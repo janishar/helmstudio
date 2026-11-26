@@ -1,0 +1,66 @@
+{
+  "name": "cover-2b-s7",
+  "workflow": "ace-step-cover",
+  "variant": "turbo-2b",
+  "seed": 7,
+  "params": {
+    "strength": 0.6
+  },
+  "style": "acoustic folk, finger-picked guitar, male vocal, warm room",
+  "lyrics": "[verse]\nMorning light on the harbour wall\nBoats come home and the seagulls call\n[chorus]\nHold the tide, hold it still\nI will wait by the window sill",
+  "sha256": "a8fbcd092e8b5a1428aee2d61b87c84588ed3647378ba62485868e57e903b152",
+  "facts": {
+    "sample_rate": 48000,
+    "channels": 2,
+    "duration_s": 6.0
+  },
+  "rms": 0.1075,
+  "peak": 0.8912,
+  "sections": [
+    {
+      "label": "verse",
+      "start_s": 0.0,
+      "end_s": 2.0
+    },
+    {
+      "label": "chorus",
+      "start_s": 2.0,
+      "end_s": 6.0
+    }
+  ],
+  "texts": {},
+  "cold": {
+    "s": {
+      "cover": 1.8,
+      "decode": 0.2
+    },
+    "peak_gb": {
+      "cover": 21.36,
+      "decode": 21.36
+    },
+    "total_s": 2.09,
+    "before_gb": 21.36,
+    "resident_gb": 18.36
+  },
+  "warm": {
+    "s": {
+      "cover": 1.7,
+      "decode": 0.2,
+      "output": 0.0
+    },
+    "peak_gb": {
+      "cover": 21.36,
+      "decode": 21.36,
+      "output": 21.36
+    },
+    "total_s": 1.99,
+    "resident_gb": 18.36
+  },
+  "wav": "cover-2b-s7.wav",
+  "kept_s": 2.0,
+  "versions": {
+    "torch": "2.15.0",
+    "python": "3.14.10"
+  },
+  "device": "mps"
+}

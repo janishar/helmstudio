@@ -1,0 +1,91 @@
+{
+  "id": "ace-step-cover",
+  "title": "ACE-Step Cover",
+  "action": "Cover",
+  "family": "ace-step",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "ace-step/model",
+      "params": {
+        "variant": "turbo-2b",
+        "precision": "bf16"
+      }
+    },
+    "song": {
+      "kind": "ace-step/song",
+      "params": {
+        "lyrics": "",
+        "instrumental": false,
+        "seconds": 0,
+        "bpm": 0,
+        "key": "auto",
+        "time": "auto",
+        "language": "auto"
+      }
+    },
+    "cover": {
+      "kind": "ace-step/cover",
+      "in": {
+        "model": "model.model",
+        "song": "song.song",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "strength": 0.6,
+        "steps": 8
+      }
+    },
+    "decode": {
+      "kind": "ace-step/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "cover.latent"
+      },
+      "params": {}
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "song.lyrics",
+      "cover.source"
+    ],
+    "quick": [
+      "model.variant",
+      "cover.strength",
+      "song.instrumental",
+      "song.language"
+    ],
+    "inspector": [
+      {
+        "title": "Advanced",
+        "items": [
+          "seed.seed",
+          "cover.steps"
+        ]
+      }
+    ]
+  }
+}

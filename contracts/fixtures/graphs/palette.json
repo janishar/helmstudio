@@ -4478,6 +4478,539 @@
           "peak_gb": "2.0"
         }
       ]
+    },
+    {
+      "family": "ace-step",
+      "title": "ACE-Step 1.5",
+      "nodes": [
+        {
+          "kind": "ace-step/song",
+          "title": "Song",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "lyrics",
+              "type": "text",
+              "label": "Lyrics",
+              "default": "",
+              "min": 0,
+              "max": 4096,
+              "tags": [
+                "verse",
+                "chorus",
+                "bridge",
+                "intro",
+                "outro"
+              ],
+              "when": "instrumental == false",
+              "help": "Section tags in square brackets, one per line: [verse], [chorus]. Empty: an instrumental."
+            },
+            {
+              "name": "instrumental",
+              "type": "bool",
+              "label": "Instrumental",
+              "default": false,
+              "help": "No vocals: the lyrics are not sung."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 10,
+              "max": 600,
+              "step": 1,
+              "help": "Auto: the plan picks it from the lyrics (30 s without the plan). Repaint, Cover and Extend keep the song's length."
+            },
+            {
+              "name": "bpm",
+              "type": "int",
+              "label": "BPM",
+              "default": 0,
+              "auto": true,
+              "min": 30,
+              "max": 300,
+              "help": "Auto: the plan picks it."
+            },
+            {
+              "name": "key",
+              "type": "enum",
+              "label": "Key",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "C major",
+                "C minor",
+                "C# major",
+                "C# minor",
+                "D major",
+                "D minor",
+                "Eb major",
+                "Eb minor",
+                "E major",
+                "E minor",
+                "F major",
+                "F minor",
+                "F# major",
+                "F# minor",
+                "G major",
+                "G minor",
+                "Ab major",
+                "Ab minor",
+                "A major",
+                "A minor",
+                "Bb major",
+                "Bb minor",
+                "B major",
+                "B minor"
+              ],
+              "help": "Auto: the plan picks it."
+            },
+            {
+              "name": "time",
+              "type": "enum",
+              "label": "Time",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "2/4",
+                "3/4",
+                "4/4",
+                "6/8"
+              ],
+              "help": "Beats per bar. Auto: the plan picks it."
+            },
+            {
+              "name": "language",
+              "type": "enum",
+              "label": "Vocal language",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "en",
+                "zh",
+                "ja",
+                "ko",
+                "es",
+                "fr",
+                "de",
+                "it",
+                "pt",
+                "ru",
+                "hi",
+                "ar",
+                "nl",
+                "pl",
+                "tr",
+                "sv",
+                "vi",
+                "th",
+                "id",
+                "yue"
+              ],
+              "when": "instrumental == false",
+              "help": "The language the lyrics are sung in. Auto: the plan tells it from the lyrics."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "song",
+              "type": "Conditioning"
+            }
+          ],
+          "help": "The song's lyrics and its settings: BPM, key, time, length and vocal language. Auto leaves a value to the plan (a plain 30 s and no value without it).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/model",
+          "title": "ACE-Step 1.5",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "turbo-2b",
+                "xl-turbo"
+              ],
+              "default": "turbo-2b",
+              "label": "Model",
+              "help": "2B turbo: fast drafts and edits. XL turbo (4B): better, bf16 on a Mac. Either about 24 GB for 30 s (26 GB for 2 min)."
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16",
+              "label": "Precision",
+              "help": "Fixed: the 2B's DiT runs in float32, XL's in bf16; the planner and text encoder in float32, the VAE in float16."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "Which DiT makes the song; the planner, text encoder and VAE are shared.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/plan",
+          "title": "Plan",
+          "family": "ace-step",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "style",
+              "type": "Text"
+            },
+            {
+              "name": "plan",
+              "type": "Text"
+            }
+          ],
+          "component": "planner",
+          "help": "The planner (ACE-Step's 5 Hz LM, 1.7B) rewrites the style, fills BPM, key, time, length and language where they are Auto, then writes the song's 5 Hz audio codes for the DiT to follow; seeded, so a seed repeats. Bypassed (Let it rewrite off): the style and the song pass through.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/compose",
+          "title": "Compose",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "reference",
+              "type": "rows",
+              "label": "Reference",
+              "default": [],
+              "min": 0,
+              "max": 1,
+              "item": {
+                "audio": {
+                  "type": "media",
+                  "label": "Song",
+                  "default": null,
+                  "accepts": [
+                    "audio"
+                  ],
+                  "max_s": 600,
+                  "help": "A song, voice or sound whose sound the new song borrows; the first 30 s are read."
+                }
+              },
+              "help": "A song whose sound (timbre, mix) the new one borrows; the first 30 s are used."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the song with the DiT in 8 steps from the style, the lyrics and the plan's audio codes (without them, from the text alone); a reference song lends its sound (the first 30 s).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/repaint",
+          "title": "Repaint",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600,
+              "help": "The song to repaint."
+            },
+            {
+              "name": "span",
+              "type": "span",
+              "label": "Repaint",
+              "default": null,
+              "help": "The part to make again, in the song's seconds."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes a range of a song again in the style and lyrics given, keeping the rest (spliced back sample for sample).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/cover",
+          "title": "Cover",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600,
+              "help": "The song to cover."
+            },
+            {
+              "name": "strength",
+              "type": "float",
+              "label": "Keep the song",
+              "default": 0.6,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "1 stays with the song's melody and words; lower lets the new style take over."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "The same song in a new style: its melody and words through the DiT's audio tokenizer, the new style and lyrics from the text; Keep the song is how close to stay.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/extend",
+          "title": "Extend",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 590,
+              "help": "The song to extend."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Add",
+              "default": 30,
+              "min": 5,
+              "max": 300,
+              "step": 1,
+              "help": "Seconds to add; the song may last at most 600 s."
+            },
+            {
+              "name": "where",
+              "type": "enum",
+              "label": "Where",
+              "default": "end",
+              "enum": [
+                "end",
+                "start"
+              ]
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Adds time at the end (or the start) of a song, carrying on in its style: a repaint of silence past its edge, the song itself kept.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/decode",
+          "title": "Decode",
+          "family": "ace-step",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "vae",
+          "help": "Turns the latent into 48 kHz stereo with the VAE (tiled past 20 s), levelled to -1 dBFS peak; a repaint's or extend's kept parts are the source's own samples. A song with tagged lyrics carries its sections.",
+          "sound": "music",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
     }
   ]
 }

@@ -1,0 +1,56 @@
+{
+  "name": "repaint-2b-s7",
+  "workflow": "ace-step-repaint",
+  "variant": "turbo-2b",
+  "seed": 7,
+  "params": {
+    "span": {
+      "start": 2.0,
+      "end": 4.0
+    }
+  },
+  "style": "warm indie pop, acoustic guitar, female vocal, 100 bpm",
+  "lyrics": "[verse]\nMorning light on the harbour wall\nBoats come home and the seagulls call\n[chorus]\nHold the tide, hold it still\nI will wait by the window sill",
+  "sha256": "f3c3a442c4cb3801ae69e82d7da4bbe6f56475f75e6b87064f88304113284453",
+  "facts": {
+    "sample_rate": 48000,
+    "channels": 2,
+    "duration_s": 6.0
+  },
+  "rms": 0.1361,
+  "peak": 0.8912,
+  "sections": [],
+  "texts": {},
+  "cold": {
+    "s": {
+      "repaint": 1.1,
+      "decode": 0.2
+    },
+    "peak_gb": {
+      "repaint": 21.35,
+      "decode": 21.35
+    },
+    "total_s": 1.4,
+    "before_gb": 21.34,
+    "resident_gb": 18.36
+  },
+  "warm": {
+    "s": {
+      "repaint": 0.7,
+      "decode": 0.2
+    },
+    "peak_gb": {
+      "repaint": 21.35,
+      "decode": 21.35
+    },
+    "total_s": 1.01,
+    "resident_gb": 18.36
+  },
+  "wav": "repaint-2b-s7.wav",
+  "kept_s": 2.0,
+  "versions": {
+    "torch": "2.15.0",
+    "python": "3.14.10"
+  },
+  "device": "mps"
+}

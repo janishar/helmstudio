@@ -23,7 +23,7 @@ def test_readme_example_generates_the_canonical_qwen_image_nodes(tmp_path, monke
     assert list(q.schemas.values()) == want
 
 
-@pytest.mark.parametrize("family", ["qwen-image", "minimax-h3-image", "qwen3-tts"])
+@pytest.mark.parametrize("family", ["qwen-image", "minimax-h3-image", "qwen3-tts", "ace-step"])
 def test_real_torch_packs_match_the_fixtures(family):
     """The torch runner publishes both families merged (contracts README): each family's canonical nodes, in its
     order (the core kinds they share are identical), and its workflows."""

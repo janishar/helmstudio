@@ -1,0 +1,238 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-27T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "ace-step-1.5",
+      "family": "ace-step",
+      "title": "ACE-Step 1.5",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps",
+            "cuda"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "turbo-2b",
+          "presence": "present",
+          "bytes": 10092100853,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "2B turbo",
+          "dir": "ACE-Step-1.5",
+          "source": {
+            "repo": "ACE-Step/Ace-Step1.5",
+            "revision": "19671f406d603126926c1b7e2adc169acbcade22",
+            "allow_patterns": [
+              "acestep-v15-turbo/config.json",
+              "acestep-v15-turbo/model.safetensors",
+              "acestep-v15-turbo/silence_latent.pt",
+              "acestep-5Hz-lm-1.7B/*",
+              "Qwen3-Embedding-0.6B/*",
+              "vae/*"
+            ],
+            "licence": "mit",
+            "must_accept": false,
+            "gated": false
+          },
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "bf16",
+              "bytes": 4787825604
+            },
+            {
+              "component": "lm",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "bf16",
+              "bytes": 3708521528
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "bf16",
+              "bytes": 1191586416
+            },
+            {
+              "component": "vae",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp16"
+              ],
+              "stored": "bf16",
+              "bytes": 337431388
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 25.86,
+              "components": [
+                {
+                  "component": "lm",
+                  "variant": "turbo-2b",
+                  "precision": "fp32",
+                  "gb": 6.91
+                },
+                {
+                  "component": "transformer",
+                  "variant": "turbo-2b",
+                  "precision": "fp32",
+                  "gb": 8.92
+                },
+                {
+                  "component": "transformer_xl",
+                  "variant": "turbo-2b",
+                  "precision": "bf16",
+                  "gb": 0.0
+                },
+                {
+                  "component": "text_encoder",
+                  "variant": "turbo-2b",
+                  "precision": "fp32",
+                  "gb": 2.22
+                },
+                {
+                  "component": "vae",
+                  "variant": "turbo-2b",
+                  "precision": "fp16",
+                  "gb": 0.31
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 1440
+              }
+            }
+          ]
+        },
+        {
+          "id": "xl-turbo",
+          "presence": "present",
+          "bytes": 19953376749,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "XL turbo",
+          "dir": "ACE-Step-1.5-XL-Turbo",
+          "source": {
+            "repo": "ACE-Step/acestep-v15-xl-turbo",
+            "revision": "d4a0b288b83ebb7e25a8c0b32c573c22e134e8ee",
+            "allow_patterns": [
+              "config.json",
+              "model.safetensors.index.json",
+              "model-*-of-00004.safetensors",
+              "silence_latent.pt"
+            ],
+            "licence": "mit",
+            "must_accept": false,
+            "gated": false
+          },
+          "components": [
+            {
+              "component": "transformer_xl",
+              "from_variant": "xl-turbo",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "fp32",
+              "bytes": 19949340504
+            },
+            {
+              "component": "lm",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "bf16",
+              "bytes": 3708521528
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "bf16",
+              "bytes": 1191586416
+            },
+            {
+              "component": "vae",
+              "from_variant": "turbo-2b",
+              "precisions": [
+                "fp16"
+              ],
+              "stored": "bf16",
+              "bytes": 337431388
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 26.23,
+              "components": [
+                {
+                  "component": "lm",
+                  "variant": "turbo-2b",
+                  "precision": "fp32",
+                  "gb": 6.91
+                },
+                {
+                  "component": "transformer",
+                  "variant": "xl-turbo",
+                  "precision": "fp32",
+                  "gb": 0.0
+                },
+                {
+                  "component": "transformer_xl",
+                  "variant": "xl-turbo",
+                  "precision": "bf16",
+                  "gb": 9.29
+                },
+                {
+                  "component": "text_encoder",
+                  "variant": "turbo-2b",
+                  "precision": "fp32",
+                  "gb": 2.22
+                },
+                {
+                  "component": "vae",
+                  "variant": "turbo-2b",
+                  "precision": "fp16",
+                  "gb": 0.31
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 1440
+              }
+            }
+          ]
+        }
+      ],
+      "sound": "music"
+    }
+  ]
+}
