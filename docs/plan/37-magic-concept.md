@@ -36,13 +36,21 @@ scheduled: not alpha.5; a release is picked when the concept is done. The wirefr
    lane's start and end (fade in, fade out). Effects are badges on a block.
 7. **Separate from the Timeline** (owner: "b, separate with send to timeline, timeline can strart either with standard or
    magic mode"): a Magic board is its own thing; **Send to Timeline** makes or updates a normal sequence for the final cut
-   and export. A new sequence starts in **Standard** (today's Timeline) or **Magic**.
+   and export. A new sequence starts in **Standard** (today's Timeline) or **Magic**. Superseded by 9.
+8. **The Assistant does it all** (owner: "this entire flow should be extensively supported by assitant"): build a board from a
+   brief, storyboard first, edit by words, fill the standard request and run blocks, compare and pick takes, look at frames,
+   Send to Timeline. Its changes show as a proposal on the board (Apply or Discard), land in Run history and the undo marked
+   "by Assistant"; notes on the board guide it. New tools follow its timeline tools (try, then apply).
+9. **Its own feature** (owner: "lets do this make this separate feature than timeline no conflict or movement"; confirmed
+   "Yes, exactly"): Magic is its own page in the left rail. The Timeline is unchanged: no mode switch, no link back. The only
+   bridge is **Send to Timeline**, which makes a new sequence every time and never touches an existing one, so there is nothing
+   to merge.
 
 ## Open
 
-- Sending again after the sequence was hand-edited in the Timeline: what wins.
 - Voice and music lined up with shots (owner: "handle the voice and music to align with a shot"): lanes in time may cover it;
   open whether a line moves with its shot.
-- The Assistant: run generation by itself, or always ask first.
+- The Assistant: run generation by itself, or always ask first (suggested: free for small things under a GPU-time limit
+  you set, ask above it).
 - Which n8n ideas go in the first version.
 - Where the standard request lives (contract, adapters in the runner) and the first models it covers.
