@@ -225,12 +225,16 @@ def test_fixture_takes_match(live):
 def test_create_defaults_from_first_clip(api, live):
     a, b = live["v24a"], live["v24b"]
     tl = create(api, take_ids=[a["id"], b["id"]])
-    assert (tl["name"], tl["revision"], tl["can_undo"], tl["can_redo"]) == (
-        "Untitled sequence",
+    # API 1.76: no name is named at once from the first take's prompt ("shot a")
+    assert (tl["name"], tl["title_source"], tl["revision"], tl["can_undo"], tl["can_redo"]) == (
+        "Shot a",
+        "prompt",
         1,
         False,
         False,
     )
+    bare = create(api)
+    assert (bare["name"], bare["title_source"]) == ("Untitled sequence", "default")
     assert tl["target"] == {"width": 256, "height": 128, "fps": 24, "sample_rate": 48000}
     assert tl["session_id"] and tl["defaults"] == {"cast": [], "looks": []}
     v1 = clips(tl)
@@ -277,6 +281,32 @@ def test_list_rename_defaults_delete(api, live):
     assert tl["id"] not in {x["id"] for x in ok(api.get(TL))["timelines"]}
     assert api.delete(f"{TL}/{tl['id']}").status_code == 404
     assert api.get(f"{TL}/not-a-uuid").status_code == 404
+
+
+def test_clone(api, api_b, live):
+    """API 1.76: Sequences › Clone copies the open sequence (clips with new ids, markers, target, defaults, the same
+    takes) as revision 1 with its own session; the original is unchanged."""
+    a, b = live["v24a"]["id"], live["v24b"]["id"]
+    src = create(api, name="Fox at dusk", take_ids=[a, b])
+    look = ok(api.get(f"{STUDIO}/library", params={"kind": "look"}))["items"][0]["id"]
+    ok(api.patch(f"{TL}/{src['id']}", json={"defaults": {"cast": [], "looks": [look]}}))
+    src = put(api, src, doc(src) | {"markers": [{"id": "m1", "at": 1, "name": "beat"}]})
+    tl = create(api, from_timeline_id=src["id"])
+    assert (tl["name"], tl["title_source"], tl["revision"], tl["can_undo"]) == (
+        "Fox at dusk clone", "user", 1, False)  # fmt: skip
+    assert tl["id"] != src["id"] and tl["session_id"] not in (None, src["session_id"])
+    assert (tl["target"], tl["defaults"], tl["markers"], tl["duration_s"]) == (
+        src["target"], src["defaults"], src["markers"], src["duration_s"])  # fmt: skip
+    strip = lambda t: [{k: v for k, v in c.items() if k != "id"} for c in clips(t)]
+    assert strip(tl) == strip(src) and set(tl["takes"]) == {a, b}
+    assert not {c["id"] for c in clips(tl)} & {c["id"] for c in clips(src)}
+    assert get(api, src)["revision"] == src["revision"]
+    assert create(api, name="Mine", from_timeline_id=src["id"])["name"] == "Mine"
+    r = api.post(TL, json={"from_timeline_id": src["id"], "take_ids": [a]})
+    assert (r.status_code, r.json()["detail"]) == (
+        422, "from_timeline_id: target and take_ids are not allowed with it")  # fmt: skip
+    for who, tid in [(api_b, src["id"]), (api, NO_SUCH_ID)]:
+        assert who.post(TL, json={"from_timeline_id": tid}).status_code == 404
 
 
 def test_add_clips_in_order(api, live, takes):

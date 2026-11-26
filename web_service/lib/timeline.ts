@@ -451,7 +451,13 @@ function front(c: Clip, kind: Kind, df: number, g: Grid) {
 }
 
 /** The clip of t strictly around frame f: [index, start, length], else null. */
-function inside(t: Track, f: number, onV1: boolean, takes: Takes, g: Grid): [number, number, number] | null {
+function inside(
+  t: Track,
+  f: number,
+  onV1: boolean,
+  takes: Takes,
+  g: Grid,
+): [number, number, number] | null {
   const starts = onV1 ? v1Starts(t.clips, takes, g)[0] : null;
   let hit: [number, number, number] | null = null;
   t.clips.forEach((c, k) => {
@@ -464,7 +470,17 @@ function inside(t: Track, f: number, onV1: boolean, takes: Takes, g: Grid): [num
 
 /** Cut clip k of t (start a, length ln frames) at frame f: the right part, inserted after it, gets id, keeps the take,
  * alternatives and link, never the dissolve or the shot. */
-function cutClip(t: Track, k: number, f: number, a: number, ln: number, id: string, onV1: boolean, takes: Takes, g: Grid) {
+function cutClip(
+  t: Track,
+  k: number,
+  f: number,
+  a: number,
+  ln: number,
+  id: string,
+  onV1: boolean,
+  takes: Takes,
+  g: Grid,
+) {
   const c = t.clips[k];
   const c2: Clip = { ...structuredClone(c), id };
   delete c2.transition_in;
@@ -785,7 +801,8 @@ function editOp(doc: Doc, op: Op, takes: Takes): Doc | string {
     }
     c.take_id = op.take_id;
   } else if (op.op === "set") {
-    for (const k of ["gain_db", "mute", "hold", "transition_in", "link"] as const) // link: 1.50
+    for (const k of ["gain_db", "mute", "hold", "transition_in", "link"] as const)
+      // link: 1.50
       if (k in op) {
         if (op[k] === null) delete c[k];
         else (c as Record<string, unknown>)[k] = op[k];
@@ -1195,4 +1212,17 @@ export function clipAt(doc: Doc, f: number, takes: Takes): number {
     const a = g.f(c.at!);
     return a <= f && f < a + lenOf(c, kindOf(c, takes), g);
   });
+}
+
+/** A sequence's name from its session's `session` event (API 1.76, contracts/README.md Timeline: names): the
+ * namer's (or the prompt's) title replaces one nobody chose; a name the user typed stays, as the replay brings old
+ * events again. Undefined: no change. */
+export function retitled<T extends Pick<S<"Timeline">, "name" | "title_source" | "named_by">>(
+  cur: T,
+  e: { title: string; title_source?: S<"TitleSource">; named_by?: string | null },
+): T | undefined {
+  if (cur.title_source === "user" || cur.title_source === "model" || !e.title_source)
+    return undefined;
+  if (e.title_source !== "prompt" && e.title_source !== "model") return undefined;
+  return { ...cur, name: e.title, title_source: e.title_source, named_by: e.named_by ?? null };
 }

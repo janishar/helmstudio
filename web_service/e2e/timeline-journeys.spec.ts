@@ -149,6 +149,18 @@ test("j02b after renaming, Esc closes the Sequences dialog", async () => {
   await expect(list).toBeHidden({ timeout: 3000 });
 });
 
+test("j02c clone the sequence from the Sequences dialog, then go back to it (alpha.5 item 12)", async () => {
+  await closeDialogs();
+  await page.getByRole("main").locator('button[aria-haspopup="dialog"]').first().click();
+  const list = page.getByRole("dialog", { name: "Sequences" });
+  await list.getByRole("button", { name: "Clone" }).click();
+  await expect(page.getByRole("heading", { name: "Timeline: Harbour cut clone" })).toBeAttached();
+  await expect(v1()).toHaveCount(3);
+  await page.getByRole("main").locator('button[aria-haspopup="dialog"]').first().click();
+  await list.getByRole("button", { name: /^Harbour cut · 3 clips/ }).click();
+  await expect(page.getByRole("heading", { name: "Timeline: Harbour cut" })).toBeAttached();
+});
+
 test("j03 trim five frames off the end of the first clip", async () => {
   await closeDialogs();
   const before = await length();

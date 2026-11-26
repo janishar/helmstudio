@@ -112,3 +112,27 @@ def test_with_no_namer_an_untitled_session_takes_its_first_words(api):
     assert [e["data"] for e in events if e["type"] == "session"] == [
         {"title": "Old fisherman on a pier", "title_source": "prompt", "named_by": None}
     ]
+
+
+def test_an_untitled_sequence_is_named_once(api, admin, fake_server):
+    """API 1.76 (alpha.5 item 14): an untitled sequence takes its first take's prompt, then the namer's title through
+    its session; a rename stays."""
+    ok(admin.put(NAMES, json={"mode": "remote", "provider": fake_server}))
+    sid = ok(api.post(f"{STUDIO}/sessions", json={"title": "Shots"}), 201)["id"]
+    answer = "ECHO-ANSWER: " + json.dumps({"title": "Gulls over the harbour"})
+    run = start_run(api, sid, {"prompt.text": answer, **FAST})
+    assert wait_run(api, run["id"])["status"] == "succeeded"
+    take = take_of_run(api, run["id"])
+    tl = ok(api.post(f"{STUDIO}/timelines", json={"take_ids": [take["id"]]}), 201)
+    assert tl["title_source"] == "prompt" and tl["name"].startswith("ECHO-ANSWER:")
+    url = f"{STUDIO}/timelines/{tl['id']}"
+    named = wait_for(
+        lambda: (t := ok(api.get(url)))["title_source"] == "model" and t, what="the sequence's name"
+    )
+    assert (named["name"], named["named_by"]) == ("Gulls over the harbour", "Fake server")
+    renamed = ok(api.patch(url, json={"name": "Harbour"}))
+    assert (renamed["name"], renamed["title_source"], renamed["named_by"]) == (
+        "Harbour",
+        "user",
+        None,
+    )

@@ -236,20 +236,91 @@ func (p *Projector) askName(ctx context.Context, tx pgx.Tx, run model.Run) error
 	if err != nil || tag.RowsAffected() == 0 {
 		return err
 	}
+	return enqueueName(ctx, tx, p.RemoteOn, run.OwnerID, run.SessionID, run.ID, prompt)
+}
+
+// enqueueName writes cmd.pipeline.name for sessionID (named from runID's prompt) when the setting names something
+// usable: a remote provider is skipped while the deployment's switch is off.
+func enqueueName(ctx context.Context, tx pgx.Tx, remoteOn bool, ownerID, sessionID, runID, prompt string) error {
 	set, err := readNames(ctx, tx)
 	if err != nil {
 		return err
 	}
 	name, provider, ok, err := namer(ctx, tx, set)
-	if err != nil || !ok || (provider != nil && provider.Kind == "remote" && !p.RemoteOn) {
+	if err != nil || !ok || (provider != nil && provider.Kind == "remote" && !remoteOn) {
 		return err
 	}
-	data := message.Name{SessionID: run.SessionID, RunID: run.ID, Prompt: prompt, Mode: set.Mode, NamedBy: name}
+	data := message.Name{SessionID: sessionID, RunID: runID, Prompt: prompt, Mode: set.Mode, NamedBy: name}
 	if provider != nil {
 		data.Provider = &message.NameProvider{Name: provider.Name, Model: deref(set.Model), Snapshot: provider.snapshot()}
 	}
-	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: run.SessionID, OwnerID: run.OwnerID,
-		MsgID: "name:" + run.SessionID, Data: data})
+	return messaging.Enqueue(ctx, tx, messaging.Command{JobID: sessionID, OwnerID: ownerID,
+		MsgID: "name:" + sessionID, Data: data})
+}
+
+// askTimelineName names an untitled sequence once (API 1.76, as askName a session): while its name is default and it
+// was never asked, the first take of its document (track and clip order) made by a run with a prompt gives the
+// prompt's first words at once (title_source prompt, its session too, with a `session` event there) and, when the
+// setting names something, cmd.pipeline.name for the sequence's session; the answer names both (namedHandler).
+func askTimelineName(ctx context.Context, tx pgx.Tx, reg *registry.Registry, remoteOn bool, row *timelineRow) error {
+	if reg == nil || row.TitleSource != "default" || row.NameAsked || row.SessionID == nil {
+		return nil // ponytail: a sequence whose session was deleted waits for its next shot to make one
+	}
+	ids := docTakeIDs(row.doc())
+	if len(ids) == 0 {
+		return nil
+	}
+	runs, err := collect[model.Run](ctx, tx, `WITH t AS (SELECT run_id, min(array_position($1::uuid[], id)) AS pos
+		FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND run_id IS NOT NULL GROUP BY run_id)
+		SELECT `+model.RunCols+` FROM runs JOIN t ON t.run_id = runs.id WHERE owner_id = $2 AND purpose IS NULL
+		ORDER BY t.pos`, ids, row.OwnerID)
+	if err != nil {
+		return err
+	}
+	for _, run := range runs {
+		prompt := namePrompt(reg, run)
+		title := promptTitle(prompt)
+		if title == "" {
+			continue // an upload, a clone with no text: the next take with a prompt may name it
+		}
+		named, err := one[timelineRow](ctx, tx, `UPDATE timelines SET name = $2, title_source = 'prompt', name_asked = true
+			WHERE id = $1 RETURNING `+timelineCols, row.ID, title)
+		if err != nil {
+			return err
+		}
+		*row = named
+		if _, err := tx.Exec(ctx, `UPDATE sessions SET title = $2, title_source = 'prompt', name_asked = true WHERE id = $1`,
+			*row.SessionID, title); err != nil {
+			return err
+		}
+		if err := appendEvent(ctx, tx, model.Run{ID: run.ID, SessionID: *row.SessionID, OwnerID: row.OwnerID}, "session",
+			time.Now(), map[string]any{"title": title, "title_source": "prompt", "named_by": nil}); err != nil {
+			return err
+		}
+		return enqueueName(ctx, tx, remoteOn, row.OwnerID, *row.SessionID, run.ID, prompt)
+	}
+	return nil
+}
+
+// nameTimelinesOf is askTimelineName for each sequence run's shot just filled (the projector).
+func (p *Projector) nameTimelinesOf(ctx context.Context, tx pgx.Tx, run model.Run) error {
+	_, timelines, _, err := shotsOf(ctx, tx, run)
+	if err != nil {
+		return err
+	}
+	for _, id := range slices.Compact(slices.Sorted(slices.Values(timelines))) {
+		row, err := one[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE id = $1 AND owner_id = $2
+			AND deleted_at IS NULL FOR UPDATE`, id, run.OwnerID)
+		if errors.Is(err, errNotFound) {
+			continue
+		} else if err != nil {
+			return err
+		}
+		if err := askTimelineName(ctx, tx, p.Workflows, p.RemoteOn, &row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // applyStatusNamed is applyStatus, then askName when the run succeeded.
@@ -287,10 +358,18 @@ func (p *Projector) namedHandler(ctx context.Context, msg *micro.NatsJetStreamMe
 		return
 	}
 	err = common.System(ctx, p.pool, func(tx pgx.Tx) error {
+		// API 1.76: a sequence's session names the sequence (asked by askTimelineName, from a take made anywhere)
+		seq, err := tx.Exec(ctx, `UPDATE timelines SET name = $2, title_source = 'model', named_by = $3
+			WHERE session_id = $1 AND owner_id = $4 AND deleted_at IS NULL AND name_asked
+			AND title_source IN ('default', 'prompt')`, d.SessionID, title, d.NamedBy, event.OwnerID)
+		if err != nil {
+			return err
+		}
 		tag, err := tx.Exec(ctx, `UPDATE sessions SET title = $2, title_source = 'model', named_by = $3
 			WHERE id = $1 AND owner_id = $4 AND title_source IN ('default', 'prompt')
-			AND EXISTS (SELECT 1 FROM runs WHERE id = $5 AND session_id = $1)`, d.SessionID, title, d.NamedBy, event.OwnerID, d.RunID)
-		if err != nil || tag.RowsAffected() == 0 {
+			AND ($6 OR EXISTS (SELECT 1 FROM runs WHERE id = $5 AND session_id = $1))`, d.SessionID, title, d.NamedBy,
+			event.OwnerID, d.RunID, seq.RowsAffected() > 0)
+		if err != nil || (tag.RowsAffected() == 0 && seq.RowsAffected() == 0) {
 			return err
 		}
 		return appendEvent(ctx, tx, model.Run{ID: d.RunID, SessionID: d.SessionID, OwnerID: event.OwnerID}, "session",

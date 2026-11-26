@@ -1,5 +1,5 @@
 "use client";
-// The Timeline screen's dialogs (docs/mock/TimelineDialogs.dc.html): Sequences (switch, rename, delete), New
+// The Timeline screen's dialogs (docs/mock/TimelineDialogs.dc.html): Sequences (switch, rename, clone, delete), New
 // sequence, Re-render (a preset over the selected clips) and Export (the plan first, then the job's progress, cancel
 // and the exported take in the media viewer).
 import Link from "next/link";
@@ -17,7 +17,7 @@ type Job = S<"MediaJob">;
 
 const field = "in h-[38px]";
 
-/** The sequence list (the name's ⌄): open one, + New sequence, rename or delete the current one. */
+/** The sequence list (the name's ⌄): open one, + New sequence, rename, clone (alpha.5 item 12) or delete the current one. */
 export function Sequences({
   open,
   onClose,
@@ -68,6 +68,7 @@ function SequenceList({
   const [error, setError] = useState("");
   const [name, setName] = useState<string | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [cloning, setCloning] = useState(false);
   useEffect(() => {
     ok(api.GET("/v1/studio/timelines"))
       .then((r) => setList(r.timelines))
@@ -142,6 +143,24 @@ function SequenceList({
             onClick={() => setName(current.name)}
           >
             Rename
+          </button>
+          <button
+            type="button"
+            className="chip bevel rounded-[10px]"
+            title="A copy of this sequence: clips, sound, markers, cast, look, size; the same takes, nothing re-rendered"
+            disabled={cloning}
+            onClick={() => {
+              setCloning(true);
+              void act(async () => {
+                const t = await ok(
+                  api.POST("/v1/studio/timelines", { body: { from_timeline_id: current.id } }),
+                );
+                onOpen(t.id);
+                onClose();
+              }).finally(() => setCloning(false));
+            }}
+          >
+            Clone
           </button>
           <button
             type="button"

@@ -2673,7 +2673,14 @@ export interface paths {
          *     `target` fields come from the first take of `take_ids` (contracts/README.md, Timeline: sequences), else
          *     1280 × 720, 24 fps, 48000 Hz. `take_ids` are added as `POST …/clips` adds them. 409 at 100 sequences (`You have
          *     100 sequences; delete some first.`). 422 `take_ids[2]: take <id> not found` (unknown, another user's, deleted
-         *     or a pending upload), `name must be 1-80 characters`.
+         *     or a pending upload), `name must be 1-80 characters`. From 1.76 `from_timeline_id` clones that sequence
+         *     (Timeline › Sequences › Clone): its current revision's clips, sound clips and markers (new clip ids, links
+         *     kept), its target and `defaults` (unless given), the same takes (nothing rendered again); a pending shot is
+         *     not carried (its slot stays empty). The clone is revision 1 with its own session; the original is unchanged.
+         *     A missing name is `<name> clone` (`title_source` user). 422 `from_timeline_id: target and take_ids are not
+         *     allowed with it`; 404 for an unknown, deleted or another user's sequence. From 1.76 a sequence without a name
+         *     is "Untitled sequence" (`title_source` default) and is named once from its first take's prompt
+         *     (contracts/README.md, Timeline: names).
          */
         post: operations["studioCreateTimeline"];
         delete?: never;
@@ -2709,7 +2716,10 @@ export interface paths {
         delete: operations["studioDeleteTimeline"];
         options?: never;
         head?: never;
-        /** Rename, or set the defaults for new shots (no revision; not undone) */
+        /**
+         * Rename, or set the defaults for new shots (no revision; not undone)
+         * @description From 1.76 a rename makes `title_source` user (`named_by` null): the namer never replaces it.
+         */
         patch: operations["studioPatchTimeline"];
         trace?: never;
     };
@@ -7740,6 +7750,11 @@ export interface components {
             /** @description clips to start with, in order (the gallery's multi-selection) */
             take_ids?: string[];
             defaults?: components["schemas"]["TimelineDefaults"];
+            /**
+             * Format: uuid
+             * @description from 1.76: clone this sequence (not with target or take_ids: 422; another user's: 404)
+             */
+            from_timeline_id?: string;
         };
         TimelineUpdate: {
             /** @description the revision the edit was made on */
@@ -7828,6 +7843,10 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description from 1.76: who wrote `name`, as a session's title (contracts/README.md, Timeline: names) */
+            title_source?: components["schemas"]["TitleSource"];
+            /** @description from 1.76: the model that wrote the name while `title_source` is model; null otherwise */
+            named_by?: string | null;
         } & components["schemas"]["TimelineNormalized"];
         TimelineSummary: {
             /** Format: uuid */
@@ -12648,6 +12667,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];

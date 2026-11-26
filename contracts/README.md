@@ -3384,6 +3384,20 @@ saved_at, via, ops_summary)` (from 1.49 `via` and `ops_summary`: Edits by ops; t
   picker = `POST …/clips {take_ids, track}` in the given order (`add`). A take deleted later stays as an **offline**
   clip (`offline: true`, its place and length kept, `takes` leaves it out, preview shows it offline, export is blocked);
   it never breaks the sequence.
+- **Clone** (API 1.76, Timeline › Sequences › Clone; alpha.5 item 12): `POST …/timelines {from_timeline_id}` makes
+  `<name> clone` from the sequence's current revision: every clip, sound clip and marker with new clip ids made by
+  studio (`link` follows), its target, `defaults` and the same takes (nothing rendered again); a pending shot is not
+  carried. Revision 1, its own session; the original is unchanged. Another user's or a deleted sequence is 404.
+- **Names** (API 1.76; alpha.5 item 14), as Sessions: titles and naming: `Timeline.title_source` (`default` for
+  "Untitled sequence", `prompt`, `user` for a typed name, any rename and a clone, `model` with `named_by`).
+  Sequences made before 1.76: "Untitled sequence" is `default`, any other name `user`. While it is `default` and
+  never asked, the first stored change (create with `take_ids`, an edit, a shot's fill) whose document holds a take
+  made by a run with a prompt (track then clip order; the run's prompt as Sessions: naming sends it) names it once:
+  the prompt's first 5 words at once (`prompt`, the sequence's session too, with a `session` event in that session's
+  log), then `cmd.pipeline.name` for the sequence's session when the admin's setting is not off. The answer
+  (`evt.pipeline.<session_id>.named`) renames the sequence whose session it is while its `title_source` is
+  `default` or `prompt` (a rename wins), and that session, with one `session` event (`TitleEvent`). The Timeline
+  follows its session's events and shows the name in its name chip, with Create's "named by …" hint.
 - **Defaults for new shots** (`defaults {cast, looks}`, library items: plan 10): New shot's composer starts with the
   looks as `RunRequest.looks` and the cast as `@handle` mentions typed into an empty prompt (and first in the mention
   list). Studio applies nothing itself: the run is what the composer sends.

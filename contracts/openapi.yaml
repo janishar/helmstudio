@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.75.0
+  version: 1.76.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -2724,13 +2724,21 @@ paths:
         `target` fields come from the first take of `take_ids` (contracts/README.md, Timeline: sequences), else
         1280 × 720, 24 fps, 48000 Hz. `take_ids` are added as `POST …/clips` adds them. 409 at 100 sequences (`You have
         100 sequences; delete some first.`). 422 `take_ids[2]: take <id> not found` (unknown, another user's, deleted
-        or a pending upload), `name must be 1-80 characters`.
+        or a pending upload), `name must be 1-80 characters`. From 1.76 `from_timeline_id` clones that sequence
+        (Timeline › Sequences › Clone): its current revision's clips, sound clips and markers (new clip ids, links
+        kept), its target and `defaults` (unless given), the same takes (nothing rendered again); a pending shot is
+        not carried (its slot stays empty). The clone is revision 1 with its own session; the original is unchanged.
+        A missing name is `<name> clone` (`title_source` user). 422 `from_timeline_id: target and take_ids are not
+        allowed with it`; 404 for an unknown, deleted or another user's sequence. From 1.76 a sequence without a name
+        is "Untitled sequence" (`title_source` default) and is named once from its first take's prompt
+        (contracts/README.md, Timeline: names).
       requestBody:
         required: true
         content: {application/json: {schema: {$ref: '#/components/schemas/TimelineCreate'}}}
       responses:
         '201': {description: the sequence, content: {application/json: {schema: {$ref: '#/components/schemas/Timeline'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
@@ -2774,6 +2782,7 @@ paths:
       tags: [studio]
       operationId: studioPatchTimeline
       summary: 'Rename, or set the defaults for new shots (no revision; not undone)'
+      description: 'From 1.76 a rename makes `title_source` user (`named_by` null): the namer never replaces it.'
       parameters: [{$ref: '#/components/parameters/TimelineId'}]
       requestBody:
         required: true
@@ -7465,6 +7474,7 @@ components:
         target: {type: object, additionalProperties: false, description: 'any field left out comes from the first take', properties: {width: {$ref: '#/components/schemas/TimelineTarget/properties/width'}, height: {$ref: '#/components/schemas/TimelineTarget/properties/height'}, fps: {$ref: '#/components/schemas/TimelineTarget/properties/fps'}, sample_rate: {$ref: '#/components/schemas/TimelineTarget/properties/sample_rate'}}}
         take_ids: {type: array, maxItems: 100, items: {type: string, format: uuid}, description: 'clips to start with, in order (the gallery''s multi-selection)'}
         defaults: {$ref: '#/components/schemas/TimelineDefaults'}
+        from_timeline_id: {type: string, format: uuid, description: 'from 1.76: clone this sequence (not with target or take_ids: 422; another user''s: 404)'}
     TimelineUpdate:
       type: object
       required: [revision, target, tracks]
@@ -7541,6 +7551,8 @@ components:
         takes: {type: object, propertyNames: {format: uuid}, additionalProperties: {$ref: '#/components/schemas/TimelineTake'}, description: 'every take the document names that is not offline'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
+        title_source: {$ref: '#/components/schemas/TitleSource', description: 'from 1.76: who wrote `name`, as a session''s title (contracts/README.md, Timeline: names)'}
+        named_by: {type: [string, 'null'], maxLength: 60, description: 'from 1.76: the model that wrote the name while `title_source` is model; null otherwise'}
     TimelineSummary:
       type: object
       required: [id, name, target, revision, duration_s, clips, thumb_url, updated_at]

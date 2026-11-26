@@ -41,6 +41,7 @@ import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
 import { followSession, renderTime } from "@/lib/runs";
+import { firstHint } from "@/components/create/sessions";
 import { Preview } from "@/lib/timeline-preview";
 import {
   Grid,
@@ -60,6 +61,7 @@ import {
   type Op,
   type Problem,
   type Track,
+  retitled,
   shotBusy,
 } from "@/lib/timeline";
 import {
@@ -398,10 +400,33 @@ export function TimelineEditor({ id }: { id?: string }) {
     const t = setInterval(() => void reload().catch(() => undefined), 3000);
     return () => clearInterval(t);
   }, [live, reload]);
-  const session = tl?.session_id;
+  // the model that just named the sequence: "named by Qwen3.8" under the name, once per browser (as Create)
+  const [hint, setHint] = useState("");
   useEffect(() => {
-    if (!session || !live) return;
+    if (!hint) return;
+    const t = setTimeout(() => setHint(""), 6000);
+    return () => clearTimeout(t);
+  }, [hint]);
+  const session = tl?.session_id;
+  // API 1.76: an untitled sequence is named from its first prompt (then perhaps by the namer): its session says so.
+  // ponytail: a prompt-named sequence with naming off keeps this stream open; close it on a timer if that ever costs
+  const naming = tl?.title_source === "default" || tl?.title_source === "prompt";
+  useEffect(() => {
+    if (!session || (!live && !naming)) return;
     return followSession(session, (e) => {
+      if (e.type === "session") {
+        const cur = tlRef.current;
+        const next = cur && retitled(cur, e.data);
+        if (!next) return;
+        tlRef.current = next;
+        setTl((t) =>
+          t && t.id === next.id
+            ? { ...t, name: next.name, title_source: next.title_source, named_by: next.named_by }
+            : t,
+        );
+        if (next.title_source === "model" && next.named_by && firstHint()) setHint(next.named_by);
+        return;
+      }
       if (e.type === "progress")
         setRunProgress((p) => ({
           ...p,
@@ -410,7 +435,7 @@ export function TimelineEditor({ id }: { id?: string }) {
       if (e.type === "status" && ["succeeded", "failed", "cancelled"].includes(e.data.status))
         void reload().catch(() => undefined);
     });
-  }, [session, live, reload]);
+  }, [session, live, naming, reload]);
   const progress = useMemo(
     () =>
       Object.fromEntries(
@@ -892,27 +917,37 @@ export function TimelineEditor({ id }: { id?: string }) {
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-5 pt-4 pb-5">
         <h1 className="sr-only">Timeline: {tl.name}</h1>
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            aria-haspopup="dialog"
-            onClick={() => setDialog("list")}
-            className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
-          >
-            {tl.name}
-            <svg
-              aria-hidden
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+          <div className="flex min-w-0 flex-col items-start gap-0.5">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              onClick={() => setDialog("list")}
+              className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
             >
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </button>
+              {tl.name}
+              <svg
+                aria-hidden
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </button>
+            {hint && (
+              <span
+                role="status"
+                className="fade-late ml-3 rounded-full bg-s2 px-2 py-0.5 text-[11px] text-t2"
+              >
+                named by {hint}
+              </span>
+            )}
+          </div>
           <span className="mono rounded-full bg-s2 px-2.5 py-1 text-[12px] text-t2">
             {t.width} × {t.height} · {t.fps} fps · {shortTime(doc.duration_s)}
             {renderTotal && <span title="Render time of its shots, in all"> · {renderTotal}</span>}
@@ -1387,7 +1422,13 @@ export function TimelineEditor({ id }: { id?: string }) {
         current={tl}
         onOpen={goTo}
         onNew={() => setDialog("new")}
-        onRenamed={(nt) => setTl((cur) => (cur ? { ...cur, name: nt.name } : nt))}
+        onRenamed={(nt) =>
+          setTl((cur) =>
+            cur
+              ? { ...cur, name: nt.name, title_source: nt.title_source, named_by: nt.named_by }
+              : nt,
+          )
+        }
         onDeleted={() => {
           router.replace("/timeline");
           void open();

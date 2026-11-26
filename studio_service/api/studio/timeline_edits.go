@@ -71,6 +71,8 @@ func (s *Service) EditTimeline(ctx context.Context, caller common.Caller, id str
 			row.Doc, _ = json.Marshal(clean(doc, &stored)) // what it would be: nothing is written
 		} else if err := storeUser(ctx, tx, &row, doc, userWrite(caller, opsSummary(body.Ops))); err != nil {
 			return err
+		} else if err := askTimelineName(ctx, tx, s.registry, s.remoteOn, &row); err != nil {
+			return err
 		}
 		out.Revision = row.Revision
 		out.Timeline, err = s.timelineDTO(ctx, tx, row)

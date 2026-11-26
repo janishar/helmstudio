@@ -45,9 +45,13 @@ type timelineRow struct {
 	Revision             int
 	SessionID            *string
 	CreatedAt, UpdatedAt time.Time
+	TitleSource          string // API 1.76: default | prompt | user | model, as a session's title
+	NamedBy              *string
+	NameAsked            bool
 }
 
-const timelineCols = `id::text, owner_id::text, name, doc, defaults, revision, session_id::text, created_at, updated_at`
+const timelineCols = `id::text, owner_id::text, name, doc, defaults, revision, session_id::text, created_at, updated_at,
+	title_source, named_by, name_asked`
 
 func (r timelineRow) doc() timeline.Doc {
 	var d timeline.Doc
@@ -355,6 +359,7 @@ func (s *Service) timelineDTO(ctx context.Context, tx pgx.Tx, row timelineRow) (
 		}
 	}
 	out := dto.Timeline{ID: row.ID, Name: row.Name, SessionID: row.SessionID, Revision: row.Revision, Target: doc.Target,
+		TitleSource: row.TitleSource, NamedBy: row.NamedBy,
 		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Takes: map[string]dto.TimelineTake{},
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 	for id, take := range rows {
@@ -529,6 +534,25 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 		} else if count >= MaxTimelines {
 			return network.NewConflictError(fmt.Sprintf("You have %d sequences; delete some first.", MaxTimelines), nil)
 		}
+		var defaults any = body.Defaults.Filled()
+		name := body.NameOrDefault()
+		var doc timeline.Doc
+		if body.From != nil { // 1.76: a clone of that sequence
+			src, err := readTimeline(ctx, tx, *body.From, false)
+			if err != nil {
+				return err
+			}
+			if doc, err = cloneDoc(ctx, tx, caller.ID, src.doc()); err != nil {
+				return err
+			}
+			if body.Defaults == nil {
+				defaults = src.Defaults
+			}
+			if body.Name == nil || strings.TrimSpace(*body.Name) == "" {
+				name = strings.TrimSpace(cutRunes(src.Name+" clone", 80))
+			}
+			return s.insertTimeline(ctx, tx, caller, name, "user", doc, defaults, &out) // the clone's name is chosen
+		}
 		rules, rows, err := loadTakes(ctx, tx, caller.ID, body.TakeIDs)
 		if err != nil {
 			return err
@@ -546,7 +570,7 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 			target.Width, target.Height = orElse(t.Width, target.Width), orElse(t.Height, target.Height)
 			target.FPS, target.SampleRate = orElse(t.FPS, target.FPS), orElse(t.SampleRate, target.SampleRate)
 		}
-		doc := timeline.Doc{Target: target, Tracks: []timeline.Track{{Kind: "video", Clips: []timeline.Clip{}}}}
+		doc = timeline.Doc{Target: target, Tracks: []timeline.Track{{Kind: "video", Clips: []timeline.Clip{}}}}
 		n, probs := timeline.Normalize(doc, rules, nil)
 		if probs != nil {
 			return problemsError(probs)
@@ -557,26 +581,71 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 				return err
 			}
 		}
-		name := body.NameOrDefault()
-		sessionID := utility.NewID()
-		if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, name); err != nil {
-			return err
+		source := "user"
+		if body.Name == nil || strings.TrimSpace(*body.Name) == "" {
+			source = "default"
 		}
-		data, _ := json.Marshal(clean(doc, nil))
-		row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id)
-			VALUES ($1, $2, $3, $4, $5, $6) RETURNING `+timelineCols, utility.NewID(), caller.ID, name, data,
-			body.Defaults.Filled(), sessionID)
-		if err != nil {
-			return err
-		}
-		if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
-			VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
-			return err
-		}
-		out, err = s.timelineDTO(ctx, tx, row)
-		return err
+		return s.insertTimeline(ctx, tx, caller, name, source, doc, defaults, &out)
 	})
 	return out, err
+}
+
+// insertTimeline stores a new sequence (revision 1) with its own session and answers it in out.
+func (s *Service) insertTimeline(ctx context.Context, tx pgx.Tx, caller common.Caller, name, source string, doc timeline.Doc,
+	defaults any, out *dto.Timeline) error {
+	sessionID := utility.NewID()
+	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, name); err != nil {
+		return err
+	}
+	data, _ := json.Marshal(clean(doc, nil))
+	row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id, title_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+timelineCols, utility.NewID(), caller.ID, name, data,
+		defaults, sessionID, source)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
+		VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
+		return err
+	}
+	if err := askTimelineName(ctx, tx, s.registry, s.remoteOn, &row); err != nil {
+		return err
+	}
+	*out, err = s.timelineDTO(ctx, tx, row)
+	return err
+}
+
+// cloneDoc is src with new clip ids (links follow) and no pending shots (a V1 slot stays empty, a New line's
+// placeholder goes), normalized against src so its offline clips stay offline (API 1.76).
+func cloneDoc(ctx context.Context, tx pgx.Tx, ownerID string, src timeline.Doc) (timeline.Doc, error) {
+	doc, ids, made := src.Clone(), map[string]string{}, []string{}
+	for ti := range doc.Tracks {
+		for ci := range doc.Tracks[ti].Clips {
+			c := &doc.Tracks[ti].Clips[ci]
+			id := newClipID(timeline.Doc{}, made...)
+			ids[c.ID], c.ID, c.Shot = id, id, nil
+			made = append(made, id)
+		}
+	}
+	for ti := range doc.Tracks {
+		for ci := range doc.Tracks[ti].Clips {
+			if c := &doc.Tracks[ti].Clips[ci]; c.Link != nil {
+				if id, ok := ids[*c.Link]; ok {
+					c.Link = &id
+				}
+			}
+		}
+	}
+	doc = dropPlaceholders(doc)
+	rules, _, err := loadTakes(ctx, tx, ownerID, docTakeIDs(doc))
+	if err != nil {
+		return doc, err
+	}
+	n, probs := timeline.Normalize(doc, rules, &src)
+	if probs != nil {
+		return doc, problemsError(probs)
+	}
+	return *n, nil
 }
 
 func orElse[T any](p *T, fallback T) T {
@@ -674,6 +743,9 @@ func (s *Service) editTimeline(ctx context.Context, caller common.Caller, id str
 		if err := fn(tx, &row); err != nil {
 			return err
 		}
+		if err := askTimelineName(ctx, tx, s.registry, s.remoteOn, &row); err != nil { // API 1.76
+			return err
+		}
 		out, err = s.timelineDTO(ctx, tx, row)
 		return err
 	})
@@ -709,8 +781,13 @@ func (s *Service) PatchTimeline(ctx context.Context, caller common.Caller, id st
 		if body.Defaults != nil {
 			defaults, _ = json.Marshal(body.Defaults.Filled())
 		}
-		updated, err := one[timelineRow](ctx, tx, `UPDATE timelines SET name = $2, defaults = $3, updated_at = clock_timestamp()
-			WHERE id = $1 RETURNING `+timelineCols, row.ID, name, defaults)
+		source, namedBy := row.TitleSource, row.NamedBy
+		if body.Name != nil { // a rename is the user's (API 1.76): the namer never replaces it
+			source, namedBy = "user", nil
+		}
+		updated, err := one[timelineRow](ctx, tx, `UPDATE timelines SET name = $2, defaults = $3, title_source = $4,
+			named_by = $5, updated_at = clock_timestamp() WHERE id = $1 RETURNING `+timelineCols, row.ID, name, defaults,
+			source, namedBy)
 		*row = updated
 		return err
 	})

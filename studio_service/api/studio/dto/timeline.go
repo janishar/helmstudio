@@ -69,10 +69,14 @@ type TimelineCreate struct {
 	Target   *TimelineTargetIn `json:"target"`
 	TakeIDs  []string          `json:"take_ids"`
 	Defaults *TimelineDefaults `json:"defaults"`
+	From     *string           `json:"from_timeline_id"` // 1.76: clone this sequence
 }
 
 // Validate checks the shapes; the takes are checked by the service.
 func (b *TimelineCreate) Validate() string {
+	if b.From != nil && (b.Target != nil || b.TakeIDs != nil) {
+		return "from_timeline_id: target and take_ids are not allowed with it"
+	}
 	if b.Name != nil && utf8.RuneCountInString(*b.Name) > 80 {
 		return "name must be 1-80 characters"
 	}
@@ -463,6 +467,9 @@ type Timeline struct {
 	Takes     map[string]TimelineTake `json:"takes"`
 	CreatedAt time.Time               `json:"created_at"`
 	UpdatedAt time.Time               `json:"updated_at"`
+	// API 1.76: who wrote the name, as a session's title_source; named_by while it is model
+	TitleSource string  `json:"title_source"`
+	NamedBy     *string `json:"named_by"`
 }
 
 // TimelineSummary is a list item.

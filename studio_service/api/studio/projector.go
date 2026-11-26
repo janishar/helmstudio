@@ -226,6 +226,9 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 		Audio: data.Audio, Thumb: data.Thumb})
 	if err == nil && data.Index == 0 {
 		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
+		if err == nil {
+			err = p.nameTimelinesOf(ctx, tx, run) // API 1.76: an untitled sequence takes its first prompt's name
+		}
 	}
 	if err != nil {
 		return nil, err
