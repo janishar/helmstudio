@@ -348,3 +348,50 @@ func TestVoicesMigrationDown(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// Migration 00056 (API 1.79) makes every audio take before it a voice take and leaves images and videos without a class.
+func TestTakeSoundBackfill(t *testing.T) {
+	setup(t)
+	sqldb, err := sql.Open("pgx", os.Getenv("TEST_DATABASE_URL"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sqldb.Close()
+	sqldb.SetMaxOpenConns(1)
+	system := func() {
+		if _, err := sqldb.Exec(`SELECT set_config('app.role', 'system', false)`); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = goose.DownTo(sqldb, ".", 55); err != nil {
+		t.Fatal(err)
+	}
+	system()
+	for id, kind := range map[string]string{"0b0b0b0b-0000-4000-8000-000000000001": "audio",
+		"0b0b0b0b-0000-4000-8000-000000000002": "image"} {
+		if _, err = sqldb.Exec(`INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, bytes, ready)
+			VALUES ($1, $2, $3, 'upload', 'old', 'u/old/' || $3, 'audio/wav', 1, true)`, id, userA, kind); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err = goose.Up(sqldb, "."); err != nil {
+		t.Fatal(err)
+	}
+	system()
+	got := map[string]string{}
+	rows, err := sqldb.Query(`SELECT kind, coalesce(sound, '-') FROM takes`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind, sound string
+		if err := rows.Scan(&kind, &sound); err != nil {
+			t.Fatal(err)
+		}
+		got[kind] = sound
+	}
+	if got["audio"] != "voice" || got["image"] != "-" {
+		t.Fatal(got)
+	}
+}
