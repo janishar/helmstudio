@@ -21,7 +21,7 @@ PROD := $(PROD_ENV) docker compose -p helmstudio-prod -f deploy/docker-compose.y
 TEST_ADMIN := ADMIN_EMAIL=admin@helm.test ADMIN_PASSWORD="$${HELM_TEST_ADMIN_PASSWORD:-helm test admin pass 1}"
 
 .PHONY: secrets envs build up dev down logs ps contracts-check test resilience test-down prod prod-secrets prod-down \
-        prod-logs prod-ps runners runner-torch runner-mlx runner-native runners-stop runners-nvidia runners-nvidia-stop h3 zonos3 \
+        prod-logs prod-ps runners runner-torch runner-mlx runner-native runners-stop runners-nvidia runners-nvidia-stop sglang h3 zonos3 \
         gpu-host-secrets gpu-host-reload gpu-host-tunnel gpu-host-tunnel-stop
 
 secrets:          ## deploy/secrets/ (git-ignored); never overwrites
@@ -165,12 +165,26 @@ runners-stop:     ## stops the native runners (each by its pid file; only a proc
 # without a restart of the stack: NATS reloads (and restarts when its accounts changed), SeaweedFS (identities)
 # restarts alone.
 # The runners of a Linux NVIDIA machine (or WSL2) on the host, from source (docs/guides/nvidia-linux.md): no CUDA
-# image ships. Env torch always; env native when SGLang is found (SGLANG_BIN, else `sglang` on PATH). Host GPU_HOST
+# image ships. Env torch always; env native when SGLang is found (SGLANG_BIN, else ~/sglang from make sglang, else
+# `sglang` on PATH). Host GPU_HOST
 # (default: the first of GPU_HOSTS, else the one GPU host deploy/secrets has, else the short hostname) with the NATS user and S3 identity that
 # make up GPU_HOSTS=<h> made, over plain nats:// and http:// on 127.0.0.1 (this machine's stack: no tunnel, no TLS).
 # Logs and pid files as the Mac's: runner_service/.run/runner-<h>-<env>.{pid,log}; make runners-nvidia-stop.
 GPU_HOST ?= $(or $(firstword $(GPU_HOSTS)),$(if $(filter release,$(STACK)),$(or $(HELMSTUDIO_GPU_HOST),gpu)),$(shell ls $(SECRETS) 2>/dev/null | sed -n 's/^nats_runner_\([a-z0-9]*\)_torch_password$$/\1/p' | grep -vx mac | head -1),$(shell hostname -s | tr A-Z a-z | tr -cd a-z0-9))
+SGLANG_HOME ?= $(HOME)/sglang
+SGLANG_BIN ?= $(if $(wildcard $(SGLANG_HOME)/bin/sglang),$(SGLANG_HOME)/bin/sglang)
 SGLANG_FOUND = $(or $(SGLANG_BIN),$(shell command -v sglang))
+# SGLang 0.5.23 (MiniMax H3 Base fp8) in its own venv on uv's own Python 3.12 (it carries Python.h: no python3.12-dev).
+# The cu13 links its kernels need are made by the runner at the first run (sgl.preflight); this checks the rest.
+sglang:           ## SGLang for MiniMax H3 Base fp8 on an NVIDIA Linux host, in SGLANG_HOME (default ~/sglang)
+	$(UV) venv --allow-existing --python 3.12 --python-preference only-managed $(SGLANG_HOME)
+	VIRTUAL_ENV=$(SGLANG_HOME) $(UV) pip sync runner_service/sglang-requirements.txt
+	@command -v gcc >/dev/null && command -v g++ >/dev/null || \
+	  echo "SGLang compiles its kernels with gcc and g++: sudo apt install build-essential"
+	@h=$$(hostname); [ $${#h} -le 63 ] || \
+	  echo "the hostname $${#h} characters long breaks SGLang's start: sudo hostnamectl set-hostname gpu1"
+	@echo "SGLang is in $(SGLANG_HOME); make runners-nvidia finds it there"
+
 runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GPU_HOSTS=<h>, or STACK=release); GPU_HOST=<h>, SGLANG_BIN, HELMSTUDIO_MODELS
 	@h=$(GPU_HOST); $(if $(filter release,$(STACK)),mkdir -p $(SECRETS) && chmod 700 $(SECRETS) && \
 	docker run --rm -v $${HELMSTUDIO_PROJECT:-helmstudio}_keys:/k:ro -v $(SECRETS):/o --entrypoint sh nats:2.15.3-alpine3.22 \

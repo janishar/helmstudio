@@ -57,6 +57,33 @@ def child_env(exe: Path, env=os.environ) -> dict[str, str]:
     return {"PATH": os.pathsep.join([*paths, env.get("PATH", os.defpath)]), **extra}
 
 
+HOSTNAME_MAX = 63  # ponytail: a guess; 65 characters broke on 2026-11-25 (Linux allows 64), set it on the GPU check
+
+
+def preflight(node: str, exe: Path, env=os.environ) -> None:
+    """What SGLang's start needs from the host, checked before a 30-minute READY_S wait (docs/guides: NVIDIA on Linux):
+    the two links its JIT kernels expect in the cu13 wheel (made here when missing: `lib64` → lib and
+    lib/libcudart.so → libcudart.so.13; the CUDA image had them), a short hostname (torch.distributed's "File name
+    too long") and gcc / g++ on PATH."""
+    cuda = next(exe.parent.parent.glob("lib/python*/site-packages/nvidia/cu13"), None)
+    if cuda:
+        for link, to in ((cuda / "lib64", "lib"), (cuda / "lib/libcudart.so", "libcudart.so.13")):
+            if link.is_symlink() or link.exists():
+                continue
+            try:
+                link.symlink_to(to)
+            except OSError as e:
+                raise RunError(f"{node}: SGLang needs the link {link} ({e.strerror}): "
+                               f"ln -s {to} {link}") from None  # fmt: skip
+    if len(host := socket.gethostname()) > HOSTNAME_MAX:
+        raise RunError(f"{node}: the hostname {len(host)} characters long breaks SGLang's start (torch.distributed "
+                       "'File name too long'): sudo hostnamectl set-hostname gpu1")  # fmt: skip
+    path = child_env(exe, env)["PATH"]
+    if missing := [c for c in ("gcc", "g++") if not shutil.which(c, path=path)]:
+        raise RunError(f"{node}: SGLang compiles its kernels with gcc and g++ ({', '.join(missing)} not found): "
+                       "sudo apt install build-essential")  # fmt: skip
+
+
 SGLANG = find()
 # uvicorn's start line (use_colors: the URL may be wrapped in ANSI codes); SGLang starts it after the weights loaded
 READY = re.compile(r"Uvicorn running on (?:\x1b\[[0-9;]*m)?http://127\.0\.0\.1:(\d+)")
@@ -258,6 +285,7 @@ def generate(ctx, model, body: dict, out: Path, tmp: Path, lora: Path | None = N
         raise RunError(
             f"{ctx.node}: SGLang is not found at {SGLANG} (set SGLANG_BIN; docs/guides: NVIDIA on Linux)"
         )
+    preflight(ctx.node, SGLANG)
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
     ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
     lora = ready_lora(lora) if lora else None

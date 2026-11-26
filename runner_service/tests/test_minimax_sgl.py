@@ -259,3 +259,49 @@ def test_find_and_child_env(tmp_path):
     env = sgl.child_env(exe, {"PATH": "/usr/bin"})
     assert env["PATH"].split(os.pathsep) == [str(exe.parent), str(cuda / "bin"), "/usr/bin"]
     assert env["CUDA_HOME"] == str(cuda)
+
+
+def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(
+    tmp_path, monkeypatch
+):
+    """alpha.6 row 3: the two cu13 links are made once (a second call changes nothing), an unwritable venv names the
+    ln command, a long hostname and a missing gcc fail fast; a missing SGLang is refused before any of it."""
+    exe = tmp_path / "venv/bin/sglang"
+    cuda = tmp_path / "venv/lib/python3.12/site-packages/nvidia/cu13"
+    (cuda / "lib").mkdir(parents=True)
+    (cuda / "lib/libcudart.so.13").write_bytes(b"")
+    exe.parent.mkdir(parents=True)
+    exe.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(sgl.socket, "gethostname", lambda: "gpu1")
+    monkeypatch.setattr(sgl.shutil, "which", lambda c, path=None: f"/usr/bin/{c}")
+    sgl.preflight("generate", exe)
+    assert (
+        os.readlink(cuda / "lib64") == "lib"
+        and os.readlink(cuda / "lib/libcudart.so") == "libcudart.so.13"
+    )
+    assert (cuda / "lib64/libcudart.so").resolve() == (cuda / "lib/libcudart.so.13").resolve()
+    sgl.preflight("generate", exe)  # already there: a no-op
+    (cuda / "lib64").unlink()
+    cuda.chmod(0o555)
+    try:
+        with pytest.raises(RunError, match=f"ln -s lib {cuda / 'lib64'}$"):
+            sgl.preflight("generate", exe)
+    finally:
+        cuda.chmod(0o755)
+    monkeypatch.setattr(sgl.socket, "gethostname", lambda: "h" * 64)
+    with pytest.raises(
+        RunError, match="hostname 64 characters long .*sudo hostnamectl set-hostname gpu1$"
+    ):
+        sgl.preflight("generate", exe)
+    monkeypatch.setattr(sgl.socket, "gethostname", lambda: "gpu1")
+    monkeypatch.setattr(sgl.shutil, "which", lambda c, path=None: None if c == "gcc" else c)
+    with pytest.raises(RunError, match=r"\(gcc not found\): sudo apt install build-essential$"):
+        sgl.preflight("generate", exe)
+    called = []
+    monkeypatch.setattr(sgl, "preflight", lambda *a: called.append(a))
+    monkeypatch.setattr(sgl, "SGLANG", Path("/nonexistent/sglang"))
+    with pytest.raises(RunError, match="SGLang is not found"):
+        sgl.generate(
+            type("Ctx", (), {"node": "generate"})(), None, {"task": "t2va"}, tmp_path, tmp_path
+        )
+    assert not called
