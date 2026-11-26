@@ -149,7 +149,7 @@ export function AppShell({
       <AssistantContext value={a}>
         <ToolsContext value={reg}>
           <div
-            className="flex min-h-dvh flex-col md:flex-row lg:h-dvh lg:overflow-hidden"
+            className="flex min-h-dvh flex-col md:h-dvh md:flex-row md:overflow-clip"
             data-drawer={(a.ready && a.open) || undefined}
           >
             {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
@@ -239,8 +239,11 @@ export function AppShell({
                 </Link>
               </nav>
             </div>
-            {/* lg+: the window never scrolls; the dock and the side panel stay put and only <main> scrolls */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start lg:flex-nowrap lg:overflow-hidden lg:[&>.aside]:max-h-[calc(100dvh-28px)] lg:[&>.aside]:shrink-0 lg:[&>.aside]:overflow-y-auto lg:[&>main]:min-h-0 lg:[&>main]:overflow-y-auto">
+            {/* md+: the window never scrolls (overflow-clip: not even a focus or scrollIntoView moves it; owner, alpha.5
+                item 9), the rail stays put. 60rem (the Mac app's narrowest window, 960 px) and up: the side panel sits
+                beside <main> and each scrolls on its own; narrower, the side panel wraps under <main> and the page
+                area scrolls as one */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start md:overflow-y-auto min-[60rem]:flex-nowrap min-[60rem]:overflow-hidden min-[60rem]:[&>.aside]:max-h-[calc(100dvh-28px)] min-[60rem]:[&>.aside]:shrink-0 min-[60rem]:[&>.aside]:overflow-y-auto min-[60rem]:[&>main]:min-h-0 min-[60rem]:[&>main]:overflow-y-auto">
               {children}
             </div>
           </div>
