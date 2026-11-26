@@ -65,11 +65,18 @@ e227a7ee) is replaced.
     @; hovering an asset lights the frames and shots that use it ("used in 3 frames · 2 shots"); changing one marks them out of
     date. The Assistant can make the cast and props from the brief first.
 
+13. **The whole concept in the first version** (owner, 2026-11-26: "Everything in the concept", asked whether alpha.6 gets a
+    small first version or all of it): every lane (Assets, Storyboard, Shots, Voice, Music, sound effects), every
+    transition and morph, effects, and every block ability (open, run, pin a take, @ references, run history, notes).
+14. **Music from a local open model** (owner, 2026-11-26: "Local open model"): the best open music model that runs on the
+    Mac (and NVIDIA) is picked with its licence shown to the owner first, then added as a new pack behind the standard
+    Music request.
+15. **The standard request covers every pack we have**: Image (Qwen Image 2.1 and Turbo, MiniMax H3 Image), Video (LTX
+    2.5, MiniMax H3), Voice (Qwen3-TTS, ZONOS3), Music (the new pack). Outside services stay later (decision 2).
+
 ## Open
 
-- What a block can do in the first version (open it, run it, pin a take, @ references, run history, notes), in Magic's own
-  terms.
-- Where the standard request lives (contract, adapters in the runner) and the first models it covers.
+- Where the standard request lives (contract, adapters) is a build choice, settled in the plan.
 
 ## Release
 
