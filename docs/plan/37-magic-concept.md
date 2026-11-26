@@ -1,0 +1,48 @@
+# 37. Magic: concept (draft, in discussion)
+
+Owner, 2026-11-26: "plan an switch ui for this timeline which opens a node editor … this will be a real playground for the
+assistant", then "first lets have a concept discussion with me". This file keeps what was decided in that discussion. Not
+scheduled: not alpha.5; a release is picked when the concept is done. The wireframe board
+[Magic](../mock/Magic.dc.html) (44a93115, e227a7ee) shows the first idea (a node canvas) and is now partly superseded.
+
+## Decided
+
+1. **A recipe, not a mirror.** Magic is where a sequence is composed and generated; the result is a normal sequence
+   (owner: "B, the recipe graph").
+2. **One standard generation request per kind**: Image, Video, Voice, Music. Strict: only the shared fields show, a model's
+   extras sit under Advanced. Each model declares what it supports; the form greys what the chosen model can't do. Adapters
+   turn the request into a local pack's job (LTX, Qwen, Zonos3, H3) and later into an outside service's API. A new addition:
+   it removes nothing from Create or Pipelines, and for now only powers Magic (owner: "a, strict standard, but it will not
+   remove current features … right now only be powering the magic screen").
+3. **The whole main area**, with a floating player, small by default, resizable (owner: "b. The whole main area"; "a,
+   floating player resizable but small by default").
+4. **From n8n** (owner: "can we borrow something from n8n?"), proposed: each block's Input | Output view, Run one / Run up to
+   here, a pinned take, references between blocks, "+" to add the next one, Run history, notes, templates, keys for outside
+   services later.
+5. **Lanes, not a free canvas** (owner, 2026-11-26: "imagine a lines in parallel, i drop at any point it opens a dialog to add
+   elemnt like audio, image, video, dialog etc and i select the duration and options … don't copy timeline its a new screen
+   with preview of each node. i will be able to add things in parallel and serial. the charecter etc will be in the @
+   selection in nodes. this ui also allows to create a storyboard charecter and alogign them with the shots"):
+   - parallel lanes in time; drop at any point opens a dialog: pick the kind, then its duration and options;
+   - every block is a node with a live preview and a status (draft, running, done, out of date);
+   - serial along a lane, parallel across lanes; free lanes (any kind on any lane), named by the user;
+   - characters, places and other elements are @ picks inside a block, not blocks; links like a first frame are @ picks too
+     (`@Shot 1 · last frame`);
+   - storyboard: a block can start as a board (a quick image, its @characters, a note) lined up with the shots, then
+     Generate from board.
+6. **Move and join** (owner: "i should be able to drag and move nodes around, transition etc will be new point in that
+   view"): drag blocks in time and across lanes, snapping to edges, the playhead and the ruler; insert or overwrite; move
+   several together. Transitions are points where two blocks meet (cut, dissolve, fade, wipe, a generated morph), and at a
+   lane's start and end (fade in, fade out). Effects are badges on a block.
+7. **Separate from the Timeline** (owner: "b, separate with send to timeline, timeline can strart either with standard or
+   magic mode"): a Magic board is its own thing; **Send to Timeline** makes or updates a normal sequence for the final cut
+   and export. A new sequence starts in **Standard** (today's Timeline) or **Magic**.
+
+## Open
+
+- Sending again after the sequence was hand-edited in the Timeline: what wins.
+- Voice and music lined up with shots (owner: "handle the voice and music to align with a shot"): lanes in time may cover it;
+  open whether a line moves with its shot.
+- The Assistant: run generation by itself, or always ask first.
+- Which n8n ideas go in the first version.
+- Where the standard request lives (contract, adapters in the runner) and the first models it covers.
