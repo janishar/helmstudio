@@ -330,10 +330,13 @@ test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, A
   await page.goto("/");
   await page.evaluate(() => localStorage.removeItem("create-settings-drawer"));
   await page.reload();
-  await page.getByRole("tab", { name: "Video" }).click();
-  await page.getByRole("button", { name: /^Workflow:/ }).click();
-  await page.getByRole("menuitemradio", { name: "Echo video", exact: true }).click();
-  await expect(page.getByRole("button", { name: /^Workflow: Echo video\./ })).toBeVisible();
+  const echoVideo = async () => {
+    await page.getByRole("tab", { name: "Video" }).click();
+    await page.getByRole("button", { name: /^Workflow:/ }).click();
+    await page.getByRole("menuitemradio", { name: "Echo video", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Workflow: Echo video\./ })).toBeVisible();
+  };
+  await echoVideo();
   const composer = page.getByRole("form", { name: "Composer" });
   const sliders = composer.getByRole("button", { name: "All settings" });
   await expect(sliders).toHaveAttribute("aria-expanded", "false");
@@ -356,8 +359,15 @@ test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, A
   await canvas.getByRole("button", { name: "All settings" }).click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
   await expect(sliders).toHaveAttribute("aria-expanded", "true");
+  // the reload keeps it open; a new user's empty screen still shows its Elements panel there until the sliders button
+  // asks for the settings, which it closes again
   await page.reload();
+  await echoVideo();
+  expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBe("1");
+  await expect(page.getByRole("complementary", { name: "Elements" })).toBeVisible();
+  await sliders.click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
   await sliders.click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toHaveCount(0);
+  expect(await page.evaluate(() => localStorage.getItem("create-settings-drawer"))).toBeNull();
 });

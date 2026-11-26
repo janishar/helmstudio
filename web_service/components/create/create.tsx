@@ -251,8 +251,6 @@ export type CreateInitial = {
   naming?: S<"SessionList">["naming"];
 };
 
-/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
- * (picture, sound: sideOf), so neither replaces the other. */
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
 const DRAWER = "create-settings-drawer";
 const noSub = () => () => undefined;
@@ -263,6 +261,8 @@ const storedDrawer = () => {
     return false;
   }
 };
+/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
+ * (picture, sound: sideOf), so neither replaces the other. */
 const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
