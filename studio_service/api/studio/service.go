@@ -122,7 +122,9 @@ func (s *Service) CreateSession(ctx context.Context, caller common.Caller, body 
 func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.SessionList, error) {
 	out := dto.SessionList{Sessions: []dto.Session{}}
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions
+		// API 1.81: a Magic board's own session is not listed (it is the board's)
+		rows, err := collect[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions s
+			WHERE NOT EXISTS (SELECT 1 FROM magic_boards b WHERE b.session_id = s.id)
 			ORDER BY created_at DESC LIMIT 100`)
 		for _, row := range rows {
 			out.Sessions = append(out.Sessions, sessionDTO(row))

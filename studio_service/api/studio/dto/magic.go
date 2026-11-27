@@ -22,6 +22,173 @@ type MagicBoard struct {
 	CanRedo   bool      `json:"can_redo"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// API 1.81: the board's session, its blocks' runs, the document's takes and every block's status
+	SessionID *string                `json:"session_id"`
+	Runs      []MagicBlockRun        `json:"runs"`
+	Takes     map[string]MagicTake   `json:"takes"`
+	Status    map[string]MagicStatus `json:"status"`
+}
+
+// MagicStatus is a block's derived status (API 1.81).
+type MagicStatus struct {
+	Status   string `json:"status"` // draft | running | done | out_of_date | failed
+	Progress *int   `json:"progress,omitempty"`
+	Error    string `json:"error,omitempty"`
+}
+
+// MagicTake is a take the document names, as the board shows it.
+type MagicTake struct {
+	ID        string  `json:"id"`
+	Kind      string  `json:"kind"`
+	URL       string  `json:"url,omitempty"`
+	ThumbURL  *string `json:"thumb_url"`
+	PosterURL *string `json:"poster_url"`
+	Seed      *int64  `json:"seed"`
+	RunID     *string `json:"run_id"`
+}
+
+// MagicBlockRun is one run of a block (its run history).
+type MagicBlockRun struct {
+	Block      string    `json:"block"`
+	RunID      string    `json:"run_id"`
+	WorkflowID string    `json:"workflow_id"`
+	Status     string    `json:"status"`
+	Progress   *int      `json:"progress,omitempty"`
+	Error      *string   `json:"error"`
+	Takes      []string  `json:"takes"`
+	Seed       *int64    `json:"seed"`
+	Current    bool      `json:"current"`
+	By         string    `json:"by"` // user | assistant
+	CreatedAt  time.Time `json:"created_at"`
+	RenderS    *float64  `json:"render_s"`
+}
+
+// MagicParam is one Advanced field of a model.
+type MagicParam struct {
+	Path  string `json:"path"`
+	Param any    `json:"param"`
+}
+
+// MagicModel is a workflow that serves a kind.
+type MagicModel struct {
+	WorkflowID string            `json:"workflow_id"`
+	Name       string            `json:"name"`
+	Title      string            `json:"title"`
+	Fields     []string          `json:"fields"`
+	Greyed     map[string]string `json:"greyed"`
+	Seconds    *float64          `json:"seconds"`
+	Advanced   []MagicParam      `json:"advanced"`
+}
+
+// MagicKindInfo is one kind: its shared fields and models.
+type MagicKindInfo struct {
+	Kind   string       `json:"kind"`
+	Fields []string     `json:"fields"`
+	Models []MagicModel `json:"models"`
+	Off    string       `json:"off,omitempty"`
+}
+
+// MagicKinds is GET /magic/kinds.
+type MagicKinds struct {
+	Kinds []MagicKindInfo `json:"kinds"`
+}
+
+// MagicSettings is GET/PUT /magic/settings.
+type MagicSettings struct {
+	AskAboveGPUMinutes *float64 `json:"ask_above_gpu_minutes"`
+}
+
+// Validate requires 0..600 minutes.
+func (b *MagicSettings) Validate() string {
+	if b.AskAboveGPUMinutes == nil || *b.AskAboveGPUMinutes < 0 || *b.AskAboveGPUMinutes > 600 {
+		return "ask_above_gpu_minutes must be 0 to 600"
+	}
+	return ""
+}
+
+// MagicPick names blocks: some, a lane's, or every one not done.
+type MagicPick struct {
+	Blocks []string `json:"blocks"`
+	Lane   *string  `json:"lane"`
+	Stale  *bool    `json:"stale"`
+}
+
+// Validate wants exactly one way to pick.
+func (b *MagicPick) Validate() string {
+	n := 0
+	for _, set := range []bool{b.Blocks != nil, b.Lane != nil, b.Stale != nil} {
+		if set {
+			n++
+		}
+	}
+	switch {
+	case n != 1:
+		return "give exactly one of blocks, lane, stale"
+	case b.Blocks != nil && (len(b.Blocks) < 1 || len(b.Blocks) > 200):
+		return "blocks: 1 to 200 ids"
+	case b.Stale != nil && !*b.Stale:
+		return "stale must be true"
+	}
+	return ""
+}
+
+// MagicRunCreate is POST …/run.
+type MagicRunCreate struct {
+	Revision int `json:"revision"`
+	MagicPick
+}
+
+// Validate requires the revision and the pick.
+func (b *MagicRunCreate) Validate() string {
+	if b.Revision < 1 {
+		return "revision is required"
+	}
+	return b.MagicPick.Validate()
+}
+
+// MagicStarted is a run started for a block; MagicSkipped one that could not.
+type MagicStarted struct {
+	Block string `json:"block"`
+	RunID string `json:"run_id"`
+}
+type MagicSkipped struct {
+	Block  string `json:"block"`
+	Reason string `json:"reason"`
+}
+
+// MagicRunStarted is …/run's 202.
+type MagicRunStarted struct {
+	Board   MagicBoard     `json:"board"`
+	Started []MagicStarted `json:"started"`
+	Skipped []MagicSkipped `json:"skipped"`
+}
+
+// MagicPlanBlock is one block's estimate.
+type MagicPlanBlock struct {
+	Block   string   `json:"block"`
+	Seconds *float64 `json:"seconds"`
+	Source  string   `json:"source"` // yours | pack | unknown
+	Host    *string  `json:"host"`
+	PeakGB  *float64 `json:"peak_gb"`
+	Reason  *string  `json:"reason"`
+}
+
+// MagicPlanLane is a lane's total.
+type MagicPlanLane struct {
+	Lane    string   `json:"lane"`
+	Seconds *float64 `json:"seconds"`
+	Blocks  int      `json:"blocks"`
+}
+
+// MagicPlan is …/plan.
+type MagicPlan struct {
+	Blocks       []MagicPlanBlock `json:"blocks"`
+	Lanes        []MagicPlanLane  `json:"lanes"`
+	Seconds      *float64         `json:"seconds"`
+	Order        []string         `json:"order"`
+	Ask          bool             `json:"ask"`
+	AskText      string           `json:"ask_text"`
+	LimitMinutes float64          `json:"limit_minutes"`
 }
 
 // MagicBoardSummary is a board in the list.

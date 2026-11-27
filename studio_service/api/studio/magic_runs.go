@@ -1,0 +1,1068 @@
+package studio
+
+import (
+	"cmp"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"maps"
+	"math"
+	"slices"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+
+	"github.com/helmstudio/helmgo/network"
+	"github.com/helmstudio/helmgo/utility"
+
+	"github.com/helmstudio/studio_service/api/gallery"
+	"github.com/helmstudio/studio_service/api/magic"
+	"github.com/helmstudio/studio_service/api/studio/dto"
+	"github.com/helmstudio/studio_service/api/studio/model"
+	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
+)
+
+// Magic's standard request and runs (API 1.81, plan 39 phase D; contracts/README.md "Magic: the standard request",
+// "Magic: runs"): a block's request is turned by the workflow's `standard` block into a normal run in the board's own
+// session; magic_runs keeps run → block with the hash of the block's inputs, so the projector adds each take to its
+// block and the status (draft, running, done, out of date, failed) is derived.
+
+// magicKindFields are each kind's shared fields in form order (size = width and height).
+var magicKindFields = map[string][]string{
+	"image": {"prompt", "refs", "size", "seed"},
+	"video": {"prompt", "first", "last", "length", "size", "seed"},
+	"voice": {"line", "voice", "seed"},
+	"music": {}, "sound": {}, "frame": {},
+}
+
+// magicKindOrder is the kinds as GET /magic/kinds lists them (Add's order).
+var magicKindOrder = []string{"video", "image", "voice", "music", "sound", "frame"}
+
+const (
+	offMusicSound = "Comes with Create's Music and Sound"
+	offFrame      = "Board frames come with the storyboard"
+	maxBlockRuns  = 20 // the runs of one block a board answers
+)
+
+var magicFieldWords = map[string]string{"prompt": "a prompt", "line": "a line", "refs": "references",
+	"first": "a first frame", "last": "a last frame", "length": "a length", "size": "a size", "seed": "a seed",
+	"voice": "a voice"}
+
+// modelFields are the shared fields of kind a standard block fills, in form order.
+func modelFields(kind string, st *registry.Standard) []string {
+	out := []string{}
+	for _, f := range magicKindFields[kind] {
+		_, ok := st.Fields[f]
+		if f == "size" {
+			_, w := st.Fields["width"]
+			_, h := st.Fields["height"]
+			ok = w && h
+		}
+		if ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+// standardModels are the workflows that serve kind, fastest declared first (then by id): the first is the default.
+func standardModels(ws []registry.Workflow, kind string) []registry.Workflow {
+	var out []registry.Workflow
+	for _, w := range ws {
+		if w.Standard != nil && w.Standard.Kind == kind {
+			out = append(out, w)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b registry.Workflow) int {
+		sa, sb := math.Inf(1), math.Inf(1)
+		if a.Standard.Seconds != nil {
+			sa = *a.Standard.Seconds
+		}
+		if b.Standard.Seconds != nil {
+			sb = *b.Standard.Seconds
+		}
+		return cmp.Or(cmp.Compare(sa, sb), strings.Compare(a.ID, b.ID))
+	})
+	return out
+}
+
+// advancedParams are a model's Advanced fields: every unwired param a form can set that its standard block does not
+// fill, node id order then param order, with the workflow's own value as the default.
+func advancedParams(w registry.Workflow) []dto.MagicParam {
+	filled := map[string]bool{}
+	for _, p := range w.Standard.Fields {
+		filled[p] = true
+	}
+	for p := range w.Standard.Set {
+		filled[p] = true
+	}
+	out := []dto.MagicParam{}
+	for _, id := range slices.Sorted(maps.Keys(w.Nodes)) {
+		node := w.Nodes[id]
+		for _, p := range w.NodeSchemas[node.Kind].Params {
+			path := id + "." + p.Name
+			_, wired := node.In[p.Name]
+			if wired || filled[path] || slices.Contains([]string{"rows", "image", "media", "voice", "span"}, p.Type) {
+				continue
+			}
+			if v, ok := node.Params[p.Name]; ok {
+				p.Default = v
+			}
+			out = append(out, dto.MagicParam{Path: path, Param: p})
+		}
+	}
+	return out
+}
+
+// magicKinds is GET /magic/kinds from the registry's workflows.
+func magicKinds(ws []registry.Workflow) dto.MagicKinds {
+	out := dto.MagicKinds{Kinds: []dto.MagicKindInfo{}}
+	for _, kind := range magicKindOrder {
+		info := dto.MagicKindInfo{Kind: kind, Fields: magicKindFields[kind], Models: []dto.MagicModel{}}
+		for _, w := range standardModels(ws, kind) {
+			fields := modelFields(kind, w.Standard)
+			greyed := map[string]string{}
+			for _, f := range magicKindFields[kind] {
+				if !slices.Contains(fields, f) {
+					greyed[f] = w.Standard.Model + " can't take " + magicFieldWords[f]
+				}
+			}
+			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title,
+				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w)})
+		}
+		switch {
+		case kind == "frame":
+			info.Off = offFrame
+		case (kind == "music" || kind == "sound") && len(info.Models) == 0:
+			info.Off = offMusicSound
+		}
+		out.Kinds = append(out.Kinds, info)
+	}
+	return out
+}
+
+// MagicKinds answers GET /magic/kinds.
+func (s *Service) MagicKinds(ctx context.Context, caller common.Caller) (dto.MagicKinds, error) {
+	if !s.registry.Ready() {
+		return dto.MagicKinds{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	return magicKinds(s.registry.Workflows()), nil
+}
+
+// ------------------------------------------------------------------ the resolver
+
+// reqString, reqNumber and reqRef read a MagicRequest's fields (it is kept as JSON).
+func reqString(req map[string]any, k string) string { v, _ := req[k].(string); return v }
+
+func reqNumber(req map[string]any, k string) (float64, bool) {
+	v, ok := req[k].(float64)
+	return v, ok
+}
+
+func reqRefs(req map[string]any) []map[string]any {
+	var out []map[string]any
+	list, _ := req["refs"].([]any)
+	for _, r := range list {
+		if m, ok := r.(map[string]any); ok {
+			out = append(out, m)
+		}
+	}
+	return out
+}
+
+// magicModel is the workflow a block's request runs: its `model` when that serves the kind, else the kind's first.
+func magicModel(ws []registry.Workflow, kind string, req map[string]any) (registry.Workflow, string) {
+	models := standardModels(ws, kind)
+	if want := reqString(req, "model"); want != "" {
+		for _, w := range models {
+			if w.ID == want {
+				return w, ""
+			}
+		}
+		return registry.Workflow{}, "its model " + want + " is on no host"
+	}
+	if len(models) == 0 {
+		return registry.Workflow{}, "no model for " + kind + " is on any host"
+	}
+	return models[0], ""
+}
+
+// whyNot is why block b cannot run ("" when it can): its kind, a dialogue, no model.
+func whyNot(ws []registry.Workflow, b *magic.Block) string {
+	switch b.Kind {
+	case "music":
+		return "Music " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
+	case "sound":
+		return "Sound " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
+	case "frame":
+		return offFrame
+	}
+	if turns, _ := b.Request["turns"].([]any); len(turns) > 0 {
+		return "Dialogue blocks can't run yet"
+	}
+	_, why := magicModel(ws, b.Kind, b.Request)
+	return why
+}
+
+// magicPics are a block's pictures as take ids: its first and last frame and its refs ("" none).
+type magicPics struct {
+	First, Last string
+	Refs        []string
+}
+
+// fitSize is w × h scaled down to fit the int params' maxes, each side then on its step and in its bounds.
+func fitSize(w, h float64, pw, ph registry.Param) (float64, float64) {
+	scale := 1.0
+	if pw.Max != nil {
+		scale = min(scale, *pw.Max/w)
+	}
+	if ph.Max != nil {
+		scale = min(scale, *ph.Max/h)
+	}
+	return onGrid(w*scale, pw), onGrid(h*scale, ph)
+}
+
+// onGrid is v on p's grid (min + k × step, else whole numbers) within its bounds.
+func onGrid(v float64, p registry.Param) float64 {
+	lo, step := 0.0, 1.0
+	if p.Min != nil {
+		lo = *p.Min
+	}
+	if p.Step != nil && *p.Step > 0 {
+		step = *p.Step
+	}
+	v = lo + math.Round((v-lo)/step)*step
+	if p.Max != nil && v > *p.Max {
+		v = lo + math.Floor((*p.Max-lo)/step)*step
+	}
+	return math.Max(v, lo)
+}
+
+// itemField is the name of a rows param's item field of type typ (an Image port: "Image"), or of the item param with
+// position seconds (typ "seconds").
+func rowField(p registry.Param, typ string) string {
+	for _, name := range slices.Sorted(maps.Keys(p.Item)) {
+		raw := p.Item[name]
+		var port string
+		if json.Unmarshal(raw, &port) == nil && port == typ {
+			return name
+		}
+		var item registry.Param
+		if typ == "seconds" && json.Unmarshal(raw, &item) == nil && item.Position == "seconds" {
+			return name
+		}
+	}
+	return ""
+}
+
+// standardInputs is a run's inputs for block b's request on workflow w (its standard block): each shared field the
+// model fills on its param, `set` and `advanced` under them; voiceID is the voice it speaks in ("" none).
+func standardInputs(w registry.Workflow, b *magic.Block, target magic.Target, pics magicPics, voiceID string, seed int64) map[string]any {
+	st, req := w.Standard, b.Request
+	inputs := map[string]any{}
+	if adv, ok := req["advanced"].(map[string]any); ok {
+		maps.Copy(inputs, adv)
+	}
+	maps.Copy(inputs, st.Set)
+	param := func(field string) (string, registry.Param, bool) {
+		path, ok := st.Fields[field]
+		if !ok {
+			return "", registry.Param{}, false
+		}
+		p, found := findParam(w, path)
+		return path, p, found
+	}
+	for _, f := range []string{"prompt", "line"} {
+		if path, _, ok := param(f); ok {
+			inputs[path] = reqString(req, f)
+		}
+	}
+	if path, _, ok := param("seed"); ok {
+		inputs[path] = float64(seed)
+	}
+	if pw, w1, ok := param("width"); ok {
+		if ph, h1, ok := param("height"); ok {
+			wd, hd := float64(target.Width), float64(target.Height)
+			if v, ok := reqNumber(req, "width"); ok {
+				wd = v
+			}
+			if v, ok := reqNumber(req, "height"); ok {
+				hd = v
+			}
+			inputs[pw], inputs[ph] = fitSize(wd, hd, w1, h1)
+		}
+	}
+	// the clip's length in the workflow's frames (its fps param's value), on the frames param's grid
+	frames, fps := 0.0, float64(target.FPS)
+	if path, p, ok := param("length"); ok {
+		nodeID, _, _ := strings.Cut(path, ".")
+		node := w.Nodes[nodeID]
+		if v, ok := number(merged(w.NodeSchemas[node.Kind], node.Params)[p.FPS]); ok && v > 0 {
+			fps = v
+		}
+		frames = onGrid(math.Round(float64(b.Length)/float64(target.FPS)*fps), p)
+		inputs[path] = frames
+	}
+	if path, p, ok := param("refs"); ok {
+		image, rows := rowField(p, "Image"), []any{}
+		for _, t := range pics.Refs {
+			if p.Max != nil && float64(len(rows)) >= *p.Max {
+				break
+			}
+			rows = append(rows, map[string]any{image: map[string]any{"take_id": t}})
+		}
+		inputs[path] = rows
+	}
+	rowsOf := map[string][]any{}
+	for _, end := range []struct{ field, take string }{{"first", pics.First}, {"last", pics.Last}} {
+		path, p, ok := param(end.field)
+		switch {
+		case !ok:
+			continue
+		case p.Type == "image":
+			if end.take != "" {
+				inputs[path] = map[string]any{"take_id": end.take}
+			}
+			continue
+		}
+		if _, seen := rowsOf[path]; !seen {
+			rowsOf[path] = []any{}
+		}
+		if end.take == "" {
+			continue
+		}
+		row := map[string]any{rowField(p, "Image"): map[string]any{"take_id": end.take}}
+		if at := rowField(p, "seconds"); at != "" {
+			s := 0.0
+			if end.field == "last" && frames > 0 {
+				s = math.Floor((frames-1)/fps*10) / 10 // the clip's last frame, on the 0.1 s grid
+			}
+			row[at] = s
+		}
+		rowsOf[path] = append(rowsOf[path], row)
+	}
+	for path, rows := range rowsOf {
+		nodeID, _, _ := strings.Cut(path, ".")
+		if len(rows) == 0 { // no frame: the node goes (text to video), when it can
+			if w.NodeSchemas[w.Nodes[nodeID].Kind].Passthrough() != nil {
+				inputs[nodeID+".bypass"] = true
+			}
+			continue
+		}
+		inputs[path] = rows
+		if w.NodeSchemas[w.Nodes[nodeID].Kind].Passthrough() != nil {
+			inputs[nodeID+".bypass"] = false
+		}
+	}
+	if path, _, ok := param("voice"); ok && voiceID != "" {
+		inputs[path] = map[string]any{"voice_id": voiceID}
+	}
+	return inputs
+}
+
+// shownTake is the take block b shows: its pinned one, else its latest ("" none).
+func shownTake(b *magic.Block) string {
+	if b.Pinned != nil {
+		return *b.Pinned
+	}
+	if len(b.Takes) > 0 {
+		return b.Takes[len(b.Takes)-1]
+	}
+	return ""
+}
+
+func findBlock(d magic.Doc, id string) *magic.Block {
+	for _, b := range d.Blocks {
+		if b.ID == id {
+			return b
+		}
+	}
+	return nil
+}
+
+func findAsset(d magic.Doc, id string) *magic.Asset {
+	for _, a := range d.Assets {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
+// pickRefs are a block's picture picks: first, last (from_frame's take when it has no first) and refs; missing
+// blocks and assets are left out.
+func pickRefs(d magic.Doc, b *magic.Block) (first, last map[string]any, refs []map[string]any) {
+	first, _ = b.Request["first"].(map[string]any)
+	last, _ = b.Request["last"].(map[string]any)
+	if first == nil && b.FromFrame != nil {
+		first = map[string]any{"block": *b.FromFrame, "part": "take"}
+	}
+	return first, last, reqRefs(b.Request)
+}
+
+// inputsHash is what block b's take depends on, hashed: its request, its length, the takes its picks show (an asset:
+// its sheet and voice) and the frame it is made from. A take whose run's hash differs is out of date.
+func inputsHash(d magic.Doc, b *magic.Block) string {
+	pick := func(r map[string]any) any {
+		if r == nil {
+			return nil
+		}
+		if id, ok := r["asset"].(string); ok {
+			if a := findAsset(d, id); a != nil {
+				return []any{a.Sheet, a.VoiceID}
+			}
+			return nil
+		}
+		id, _ := r["block"].(string)
+		if x := findBlock(d, id); x != nil {
+			return []any{shownTake(x), r["part"]}
+		}
+		return nil
+	}
+	first, last, refs := pickRefs(d, b)
+	var picked []any
+	for _, r := range refs {
+		picked = append(picked, pick(r))
+	}
+	var voice any
+	if id, ok := b.Request["voice"].(string); ok {
+		voice = pick(map[string]any{"asset": id})
+	}
+	data, _ := json.Marshal([]any{b.Request, b.Length, pick(first), pick(last), picked, voice})
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:16])
+}
+
+// magicPicture is the picture take of a pick: an asset's first sheet take; a block's shown take, or (a video) its
+// first or last frame take, made at once as POST /takes/{id}/frame does; "" for a pick of nothing.
+func (s *Service) magicPicture(ctx context.Context, tx pgx.Tx, ownerID string, d magic.Doc, r map[string]any, end string) (string, error) {
+	if r == nil {
+		return "", nil
+	}
+	if id, ok := r["asset"].(string); ok {
+		if a := findAsset(d, id); a != nil && len(a.Sheet) > 0 {
+			return a.Sheet[0], nil
+		}
+		return "", nil
+	}
+	id, _ := r["block"].(string)
+	x := findBlock(d, id)
+	if x == nil {
+		return "", nil
+	}
+	name := strings.Split(x.Name, " · ")[0]
+	take := shownTake(x)
+	if take == "" {
+		return "", network.NewUnprocessableError(name+" has no take yet", nil)
+	}
+	_, rows, err := loadTakes(ctx, tx, ownerID, []string{take})
+	if err != nil {
+		return "", err
+	}
+	row, ok := rows[take]
+	switch {
+	case !ok:
+		return "", network.NewUnprocessableError(name+"'s take is gone", nil)
+	case row.Kind == "image":
+		return take, nil
+	case row.Kind != "video":
+		return "", network.NewUnprocessableError(name+" has no picture", nil)
+	}
+	part, _ := r["part"].(string)
+	if part != "first" && part != "last" {
+		part = end
+	}
+	frame, job, err := s.frameOf(ctx, tx, ownerID, row, part)
+	if err != nil {
+		return "", err
+	}
+	if frame == nil {
+		_ = job
+		return "", network.NewConflictError(name+"'s "+part+" frame is being made; try again in a moment", nil)
+	}
+	return frame.ID, nil
+}
+
+// ------------------------------------------------------------------ runs, takes and status
+
+type magicRunRow struct {
+	Block, RunID, InputsHash string
+	Seed                     *int64
+	Via                      *string
+	CreatedAt                time.Time
+	WorkflowID, Status       string
+	Progress                 json.RawMessage
+	Error                    *string
+	Takes                    []string
+	RenderS                  *float64
+}
+
+// boardRuns are the board's runs, the last 20 of each block, oldest first; deleted runs and takes are left out.
+func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, error) {
+	return collect[magicRunRow](ctx, tx, `SELECT m.block, m.run_id::text, m.inputs_hash, m.seed, m.via, m.created_at,
+		r.workflow_id, r.status, r.progress, r.error,
+		coalesce((SELECT array_agg(o.take_id::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
+			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
+		(SELECT (t.made_with->>'render_s')::float8 FROM run_outputs o JOIN takes t ON t.id = o.take_id
+			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1)
+		FROM (SELECT *, row_number() OVER (PARTITION BY block ORDER BY created_at DESC) AS n FROM magic_runs
+			WHERE board_id = $1) m
+		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL
+		WHERE m.n <= $2 ORDER BY m.created_at, m.run_id`, boardID, maxBlockRuns)
+}
+
+// runPercent is a run's progress as a percentage (its last step of), nil without.
+func runPercent(raw json.RawMessage) *int {
+	var p struct{ Step, Of float64 }
+	if json.Unmarshal(raw, &p) != nil || p.Of <= 0 {
+		return nil
+	}
+	v := int(math.Round(min(max(p.Step/p.Of, 0), 1) * 100))
+	return &v
+}
+
+var openRun = map[string]bool{"queued": true, "running": true}
+
+// blockStatuses derives every block's status from the document and its runs (contracts/README.md, Magic: runs).
+func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
+	out := map[string]dto.MagicStatus{}
+	for _, b := range d.Blocks {
+		var mine []magicRunRow
+		for _, r := range runs {
+			if r.Block == b.ID {
+				mine = append(mine, r)
+			}
+		}
+		open := -1
+		for i, r := range mine {
+			if openRun[r.Status] {
+				open = i // the newest open run's progress
+			}
+		}
+		if open >= 0 {
+			out[b.ID] = dto.MagicStatus{Status: "running", Progress: runPercent(mine[open].Progress)}
+			continue
+		}
+		take := shownTake(b)
+		if take == "" {
+			if n := len(mine); n > 0 && mine[n-1].Status == "failed" {
+				out[b.ID] = dto.MagicStatus{Status: "failed", Error: cmp.Or(deref(mine[n-1].Error), "failed")}
+			} else {
+				out[b.ID] = dto.MagicStatus{Status: "draft"}
+			}
+			continue
+		}
+		status := "done"
+		for _, r := range mine {
+			if slices.Contains(r.Takes, take) && r.InputsHash != inputsHash(d, b) {
+				status = "out_of_date"
+			}
+		}
+		out[b.ID] = dto.MagicStatus{Status: status}
+	}
+	return out
+}
+
+// boardExtras fills a board's session, runs, takes and statuses.
+func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out *dto.MagicBoard) error {
+	out.SessionID = row.SessionID
+	runs, err := boardRuns(ctx, tx, row.ID)
+	if err != nil {
+		return err
+	}
+	d := out.Doc
+	out.Runs, out.Takes = []dto.MagicBlockRun{}, map[string]dto.MagicTake{}
+	byTake := map[string]string{}
+	for _, r := range runs {
+		by := "user"
+		if deref(r.Via) == "assistant" {
+			by = "assistant"
+		}
+		current := false
+		if b := findBlock(d, r.Block); b != nil {
+			current = r.InputsHash == inputsHash(d, b)
+		}
+		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
+			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
+			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS})
+		for _, t := range r.Takes {
+			byTake[t] = r.RunID
+		}
+	}
+	out.Status = blockStatuses(d, runs)
+	_, rows, err := loadTakes(ctx, tx, row.OwnerID, magic.TakeIDs(d))
+	if err != nil {
+		return err
+	}
+	for id, t := range rows {
+		td := gallery.TakeDTO(s.signer, t)
+		mt := dto.MagicTake{ID: id, Kind: t.Kind, URL: td.URL, ThumbURL: &td.ThumbURL}
+		if td.Video != nil {
+			mt.PosterURL = &td.Video.PosterURL
+		}
+		if td.MadeWith != nil {
+			mt.Seed = td.MadeWith.Seed
+		}
+		if run, ok := byTake[id]; ok {
+			mt.RunID = &run
+		}
+		out.Takes[id] = mt
+	}
+	return nil
+}
+
+// boardSession is the board's own session; one deleted since is made again. It is hidden from Create's list.
+func boardSession(ctx context.Context, tx pgx.Tx, row *boardRow) (string, error) {
+	if row.SessionID != nil {
+		var found bool
+		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM sessions WHERE id = $1)`, *row.SessionID).Scan(&found); err != nil || found {
+			return *row.SessionID, err
+		}
+	}
+	id := utility.NewID()
+	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, id, row.OwnerID,
+		"Magic · "+row.Name); err != nil {
+		return "", err
+	}
+	if _, err := tx.Exec(ctx, `UPDATE magic_boards SET session_id = $2 WHERE id = $1`, row.ID, id); err != nil {
+		return "", err
+	}
+	row.SessionID = &id
+	return id, nil
+}
+
+// pickBlocks are the blocks a pick names, in run order (board frames first, then lane by lane in time); named
+// blocks that do not exist and an unknown lane are 422s.
+func pickBlocks(d magic.Doc, pick dto.MagicPick, status map[string]dto.MagicStatus) ([]*magic.Block, error) {
+	var out []*magic.Block
+	switch {
+	case pick.Blocks != nil:
+		for _, id := range pick.Blocks {
+			b := findBlock(d, id)
+			if b == nil {
+				return nil, network.NewUnprocessableError("unknown block "+id, nil)
+			}
+			out = append(out, b)
+		}
+	case pick.Lane != nil:
+		if !slices.ContainsFunc(d.Lanes, func(l *magic.Lane) bool { return l.ID == *pick.Lane }) {
+			return nil, network.NewUnprocessableError("unknown lane "+*pick.Lane, nil)
+		}
+		for _, b := range d.Blocks {
+			if b.Lane == *pick.Lane {
+				out = append(out, b)
+			}
+		}
+	default:
+		for _, b := range d.Blocks {
+			if st := status[b.ID].Status; st != "done" && st != "running" {
+				out = append(out, b)
+			}
+		}
+	}
+	lane := map[string]int{}
+	for i, l := range d.Lanes {
+		lane[l.ID] = i
+	}
+	slices.SortStableFunc(out, func(a, b *magic.Block) int {
+		return cmp.Or(cmp.Compare(boolInt(a.Kind != "frame"), boolInt(b.Kind != "frame")), cmp.Compare(lane[a.Lane], lane[b.Lane]),
+			cmp.Compare(a.At, b.At))
+	})
+	return out, nil
+}
+
+// RunMagicBoard answers POST …/run: each picked block's request as `count` runs in the board's session.
+func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id string, body *dto.MagicRunCreate) (dto.MagicRunStarted, error) {
+	if !s.registry.Ready() {
+		return dto.MagicRunStarted{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.MagicRunStarted{Started: []dto.MagicStarted{}, Skipped: []dto.MagicSkipped{}}
+	var placed []dto.Run
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := readBoard(ctx, tx, id, true)
+		if err != nil {
+			return err
+		}
+		if body.Revision != row.Revision {
+			return staleBoard(row)
+		}
+		d := row.doc()
+		runs, err := boardRuns(ctx, tx, row.ID)
+		if err != nil {
+			return err
+		}
+		status := blockStatuses(d, runs)
+		blocks, err := pickBlocks(d, body.MagicPick, status)
+		if err != nil {
+			return err
+		}
+		named := body.Blocks != nil
+		ws := s.registry.Workflows()
+		for _, b := range blocks {
+			name := strings.Split(b.Name, " · ")[0]
+			why := whyNot(ws, b)
+			if why == "" && status[b.ID].Status == "running" {
+				if named {
+					return network.NewConflictError(name+" is already running", nil)
+				}
+				why = "already running"
+			}
+			if why != "" {
+				if named {
+					return network.NewUnprocessableError(name+": "+why, nil)
+				}
+				out.Skipped = append(out.Skipped, dto.MagicSkipped{Block: b.ID, Reason: why})
+				continue
+			}
+			made, err := s.runBlock(ctx, tx, caller, &row, d, b)
+			if err != nil {
+				return err
+			}
+			for _, r := range made {
+				out.Started = append(out.Started, dto.MagicStarted{Block: b.ID, RunID: r.ID})
+			}
+			placed = append(placed, made...)
+		}
+		out.Board, err = s.boardDTO(ctx, tx, row)
+		return err
+	})
+	if err != nil {
+		return dto.MagicRunStarted{}, err
+	}
+	for i := range placed {
+		if err := s.placeQueued(ctx, &placed[i]); err != nil {
+			return out, err
+		}
+	}
+	return out, nil
+}
+
+// runBlock makes block b's runs (its count, seeds from its seed) in the board's session and indexes them.
+func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller, row *boardRow, d magic.Doc, b *magic.Block) ([]dto.Run, error) {
+	w, _ := magicModel(s.registry.Workflows(), b.Kind, b.Request)
+	first, last, refs := pickRefs(d, b)
+	var pics magicPics
+	var err error
+	if pics.First, err = s.magicPicture(ctx, tx, row.OwnerID, d, first, "last"); err != nil {
+		return nil, err
+	}
+	if pics.Last, err = s.magicPicture(ctx, tx, row.OwnerID, d, last, "first"); err != nil {
+		return nil, err
+	}
+	for _, r := range refs {
+		t, err := s.magicPicture(ctx, tx, row.OwnerID, d, r, "last")
+		if err != nil {
+			return nil, err
+		}
+		if t != "" {
+			pics.Refs = append(pics.Refs, t)
+		}
+	}
+	voiceID := reqString(b.Request, "voice_id")
+	if a := findAsset(d, reqString(b.Request, "voice")); a != nil && a.VoiceID != nil {
+		voiceID = *a.VoiceID
+	}
+	session, err := boardSession(ctx, tx, row)
+	if err != nil {
+		return nil, err
+	}
+	seed, seeded := reqNumber(b.Request, "seed")
+	count, ok := reqNumber(b.Request, "count")
+	if !ok {
+		count = 1
+	}
+	hash, via := inputsHash(d, b), common.ViaOf(caller.Via)
+	var out []dto.Run
+	for i := range int(min(max(count, 1), 4)) {
+		runSeed := int64(-1)
+		if seeded && seed >= 0 {
+			runSeed = int64(seed) + int64(i)
+		}
+		run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
+			Inputs: standardInputs(w, b, d.Target, pics, voiceID, runSeed)})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via); err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, nil
+}
+
+// magicFill adds a board run's take to its block as a studio revision (the projector, after storing the take); a
+// block or board gone since leaves the take in the gallery.
+func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) error {
+	var boardID, block string
+	err := tx.QueryRow(ctx, `SELECT board_id::text, block FROM magic_runs WHERE run_id = $1 AND owner_id = $2`,
+		run.ID, run.OwnerID).Scan(&boardID, &block)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	row, err := one[boardRow](ctx, tx, `SELECT `+boardCols+` FROM magic_boards WHERE id = $1 AND owner_id = $2
+		AND deleted_at IS NULL FOR UPDATE`, boardID, run.OwnerID)
+	if errors.Is(err, errNotFound) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	doc := row.doc()
+	b := findBlock(doc, block)
+	if b == nil || slices.Contains(b.Takes, takeID) || len(b.Takes) >= 200 {
+		return nil
+	}
+	b.Takes = append(b.Takes, takeID)
+	if why := magic.Check(doc); why != "" {
+		return fmt.Errorf("magic fill of %s: %s", block, why)
+	}
+	undo, redo, err := boardPointers(ctx, tx, row.ID, row.Revision)
+	if err != nil {
+		return err
+	}
+	return storeBoard(ctx, tx, &row, doc, write{by: "studio", ops: "take"}, undo, redo)
+}
+
+// withRunTakes is doc with every take a board run made put back on its block (still on the board, oldest first): an
+// undo, redo or restore never takes a take back (plan 39 §45.12).
+func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc) (magic.Doc, error) {
+	type made struct{ Block, TakeID string }
+	rows, err := collect[made](ctx, tx, `SELECT m.block, o.take_id::text FROM magic_runs m
+		JOIN run_outputs o ON o.run_id = m.run_id JOIN takes t ON t.id = o.take_id AND t.deleted_at IS NULL
+		WHERE m.board_id = $1 ORDER BY m.created_at, o.idx`, boardID)
+	if err != nil || len(rows) == 0 {
+		return doc, err
+	}
+	doc = doc.Clone()
+	for _, r := range rows {
+		if b := findBlock(doc, r.Block); b != nil && !slices.Contains(b.Takes, r.TakeID) && len(b.Takes) < 200 {
+			b.Takes = append(b.Takes, r.TakeID)
+		}
+	}
+	return doc, nil
+}
+
+// ------------------------------------------------------------------ the estimate (plan 39 §45.10)
+
+// magicUnits are a take's or a block's units of GPU work: an image's megapixels, a video's seconds × its pixels /
+// (1280 × 720), a voice's (any audio's) seconds.
+func magicUnits(kind string, w, h, seconds float64) float64 {
+	switch kind {
+	case "image":
+		return w * h / 1e6
+	case "video":
+		return seconds * w * h / (1280 * 720)
+	}
+	return seconds
+}
+
+// median is the middle of xs (the mean of the two middle ones); xs is not empty.
+func median(xs []float64) float64 {
+	xs = slices.Sorted(slices.Values(xs))
+	n := len(xs)
+	if n%2 == 1 {
+		return xs[n/2]
+	}
+	return (xs[n/2-1] + xs[n/2]) / 2
+}
+
+// recentRate is the caller's GPU seconds per unit of workflow on host: the median over their last 5 takes of it there
+// with a render time; nil with none.
+func recentRate(ctx context.Context, tx pgx.Tx, ownerID, workflowID, host, kind string) (*float64, error) {
+	type take struct{ RenderS, W, H, Seconds float64 }
+	rows, err := collect[take](ctx, tx, `SELECT (made_with->>'render_s')::float8, coalesce(width, 0)::float8,
+		coalesce(height, 0)::float8, coalesce((video->>'duration_s')::float8, (audio->>'duration_s')::float8, 0)
+		FROM takes WHERE owner_id = $1 AND made_with->>'workflow_id' = $2 AND made_with->>'host' = $3
+		AND made_with ? 'render_s' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 5`, ownerID, workflowID, host)
+	if err != nil {
+		return nil, err
+	}
+	var rates []float64
+	for _, t := range rows {
+		if u := magicUnits(kind, t.W, t.H, t.Seconds); u > 0 {
+			rates = append(rates, t.RenderS/u)
+		}
+	}
+	if len(rates) == 0 {
+		return nil, nil
+	}
+	m := median(rates)
+	return &m, nil
+}
+
+// blockUnits are block b's units on the board (its size, its length).
+func blockUnits(d magic.Doc, b *magic.Block) float64 {
+	w, h := float64(d.Target.Width), float64(d.Target.Height)
+	if v, ok := reqNumber(b.Request, "width"); ok {
+		w = v
+	}
+	if v, ok := reqNumber(b.Request, "height"); ok {
+		h = v
+	}
+	return magicUnits(b.Kind, w, h, float64(b.Length)/float64(d.Target.FPS))
+}
+
+// askAbove is the caller's ask_above_gpu_minutes (5 without a row).
+func askAbove(ctx context.Context, tx pgx.Tx) (float64, error) {
+	v := 5.0
+	err := tx.QueryRow(ctx, `SELECT ask_above_gpu_minutes FROM magic_settings`).Scan(&v)
+	if errors.Is(err, pgx.ErrNoRows) {
+		err = nil
+	}
+	return v, err
+}
+
+var magicNoun = map[string][2]string{"video": {"shot", "shots"}, "image": {"still", "stills"}, "voice": {"line", "lines"},
+	"frame": {"frame", "frames"}}
+
+// askText is the ask card's line: "3 shots, about 6 min".
+func askText(kinds []string, seconds *float64) string {
+	noun := [2]string{"block", "blocks"}
+	if len(kinds) > 0 && !slices.ContainsFunc(kinds, func(k string) bool { return k != kinds[0] }) {
+		if n, ok := magicNoun[kinds[0]]; ok {
+			noun = n
+		}
+	}
+	what := fmt.Sprintf("%d %s", len(kinds), noun[min(len(kinds), 2)/2])
+	switch {
+	case seconds == nil:
+		return what + ", time unknown"
+	case *seconds < 60:
+		return fmt.Sprintf("%s, about %d s", what, int(math.Ceil(*seconds)))
+	}
+	return fmt.Sprintf("%s, about %d min", what, int(math.Round(*seconds/60)))
+}
+
+// PlanMagicBoard answers POST …/plan: per block its estimate, host and peak, the totals, the run order and the ask rule.
+func (s *Service) PlanMagicBoard(ctx context.Context, caller common.Caller, id string, body *dto.MagicPick) (dto.MagicPlan, error) {
+	if !s.registry.Ready() {
+		return dto.MagicPlan{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.MagicPlan{Blocks: []dto.MagicPlanBlock{}, Lanes: []dto.MagicPlanLane{}, Order: []string{}}
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := readBoard(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		d := row.doc()
+		runs, err := boardRuns(ctx, tx, row.ID)
+		if err != nil {
+			return err
+		}
+		blocks, err := pickBlocks(d, *body, blockStatuses(d, runs))
+		if err != nil {
+			return err
+		}
+		if out.LimitMinutes, err = askAbove(ctx, tx); err != nil {
+			return err
+		}
+		ws := s.registry.Workflows()
+		total, known, unknownRun := 0.0, true, false
+		lanes := map[string]*dto.MagicPlanLane{}
+		var kinds []string
+		for _, b := range blocks {
+			pb := dto.MagicPlanBlock{Block: b.ID, Source: "unknown"}
+			out.Order = append(out.Order, b.ID)
+			lane := lanes[b.Lane]
+			if lane == nil {
+				lane = &dto.MagicPlanLane{Lane: b.Lane, Seconds: new(float64)}
+				lanes[b.Lane] = lane
+			}
+			lane.Blocks++
+			if why := whyNot(ws, b); why != "" {
+				pb.Reason = &why
+				out.Blocks = append(out.Blocks, pb)
+				continue
+			}
+			kinds = append(kinds, b.Kind)
+			w, _ := magicModel(ws, b.Kind, b.Request)
+			// the host and peak as POST /runs/plan answers them, for the request without its pictures
+			_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
+				Inputs: standardInputs(w, b, d.Target, magicPics{}, reqString(b.Request, "voice_id"), -1)})
+			if perr == nil {
+				if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
+					host := slices.Sorted(maps.Keys(slots))[0]
+					pb.Host = &host
+					if p := planOf(s.registry, host, probe); p.peak >= 0 {
+						gb := float64(p.peak) / 100
+						pb.PeakGB = &gb
+					}
+				}
+			}
+			count, ok := reqNumber(b.Request, "count")
+			if !ok {
+				count = 1
+			}
+			units := blockUnits(d, b) * min(max(count, 1), 4)
+			var rate *float64
+			if pb.Host != nil {
+				if rate, err = recentRate(ctx, tx, row.OwnerID, w.ID, *pb.Host, b.Kind); err != nil {
+					return err
+				}
+			}
+			switch {
+			case rate != nil:
+				pb.Source = "yours"
+			case w.Standard.Seconds != nil:
+				rate, pb.Source = w.Standard.Seconds, "pack"
+			}
+			if rate != nil {
+				sec := math.Round(*rate*units*10) / 10
+				pb.Seconds = &sec
+				total += sec
+				if lane.Seconds != nil {
+					*lane.Seconds += sec
+				}
+			} else {
+				known, lane.Seconds = false, nil
+				if b.Kind != "frame" {
+					unknownRun = true
+				}
+			}
+			out.Blocks = append(out.Blocks, pb)
+		}
+		for _, l := range d.Lanes {
+			if lane := lanes[l.ID]; lane != nil {
+				out.Lanes = append(out.Lanes, *lane)
+			}
+		}
+		if known {
+			out.Seconds = &total
+		}
+		out.Ask = unknownRun || total > out.LimitMinutes*60
+		out.AskText = askText(kinds, out.Seconds)
+		return nil
+	})
+	return out, err
+}
+
+// ------------------------------------------------------------------ settings
+
+// GetMagicSettings is the caller's Magic settings.
+func (s *Service) GetMagicSettings(ctx context.Context, caller common.Caller) (dto.MagicSettings, error) {
+	var out dto.MagicSettings
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		v, err := askAbove(ctx, tx)
+		out.AskAboveGPUMinutes = &v
+		return err
+	})
+	return out, err
+}
+
+// PutMagicSettings stores the caller's Magic settings.
+func (s *Service) PutMagicSettings(ctx context.Context, caller common.Caller, body *dto.MagicSettings) (dto.MagicSettings, error) {
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		_, err := tx.Exec(ctx, `INSERT INTO magic_settings (owner_id, ask_above_gpu_minutes) VALUES ($1, $2)
+			ON CONFLICT (owner_id) DO UPDATE SET ask_above_gpu_minutes = $2`, caller.ID, *body.AskAboveGPUMinutes)
+		return err
+	})
+	return *body, err
+}

@@ -353,6 +353,17 @@ type Workflow struct {
 	Studio      json.RawMessage       `json:"studio,omitempty"` // a StudioLayout as published; absent = the derived form
 	NodeSchemas map[string]NodeSchema `json:"node_schemas"`
 	Order       int                   `json:"-"` // its place in its runner's workflows value (the pack's file order)
+	// API 1.81: what Magic's standard request fills in it (registry.schema.json standard); nil = it serves no kind
+	Standard *Standard `json:"standard,omitempty"`
+}
+
+// Standard is a workflow's standard block (API 1.81, contracts/README.md "Magic: the standard request").
+type Standard struct {
+	Kind    string            `json:"kind"`   // image | video | voice | music | sound
+	Model   string            `json:"model"`  // the model's name in Magic's picker
+	Fields  map[string]string `json:"fields"` // shared field → "<node>.<param>"
+	Set     map[string]any    `json:"set,omitempty"`
+	Seconds *float64          `json:"seconds,omitempty"` // the declared GPU seconds per unit
 }
 
 // Host is one hosts KV value.

@@ -233,6 +233,9 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 	if err == nil && data.Index == 0 {
 		err = fillShot(ctx, tx, run, takeID) // API 1.17: the run's first take fills its slot
 		if err == nil {
+			err = magicFill(ctx, tx, run, takeID) // API 1.81: a board run's take joins its block
+		}
+		if err == nil {
 			err = p.nameTimelinesOf(ctx, tx, run) // API 1.76: an untitled sequence takes its first prompt's name
 		}
 	}

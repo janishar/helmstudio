@@ -31,9 +31,10 @@ type boardRow struct {
 	Doc                  json.RawMessage
 	Revision             int
 	CreatedAt, UpdatedAt time.Time
+	SessionID            *string // API 1.81: made at its first run
 }
 
-const boardCols = `id::text, owner_id::text, name, doc, revision, created_at, updated_at`
+const boardCols = `id::text, owner_id::text, name, doc, revision, created_at, updated_at, session_id::text`
 
 func (r boardRow) doc() magic.Doc {
 	d, err := magic.Parse(r.Doc)
@@ -115,8 +116,8 @@ func boardKept(ctx context.Context, tx pgx.Tx, id string, p *int) (bool, error) 
 	return found, err
 }
 
-// boardDTO is the board as answered, with whether undo and redo can go.
-func boardDTO(ctx context.Context, tx pgx.Tx, row boardRow) (dto.MagicBoard, error) {
+// boardDTO is the board as answered, with whether undo and redo can go and (API 1.81) its runs, takes and statuses.
+func (s *Service) boardDTO(ctx context.Context, tx pgx.Tx, row boardRow) (dto.MagicBoard, error) {
 	out := dto.MagicBoard{ID: row.ID, Name: row.Name, Revision: row.Revision, Doc: row.doc(), CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt}
 	undo, redo, err := boardPointers(ctx, tx, row.ID, row.Revision)
@@ -125,6 +126,9 @@ func boardDTO(ctx context.Context, tx pgx.Tx, row boardRow) (dto.MagicBoard, err
 	}
 	if err == nil {
 		out.CanRedo, err = boardKept(ctx, tx, row.ID, redo)
+	}
+	if err == nil {
+		err = s.boardExtras(ctx, tx, row, &out)
 	}
 	return out, err
 }
@@ -210,7 +214,7 @@ func (s *Service) CreateMagicBoard(ctx context.Context, caller common.Caller, bo
 			VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
 			return err
 		}
-		out, err = boardDTO(ctx, tx, row)
+		out, err = s.boardDTO(ctx, tx, row)
 		return err
 	})
 	return out, err
@@ -222,7 +226,7 @@ func (s *Service) GetMagicBoard(ctx context.Context, caller common.Caller, id st
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		row, err := readBoard(ctx, tx, id, false)
 		if err == nil {
-			out, err = boardDTO(ctx, tx, row)
+			out, err = s.boardDTO(ctx, tx, row)
 		}
 		return err
 	})
@@ -234,8 +238,15 @@ func (s *Service) GetMagicAgent(ctx context.Context, caller common.Caller, id st
 	var out dto.MagicAgentView
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		row, err := readBoard(ctx, tx, id, false)
-		if err == nil {
-			out = dto.MagicAgentView{ID: row.ID, Name: row.Name, Revision: row.Revision, Agent: magic.AgentView(row.doc())}
+		if err != nil {
+			return err
+		}
+		d := row.doc()
+		out = dto.MagicAgentView{ID: row.ID, Name: row.Name, Revision: row.Revision, Agent: magic.AgentView(d)}
+		runs, err := boardRuns(ctx, tx, row.ID) // API 1.81: the derived status
+		status := blockStatuses(d, runs)
+		for i := range out.Blocks {
+			out.Blocks[i].Status = status[out.Blocks[i].ID].Status
 		}
 		return err
 	})
@@ -251,7 +262,7 @@ func (s *Service) editBoard(ctx context.Context, caller common.Caller, id string
 			err = fn(tx, &row)
 		}
 		if err == nil {
-			out, err = boardDTO(ctx, tx, row)
+			out, err = s.boardDTO(ctx, tx, row)
 		}
 		return err
 	})
@@ -314,7 +325,7 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 		out = dto.MagicEditResult{Revision: row.Revision, DryRun: body.DryRun, Diff: magic.DiffDocs(before, doc),
 			Warnings: magic.Warnings(doc)}
 		if body.DryRun {
-			out.Board, err = boardDTO(ctx, tx, row)
+			out.Board, err = s.boardDTO(ctx, tx, row)
 			out.Board.Doc = doc // what it would be: nothing is written
 			return err
 		}
@@ -329,7 +340,7 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 			return err
 		}
 		out.Revision = row.Revision
-		out.Board, err = boardDTO(ctx, tx, row)
+		out.Board, err = s.boardDTO(ctx, tx, row)
 		return err
 	})
 	return out, err
@@ -400,6 +411,9 @@ func (s *Service) restoreBoard(ctx context.Context, caller common.Caller, id str
 			return err
 		}
 		doc, err := magic.Parse(raw)
+		if err == nil { // API 1.81: an undo, redo or restore never takes a run's take back
+			doc, err = withRunTakes(ctx, tx, row.ID, doc)
+		}
 		if err != nil {
 			return err
 		}

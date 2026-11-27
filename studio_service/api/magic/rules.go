@@ -26,7 +26,8 @@ var (
 	Kinds = []string{"frame", "image", "video", "voice", "music", "sound"}
 	Roles = []string{"storyboard", "shots", "voice", "music", "sound", "free"}
 	// requestFields are a MagicRequest's
-	requestFields = []string{"kind", "model", "prompt", "line", "turns", "voice", "style", "from", "refs", "advanced"}
+	requestFields = []string{"kind", "model", "prompt", "line", "turns", "voice", "style", "from", "refs", "advanced", "first",
+		"last", "width", "height", "seed", "count", "voice_id"} // API 1.81: first … voice_id
 )
 
 // CheckTarget is "" or why t is not a board's target.

@@ -91,6 +91,32 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		}
 		reply(ctx, http.StatusOK, out, err)
 	})
+	// API 1.81: the standard request and runs
+	group.GET("/magic/kinds", func(ctx *gin.Context) {
+		out, err := c.service.MagicKinds(ctx.Request.Context(), common.MustCaller(ctx))
+		reply(ctx, http.StatusOK, out, err)
+	})
+	group.GET("/magic/settings", func(ctx *gin.Context) {
+		out, err := c.service.GetMagicSettings(ctx.Request.Context(), common.MustCaller(ctx))
+		reply(ctx, http.StatusOK, out, err)
+	})
+	group.PUT("/magic/settings", func(ctx *gin.Context) {
+		body, err := strictBody[dto.MagicSettings](ctx, false)
+		var out dto.MagicSettings
+		if err == nil {
+			out, err = c.service.PutMagicSettings(ctx.Request.Context(), common.MustCaller(ctx), body)
+		}
+		reply(ctx, http.StatusOK, out, err)
+	})
+	group.POST("/magic/boards/:id/run", func(ctx *gin.Context) {
+		body, err := strictBody[dto.MagicRunCreate](ctx, false)
+		var out dto.MagicRunStarted
+		if err == nil {
+			out, err = c.service.RunMagicBoard(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+		}
+		reply(ctx, http.StatusAccepted, out, err)
+	})
+	group.POST("/magic/boards/:id/plan", magicIDBody(c.service.PlanMagicBoard))
 	group.DELETE("/magic/boards/:id/snapshots/:snapshot_id", func(ctx *gin.Context) {
 		noContent(ctx, c.service.DeleteMagicSnapshot(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"),
 			ctx.Param("snapshot_id")))
