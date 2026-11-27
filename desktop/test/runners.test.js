@@ -25,6 +25,7 @@ test('a new start stops the runners a killed app left behind', async () => {
   assert.equal(a.procs.torch.spawnfile, path.join(p.venvs, 'runner', 'bin', 'helmstudio-runner'), 'runs under the helm name');
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(home, 'runners.json'))), { torch: old });
 
+  a.stopping = true; // a is the killed app: it restarts nothing
   const b = new Runners({ p, cfg, settings: {} }); // the app again, a forgotten
   await b.start();
   assert.ok(!alive(old), 'the left-behind runner was stopped');
@@ -54,4 +55,59 @@ test('a stop or start stops the plugin groups a killed native runner left, only 
     left.kill();
     other.kill();
   }
+});
+
+// 2b: a stand-in runner home (node under the venv's python name) whose main.py is `script`
+function standIn(script) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'helm-backoff-'));
+  process.env.HELM_HOME = path.join(home, 'helm');
+  const p = layout(home, home);
+  fs.mkdirSync(path.join(p.venvs, 'runner', 'bin'), { recursive: true });
+  fs.symlinkSync(process.execPath, path.join(p.venvs, 'runner', 'bin', 'python'));
+  fs.mkdirSync(path.join(p.runner, 'runner_service'), { recursive: true });
+  fs.writeFileSync(path.join(p.runner, 'runner_service', 'main.py'), script);
+  const cfg = { profile: 'x', composeEnv: { HELM_SECRETS: 'secrets' }, runners: [{ env: 'torch', venv: 'runner', healthPort: 1 }], defaultModelsDir: home };
+  return { home, p, cfg };
+}
+const until = async (ok) => {
+  for (let i = 0; i < 300 && !ok(); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.ok(ok(), 'in time');
+};
+
+test('2b: a runner that stops is restarted with back-off, any exit code; after 5 in 10 minutes it is given up', async () => {
+  const { p, cfg } = standIn('process.exit(3)');
+  const waits = [];
+  const a = new Runners({ p, cfg, settings: {}, backoff: (n) => (waits.push(n), 10) });
+  await a.start();
+  await until(() => a.issues.torch);
+  assert.deepEqual(waits, [0, 1, 2, 3], 'four restarts, each one step further along the back-off');
+  assert.equal(a.issues.torch.kind, 'nostart', 'every stop came within 5 s of its start');
+  assert.equal(a.state().torch.kind, 'nostart');
+  assert.match(a.issues.torch.lines.join('\n'), /exit 3[\s\S]*stopped 5 of 5 · not restarted/);
+  await assert.rejects(a.waitReady(null, 5000), /The torch runner didn’t start/);
+  a.restartOne('torch'); // Restart runner: the count reset, started now
+  assert.equal(a.issues.torch, undefined);
+  assert.equal(a.state().torch, 'run');
+  await until(() => a.issues.torch);
+  await a.stop();
+});
+
+test('2b: a runner that cannot be spawned is given up at once, with the cause', async () => {
+  const { p, cfg } = standIn('');
+  fs.rmSync(path.join(p.venvs, 'runner'), { recursive: true });
+  const a = new Runners({ p, cfg, settings: {} });
+  await a.start();
+  assert.deepEqual(a.issues.torch && { kind: a.issues.torch.kind, cause: a.issues.torch.cause }, { kind: 'nostart', cause: 'Its Python environment is missing.' });
+  assert.match(a.issues.torch.lines.at(-1), /spawn runner-torch: ENOENT/);
+});
+
+test('2b: a stop while a restart waits cancels it', async () => {
+  const { p, cfg } = standIn('process.exit(0)');
+  const a = new Runners({ p, cfg, settings: {}, backoff: () => 200 });
+  await a.start();
+  await until(() => a.state().torch.wait != null);
+  await a.stop();
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(a.procs, {});
+  assert.equal(a.state().torch, 'down');
 });

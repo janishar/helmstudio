@@ -63,3 +63,13 @@ button{font:inherit;color:inherit;cursor:pointer}
 .lnk{color:var(--a1);text-decoration:underline;text-underline-offset:2px;cursor:pointer}
 .spin{width:22px;height:22px;border-radius:50%;border:2.5px solid var(--a1);border-right-color:transparent;display:inline-block;animation:spin 1s linear infinite}
 .start h2.upd-t{font-size:19px}
+/* the error states (board Desktop.dc.html "Error states", 2a–2g) */
+.mono{font-family:'JetBrains Mono',monospace;overflow-wrap:anywhere}
+.down{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:0 60px 24px;text-align:center}
+.down h2{font-size:24px}.down p{margin:0}
+.down .steps{max-width:420px;text-align:left}
+.down .act{margin-top:4px;justify-content:center}
+.down.lo{padding-top:40px}.down.lo h2{font-size:20px}
+.st.fail .sd{color:#ff8a80}
+.pick .in{flex:1}
+.pri:disabled{opacity:.6;cursor:default}

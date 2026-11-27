@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('helm', {
   chooseFolder: (current) => ipcRenderer.invoke('choose-folder', current),
   showLog: () => ipcRenderer.send('show-log'),
   retry: () => ipcRenderer.send('retry'),
+  // the error states' buttons (board Desktop.dc.html "Error states"): restart | quit | reload | restart-runner |
+  // log-folder | runner-log | open-storage
+  act: (name) => ipcRenderer.send('act', String(name)),
   // the update window: its state, and install | cancel | restart | recheck | notes | close
   onUpd: (cb) => ipcRenderer.on('upd', (_e, u) => cb(u)),
   updHello: () => ipcRenderer.invoke('upd-hello'),

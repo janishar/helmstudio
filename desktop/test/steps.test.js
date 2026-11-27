@@ -174,3 +174,74 @@ test('images: byte progress from the registry\'s layer sizes', async () => {
   ]);
   assert.equal(runner.snapshot().steps[0].detail, '0.6 GB download · 5.5 GB on disk');
 });
+
+test('an error with its own title shows its words over the step\'s hint (2e: under 2 GB at any start)', async () => {
+  const dir = tmp();
+  const steps = [{ id: 'vm', title: 'VM', hint: 'The VM did not start.', run: async () => { throw Object.assign(new Error('About 6 GB of free disk is needed; 1 GB is free.'), { title: 'Check this Mac failed' }); } }];
+  const runner = new StepRunner({ steps, logFile: path.join(dir, 'log') });
+  assert.equal(await runner.run(), 'failed');
+  assert.deepEqual([runner.error.title, runner.error.message], ['Check this Mac failed', 'About 6 GB of free disk is needed; 1 GB is free.']);
+});
+
+test('ask with until answers itself when it holds (2d: the drive is back)', async () => {
+  const dir = tmp();
+  let back = false;
+  let got;
+  const steps = [{ id: 'q', title: 'Q', run: async (c) => (got = await c.ask('drive', {}, () => back)) }];
+  const runner = new StepRunner({ steps, logFile: path.join(dir, 'log') });
+  setTimeout(() => (back = true), 100);
+  assert.equal(await runner.run(), 'done');
+  assert.equal(got, 'auto');
+});
+
+// the every-open steps on a scratch home, the commands faked; free ports only (never the dev stack's or the app's)
+async function everyRun({ settings, runners = { start: async () => {}, waitReady: async () => {} } }) {
+  const net = require('node:net');
+  const dir = tmp();
+  process.env.HELMSTUDIO_HOME = dir;
+  process.env.HELM_HOME = path.join(dir, 'helm');
+  const free = () => new Promise((r) => { const s = net.createServer().listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => r(port)); }); });
+  const c = structuredClone(cfg);
+  for (const k of ['KONG_HTTP_PORT', 'POSTGRES_HOST_PORT', 'NATS_HOST_PORT', 'S3_HOST_PORT', 'S3_TLS_HOST_PORT']) c.composeEnv[k] = `${await free()}`;
+  for (const r of c.runners) r.healthPort = await free();
+  fs.mkdirSync(path.join(dir, 'res', 'stack', '.tools'), { recursive: true });
+  const calls = [];
+  const fake = async (cmd, args, o) => (calls.push({ cmd, args, env: o.env }), '');
+  const s = { save() {}, ...settings };
+  const steps = stackSteps({ p: layout(dir, path.join(dir, 'res')), cfg: c, settings: s, runners });
+  return { dir, c, s, calls, steps, fake };
+}
+
+test('2c: a port another app holds asks for another; the picked one is saved and reaches compose and the studio address', async () => {
+  const net = require('node:net');
+  const { c, s, calls, steps, fake, dir } = await everyRun({ settings: {} });
+  const kong = Number(c.composeEnv.KONG_HTTP_PORT);
+  const held = net.createServer().listen(kong, '127.0.0.1');
+  await new Promise((r) => held.once('listening', r));
+  const runner = new StepRunner({ steps: steps.every.filter((x) => x.id === 'services'), logFile: path.join(dir, 'log'), exec: fake });
+  let asked;
+  runner.on('update', (snap) => snap.ask?.kind === 'port' && !asked && ((asked = snap.ask.data), held.close(), runner.answer('port', `${asked.suggest}`)));
+  try {
+    const out = await runner.run();
+    assert.equal(out, 'done', JSON.stringify(runner.error));
+  } finally {
+    held.close();
+  }
+  assert.deepEqual([asked.port, asked.holder, asked.label, asked.key], [kong, 'node', 'the studio', 'KONG_HTTP_PORT']);
+  assert.ok(asked.suggest > kong);
+  assert.deepEqual(s.ports, { KONG_HTTP_PORT: asked.suggest });
+  assert.equal(c.studioUrl, `http://127.0.0.1:${asked.suggest}`);
+  const up = calls.find((x) => x.args.includes('up'));
+  assert.equal(up.env.KONG_HTTP_PORT, `${asked.suggest}`);
+});
+
+test('2d: a models folder on an unplugged drive asks; Continue starts the runners with what is there', async () => {
+  let started = false;
+  const { steps, fake, dir } = await everyRun({ settings: { modelsDir: '/Volumes/helm-test-not-there/models' }, runners: { start: async () => (started = true), waitReady: async () => {} } });
+  const runner = new StepRunner({ steps: steps.every.filter((x) => x.id === 'runners'), logFile: path.join(dir, 'log'), exec: fake });
+  let asked;
+  runner.on('update', (snap) => snap.ask?.kind === 'drive' && !asked && ((asked = snap.ask.data), runner.answer('drive', 'continue')));
+  assert.equal(await runner.run(), 'done');
+  assert.deepEqual(asked, { volume: 'helm-test-not-there', dir: '/Volumes/helm-test-not-there/models' });
+  assert.ok(started);
+});

@@ -117,7 +117,9 @@ class StepRunner extends EventEmitter {
           }
           step.status = 'fail';
           this.log(`failed: ${e.message}`);
-          this.error = { step: step.id, title: `${step.title} failed`, message: step.hint || e.message, detail: e.message };
+          // an error with its own title (a check's words, as the first open's) is shown as is, over the step's hint
+          const title = e.title || `${step.title} failed`;
+          this.error = { step: step.id, title, message: (!e.title && step.hint) || e.message, detail: e.message };
           this.emitUpdate();
           return 'failed';
         }
@@ -162,18 +164,23 @@ class StepRunner extends EventEmitter {
       run: (cmd, args, opts = {}) =>
         this.exec(cmd, args, { ...opts, signal, onLine: (l) => (opts.quiet || onLine(l), opts.onLine?.(l)) }),
       pipe: (a, b, opts = {}) => this.pipe(a, b, { ...opts, signal, onLine }),
-      // waits for the UI (an admin account, a folder); data goes to the UI (e.g. an error from the last answer)
-      ask: (kind, data = {}) =>
-        new Promise((resolve, reject) => {
+      // waits for the UI (an admin account, a folder); data goes to the UI (e.g. an error from the last answer);
+      // until(): checked every 2 s, true answers 'auto' (the unplugged drive is back)
+      ask: (kind, data = {}, until = null) => {
+        let poll;
+        return new Promise((resolve, reject) => {
           if (signal.aborted) return reject(new Error('cancelled'));
           this.asking = { kind, data, resolve, reject };
           step.status = 'ask';
           this.emitUpdate();
+          if (until) poll = setInterval(() => until() && resolve('auto'), 2000);
         }).finally(() => {
+          clearInterval(poll);
           this.asking = null;
           step.status = 'run';
           this.emitUpdate();
-        }),
+        });
+      },
     };
   }
 }
