@@ -1458,6 +1458,10 @@
   .ast .msg p + .al {
     margin-top: 6px;
   }
+  /* the steps come first in a reply (alpha.6): the answer and the choices sit 8px under them */
+  .ast .msg .al + * {
+    margin-top: 8px;
+  }
   .ast .src {
     margin: 4px 0 0;
     padding-left: 18px;
