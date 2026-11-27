@@ -1,6 +1,7 @@
 package magic
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -48,7 +49,7 @@ func sendTakes() map[string]timeline.Take {
 // halves of their shots, the effects bake the rest of Shot 2, the gap before Shot 4 and Shot 4 itself are slots,
 // the voice is linked to Shot 2's clip and cut at V1's end; the sequence passes the Timeline's rules.
 func TestBuildSend(t *testing.T) {
-	out := BuildSend(sendBoard(), sendTakes(), map[string]string{"s3": "out_of_date"}, true)
+	out := BuildSend(sendBoard(), sendTakes(), map[string]string{"s3": "out_of_date"}, nil, true)
 	v1 := out.Doc.Tracks[0].Clips
 	g := timeline.NewGrid(out.Doc.Target)
 	total := 0
@@ -134,7 +135,7 @@ func TestBuildSendDissolve(t *testing.T) {
 	takes := sendTakes()
 	takes[tB] = timeline.Take{Kind: "video", DurationS: 4.5}
 	takes[tA] = timeline.Take{Kind: "video", DurationS: 4.5}
-	out := BuildSend(d, takes, nil, true)
+	out := BuildSend(d, takes, nil, nil, true)
 	if out.Joins[0].How != "kept" || len(out.Bakes) != 0 {
 		t.Fatalf("want a kept dissolve: %+v %+v", out.Joins, out.Bakes)
 	}
@@ -145,11 +146,11 @@ func TestBuildSendDissolve(t *testing.T) {
 	if _, probs := timeline.Normalize(out.Doc, takes, nil); probs != nil {
 		t.Fatalf("rules: %v", probs)
 	}
-	if out := BuildSend(d, takes, nil, false); out.Joins[0].How != "baked" || len(out.Bakes) != 1 {
+	if out := BuildSend(d, takes, nil, nil, false); out.Joins[0].How != "baked" || len(out.Bakes) != 1 {
 		t.Fatalf("keep false: %+v", out.Joins)
 	}
 	takes[tB] = timeline.Take{Kind: "video", DurationS: 4}
-	if out := BuildSend(d, takes, nil, true); out.Joins[0].How != "baked" {
+	if out := BuildSend(d, takes, nil, nil, true); out.Joins[0].How != "baked" {
 		t.Fatalf("no handle: %+v", out.Joins)
 	}
 }
@@ -161,7 +162,7 @@ func TestBuildSendShortTake(t *testing.T) {
 	takes := sendTakes()
 	takes[tA] = timeline.Take{Kind: "video", DurationS: 1}
 	takes[tB] = timeline.Take{Kind: "video", DurationS: 1}
-	out := BuildSend(d, takes, nil, true)
+	out := BuildSend(d, takes, nil, nil, true)
 	for _, b := range out.Bakes {
 		for _, s := range b.Sides {
 			if s.Pre < 0 || s.Post < 0 {
@@ -169,4 +170,39 @@ func TestBuildSendShortTake(t *testing.T) {
 			}
 		}
 	}
+}
+
+// API 1.89: a dialogue's turns go one after another, the first linked to its shot, a missing turn warned; a Loop's
+// take repeats to fill its block, the last cut at its end.
+func TestBuildSendTurnsAndLoop(t *testing.T) {
+	d := sendBoard()
+	d.Blocks[5].Request = map[string]any{"kind": "voice", "turns": []any{}} // v1, 300 frames from 100
+	d.Lanes = append(d.Lanes, &Lane{ID: "fx", Name: "Sound", Role: "sound"})
+	d.Blocks = append(d.Blocks, &Block{ID: "x1", Lane: "fx", At: 0, Length: 120, Kind: "sound", Name: "Rain",
+		Request: map[string]any{"kind": "sound", "loop": true}, Takes: []string{tV}})
+	takes := sendTakes()
+	takes[tV] = timeline.Take{Kind: "audio", DurationS: 2} // 48 frames
+	out := BuildSend(d, takes, nil, map[string][]string{"v1": {tV, "", tV}}, true)
+	at := func(track int) (s []string) {
+		for _, c := range out.Doc.Tracks[track].Clips {
+			s = append(s, strings.Join([]string{ftoa(*c.At), ftoa(*c.Out)}, "+"))
+		}
+		return s
+	}
+	if got := strings.Join(at(1), " "); got != "4.17+2 6.17+2" { // 100/24 s, then right after it
+		t.Fatal(got, out.Warnings)
+	}
+	if c := out.Doc.Tracks[1].Clips; c[0].Link == nil || c[1].Link != nil {
+		t.Fatal("the first turn is linked to its shot")
+	}
+	if got := strings.Join(at(2), " "); got != "0+2 2+2 4+1" { // 120 frames: 48, 48, then 24
+		t.Fatal(got)
+	}
+	if !strings.Contains(strings.Join(out.Warnings, "; "), "Line 1: line 2 has no take") || out.Goes[2].Blocks != 1 {
+		t.Fatal(out.Warnings, out.Goes)
+	}
+}
+
+func ftoa(f float64) string {
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", f), "0"), ".")
 }

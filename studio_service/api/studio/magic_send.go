@@ -83,9 +83,9 @@ func timelinesFull(ctx context.Context, tx pgx.Tx, ownerID string) error {
 
 // buildSend is board row's document as a sequence that passes the Timeline's rules: its dissolves kept where the
 // takes allow, all baked when the rules refuse one.
-func buildSend(d magic.Doc, rules map[string]timeline.Take, status map[string]string) (magic.Send, error) {
+func buildSend(d magic.Doc, rules map[string]timeline.Take, status map[string]string, turns map[string][]string) (magic.Send, error) {
 	for _, keep := range []bool{true, false} {
-		out := magic.BuildSend(d, rules, status, keep)
+		out := magic.BuildSend(d, rules, status, turns, keep)
 		if _, probs := timeline.Normalize(out.Doc, rules, nil); probs == nil {
 			return out, nil
 		} else if !keep {
@@ -152,15 +152,20 @@ func (s *Service) SendMagicBoard(ctx context.Context, caller common.Caller, id s
 		if err != nil {
 			return err
 		}
-		status := map[string]string{}
+		status, turns := map[string]string{}, map[string][]string{}
 		for k, v := range blockStatuses(d, runs) {
 			status[k] = v.Status
+			if b := findBlock(d, k); b != nil && isDialogue(b) { // API 1.89: each turn's take
+				for _, t := range v.Turns {
+					turns[k] = append(turns[k], deref(t.Take))
+				}
+			}
 		}
 		rules, rows, err := loadTakes(ctx, tx, row.OwnerID, magic.TakeIDs(d))
 		if err != nil {
 			return err
 		}
-		send, err := buildSend(d, rules, status)
+		send, err := buildSend(d, rules, status, turns)
 		if err != nil {
 			return err
 		}

@@ -141,3 +141,78 @@ def test_a_block_runs_into_a_take(api, api_b):
     assert edited["board"]["runs"][0]["current"] is False
     agent = ok(api.get(f"{base}?view=agent"))
     assert {x["id"]: x["status"] for x in agent["blocks"]} == {"s1": "out_of_date", "m1": "draft"}
+
+
+def test_a_dialogue_runs_a_line_per_turn(api):
+    """API 1.89: a dialogue's turns run one each on the speaker's voice; each turn has its status and take; a line
+    changed puts only its turn out of date and the next Run runs only it; Run on and Loop are not inputs."""
+    doc = run_doc()
+    doc["lanes"] = [{"id": "lines", "name": "Lines", "role": "voice"}]
+    doc["assets"] = [
+        {
+            "id": "a1",
+            "kind": "character",
+            "handle": "mara",
+            "name": "Mara",
+            "sheet": [],
+            "voice_id": "echo/ada",
+        },
+        {
+            "id": "a2",
+            "kind": "character",
+            "handle": "eli",
+            "name": "Eli",
+            "sheet": [],
+            "voice_id": "echo/ada",
+        },
+    ]
+    turns = [
+        {"speaker": "a1", "text": "Is that the last bus?"},
+        {"speaker": "a2", "text": "It was."},
+    ]
+    doc["blocks"] = [{
+        "id": "d1", "lane": "lines", "at": 0, "length": 96, "kind": "voice", "name": "Dialogue 1",
+        "request": {"kind": "voice", "turns": turns, "advanced": {"speak.delay_ms": 0}},
+        "takes": [], "effects": [],
+    }]  # fmt: skip
+    b = ok(api.post(BOARDS, json={"name": "Dialogue", "doc": doc}), 201)
+    base = f"{BOARDS}/{b['id']}"
+    assert b["status"]["d1"]["status"] == "draft" and len(b["status"]["d1"]["turns"]) == 2
+
+    started = ok(api.post(f"{base}/run", json={"revision": 1, "blocks": ["d1"]}), 202)
+    assert len(started["started"]) == 2
+    inputs = [ok(api.get(f"{STUDIO}/runs/{s['run_id']}"))["inputs"] for s in started["started"]]
+    assert [i["prompt.text"] for i in inputs] == ["Is that the last bus?", "It was."]
+    assert inputs[0]["speak.voice"] == {"voice_id": "echo/ada"}
+
+    def done():
+        board = ok(api.get(base))
+        return board if board["status"]["d1"]["status"] == "done" else None
+
+    board = wait_for(done, what="the dialogue's takes")
+    st = board["status"]["d1"]
+    assert [t["status"] for t in st["turns"]] == ["done", "done"]
+    assert sorted(r["turn"] for r in board["runs"]) == [0, 1]
+    assert board["takes"][st["turns"][0]["take"]]["duration_s"] > 0
+
+    req = dict(board["doc"]["blocks"][0]["request"], host="mac", loop=True)
+    req["turns"] = [turns[0], dict(turns[1], text="It was, yes.")]
+    edited = ok(api.post(f"{base}/edits", json={"base_revision": board["revision"],
+                                                "ops": [{"op": "block", "id": "d1", "set": {"request": req}}]}))  # fmt: skip
+    st = edited["board"]["status"]["d1"]
+    assert st["status"] == "out_of_date" and [t["status"] for t in st["turns"]] == [
+        "done",
+        "out_of_date",
+    ]
+    req.pop("host")
+    edited = ok(api.post(f"{base}/edits", json={"base_revision": edited["board"]["revision"],
+                                                "ops": [{"op": "block", "id": "d1", "set": {"request": req}}]}))  # fmt: skip
+    again = ok(
+        api.post(f"{base}/run", json={"revision": edited["board"]["revision"], "blocks": ["d1"]}),
+        202,
+    )
+    assert len(again["started"]) == 1
+    assert (
+        ok(api.get(f"{STUDIO}/runs/{again['started'][0]['run_id']}"))["inputs"]["prompt.text"]
+        == "It was, yes."
+    )

@@ -30,7 +30,8 @@ var (
 	requestFields = []string{"kind", "model", "prompt", "line", "turns", "voice", "style", "from", "refs", "advanced", "first",
 		"last", "width", "height", "seed", "count", "voice_id", // API 1.81: first … voice_id
 		"framing", "shot_model", // API 1.83: a storyboard frame's framing and the model of the shot made from it
-		"lyrics", "key", "bpm"} // API 1.85: a music block's
+		"lyrics", "key", "bpm", // API 1.85: a music block's
+		"host", "loop"} // API 1.89: Run on, a sound's Loop
 	// Framing is a frame's shot size, angle and move, each one's values.
 	Framing = map[string][]string{"size": {"wide", "medium", "close", "over_shoulder"}, "angle": {"eye", "low", "high"},
 		"move": {"still", "push_in", "pan", "follow"}}

@@ -179,7 +179,7 @@ func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 					greyed[f] = w.Standard.Model + " can't take " + magicFieldWords[f]
 				}
 			}
-			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title,
+			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title, Env: w.Env,
 				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w), Video: video})
 		}
 		out.Kinds = append(out.Kinds, info)
@@ -257,8 +257,31 @@ func magicModel(ws []registry.Workflow, kind string, req map[string]any) (regist
 
 // whyNot is why block b of d cannot run ("" when it can): its kind, a dialogue, no model, a pick its model needs.
 func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
-	if turns, _ := b.Request["turns"].([]any); len(turns) > 0 {
-		return "Dialogue blocks can't run yet"
+	if isDialogue(b) { // API 1.89: each turn runs as a line
+		turns := dialogueTurns(b)
+		if len(turns) == 0 {
+			return "A dialogue needs a line"
+		}
+		for i, t := range turns {
+			line := "Line " + strconv.Itoa(i+1)
+			text, _ := t["text"].(string)
+			speaker, _ := t["speaker"].(string)
+			a := findAsset(d, speaker)
+			switch {
+			case strings.TrimSpace(text) == "":
+				return line + " has no words"
+			case a == nil:
+				return line + " has no speaker"
+			case a.VoiceID == nil:
+				return line + "'s @" + a.Handle + " has no voice"
+			}
+		}
+		if w, why := magicModel(ws, b.Kind, b.Request); why != "" {
+			return why
+		} else if _, ok := w.Standard.Fields["line"]; !ok {
+			return w.Standard.Model + " can't take " + magicFieldWords["line"]
+		}
+		return whyNot(ws, d, turnBlock(b, 0))
 	}
 	w, why := magicModel(ws, b.Kind, b.Request)
 	if why != "" {
@@ -307,6 +330,48 @@ func blockVoice(d magic.Doc, b *magic.Block) string {
 		return *a.VoiceID
 	}
 	return reqString(b.Request, "voice_id")
+}
+
+// isDialogue is whether block b is a dialogue: a voice block with turns (API 1.89).
+func isDialogue(b *magic.Block) bool {
+	_, ok := b.Request["turns"].([]any)
+	return ok && b.Kind == "voice"
+}
+
+// dialogueTurns are a dialogue's turns ({speaker, text}), nil for any other block.
+func dialogueTurns(b *magic.Block) []map[string]any {
+	if !isDialogue(b) {
+		return nil
+	}
+	var out []map[string]any
+	for _, t := range b.Request["turns"].([]any) {
+		m, _ := t.(map[string]any)
+		out = append(out, m) // a malformed turn keeps its place (the document check refuses one anyway)
+	}
+	return out
+}
+
+// turnBlock is turn i of dialogue b as the line block its run is made from: the turn's text its line, its speaker
+// its voice, the rest of b's request (one run, no saved voice).
+func turnBlock(b *magic.Block, i int) *magic.Block {
+	req := maps.Clone(b.Request)
+	delete(req, "turns")
+	delete(req, "count")
+	delete(req, "voice_id")
+	if t := dialogueTurns(b)[i]; t != nil {
+		req["line"], req["voice"] = t["text"], t["speaker"]
+	}
+	tb := *b
+	tb.Request = req
+	return &tb
+}
+
+// hostOf is block b's Run on host (API 1.89), nil for Auto.
+func hostOf(b *magic.Block) *string {
+	if h := reqString(b.Request, "host"); h != "" {
+		return &h
+	}
+	return nil
 }
 
 // magicPics are a block's pictures as take ids: its first and last frame and its refs ("" none); RefAssets is the
@@ -646,9 +711,16 @@ func inputsHash(d magic.Doc, b *magic.Block) string {
 	if id, ok := b.Request["voice"].(string); ok {
 		voice = pick(map[string]any{"asset": id})
 	}
+	// API 1.89: Run on and Loop are not inputs (left out only when set, so a hash kept from before still matches)
+	req := b.Request
+	if _, h := req["host"]; h || req["loop"] != nil {
+		req = maps.Clone(req)
+		delete(req, "host")
+		delete(req, "loop")
+	}
 	// a shot made from a frame follows the frame's request too (its words make the shot's prompt)
 	// (appended only then, so a hash kept from before 1.83 still matches)
-	parts := []any{b.Request, b.Length, pick(first), pick(last), picked, voice}
+	parts := []any{req, b.Length, pick(first), pick(last), picked, voice}
 	if b.FromFrame != nil {
 		if x := findBlock(d, *b.FromFrame); x != nil {
 			parts = append(parts, x.Request)
@@ -733,6 +805,7 @@ type magicRunRow struct {
 	Takes                    []string
 	TakeKinds                []string // each take's kind, in Takes' order
 	RenderS                  *float64
+	Turn                     *int // API 1.89: a dialogue's turn
 }
 
 // takeFits is whether a take of kind takeKind joins a block of kind (API 1.85): a voice, music or sound block takes
@@ -755,7 +828,7 @@ func fitTakes(b *magic.Block, r magicRunRow) []string {
 	return out
 }
 
-// boardRuns are the board's runs, the last 20 of each block, oldest first; deleted runs and takes are left out.
+// boardRuns are the board's runs, the last 20 of each block (of each dialogue turn), oldest first; deleted runs and takes are left out.
 func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, error) {
 	return collect[magicRunRow](ctx, tx, `SELECT m.block, m.run_id::text, m.inputs_hash, m.seed, m.via, m.label, m.created_at,
 		r.workflow_id, r.status, r.progress, r.error,
@@ -764,8 +837,8 @@ func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, e
 		coalesce((SELECT array_agg(t.kind::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
 		(SELECT (t.made_with->>'render_s')::float8 FROM run_outputs o JOIN takes t ON t.id = o.take_id
-			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1)
-		FROM (SELECT *, row_number() OVER (PARTITION BY block ORDER BY created_at DESC) AS n FROM magic_runs
+			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1), m.turn
+		FROM (SELECT *, row_number() OVER (PARTITION BY block, turn ORDER BY created_at DESC) AS n FROM magic_runs
 			WHERE board_id = $1 AND asset IS NULL) m
 		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL
 		WHERE m.n <= $2 ORDER BY m.created_at, m.run_id`, boardID, maxBlockRuns)
@@ -783,7 +856,8 @@ func runPercent(raw json.RawMessage) *int {
 
 var openRun = map[string]bool{"queued": true, "running": true}
 
-// blockStatuses derives every block's status from the document and its runs (contracts/README.md, Magic: runs).
+// blockStatuses derives every block's status from the document and its runs (contracts/README.md, Magic: runs); a
+// dialogue's from its turns' (API 1.89).
 func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
 	out := map[string]dto.MagicStatus{}
 	for _, b := range withMorphs(d) { // API 1.82: morphs too
@@ -793,32 +867,86 @@ func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
 				mine = append(mine, r)
 			}
 		}
-		open := -1
-		for i, r := range mine {
-			if openRun[r.Status] {
-				open = i // the newest open run's progress
-			}
+		if isDialogue(b) {
+			out[b.ID] = dialogueStatus(d, b, mine)
+		} else {
+			out[b.ID] = runStatus(mine, shownTake(b), inputsHash(d, b))
 		}
-		if open >= 0 {
-			out[b.ID] = dto.MagicStatus{Status: "running", Progress: runPercent(mine[open].Progress)}
-			continue
+	}
+	return out
+}
+
+// runStatus is the status of a block (or a dialogue's turn) with runs mine that shows take, its inputs hashed now.
+func runStatus(mine []magicRunRow, take, hash string) dto.MagicStatus {
+	open := -1
+	for i, r := range mine {
+		if openRun[r.Status] {
+			open = i // the newest open run's progress
 		}
-		take := shownTake(b)
-		if take == "" {
-			if n := len(mine); n > 0 && mine[n-1].Status == "failed" {
-				out[b.ID] = dto.MagicStatus{Status: "failed", Error: cmp.Or(deref(mine[n-1].Error), "failed")}
-			} else {
-				out[b.ID] = dto.MagicStatus{Status: "draft"}
-			}
-			continue
+	}
+	if open >= 0 {
+		return dto.MagicStatus{Status: "running", Progress: runPercent(mine[open].Progress)}
+	}
+	if take == "" {
+		if n := len(mine); n > 0 && mine[n-1].Status == "failed" {
+			return dto.MagicStatus{Status: "failed", Error: cmp.Or(deref(mine[n-1].Error), "failed")}
 		}
-		status := "done"
+		return dto.MagicStatus{Status: "draft"}
+	}
+	for _, r := range mine {
+		if slices.Contains(r.Takes, take) && r.InputsHash != hash {
+			return dto.MagicStatus{Status: "out_of_date"}
+		}
+	}
+	return dto.MagicStatus{Status: "done"}
+}
+
+// dialogueStatus is dialogue b's status from each turn's (a turn plays its newest run's take still on the block):
+// running when a turn is, failed when one failed with no take, draft when none has a take, out of date when one is
+// out of date or has no take yet, else done.
+func dialogueStatus(d magic.Doc, b *magic.Block, mine []magicRunRow) dto.MagicStatus {
+	out := dto.MagicStatus{Status: "done", Turns: []dto.MagicTurnStatus{}}
+	turns := dialogueTurns(b)
+	takes, drafts := 0, 0
+	for i := range turns {
+		var runs []magicRunRow
+		take := ""
 		for _, r := range mine {
-			if slices.Contains(r.Takes, take) && r.InputsHash != inputsHash(d, b) {
-				status = "out_of_date"
+			if r.Turn != nil && *r.Turn == i {
+				runs = append(runs, r)
+				for _, t := range r.Takes {
+					if slices.Contains(b.Takes, t) {
+						take = t
+					}
+				}
 			}
 		}
-		out[b.ID] = dto.MagicStatus{Status: status}
+		st := runStatus(runs, take, inputsHash(d, turnBlock(b, i)))
+		ts := dto.MagicTurnStatus{Status: st.Status, Progress: st.Progress, Error: st.Error}
+		if take != "" {
+			ts.Take = &take
+			takes++
+		}
+		out.Turns = append(out.Turns, ts)
+		switch {
+		case out.Status == "running":
+		case st.Status == "running":
+			out.Status, out.Progress, out.Error = "running", st.Progress, ""
+		case out.Status == "failed":
+		case st.Status == "failed" && take == "":
+			out.Status, out.Error = "failed", "Line "+strconv.Itoa(i+1)+": "+st.Error
+		case st.Status == "draft":
+			drafts++
+		case st.Status == "out_of_date":
+			out.Status = "out_of_date"
+		}
+	}
+	switch {
+	case out.Status == "running" || out.Status == "failed":
+	case takes == 0:
+		out.Status = "draft"
+	case drafts > 0:
+		out.Status = "out_of_date"
 	}
 	return out
 }
@@ -840,13 +968,16 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		}
 		current := false
 		b := runBlockOf(d, r.Block)
-		if b != nil {
+		switch {
+		case b != nil && isDialogue(b) && r.Turn != nil && *r.Turn < len(dialogueTurns(b)): // API 1.89
+			current = r.InputsHash == inputsHash(d, turnBlock(b, *r.Turn))
+		case b != nil && r.Turn == nil:
 			current = r.InputsHash == inputsHash(d, b)
 		}
 		r.Takes = fitTakes(b, r) // API 1.85: a sound block's run lists its audio take
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
 			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
-			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label})
+			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label, Turn: r.Turn})
 		for _, t := range r.Takes {
 			byTake[t] = r.RunID
 		}
@@ -870,6 +1001,12 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		}
 		if td.Sound != "" { // API 1.85: a music take's cover, a sound or voice take's orb
 			mt.Sound = &td.Sound
+		}
+		switch { // API 1.89: its seconds, a song's sections
+		case td.Video != nil:
+			mt.DurationS = &td.Video.DurationS
+		case td.Audio != nil:
+			mt.DurationS, mt.Sections = &td.Audio.DurationS, td.Audio.Sections
 		}
 		if run, ok := byTake[id]; ok {
 			mt.RunID = &run
@@ -1031,8 +1168,12 @@ func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id st
 	return out, nil
 }
 
-// runBlock makes block b's runs (its count, seeds from its seed) in the board's session and indexes them.
+// runBlock makes block b's runs (its count, seeds from its seed) in the board's session and indexes them; a
+// dialogue's are one run per turn (API 1.89).
 func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller, row *boardRow, session string, d magic.Doc, b *magic.Block) ([]dto.Run, error) {
+	if isDialogue(b) {
+		return s.runTurns(ctx, tx, caller, row, session, d, b)
+	}
 	w, _ := magicModel(s.registry.Workflows(), b.Kind, b.Request)
 	first, last, refs := pickRefs(d, b)
 	var pics magicPics
@@ -1072,12 +1213,56 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 			runSeed = int64(seed) + int64(i)
 		}
 		run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
-			Inputs: standardInputs(w, d, b, pics, voiceID, runSeed)})
+			Inputs: standardInputs(w, d, b, pics, voiceID, runSeed), Host: hostOf(b)})
 		if err != nil {
 			return nil, err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via, label)
 			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via, label); err != nil {
+			return nil, err
+		}
+		out = append(out, run)
+	}
+	return out, nil
+}
+
+// runTurns runs dialogue b's turns that are not done or running (every one that is not running when all are done),
+// each as its line block (turnBlock), one run each, indexed with its turn.
+func (s *Service) runTurns(ctx context.Context, tx pgx.Tx, caller common.Caller, row *boardRow, session string, d magic.Doc, b *magic.Block) ([]dto.Run, error) {
+	runs, err := boardRuns(ctx, tx, row.ID)
+	if err != nil {
+		return nil, err
+	}
+	turns := blockStatuses(d, runs)[b.ID].Turns
+	var todo, idle []int
+	for i, t := range turns {
+		if t.Status != "running" {
+			idle = append(idle, i)
+			if t.Status != "done" {
+				todo = append(todo, i)
+			}
+		}
+	}
+	if len(todo) == 0 {
+		todo = idle
+	}
+	seed, seeded := reqNumber(b.Request, "seed")
+	runSeed := int64(-1)
+	if seeded && seed >= 0 {
+		runSeed = int64(seed)
+	}
+	via := common.ViaOf(caller.Via)
+	var out []dto.Run
+	for _, i := range todo {
+		tb := turnBlock(b, i)
+		w, _ := magicModel(s.registry.Workflows(), tb.Kind, tb.Request)
+		run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
+			Inputs: standardInputs(w, d, tb, magicPics{}, blockVoice(d, tb), runSeed), Host: hostOf(b)})
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via, turn)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, run.ID, row.OwnerID, row.ID, b.ID, inputsHash(d, tb), runSeed, via, i); err != nil {
 			return nil, err
 		}
 		out = append(out, run)
@@ -1306,9 +1491,14 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 		kinds = append(kinds, b.Kind)
 		anyRun = anyRun || b.Kind != "frame"
 		w, _ := magicModel(ws, b.Kind, b.Request)
-		// the host and peak as POST /runs/plan answers them, for the request without its pictures
+		// the host and peak as POST /runs/plan answers them, for the request without its pictures (a dialogue: its
+		// first turn's), on its Run on host when it has one
+		pb0 := b
+		if isDialogue(b) {
+			pb0 = turnBlock(b, 0)
+		}
 		_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
-			Inputs: standardInputs(w, d, b, magicPics{}, blockVoice(d, b), -1)})
+			Inputs: standardInputs(w, d, pb0, magicPics{}, blockVoice(d, pb0), -1), Host: hostOf(b)})
 		if perr == nil {
 			if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
 				host := slices.Sorted(maps.Keys(slots))[0]

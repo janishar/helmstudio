@@ -100,10 +100,11 @@ type v1Piece struct {
 }
 
 // BuildSend is board d as a new sequence. takes are the takes it shows (a missing one is offline: a gap); status is
-// each block's derived status. A block's shown take is its pinned one, else its latest.
+// each block's derived status. A block's shown take is its pinned one, else its latest; turns are a dialogue's takes,
+// one per turn ("" none), played one after another (API 1.89).
 // keep: a dissolve whose takes have the media past each cut goes as the Timeline's own (false: every dissolve is baked,
 // for when the Timeline's rules refuse one).
-func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, keep bool) Send {
+func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, turns map[string][]string, keep bool) Send {
 	out := Send{Goes: []SendGoes{}, Joins: []SendJoin{}, Effects: []SendEffect{}, Warnings: []string{}}
 	warn := func(f string, a ...any) { out.Warnings = append(out.Warnings, fmt.Sprintf(f, a...)) }
 	fps := float64(d.Target.FPS)
@@ -430,44 +431,72 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			continue
 		}
 		var clips []timeline.Clip
-		pictures, linked := 0, 0
+		pictures, linked, blocks := 0, 0, 0
 		for _, b := range d.Blocks {
 			if b.Lane != l.ID {
 				continue
 			}
-			id := shown(b.Takes, b.Pinned)
-			tk, ok := takes[id]
-			switch {
-			case id == "" || !ok:
-				if slices.Contains([]string{"voice", "music", "sound"}, b.Kind) && l.Role != "free" {
-					warn("%s has no take: not sent", short(b))
-				}
-				continue
-			case tk.Kind != "audio":
-				pictures++
-				continue
+			// API 1.89: a dialogue's turns one after another, a Loop's take again and again, cut at the block's end
+			pieces, dialogue := turns[b.ID]
+			if !dialogue {
+				pieces = []string{shown(b.Takes, b.Pinned)}
 			}
-			n := min(b.Length, int(math.Floor(tk.DurationS*fps+1e-6)))
-			if shotsLane != nil && len(shots) > 0 {
+			loop, _ := b.Request["loop"].(bool)
+			at, stop, made := b.At, b.At+b.Length, 0
+		piece:
+			for i := 0; i < len(pieces) && at < stop; i++ {
+				id := pieces[i]
+				tk, ok := takes[id]
 				switch {
-				case b.At >= end:
-					warn("%s starts after the last shot: not sent", short(b))
+				case (id == "" || !ok) && dialogue:
+					warn("%s: line %d has no take", short(b), i+1)
 					continue
-				case b.At+n > end:
-					warn("%s is cut at the last shot's end", short(b))
-					n = end - b.At
+				case id == "" || !ok:
+					if slices.Contains([]string{"voice", "music", "sound"}, b.Kind) && l.Role != "free" {
+						warn("%s has no take: not sent", short(b))
+					}
+					continue
+				case tk.Kind != "audio":
+					pictures++
+					continue
+				}
+				n := min(stop-at, int(math.Floor(tk.DurationS*fps+1e-6)))
+				if shotsLane != nil && len(shots) > 0 {
+					switch {
+					case at >= end:
+						if made == 0 {
+							warn("%s starts after the last shot: not sent", short(b))
+						}
+						break piece
+					case at+n > end:
+						warn("%s is cut at the last shot's end", short(b))
+						n = end - at
+					}
+				}
+				if n < 1 {
+					break
+				}
+				take := id
+				cid := b.ID
+				if made > 0 {
+					cid = b.ID + "." + strconv.Itoa(made)
+				}
+				c := timeline.Clip{ID: cid, TakeID: &take, In: f64(0), Out: f64(s(n)), At: f64(s(at)), Alternatives: []string{}}
+				if to, ok := links[b.ID]; ok && made == 0 {
+					c.Link = &to
+					linked++
+				}
+				clips = append(clips, c)
+				at += n
+				made++
+				// ponytail: a Loop stops at 100 clips a block; a longer block of a very short sound is cut there
+				if loop && !dialogue && i == len(pieces)-1 && made < 100 {
+					i = -1
 				}
 			}
-			if n < 1 {
-				continue
+			if made > 0 {
+				blocks++
 			}
-			take := id
-			c := timeline.Clip{ID: b.ID, TakeID: &take, In: f64(0), Out: f64(s(n)), At: f64(s(b.At)), Alternatives: []string{}}
-			if to, ok := links[b.ID]; ok {
-				c.Link = &to
-				linked++
-			}
-			clips = append(clips, c)
 		}
 		if pictures > 0 && slices.Contains([]string{"shots", "free"}, l.Role) {
 			warn("%s stays here: the Timeline has one picture track", l.Name)
@@ -484,7 +513,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		if kind == "free" {
 			kind = "audio"
 		}
-		out.Goes = append(out.Goes, SendGoes{Lane: l.ID, Name: l.Name, Kind: kind, Blocks: len(clips),
+		out.Goes = append(out.Goes, SendGoes{Lane: l.ID, Name: l.Name, Kind: kind, Blocks: blocks,
 			Track: "A" + strconv.Itoa(len(tracks)), Linked: linked})
 	}
 	for _, l := range d.Lanes {

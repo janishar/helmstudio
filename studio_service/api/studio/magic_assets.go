@@ -60,7 +60,7 @@ func assetRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]dto.MagicAsset
 	rows, err := collect[magicRunRow](ctx, tx, `SELECT m.asset, m.run_id::text, m.inputs_hash, m.seed, m.via, m.label,
 		m.created_at, r.workflow_id, r.status, r.progress, r.error,
 		coalesce((SELECT array_agg(o.take_id::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
-			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'), '{}'::text[], NULL::float8
+			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'), '{}'::text[], NULL::float8, NULL::int
 		FROM (SELECT *, row_number() OVER (PARTITION BY asset ORDER BY created_at DESC) AS n FROM magic_runs
 			WHERE board_id = $1 AND asset IS NOT NULL) m
 		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL

@@ -7,6 +7,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	gallery "github.com/helmstudio/studio_service/api/gallery/dto"
 	"github.com/helmstudio/studio_service/api/magic"
 )
 
@@ -82,6 +83,16 @@ type MagicStatus struct {
 	Status   string `json:"status"` // draft | running | done | out_of_date | failed
 	Progress *int   `json:"progress,omitempty"`
 	Error    string `json:"error,omitempty"`
+	// API 1.89, a dialogue only: each turn's own status and the take it plays
+	Turns []MagicTurnStatus `json:"turns,omitempty"`
+}
+
+// MagicTurnStatus is one dialogue turn's status (API 1.89).
+type MagicTurnStatus struct {
+	Status   string  `json:"status"`
+	Progress *int    `json:"progress,omitempty"`
+	Error    string  `json:"error,omitempty"`
+	Take     *string `json:"take,omitempty"`
 }
 
 // MagicTake is a take the document names, as the board shows it.
@@ -94,6 +105,9 @@ type MagicTake struct {
 	Seed      *int64  `json:"seed"`
 	RunID     *string `json:"run_id"`
 	Sound     *string `json:"sound,omitempty"` // API 1.85: an audio take's class
+	// API 1.89: its seconds (a video or audio take) and a song's sections
+	DurationS *float64               `json:"duration_s"`
+	Sections  []gallery.AudioSection `json:"sections,omitempty"`
 }
 
 // MagicBlockRun is one run of a block (its run history).
@@ -112,6 +126,8 @@ type MagicBlockRun struct {
 	RenderS    *float64  `json:"render_s"`
 	// API 1.83: a board frame's style when it ran
 	Style *string `json:"style,omitempty"`
+	// API 1.89: a dialogue's run of this turn
+	Turn *int `json:"turn,omitempty"`
 }
 
 // MagicParam is one Advanced field of a model.
@@ -125,6 +141,7 @@ type MagicModel struct {
 	WorkflowID string            `json:"workflow_id"`
 	Name       string            `json:"name"`
 	Title      string            `json:"title"`
+	Env        string            `json:"env,omitempty"` // API 1.89: Run on greys a host without it
 	Fields     []string          `json:"fields"`
 	Greyed     map[string]string `json:"greyed"`
 	Seconds    *float64          `json:"seconds"`

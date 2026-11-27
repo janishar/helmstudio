@@ -355,3 +355,70 @@ func TestMagicMusicAndSound(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+// API 1.89: a dialogue runs a line per turn: why it can't, each turn's status (one line changed puts only its turn
+// out of date), the block's from its turns', and Run on and Loop are not inputs.
+func TestDialogueTurns(t *testing.T) {
+	ws := []registry.Workflow{canonical(t, "qwen3-tts.", "mac.torch", "qwen3-tts-voice-over")}
+	voice := "55555555-5555-4555-8555-555555555555"
+	d := magic.Doc{Target: board, Assets: []*magic.Asset{{ID: "a1", Kind: "character", Handle: "mara", Name: "Mara"},
+		{ID: "a2", Kind: "character", Handle: "eli", Name: "Eli", VoiceID: &voice}}}
+	b := block("voice", 96, `{"turns":[]}`)
+	d.Blocks = []*magic.Block{b}
+	for _, c := range []struct{ turns, want string }{
+		{`[]`, "A dialogue needs a line"},
+		{`[{"speaker":"a2","text":" "}]`, "Line 1 has no words"},
+		{`[{"speaker":"a2","text":"Hi."},{"speaker":"gone","text":"Yo."}]`, "Line 2 has no speaker"},
+		{`[{"speaker":"a2","text":"Hi."},{"speaker":"a1","text":"Yo."}]`, "Line 2's @mara has no voice"},
+	} {
+		var turns []any
+		_ = json.Unmarshal([]byte(c.turns), &turns)
+		b.Request["turns"] = turns
+		if got := whyNot(ws, d, b); got != c.want {
+			t.Fatalf("%s: %q", c.turns, got)
+		}
+	}
+	d.Assets[0].VoiceID = &voice
+	if got := whyNot(ws, d, b); got != "" {
+		t.Fatal(got)
+	}
+	// the turn's run is the line block: its text, its speaker's voice, one run
+	tb := turnBlock(b, 1)
+	if tb.Request["line"] != "Yo." || tb.Request["voice"] != "a1" || tb.Request["turns"] != nil || b.Request["line"] != nil {
+		t.Fatal(tb.Request)
+	}
+	if got := flat(standardInputs(ws[0], d, tb, magicPics{}, blockVoice(d, tb), 7)); !strings.Contains(got, "prompt.text=Yo.") ||
+		!strings.Contains(got, voice) {
+		t.Fatal(got)
+	}
+	t1, t2 := "33333333-3333-4333-8333-333333333333", "44444444-4444-4444-8444-444444444444"
+	zero, one := 0, 1
+	runs := []magicRunRow{{Block: "b1", Turn: &zero, Status: "succeeded", Takes: []string{t1}, InputsHash: inputsHash(d, turnBlock(b, 0))},
+		{Block: "b1", Turn: &one, Status: "running", Progress: json.RawMessage(`{"step":1,"of":2}`)}}
+	b.Takes = []string{t1}
+	st := blockStatuses(d, runs)["b1"]
+	if st.Status != "running" || *st.Progress != 50 || len(st.Turns) != 2 || st.Turns[0].Status != "done" ||
+		*st.Turns[0].Take != t1 || st.Turns[1].Status != "running" {
+		t.Fatal(st)
+	}
+	runs[1] = magicRunRow{Block: "b1", Turn: &one, Status: "succeeded", Takes: []string{t2}, InputsHash: inputsHash(d, turnBlock(b, 1))}
+	b.Takes = []string{t1, t2}
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "done" || *st.Turns[1].Take != t2 {
+		t.Fatal(st)
+	}
+	b.Request["turns"].([]any)[1].(map[string]any)["text"] = "Yo, later."
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "out_of_date" || st.Turns[0].Status != "done" || st.Turns[1].Status != "out_of_date" {
+		t.Fatal(st)
+	}
+	b.Request["turns"] = append(b.Request["turns"].([]any), map[string]any{"speaker": "a2", "text": "Bye."})
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "out_of_date" || st.Turns[2].Status != "draft" {
+		t.Fatal(st) // a new line with no take yet: out of date
+	}
+	// Run on and Loop change no take
+	shot := block("sound", 96, `{"prompt":"rain"}`)
+	h := inputsHash(d, shot)
+	shot.Request["host"], shot.Request["loop"] = "gcp", true
+	if inputsHash(d, shot) != h || *hostOf(shot) != "gcp" {
+		t.Fatal("host and loop are inputs")
+	}
+}
