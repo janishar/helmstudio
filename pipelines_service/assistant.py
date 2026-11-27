@@ -71,7 +71,9 @@ CHAT_KEEP = 400  # transcript entries kept in the thread; past half of it the ch
 CARDS = ("look_at", "web_search", "forget")
 # API 1.87 (contracts/README.md "Magic: the Assistant"): studio answers these with a preview first; the card is built
 # from it, and the Yes asks studio again with `confirmed` (run_blocks within the limit answers at once: no card)
-MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "send_to_timeline")
+MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "make_views", "send_to_timeline")
+# API 1.93: Magic runs that start without a card count under Auto mode's hourly caps; past them they ask once
+MAGIC_RUNS = ("run_blocks", "make_views")
 ACK_WAIT = 60  # seconds; a long turn sends in_progress every BEAT
 BEAT = 20
 RECURSION = 400  # graph steps per invocation: about 10 per model call
@@ -569,6 +571,17 @@ def auto_plan(name: str, spec: dict | None, screen: dict | None) -> tuple[int, i
     return f"Auto stops here: {why}"
 
 
+async def _auto_hour(conn, owner: str) -> tuple[int, int]:
+    """The last hour's auto takes and GPU seconds of owner."""
+    cur = await conn.execute(
+        "SELECT coalesce(sum(takes), 0) AS t, coalesce(sum(gpu_s), 0) AS g FROM assistant_spend "
+        "WHERE owner_id = %s AND kind = 'auto' AND at > now() - interval '1 hour'",
+        (owner,),
+    )
+    r = await cur.fetchone()
+    return int(r["t"]), int(r["g"])
+
+
 def same_size(a: dict) -> bool:
     """An action that leaves a generation's size alone: a pick, a star, or a prompt's text."""
     key = (a.get("args") or {}).get("key")
@@ -634,7 +647,7 @@ def magic_card(c: dict, p: dict) -> dict:
                                 "note": "Restore makes a new revision; nothing is lost.", "tags": ["changes the board"],
                                 "board": {"board_id": a["board_id"], "base_revision": a["revision"],
                                           "to": to["revision"]}}, "lines": lines}  # fmt: skip
-    if c["name"] == "run_blocks":
+    if c["name"] in MAGIC_RUNS:
         plan, rest, frames, ran = p["plan"], p["rest"], p.get("frames") or [], None
         why = (f"Above your {plan['limit_minutes']:g} min limit." if rest.get("seconds") is not None
                else "It has no estimate yet.")  # fmt: skip
@@ -658,7 +671,8 @@ def magic_card(c: dict, p: dict) -> dict:
             ran = f"{names} started without asking (storyboard frames never ask)"
         run = and_list(rest["names"]) + " · " + secs_text(rest.get("seconds")) + (
             f" · {rest['host']}" if rest.get("host") else "")  # fmt: skip
-        return {"card": base | {"kind": "magic_run", "title": _short(f"Run {rest['ask_text']}?", 120),
+        verb = "Make" if c["name"] == "make_views" else "Run"
+        return {"card": base | {"kind": "magic_run", "title": _short(f"{verb} {rest['ask_text']}?", 120),
                                 "rows": [{"label": "Runs", "value": _short(run)}], "note": _short(why),
                                 "tags": ["uses the GPU"]}, "lines": lines, "ran": ran}  # fmt: skip
     plan = p["plan"]  # send_to_timeline
@@ -689,7 +703,8 @@ def magic_done(c: dict, reply: dict) -> dict:
     """A Magic card tool's final reply as the turn keeps it: {status, result?, error?, line}."""
     line = {"id": c["id"], "undo": False}
     labels = {"edit_board": "Could not change the board", "restore_board": "Could not restore the board",
-              "run_blocks": "Could not run", "send_to_timeline": "Could not send"}  # fmt: skip
+              "run_blocks": "Could not run", "make_views": "Could not make views",
+              "send_to_timeline": "Could not send"}  # fmt: skip
     if "error" in reply:
         return {"status": "failed", "error": reply["error"],
                 "line": line | {"status": "failed", "text": _short(f"{labels[c['name']]} · {reply['error']}")}}  # fmt: skip
@@ -698,12 +713,12 @@ def magic_done(c: dict, reply: dict) -> dict:
         text, status = f"Changed the board · {r['summary']}", "done"
     elif c["name"] == "restore_board":
         text, status = f"Restored rev {c['args']['to']} · now rev {r['revision']}", "done"
-    elif c["name"] == "run_blocks":
+    elif c["name"] in MAGIC_RUNS:
         if c.get("ran"):
             r = r | {"also": c["ran"]}
         n = len(r["started"])
         text = f"Started {n} run{'s' * (n != 1)}" + (
-            f" · {len(r['skipped'])} skipped" if r["skipped"] else ""
+            f" · {len(r['skipped'])} skipped" if r.get("skipped") else ""
         )
         status = "running" if n else "done"
     else:
@@ -1197,7 +1212,14 @@ class Assistant:
         if "error" in reply:
             return None, reply["error"], None
         r, line = reply["result"], None
-        if name == "use_skill":
+        if name == "create_board":  # API 1.93: an empty board, no card
+            line = {
+                "id": c["id"],
+                "status": "done",
+                "text": f"Made board {r['name']}"[:300],
+                "undo": False,
+            }
+        elif name == "use_skill":
             line = {"id": c["id"], "status": "done", "text": f"Using skill: {r['title']}"[:300], "undo": False,
                     "skill": a["skill"]}  # fmt: skip
         elif name == "read_model_guide":  # API 1.71
@@ -1310,11 +1332,50 @@ class Assistant:
     async def magic_ask(self, s: State, c: dict) -> dict:
         """A Magic card tool asked for its preview (API 1.87): {card, lines} to ask the user, or (studio refused, or
         run_blocks ran within the limit) {status, result?, error?, line}."""
-        reply = await self.tool({"owner_id": s["owner_id"], "thread_id": s["thread_id"], "call_id": c["id"],
-                                 "tool": c["name"], "args": c["args"]})  # fmt: skip
+        req = {"owner_id": s["owner_id"], "thread_id": s["thread_id"], "call_id": c["id"], "tool": c["name"],
+               "args": c["args"]}  # fmt: skip
+        auto = c["name"] in MAGIC_RUNS and s["data"]["settings"].get("auto")
+        paused = await self.auto_paused(s) if auto else None
+        if paused:  # API 1.93: past Auto's hour's caps a Magic run asks once, whatever its size
+            req["ask"] = True
+        reply = await self.tool(req)
         if "preview" not in reply:
+            if auto and "result" in reply:
+                r = reply["result"]
+                await self.auto_spend(s, c["id"], len(r["started"]), r.get("seconds"))
             return magic_done(c, reply)
-        return magic_card(c, reply["preview"])
+        got = magic_card(c, reply["preview"])
+        frames = reply["preview"].get("frames") or []
+        if auto and frames:  # board frames started without asking: they count too
+            secs = [f["seconds"] for f in frames if f.get("seconds") is not None]
+            await self.auto_spend(s, c["id"], len(frames), sum(secs))
+        if paused:
+            got["card"]["note"] = paused
+        return got
+
+    async def auto_paused(self, s: State) -> str | None:
+        """The line when the hour's auto takes or GPU minutes are at a cap (API 1.93, Magic runs), else None."""
+        lim = s["data"]["settings"]["limits"]
+        tcap = lim.get("auto_takes_per_hour", AUTO_TAKES)
+        gcap = lim.get("auto_gpu_minutes_per_hour", AUTO_GPU_MINUTES) * 60
+        async with self.pool.connection() as conn:
+            took, gpu = await _auto_hour(conn, s["owner_id"])
+        if took >= tcap:
+            return f"Auto paused · {took} of {tcap} takes this hour"
+        if gpu >= gcap:
+            return f"Auto paused · {gpu // 60} of {gcap // 60} GPU minutes this hour"
+        return None
+
+    async def auto_spend(self, s: State, key: str, runs: int, seconds: float | None) -> None:
+        """Magic runs that started without a card join the hour's auto count: a take a run, the estimate (unknown: 0).
+        Keyed by the call: a replay counts it once."""
+        if runs:
+            async with self.pool.connection() as conn:
+                await conn.execute(
+                    "INSERT INTO assistant_spend (key, owner_id, kind, takes, gpu_s) VALUES (%s, %s, 'auto', %s, %s) "
+                    "ON CONFLICT (key) DO NOTHING",
+                    (key, s["owner_id"], runs, math.ceil(seconds or 0)),
+                )
 
     @staticmethod
     def _asks(s: State, c: dict) -> bool:
@@ -1451,13 +1512,7 @@ class Assistant:
                 "DELETE FROM assistant_spend WHERE kind = 'auto' AND key = ANY(%s)",
                 ([a["id"] for a in acts],),
             )
-            cur = await conn.execute(
-                "SELECT coalesce(sum(takes), 0) AS t, coalesce(sum(gpu_s), 0) AS g FROM assistant_spend "
-                "WHERE owner_id = %s AND kind = 'auto' AND at > now() - interval '1 hour'",
-                (owner,),
-            )
-            r = await cur.fetchone()
-            took, gpu = int(r["t"]), int(r["g"])
+            took, gpu = await _auto_hour(conn, owner)
             resized = (
                 False  # an earlier action of the batch changed the screen the plan was read from
             )

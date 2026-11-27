@@ -1683,6 +1683,8 @@ MAGIC_TOOLS = TOOLS + [
     "restore_board",
     "run_blocks",
     "send_to_timeline",
+    "create_board",
+    "make_views",
 ]
 ADD = [{"op": "add", "mode": "insert", "block": {"lane": "shots", "at": 96, "length": 48, "kind": "video",
                                                  "name": "Shot 3", "request": {"kind": "video"}, "takes": [],
@@ -1713,12 +1715,20 @@ class MagicTools(Tools):
                 "tool": "edit_board",
                 "result": {"revision": 2, "diff": {}, "warnings": [], "summary": "Added Shot 3"},
             }
+        if req["tool"] == "make_views":  # API 1.93: run_blocks' preview shape, no frames
+            if req.get("confirmed") or not (self.ask_rule or req.get("ask")):
+                return {"tool": "make_views", "result": {"revision": 2, "seconds": 20,
+                                                         "started": [{"view": "Front", "run_id": str(uuid.uuid4())}]}}  # fmt: skip
+            return {"tool": "make_views", "preview": {
+                "revision": 2, "plan": {"ask": True, "limit_minutes": 5, "ask_text": "2 views, about 20 s"}, "frames": [],
+                "rest": {"blocks": [], "names": ["Front", "Side"], "seconds": 20, "host": "mac-studio",
+                         "ask_text": "2 views, about 20 s"}}}  # fmt: skip
         if req["tool"] == "run_blocks":
             started = [{"block": "s2", "run_id": str(uuid.uuid4())}]
-            if req.get("confirmed") or not self.ask_rule:
+            if req.get("confirmed") or not (self.ask_rule or req.get("ask")):
                 return {
                     "tool": "run_blocks",
-                    "result": {"revision": 2, "started": started, "skipped": []},
+                    "result": {"revision": 2, "started": started, "skipped": [], "seconds": 90},
                 }
             return {"tool": "run_blocks", "preview": {
                 "revision": 2, "plan": {"ask": True, "limit_minutes": 5, "ask_text": "4 blocks, about 6 min"},
@@ -1821,6 +1831,57 @@ async def test_runs_within_the_limit_start_without_a_card(pool, fake):
     )
     step = await c.say("run shot 2")
     assert step["done"] and not step["cards"] and step["lines"][0]["text"] == "Started 1 run"
+
+
+async def test_make_views_asks_above_the_limit_and_create_board_needs_no_card(pool, fake):
+    # API 1.93 (owner, 2026-11-27: "Yes, fix them")
+    c = magic_chat(pool, fake)
+    views = {"board_id": BOARD, "revision": 2, "asset": "mara", "views": ["Front", "Side"]}
+    c.script(calls(("make_views", views)), {"content": "Making."})
+    (card,) = (await c.say("make mara's views"))["cards"]
+    assert card["kind"] == "magic_run" and card["title"] == "Make 2 views, about 20 s?"
+    assert card["rows"] == [{"label": "Runs", "value": "Front and Side · about 20 s · mac-studio"}]
+    step = await c.answer(card["id"])
+    assert [r.get("confirmed") for r in c.tools.asked if r["tool"] == "make_views"] == [None, True]
+    assert step["lines"][0]["text"] == "Started 1 run"
+    c.tools.results["create_board"] = {"board_id": BOARD, "name": "Brief", "revision": 1}
+    c.script(calls(("create_board", {"name": "Brief"})), {"content": "Made it."})
+    step = await c.say("start a board for the brief")
+    assert step["done"] and not step["cards"] and step["lines"][0]["text"] == "Made board Brief"
+
+
+async def test_auto_counts_magic_runs_and_asks_once_past_the_caps(pool, fake):
+    # API 1.93: with Auto on, a Magic run within the limit counts in the hour; at a cap the next one asks (ask true)
+    c = magic_chat(pool, fake)
+    c.tools.ask_rule = False
+    c.auto, c.limits = True, dict(LIMITS, auto_takes_per_hour=2, auto_gpu_minutes_per_hour=30)
+    pick = {"board_id": BOARD, "revision": 2, "blocks": ["s2"]}
+    for i in range(2):
+        c.script(calls(("run_blocks", pick)), {"content": "Running."})
+        step = await c.say(f"run shot 2 ({i})")
+        assert step["done"] and not step["cards"]
+    async with pool.connection() as conn:
+        cur = await conn.execute("SELECT sum(takes) AS t, sum(gpu_s) AS g FROM assistant_spend WHERE kind = 'auto' "
+                                 "AND owner_id = %s", (c.owner,))  # fmt: skip
+        assert dict(await cur.fetchone()) == {"t": 2, "g": 180}
+    c.script(calls(("make_views", {"board_id": BOARD, "revision": 2, "asset": "mara", "views": ["Front", "Side"]})),
+             {"content": "Asked."})  # fmt: skip
+    (card,) = (await c.say("views too"))["cards"]
+    assert card["note"] == "Auto paused · 2 of 2 takes this hour"
+    asked = [r for r in c.tools.asked if r["tool"] == "make_views"]
+    assert asked[-1].get("ask") is True and "ask" not in next(
+        r for r in c.tools.asked if r["tool"] == "run_blocks"
+    )
+    await c.answer(card["id"])
+    async with pool.connection() as conn:  # the user's Yes is not Auto's: not counted
+        cur = await conn.execute("SELECT sum(takes) AS t FROM assistant_spend WHERE kind = 'auto' AND owner_id = %s",
+                                 (c.owner,))  # fmt: skip
+        assert (await cur.fetchone())["t"] == 2
+    # Auto off: nothing is counted and nothing asks
+    c.auto = False
+    c.script(calls(("run_blocks", pick)), {"content": "Running."})
+    step = await c.say("run it again")
+    assert step["done"] and not step["cards"] and "ask" not in c.tools.asked[-1]
 
 
 async def test_restore_and_send_ask_first(pool, fake):
