@@ -158,8 +158,11 @@ Magic gaps build, contract 1.93).
   for a tool on both surfaces, and `destructive` is any write helm mcp serves. No API or message change, so no
   contract version.
 - Answers: `try_board_edit` is the dry run's revision, diff and warnings (no summary: studio writes that only on the
-  stored revision); `edit_board` adds the stored revision's `ops_summary`; `board_frame` reads the agent view and works
-  out what each visible lane shows, as studio's `boardFrame` does (no image: `get_take` shows a take).
+  stored revision; its `mcp_description` says so); `edit_board` adds the stored revision's `ops_summary` when the
+  newest kept revision is still its own; `run_blocks` answers `seconds` (the plan's) as the Assistant's does;
+  `make_views` answers `seconds` null (unknown); `plan_board`'s `mcp_description` drops "whether it asks you first"
+  (nothing asks over MCP); `board_frame` reads the agent view and works out what each visible lane shows, as studio's
+  `boardFrame` does (no image: `get_take` shows a take). (Review fixes, 2026-11-27.)
 - Tests: `cli/mcp_test.go` TestMCPMagicBoards (every call each tool makes) and the catalog test (descriptions,
   annotations); `contract_tests/tests/test_mcp.py` drives a board from empty to a sequence over stdio on
   `helmstudio-test` (echo models).

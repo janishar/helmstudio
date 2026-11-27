@@ -159,7 +159,8 @@ def test_mcp_magic_board_from_empty_to_a_sequence(mcp):
     views = structured(
         mcp.tool("make_views", {"board_id": bid, "revision": ran["revision"], "asset": "a1", "views": ["Front"]})
     )
-    assert [x["view"] for x in views["started"]] == ["Front"], views
+    assert [x["view"] for x in views["started"]] == ["Front"] and views["seconds"] is None, views
+    assert "seconds" in ran and "summary" not in tried, (ran, tried)
 
     def board():
         v = structured(mcp.tool("show_board", {"board_id": bid}))["board"]

@@ -640,7 +640,7 @@ func TestMCPMagicBoards(t *testing.T) {
 	if k := outs["magic_kinds"]["kinds"].([]any); len(k) != 1 || k[0].(map[string]any)["kind"] != "image" {
 		t.Errorf("kinds: %v", k)
 	}
-	if o := outs["make_views"]; o["revision"] != float64(7) || len(o["started"].([]any)) != 1 {
+	if o := outs["make_views"]; o["revision"] != float64(7) || len(o["started"].([]any)) != 1 || o["seconds"] != nil {
 		t.Errorf("views: %v", o)
 	}
 	if o := outs["try_board_edit"]; o["board"] != nil || o["summary"] != nil || o["revision"] != float64(5) {
@@ -649,7 +649,12 @@ func TestMCPMagicBoards(t *testing.T) {
 	if o := outs["edit_board"]; o["summary"] != "add_block" {
 		t.Errorf("edit: %v", o)
 	}
-	if o := outs["run_blocks"]; o["revision"] != float64(6) || o["plan"].(map[string]any)["ask"] != true || len(o["started"].([]any)) != 1 {
+	// another edit landed first: its summary is not this edit's
+	f.extra["GET "+base+"/revisions"] = record(200, `{"revisions":[{"revision":9,"ops_summary":"other"}]}`)
+	if _, o := call(t, cs, "edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}); o["summary"] != nil {
+		t.Errorf("edit, newer revision: %v", o)
+	}
+	if o := outs["run_blocks"]; o["revision"] != float64(6) || o["plan"].(map[string]any)["ask"] != true || len(o["started"].([]any)) != 1 || o["seconds"] != float64(12) {
 		t.Errorf("run: %v", o)
 	}
 	shown := outs["board_frame"]["shown"].([]any)

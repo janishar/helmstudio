@@ -3652,6 +3652,7 @@
     },
     "try_board_edit": {
       "description": "Try edits on a board without saving: the diff, the warnings and a summary, or the op that fails and why. Then propose the same ops with edit_board.",
+      "mcp_description": "Try edits on a board without saving: the diff and the warnings, or the op that fails and why (the summary comes with edit_board). Then apply the same ops with edit_board.",
       "surfaces": [
         "assistant",
         "mcp"
@@ -5661,6 +5662,7 @@
     },
     "plan_board": {
       "description": "What running blocks would cost: per block its GPU seconds (yours, the pack's or unknown), machine and peak memory or why it can't run; per lane and in all; the run order; whether it asks you first.",
+      "mcp_description": "What running blocks would cost: per block its GPU seconds (yours, the pack's or unknown), machine and peak memory or why it can't run; per lane and in all; the run order. Read it before run_blocks: over MCP nothing asks first.",
       "surfaces": [
         "assistant",
         "mcp"

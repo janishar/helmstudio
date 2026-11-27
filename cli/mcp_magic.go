@@ -86,6 +86,10 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 			if err != nil {
 				return nil, err
 			}
+			var est struct {
+				Seconds *float64 `json:"seconds"`
+			}
+			_ = json.Unmarshal(plan, &est)
 			p["revision"] = in["revision"]
 			raw, err := s.send(ctx, http.MethodPost, board(in)+"/run", p, http.StatusAccepted)
 			if err != nil {
@@ -99,7 +103,8 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 				Skipped json.RawMessage `json:"skipped"`
 			}
 			_ = json.Unmarshal(raw, &r)
-			return map[string]any{"revision": r.Board.Revision, "started": r.Started, "skipped": r.Skipped, "plan": plan}, nil
+			return map[string]any{"revision": r.Board.Revision, "started": r.Started, "skipped": r.Skipped, "seconds": est.Seconds,
+				"plan": plan}, nil
 		}),
 		"make_views": plain(func(ctx context.Context, in args) (any, error) {
 			var r struct {
@@ -112,7 +117,8 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 				in.pick("revision", "views", "model"), http.StatusAccepted, &r); err != nil {
 				return nil, err
 			}
-			return map[string]any{"revision": r.Board.Revision, "started": r.Started}, nil // no estimate: studio plans views in process
+			// seconds null (unknown): studio plans views in process, no route answers that estimate
+			return map[string]any{"revision": r.Board.Revision, "started": r.Started, "seconds": nil}, nil
 		}),
 		"board_frame": plain(func(ctx context.Context, in args) (any, error) {
 			var v agentView
@@ -149,10 +155,13 @@ func (s *mcpServer) editBoard(ctx context.Context, in args, dry bool) (any, erro
 	}
 	var revs struct {
 		Revisions []struct {
+			Revision   int    `json:"revision"`
 			OpsSummary string `json:"ops_summary"`
 		} `json:"revisions"`
 	}
-	if s.c.callCtx(ctx, http.MethodGet, "/v1/studio"+base+"/revisions?limit=1", nil, http.StatusOK, &revs) == nil && len(revs.Revisions) > 0 {
+	// the newest kept revision, if it is still this edit's (another edit may have landed since)
+	if s.c.callCtx(ctx, http.MethodGet, "/v1/studio"+base+"/revisions?limit=1", nil, http.StatusOK, &revs) == nil &&
+		len(revs.Revisions) > 0 && revs.Revisions[0].Revision == r.Revision {
 		out["summary"] = revs.Revisions[0].OpsSummary
 	}
 	return out, nil

@@ -100,8 +100,8 @@ called, and your client's own ask is the Yes.
 | `plan_board` | What running blocks would cost: GPU seconds per block, lane and in all, the machine, the run order | read |
 | `board_frame` | What each visible lane shows at a time (the block, its take and the second into it); `get_take` shows the picture | read |
 | `create_board` | A new empty board (name, size and rates) | write |
-| `run_blocks` | Runs named blocks, a lane's or every block not done; plans first and answers the plan with the runs | write |
-| `make_views` | One image run per view of an asset ("Front", "Side"); each take joins its sheet | write |
+| `run_blocks` | Runs named blocks, a lane's or every block not done; plans first and answers the plan and its GPU `seconds` with the runs | write |
+| `make_views` | One image run per view of an asset ("Front", "Side"); each take joins its sheet (no estimate over MCP: `seconds` is null) | write |
 | `send_to_timeline` | The board as a new sequence; the answer has the plan (what went, the bakes) | write |
 | `edit_board` | Applies the ops in order, all or nothing, on the `base_revision` (one Undo step, `via mcp` in History) | destructiveHint |
 | `restore_board` | Brings back a kept revision as a new one | destructiveHint |
