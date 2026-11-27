@@ -1890,7 +1890,7 @@ async def test_runs_above_the_limit_ask_with_the_estimate_and_frames_run_on_thei
     assert card["tags"] == ["uses the GPU"] and step["lines"][0]["text"] == "Running Frame 4"
     step = await c.answer(card["id"])
     assert [r.get("confirmed") for r in c.tools.asked if r["tool"] == "run_blocks"] == [None, True]
-    assert step["lines"][0]["text"] == "Started 1 run" and step["lines"][0]["status"] == "running"
+    assert step["lines"][0]["text"] == "Started 1 run" and step["lines"][0]["status"] == "done"
 
 
 async def test_runs_within_the_limit_start_without_a_card(pool, fake):

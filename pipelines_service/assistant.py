@@ -706,7 +706,7 @@ def magic_card(c: dict, p: dict) -> dict:
             lines.append(
                 {
                     "id": c["id"],
-                    "status": "running",
+                    "status": "done",  # started; each run reports on its own line as it ends
                     "undo": False,
                     "text": _short(f"Running {names}"),
                 }
@@ -763,7 +763,8 @@ def magic_done(c: dict, reply: dict) -> dict:
         text = f"Started {n} run{'s' * (n != 1)}" + (
             f" · {len(r['skipped'])} skipped" if r.get("skipped") else ""
         )
-        status = "running" if n else "done"
+        # the start is done; each run reports on its own line ("Run done · 1 take") as it ends
+        status = "done"
     else:
         send = r.get("send") or {}
         baking = send.get("status") == "baking"

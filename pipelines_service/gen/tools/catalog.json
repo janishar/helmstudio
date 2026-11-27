@@ -5946,6 +5946,22 @@
             "type": "string",
             "maxLength": 80,
             "description": "an image model's workflow id (magic_kinds); absent: the image kind's first real one (Echo only when nothing else is on a host)"
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 8192,
+            "description": "every view's width; absent: the 1K size above (on the model's grid, under its max)"
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 16,
+            "maximum": 8192,
+            "description": "every view's height (as width)"
+          },
+          "advanced": {
+            "type": "object",
+            "description": "the model's own params for every view, as a block's: {\"model.variant\": \"base\", \"model.precision\": \"bf16\"}"
           }
         },
         "required": [
