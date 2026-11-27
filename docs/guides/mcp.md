@@ -101,6 +101,7 @@ called, and your client's own ask is the Yes.
 | `board_frame` | What each visible lane shows at a time (the block, its take and the second into it); `get_take` shows the picture | read |
 | `create_board` | A new empty board (name, size and rates) | write |
 | `run_blocks` | Runs named blocks, a lane's or every block not done; plans first and answers the plan and its GPU `seconds` with the runs | write |
+| `cancel_runs` | Stops a board's runs still going: of named blocks, a lane, the runs named (`run_blocks`' started) or `all`; a queued run drops at once, a running one at its next safe point | write |
 | `make_views` | One image run per view of an asset ("Front", "Side"); each take joins its sheet (no estimate over MCP: `seconds` is null) | write |
 | `send_to_timeline` | The board as a new sequence; the answer has the plan (what went, the bakes) | write |
 | `edit_board` | Applies the ops in order, all or nothing, on the `base_revision` (one Undo step, `via mcp` in History) | destructiveHint |

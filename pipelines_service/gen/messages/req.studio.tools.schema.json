@@ -185,6 +185,7 @@
       "restore_board",
       "plan_board",
       "run_blocks",
+      "cancel_runs",
       "make_views",
       "board_frame",
       "send_to_timeline"
@@ -703,6 +704,22 @@
      "if": {
       "properties": {
        "tool": {
+        "const": "cancel_runs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/cancel_runs/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
         "const": "make_views"
        }
       }
@@ -849,6 +866,7 @@
       "restore_board",
       "plan_board",
       "run_blocks",
+      "cancel_runs",
       "make_views",
       "board_frame",
       "send_to_timeline"
@@ -1412,6 +1430,22 @@
       "properties": {
        "result": {
         "$ref": "../tools/catalog.json#/tools/run_blocks/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "cancel_runs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/cancel_runs/output"
        }
       }
      }

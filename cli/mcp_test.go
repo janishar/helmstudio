@@ -665,3 +665,63 @@ func TestMCPMagicBoards(t *testing.T) {
 		t.Errorf("send: %v", o)
 	}
 }
+
+// cancel_runs (alpha.6; owner, 2026-11-27: "yes build it"): the board read once, each matching run still going asked
+// to stop by its own cancel; a run that ended meanwhile (409) is left out; all takes Make views' runs too.
+func TestMCPCancelRuns(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "bbbbbbbb-0000-4000-8000-000000000002"
+	base := "/v1/studio/magic/boards/" + id
+	var asked []string
+	f.extra["GET "+base] = func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"doc":{"blocks":[{"id":"s1","lane":"shots"},{"id":"s2","lane":"shots"},{"id":"f1","lane":"story"}]},
+			"runs":[{"block":"s1","run_id":"r1","status":"running"},{"block":"s2","run_id":"r2","status":"queued"},
+			{"block":"f1","run_id":"r3","status":"running"},{"block":"s1","run_id":"r4","status":"succeeded"}],
+			"asset_runs":[{"asset":"a1","run_id":"r5","status":"queued"}]}`)
+	}
+	for run, answer := range map[string]string{"r1": "running", "r2": "cancelled", "r3": "", "r5": "cancelled"} {
+		f.extra["POST /v1/studio/runs/"+run+"/cancel"] = func(w http.ResponseWriter, r *http.Request) {
+			asked = append(asked, run)
+			if answer == "" {
+				w.WriteHeader(http.StatusConflict)
+				fmt.Fprint(w, `{"detail":"This run has already ended."}`)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			fmt.Fprintf(w, `{"id":%q,"status":%q}`, run, answer)
+		}
+	}
+	stopped := func(in map[string]any) string {
+		t.Helper()
+		res, out := call(t, cs, "cancel_runs", in)
+		if res.IsError {
+			t.Fatalf("%v: %s", in, text(res))
+		}
+		var s []string
+		for _, x := range out["stopped"].([]any) {
+			x := x.(map[string]any)
+			s = append(s, fmt.Sprintf("%s:%s:%s", x["block"], x["run_id"], x["status"]))
+		}
+		return strings.Join(s, " ")
+	}
+	if got := stopped(map[string]any{"board_id": id, "lane": "shots"}); got != "s1:r1:running s2:r2:cancelled" {
+		t.Errorf("lane: %s", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "blocks": []any{"f1"}}); got != "" {
+		t.Errorf("ended meanwhile: %q", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "run_ids": []any{"r2"}}); got != "s2:r2:cancelled" {
+		t.Errorf("run_ids: %s", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "all": true}); got != "s1:r1:running s2:r2:cancelled a1:r5:cancelled" {
+		t.Errorf("all: %s", got)
+	}
+	if strings.Join(asked, " ") != "r1 r2 r3 r2 r1 r2 r3 r5" {
+		t.Errorf("asked: %v", asked)
+	}
+	for _, in := range []map[string]any{{"board_id": id}, {"board_id": id, "lane": "shots", "all": true}} {
+		if res, _ := call(t, cs, "cancel_runs", in); !res.IsError {
+			t.Errorf("%v: want an error", in)
+		}
+	}
+}

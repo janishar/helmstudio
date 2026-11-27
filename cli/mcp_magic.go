@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"math"
 	"net/http"
 	"net/url"
@@ -106,6 +107,9 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 			return map[string]any{"revision": r.Board.Revision, "started": r.Started, "skipped": r.Skipped, "seconds": est.Seconds,
 				"plan": plan}, nil
 		}),
+		// alpha.6 (owner, 2026-11-27: "yes build it"): the board's runs still going stop, each by its own cancel, as the
+		// Assistant's cancel_runs does in studio: a queued one drops at once, a running one at its next safe point
+		"cancel_runs": plain(func(ctx context.Context, in args) (any, error) { return s.cancelRuns(ctx, in) }),
 		"make_views": plain(func(ctx context.Context, in args) (any, error) {
 			var r struct {
 				Board struct {
@@ -206,3 +210,86 @@ func (v agentView) frame(at float64) map[string]any {
 	}
 	return map[string]any{"at_s": at, "frame": f, "shown": shown}
 }
+
+// cancelRuns is cancel_runs: the board's runs still queued or running, of exactly one of blocks, lane, run_ids or all
+// (all and run_ids take Make views' runs too), each asked to stop; one that ended meanwhile (409) is left out.
+func (s *mcpServer) cancelRuns(ctx context.Context, in args) (any, error) {
+	n := 0
+	for _, k := range []string{"blocks", "lane", "run_ids", "all"} {
+		if in[k] != nil {
+			n++
+		}
+	}
+	if n != 1 {
+		return nil, errors.New("give exactly one of blocks, lane, run_ids or all")
+	}
+	var b struct {
+		Doc struct {
+			Blocks []struct{ ID, Lane string } `json:"blocks"`
+		} `json:"doc"`
+		Runs []struct {
+			Block  string `json:"block"`
+			RunID  string `json:"run_id"`
+			Status string `json:"status"`
+		} `json:"runs"`
+		AssetRuns []struct {
+			Asset  string `json:"asset"`
+			RunID  string `json:"run_id"`
+			Status string `json:"status"`
+		} `json:"asset_runs"`
+	}
+	if err := s.c.callCtx(ctx, http.MethodGet, "/v1/studio/magic/boards/"+in.esc("board_id"), nil, http.StatusOK, &b); err != nil {
+		return nil, err
+	}
+	lane := map[string]string{}
+	for _, x := range b.Doc.Blocks {
+		lane[x.ID] = x.Lane
+	}
+	strs := func(k string) []string {
+		var out []string
+		for _, v := range asList(in[k]) {
+			if s, ok := v.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	blocks, runIDs, want := strs("blocks"), strs("run_ids"), in.str("lane")
+	type open struct{ block, run string }
+	var going []open
+	for _, r := range b.Runs {
+		if r.Status == "queued" || r.Status == "running" {
+			going = append(going, open{r.Block, r.RunID})
+		}
+	}
+	if in["all"] != nil || in["run_ids"] != nil {
+		for _, r := range b.AssetRuns {
+			if r.Status == "queued" || r.Status == "running" {
+				going = append(going, open{r.Asset, r.RunID})
+			}
+		}
+	}
+	stopped := []map[string]any{}
+	for _, g := range going {
+		switch {
+		case in["blocks"] != nil && !slices.Contains(blocks, g.block),
+			in["lane"] != nil && lane[g.block] != want,
+			in["run_ids"] != nil && !slices.Contains(runIDs, g.run):
+			continue
+		}
+		var run struct {
+			Status string `json:"status"`
+		}
+		err := s.c.callCtx(ctx, http.MethodPost, "/v1/studio/runs/"+url.PathEscape(g.run)+"/cancel", nil, http.StatusAccepted, &run)
+		var api *apiError
+		if errors.As(err, &api) && api.status == http.StatusConflict {
+			continue // it ended meanwhile
+		} else if err != nil {
+			return nil, err
+		}
+		stopped = append(stopped, map[string]any{"run_id": g.run, "block": g.block, "status": run.Status})
+	}
+	return map[string]any{"stopped": stopped}, nil
+}
+
+func asList(v any) []any { l, _ := v.([]any); return l }

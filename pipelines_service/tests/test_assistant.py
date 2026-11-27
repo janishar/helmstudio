@@ -1918,3 +1918,23 @@ async def test_a_refused_magic_preview_is_a_failed_line_and_no_card(pool, fake):
     step = await c.say("add a shot")
     assert step["done"] and not step["cards"]
     assert step["lines"][0]["text"] == "Could not change the board · ops[0]: That lane is gone."
+
+
+async def test_cancel_runs_stops_at_once_with_its_line(pool, fake):
+    # alpha.6 (owner, 2026-11-27: "yes build it"): "stop the frames" by words; no card, one line
+    c = Chat(pool, fake)
+    c.tool_names = TOOLS + ["cancel_runs"]
+    stopped = [
+        {"run_id": str(uuid.uuid4()), "block": f"f{i}", "status": "cancelled"} for i in (1, 2)
+    ]
+    c.tools.results = {"cancel_runs": {"stopped": stopped}}
+    c.script(calls(("cancel_runs", {"board_id": BOARD, "lane": "story"})), {"content": "Stopped."})
+    step = await c.say("stop the frames")
+    assert step["lines"][0] == {
+        "id": c.cid(1, 0),
+        "status": "done",
+        "text": "Stopped 2 runs",
+        "undo": False,
+    }
+    assert [r["tool"] for r in c.tools.asked] == ["cancel_runs"]
+    assert not [e for e in step.get("cards") or []]

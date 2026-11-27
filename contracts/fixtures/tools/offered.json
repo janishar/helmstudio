@@ -9,6 +9,7 @@
    "expect": [
     "batch_status",
     "board_frame",
+    "cancel_runs",
     "create_board",
     "custom_nodes",
     "edit_board",
@@ -52,6 +53,7 @@
    "expect": [
     "batch_status",
     "board_frame",
+    "cancel_runs",
     "create_board",
     "custom_nodes",
     "edit_board",
@@ -97,6 +99,7 @@
    "expect": [
     "batch_status",
     "board_frame",
+    "cancel_runs",
     "create_board",
     "custom_nodes",
     "edit_board",
@@ -143,6 +146,7 @@
    "expect": [
     "batch_status",
     "board_frame",
+    "cancel_runs",
     "create_board",
     "custom_nodes",
     "edit_board",

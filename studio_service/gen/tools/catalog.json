@@ -5797,6 +5797,107 @@
       },
       "card": "magic_run"
     },
+    "cancel_runs": {
+      "description": "Stop a board's runs still queued or running, at once with no card: of these blocks, a lane's, the runs named (run_blocks' started) or all of them (exactly one). A queued run drops at once, a running one at its next safe point; takes already made stay.",
+      "mcp_description": "Stop a board's runs still queued or running: of these blocks, a lane's, the runs named (run_blocks' started) or all of them (exactly one). A queued run drops at once, a running one at its next safe point; takes already made stay.",
+      "surfaces": [
+        "assistant",
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/boards/{board_id}",
+        "POST /v1/studio/runs/{run_id}/cancel"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "blocks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,40}$"
+            },
+            "description": "these blocks' runs (or morph transitions')"
+          },
+          "lane": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "the runs of every block of this lane"
+          },
+          "run_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "these runs (run_blocks' or make_views' started)"
+          },
+          "all": {
+            "type": "boolean",
+            "const": true,
+            "description": "every run of the board still going, Make views' too"
+          }
+        },
+        "required": [
+          "board_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "stopped"
+        ],
+        "properties": {
+          "stopped": {
+            "type": "array",
+            "description": "each run asked to stop; one that ended meanwhile is left out",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "run_id",
+                "block",
+                "status"
+              ],
+              "properties": {
+                "run_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "block": {
+                  "type": "string",
+                  "description": "its block (or morph; an asset's id for Make views)"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "cancelled",
+                    "running"
+                  ],
+                  "description": "cancelled: dropped at once; running: it stops at its next safe point"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "make_views": {
       "description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. Within the user's limit it starts at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs and read the sheet in show_board.",
       "mcp_description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. No card over MCP: they start at once. Then read the sheet in show_board.",

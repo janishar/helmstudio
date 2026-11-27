@@ -4334,6 +4334,15 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `request`, `takes` and `pinned`; an asset's `used_in` counts what lib/magic.ts usedIn counts (refs, voice, a
   dialogue's speakers, first and last picks). run_blocks' and make_views' final reply carry `seconds` (the estimate
   of what started; null unknown).
+- **cancel_runs** (1.95; owner, 2026-11-27: "yes build it", after the Assistant started 8 frame runs that only the
+  Assistant's Stop could not end): {board_id, exactly one of blocks, lane, run_ids, all} stops the board's runs still
+  queued or running, for the Assistant and helm mcp, with no card (stopping loses only work in flight): it reads the
+  board (GET …/boards/{board_id}, owner scoped: another user's board is not found) and asks each matching run's own
+  cancel (POST /v1/studio/runs/{run_id}/cancel), so a queued run drops at once and a running one stops at its next
+  safe point; a run that ended meanwhile (409) is left out. `all` and `run_ids` take Make views' runs too (`block` is
+  then the asset's id). Answers {stopped: [{run_id, block, status: cancelled | running}]}. The web stops runs the
+  same way (each run's cancel): a running block's Stop (menu, dialog), Stop runs (N) in the board toolbar after a
+  confirm, and the Assistant's Stop offers "Stop its runs too" (the board's open runs by Assistant). No board route.
 - **Auto mode's caps** (1.93): with the chat's Auto on, every Magic run that starts without a card (run_blocks within
   the limit, its board frames, make_views within the limit) is reserved in `assistant_spend` (kind `auto`, keyed by
   the call: one take per run, its estimate in GPU seconds, unknown as 0). Once the hour's takes or GPU minutes are at

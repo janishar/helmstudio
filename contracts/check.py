@@ -4565,8 +4565,9 @@ def check_openapi() -> None:
                     fail(f"{where} {code}: use a components/responses error")
 
 
-# API 1.93: an assistant write with no card: create_board makes an empty board (nothing is lost or run)
-CARDLESS_WRITES = {"create_board"}
+# API 1.93: an assistant write with no card: create_board makes an empty board (nothing is lost or run); 1.95:
+# cancel_runs stops runs (only work in flight is lost; owner, 2026-11-27: "yes build it")
+CARDLESS_WRITES = {"create_board", "cancel_runs"}
 ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.61 a plugin tool with a risk flag
 
 

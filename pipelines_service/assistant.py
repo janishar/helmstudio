@@ -1222,6 +1222,10 @@ class Assistant:
         elif name == "use_skill":
             line = {"id": c["id"], "status": "done", "text": f"Using skill: {r['title']}"[:300], "undo": False,
                     "skill": a["skill"]}  # fmt: skip
+        elif name == "cancel_runs":  # alpha.6 (owner, 2026-11-27: "yes build it"): no card
+            n = len(r["stopped"])
+            text = f"Stopped {n} run{'s' * (n != 1)}" if n else "Nothing was running"
+            line = {"id": c["id"], "status": "done", "text": text, "undo": False}
         elif name == "read_model_guide":  # API 1.71
             line = {"id": c["id"], "status": "done", "text": f"Read the {r['title']} guide"[:300],
                     "undo": False}  # fmt: skip
