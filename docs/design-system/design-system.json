@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T06:00:00Z",
+  "at": "2026-11-28T05:30:00Z",
   "via": "Claude Code",
-  "note": "MagicBlockDialog: Make views' line under Make says what it makes (768 × 1024 · Turbo · int8); it opens Width, Height, Variant and Precision for the batch, kept per board"
+  "note": "MagicBlockDialog Make views: the settings (size, variant, precision) are a chip beside Make with a sliders icon and a chevron, not a plain line under the buttons (owner, 2026-11-28: \"where?\")"
  }
 }

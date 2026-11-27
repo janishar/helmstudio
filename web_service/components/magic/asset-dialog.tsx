@@ -3,7 +3,7 @@
 // views, imported from the Gallery as a copy, or a file), its voice as an orb to play or change, a note; right, where
 // it is used, lit on a small board. "new" makes one first (kind, name, handle). Each view has its right-click menu.
 import { useRef, useState } from "react";
-import { Images, Mic, Play, Upload } from "lucide-react";
+import { ChevronDown, Images, Mic, Play, SlidersHorizontal, Upload } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
 import { KIND_NAME } from "@/components/magic/icons";
@@ -445,6 +445,19 @@ function Body({
               Make {sel.length}
               {est != null && sel.length ? ` · ${estText(est * sel.length)}` : ""}
             </button>
+            <button
+              type="button"
+              className="chip bevel rounded-[10px] bg-s4 text-[12px]"
+              aria-expanded={setup}
+              title="Size, variant and precision of every view"
+              onClick={() => setSetup(!setup)}
+            >
+              <SlidersHorizontal size={13} aria-hidden />
+              {w} × {h}
+              {variant.title ? ` · ${variant.title}` : ""}
+              {precision ? ` · ${precision}` : ""}
+              <ChevronDown size={13} aria-hidden className={setup ? "rotate-180" : ""} />
+            </button>
             {images.length > 1 && (
               <select
                 aria-label="Views model"
@@ -491,17 +504,6 @@ function Body({
               }}
             />
           </div>
-          <button
-            type="button"
-            className="self-start text-[11px] text-t2 hover:text-t1"
-            aria-expanded={setup}
-            title="Size, variant and precision of every view"
-            onClick={() => setSetup(!setup)}
-          >
-            {w} × {h}
-            {variant.title ? ` · ${variant.title}` : ""}
-            {precision ? ` · ${precision}` : ""}
-          </button>
           {setup && (
             <div
               className="flex flex-wrap items-start gap-3 rounded-xl bg-s2 p-2"
