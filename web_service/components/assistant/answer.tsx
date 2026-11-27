@@ -30,10 +30,15 @@ export function Options({
   readOnly: boolean;
   send: (text: string) => unknown;
 }) {
-  const { live, picked } = pickOf(entries, entry.id, options);
+  const { live, picked, card } = pickOf(entries, entry.id, options);
   const off = !live || readOnly;
   return (
-    <div className="opts" role="group" aria-label="Pick one">
+    <div
+      className="opts"
+      role="group"
+      aria-label="Pick one"
+      title={card ? "Answer the card first" : undefined}
+    >
       {options.map((o, i) => {
         const on = o.title === picked;
         return (

@@ -31,12 +31,15 @@ export function splitOptions(text: string): { text: string; options: Option[] | 
   return { text, options: null };
 }
 
+const waits = (e: Entry) => e.kind === "card" && e.card?.state === "waiting";
+
 /** An answer's options as it stands: live while no message came after it; then the title that message picked, if
  * it was one of them (it fades the rest). */
 export function pickOf(entries: Entry[], id: string, options: Option[]) {
-  const next = entries
-    .slice(entries.findIndex((e) => e.id === id) + 1)
-    .find((e) => e.kind === "user");
+  const after = entries.slice(entries.findIndex((e) => e.id === id) + 1);
+  const next = after.find((e) => e.kind === "user");
+  // a card after them waits on its own Apply / Yes: a pick now would send a message, and that cancels the card
+  if (!next && after.some(waits)) return { live: false, picked: null, card: true };
   if (!next) return { live: true, picked: null };
   const said = next.text?.trim();
   return { live: false, picked: options.find((o) => o.title === said)?.title ?? null };
@@ -46,7 +49,7 @@ export function pickOf(entries: Entry[], id: string, options: Option[]) {
 export function liveOptions(entries: Entry[]): Option[] | null {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i];
-    if (e.kind === "user") return null;
+    if (e.kind === "user" || waits(e)) return null;
     const o = e.kind === "assistant" ? splitOptions(e.text ?? "").options : null;
     if (o) return o;
   }
