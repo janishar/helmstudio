@@ -194,7 +194,9 @@ nav button[aria-label="Magic"] svg{background:linear-gradient(155deg,#f2a8ff,#8a
 .fld>.lb{font-size:12px;color:var(--t2);display:flex;align-items:center;gap:6px}
 .box{height:36px;box-sizing:border-box;padding:0 10px;border-radius:10px;background:var(--s4);display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap;overflow:hidden}
 .box .mono{font-size:12px}
-.pr{box-sizing:border-box;min-height:66px;padding:8px 10px;border-radius:10px;background:var(--s4);font-size:13px;line-height:22px}
+.pr{position:relative;box-sizing:border-box;height:66px;overflow-y:auto;scrollbar-gutter:stable;padding:8px 38px 8px 10px;border-radius:10px;background:var(--s4);font-size:13px;line-height:22px}
+/* a fixed 66px that scrolls, with the shared Expand (top right) that opens it big, as Create's prompt (owner, 2026-11-27) */
+.pr::after{content:"";position:absolute;top:0;right:0;width:28px;height:28px;border-radius:8px;background:var(--s3) no-repeat center/16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7'/%3E%3C/svg%3E")}
 .pr .rc{vertical-align:middle}
 .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .g2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
