@@ -203,7 +203,8 @@ export class Preview {
     if (!url || this.unplayable.has(take)) return null;
     const kind = ti > 0 ? "audio" : kindOf(c, this.takes) === "image" ? "image" : "video";
     const el = document.createElement(kind === "image" ? "img" : kind);
-    el.className = "absolute inset-0 size-full object-contain";
+    // black behind its own letterbox: a picture behind the stage (the Magic player's still) showed round a fitted clip
+    el.className = "absolute inset-0 size-full bg-black object-contain";
     if (el instanceof HTMLMediaElement) {
       el.preload = "auto";
       (el as HTMLVideoElement).playsInline = true;
