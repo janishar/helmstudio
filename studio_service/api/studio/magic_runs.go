@@ -39,7 +39,9 @@ var magicKindFields = map[string][]string{
 	"video": {"prompt", "first", "last", "length", "size", "seed"},
 	"voice": {"line", "voice", "seed"},
 	"frame": {"prompt", "refs", "size", "seed"}, // API 1.83: a board frame is a still of an image model
-	"music": {}, "sound": {},
+	// API 1.85 (plan 39 phase H): music's style is its prompt; a sound may be made from a shot's video
+	"music": {"prompt", "lyrics", "length", "key", "bpm", "seed"},
+	"sound": {"from", "prompt", "length", "seed"},
 }
 
 // magicServes is the standard kind that serves a block kind: a board frame is a still (API 1.83).
@@ -53,14 +55,11 @@ func magicServes(kind string) string {
 // magicKindOrder is the kinds as GET /magic/kinds lists them (Add's order).
 var magicKindOrder = []string{"video", "image", "voice", "music", "sound", "frame"}
 
-const (
-	offMusicSound = "Comes with Create's Music and Sound"
-	maxBlockRuns  = 20 // the runs of one block a board answers
-)
+const maxBlockRuns = 20 // the runs of one block a board answers
 
 var magicFieldWords = map[string]string{"prompt": "a prompt", "line": "a line", "refs": "references",
 	"first": "a first frame", "last": "a last frame", "length": "a length", "size": "a size", "seed": "a seed",
-	"voice": "a voice"}
+	"voice": "a voice", "lyrics": "lyrics", "key": "a key", "bpm": "a BPM", "from": "a shot's video"}
 
 // modelFields are the shared fields of kind a standard block fills, in form order.
 func modelFields(kind string, st *registry.Standard) []string {
@@ -79,11 +78,13 @@ func modelFields(kind string, st *registry.Standard) []string {
 	return out
 }
 
-// standardModels are the workflows that serve kind, fastest declared first (then by id): the first is the default.
+// standardModels are the workflows that serve kind as models: the default first (API 1.85), then the fastest declared
+// (then by id); the first is the kind's default. A model's video workflow (`from`, API 1.85) is not one of them: it
+// is the model's `video` (videoOf).
 func standardModels(ws []registry.Workflow, kind string) []registry.Workflow {
 	var out []registry.Workflow
 	for _, w := range ws {
-		if w.Standard != nil && w.Standard.Kind == magicServes(kind) {
+		if w.Standard != nil && w.Standard.Kind == magicServes(kind) && !isVideoOf(ws, w) {
 			out = append(out, w)
 		}
 	}
@@ -95,9 +96,36 @@ func standardModels(ws []registry.Workflow, kind string) []registry.Workflow {
 		if b.Standard.Seconds != nil {
 			sb = *b.Standard.Seconds
 		}
-		return cmp.Or(cmp.Compare(sa, sb), strings.Compare(a.ID, b.ID))
+		return cmp.Or(cmp.Compare(boolInt(!a.Standard.Default), boolInt(!b.Standard.Default)), cmp.Compare(sa, sb),
+			strings.Compare(a.ID, b.ID))
 	})
 	return out
+}
+
+// takesVideo is whether w's standard block fills `from` (a shot's video).
+func takesVideo(w registry.Workflow) bool { _, ok := w.Standard.Fields["from"]; return ok }
+
+// isVideoOf is whether w is another workflow's video one: it takes a video and a workflow of its kind and model
+// name takes none (MMAudio Sound from a video beside MMAudio Sound).
+func isVideoOf(ws []registry.Workflow, w registry.Workflow) bool {
+	return takesVideo(w) && slices.ContainsFunc(ws, func(x registry.Workflow) bool {
+		return x.Standard != nil && x.ID != w.ID && x.Standard.Kind == w.Standard.Kind && x.Standard.Model == w.Standard.Model &&
+			!takesVideo(x)
+	})
+}
+
+// videoOf is model m's video workflow (m itself when it takes a video), nil without.
+func videoOf(ws []registry.Workflow, m registry.Workflow) *registry.Workflow {
+	if takesVideo(m) {
+		return &m
+	}
+	for _, w := range ws {
+		if w.Standard != nil && w.ID != m.ID && w.Standard.Kind == m.Standard.Kind && w.Standard.Model == m.Standard.Model &&
+			takesVideo(w) {
+			return &w
+		}
+	}
+	return nil
 }
 
 // advancedParams are a model's Advanced fields: every unwired param a form can set that its standard block does not
@@ -135,6 +163,16 @@ func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 		info := dto.MagicKindInfo{Kind: kind, Fields: magicKindFields[kind], Models: []dto.MagicModel{}}
 		for _, w := range standardModels(ws, kind) {
 			fields := modelFields(kind, w.Standard)
+			var video *dto.MagicVideo
+			if v := videoOf(ws, w); v != nil && v.ID != w.ID { // one model, two workflows: its fields are both's
+				video = &dto.MagicVideo{WorkflowID: v.ID, Title: v.Title, Advanced: advancedParams(*v)}
+				for _, f := range modelFields(kind, v.Standard) {
+					if !slices.Contains(fields, f) {
+						fields = append(fields, f)
+					}
+				}
+				fields = slices.DeleteFunc(slices.Clone(magicKindFields[kind]), func(f string) bool { return !slices.Contains(fields, f) })
+			}
 			greyed := map[string]string{}
 			for _, f := range magicKindFields[kind] {
 				if !slices.Contains(fields, f) {
@@ -142,10 +180,7 @@ func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 				}
 			}
 			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title,
-				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w)})
-		}
-		if (kind == "music" || kind == "sound") && len(info.Models) == 0 {
-			info.Off = offMusicSound
+				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w), Video: video})
 		}
 		out.Kinds = append(out.Kinds, info)
 	}
@@ -181,16 +216,28 @@ func reqRefs(req map[string]any) []map[string]any {
 	return out
 }
 
-// magicModel is the workflow a block's request runs: its `model` when that serves the kind, else the kind's first.
+// magicModel is the workflow a block's request runs: its `model` when that serves the kind, else the kind's first; a
+// request with `from` (a sound from a shot's video, API 1.85) runs the model's video workflow, and with no `model` the
+// kind's first model that takes a video.
 func magicModel(ws []registry.Workflow, kind string, req map[string]any) (registry.Workflow, string) {
 	models := standardModels(ws, kind)
 	if req["morph"] == true { // API 1.82: a morph's model takes a first and a last frame
 		models = morphModels(models)
 	}
+	from := reqString(req, "from") != ""
+	pick := func(w registry.Workflow) (registry.Workflow, string) {
+		if !from {
+			return w, ""
+		}
+		if v := videoOf(ws, w); v != nil {
+			return *v, ""
+		}
+		return w, w.Standard.Model + " can't take " + magicFieldWords["from"]
+	}
 	if want := reqString(req, "model"); want != "" {
 		for _, w := range models {
-			if w.ID == want {
-				return w, ""
+			if w.ID == want || (from && videoOf(ws, w) != nil && videoOf(ws, w).ID == want) {
+				return pick(w)
 			}
 		}
 		return registry.Workflow{}, "its model " + want + " is on no host"
@@ -198,17 +245,18 @@ func magicModel(ws []registry.Workflow, kind string, req map[string]any) (regist
 	if len(models) == 0 {
 		return registry.Workflow{}, "no model for " + kind + " is on any host"
 	}
-	return models[0], ""
+	if from {
+		for _, w := range models {
+			if videoOf(ws, w) != nil {
+				return pick(w)
+			}
+		}
+	}
+	return pick(models[0])
 }
 
 // whyNot is why block b of d cannot run ("" when it can): its kind, a dialogue, no model, a pick its model needs.
 func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
-	switch b.Kind {
-	case "music":
-		return "Music " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
-	case "sound":
-		return "Sound " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
-	}
 	if turns, _ := b.Request["turns"].([]any); len(turns) > 0 {
 		return "Dialogue blocks can't run yet"
 	}
@@ -227,6 +275,15 @@ func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
 	}
 	if _, ok := w.Standard.Fields["voice"]; ok && blockVoice(d, b) == "" {
 		return w.Standard.Model + " needs a voice"
+	}
+	if from := reqString(b.Request, "from"); from != "" { // API 1.85: the shot whose video the sound is made from
+		shot := findBlock(d, from)
+		switch {
+		case shot == nil || shot.Kind != "video":
+			return "its shot is not on the board"
+		case shownTake(shot) == "":
+			return strings.Split(shot.Name, " · ")[0] + " has no take yet"
+		}
 	}
 	return ""
 }
@@ -416,6 +473,26 @@ func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magic
 	if path, _, ok := param("line"); ok {
 		inputs[path] = reqString(req, "line")
 	}
+	// API 1.85: music's lyrics (empty: an instrumental), key (only one of the param's values) and BPM
+	if path, _, ok := param("lyrics"); ok {
+		inputs[path] = reqString(req, "lyrics")
+	}
+	if path, _, ok := param("instrumental"); ok {
+		inputs[path] = strings.TrimSpace(reqString(req, "lyrics")) == ""
+	}
+	if path, p, ok := param("key"); ok && slices.Contains(p.Enum, reqString(req, "key")) {
+		inputs[path] = reqString(req, "key")
+	}
+	if path, p, ok := param("bpm"); ok {
+		if v, ok := reqNumber(req, "bpm"); ok && v > 0 {
+			inputs[path] = onGrid(v, p)
+		}
+	}
+	if path, _, ok := param("from"); ok {
+		if shot := findBlock(d, reqString(req, "from")); shot != nil && shownTake(shot) != "" {
+			inputs[path] = map[string]any{"take_id": shownTake(shot)}
+		}
+	}
 	if path, _, ok := param("seed"); ok {
 		inputs[path] = float64(seed)
 	}
@@ -433,7 +510,9 @@ func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magic
 	}
 	// the clip's length in the workflow's frames (its fps param's value), on the frames param's grid
 	frames, fps := 0.0, float64(target.FPS)
-	if path, p, ok := param("length"); ok {
+	if path, p, ok := param("length"); ok && p.Type != "frames" { // API 1.85: a float param is the block's seconds
+		inputs[path] = onGrid(float64(b.Length)/float64(target.FPS), p)
+	} else if ok {
 		nodeID, _, _ := strings.Cut(path, ".")
 		node := w.Nodes[nodeID]
 		if v, ok := number(merged(w.NodeSchemas[node.Kind], node.Params)[p.FPS]); ok && v > 0 {
@@ -575,6 +654,10 @@ func inputsHash(d magic.Doc, b *magic.Block) string {
 			parts = append(parts, x.Request)
 		}
 	}
+	// API 1.85: a sound made from a shot's video follows the shot's take (appended only then, as above)
+	if from := reqString(b.Request, "from"); from != "" {
+		parts = append(parts, pick(map[string]any{"block": from}))
+	}
 	data, _ := json.Marshal(parts)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:16])
@@ -648,7 +731,28 @@ type magicRunRow struct {
 	Progress                 json.RawMessage
 	Error                    *string
 	Takes                    []string
+	TakeKinds                []string // each take's kind, in Takes' order
 	RenderS                  *float64
+}
+
+// takeFits is whether a take of kind takeKind joins a block of kind (API 1.85): a voice, music or sound block takes
+// only audio, so MMAudio's video with the sound stays out of its sound block; the others take every take a run makes.
+func takeFits(kind, takeKind string) bool {
+	return takeKind == "audio" || !slices.Contains([]string{"voice", "music", "sound"}, kind)
+}
+
+// fitTakes are the takes of run r that fit block b (all of them with no block).
+func fitTakes(b *magic.Block, r magicRunRow) []string {
+	if b == nil || len(r.TakeKinds) != len(r.Takes) {
+		return r.Takes
+	}
+	out := []string{}
+	for i, t := range r.Takes {
+		if takeFits(b.Kind, r.TakeKinds[i]) {
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // boardRuns are the board's runs, the last 20 of each block, oldest first; deleted runs and takes are left out.
@@ -656,6 +760,8 @@ func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, e
 	return collect[magicRunRow](ctx, tx, `SELECT m.block, m.run_id::text, m.inputs_hash, m.seed, m.via, m.label, m.created_at,
 		r.workflow_id, r.status, r.progress, r.error,
 		coalesce((SELECT array_agg(o.take_id::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
+			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
+		coalesce((SELECT array_agg(t.kind::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
 		(SELECT (t.made_with->>'render_s')::float8 FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1)
@@ -733,9 +839,11 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 			by = "assistant"
 		}
 		current := false
-		if b := runBlockOf(d, r.Block); b != nil {
+		b := runBlockOf(d, r.Block)
+		if b != nil {
 			current = r.InputsHash == inputsHash(d, b)
 		}
+		r.Takes = fitTakes(b, r) // API 1.85: a sound block's run lists its audio take
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
 			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
 			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label})
@@ -759,6 +867,9 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		}
 		if td.MadeWith != nil {
 			mt.Seed = td.MadeWith.Seed
+		}
+		if td.Sound != "" { // API 1.85: a music take's cover, a sound or voice take's orb
+			mt.Sound = &td.Sound
 		}
 		if run, ok := byTake[id]; ok {
 			mt.RunID = &run
@@ -1000,6 +1111,8 @@ func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) err
 		}
 	} else if b := findBlock(doc, block); b == nil || slices.Contains(b.Takes, takeID) || len(b.Takes) >= 200 {
 		return nil
+	} else if fits, err := takeFitsBlock(ctx, tx, b, takeID); err != nil || !fits {
+		return err // API 1.85: MMAudio's video with the sound stays in the Gallery
 	} else {
 		b.Takes = append(b.Takes, takeID)
 	}
@@ -1013,14 +1126,24 @@ func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) err
 	return storeBoard(ctx, tx, &row, doc, write{by: "studio", ops: "take"}, undo, redo)
 }
 
+// takeFitsBlock is whether take id fits block b (takeFits).
+func takeFitsBlock(ctx context.Context, tx pgx.Tx, b *magic.Block, id string) (bool, error) {
+	var kind string
+	if err := tx.QueryRow(ctx, `SELECT kind::text FROM takes WHERE id = $1`, id).Scan(&kind); err != nil {
+		return false, err
+	}
+	return takeFits(b.Kind, kind), nil
+}
+
 // withRunTakes is doc with every take a board run made put back on its block (still on the board, oldest first): an
 // undo, redo or restore never takes a take back (plan 39 §45.12).
 func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc) (magic.Doc, error) {
 	type made struct {
 		Block, TakeID string
 		Asset, Label  *string
+		Kind          string
 	}
-	rows, err := collect[made](ctx, tx, `SELECT m.block, o.take_id::text, m.asset, m.label FROM magic_runs m
+	rows, err := collect[made](ctx, tx, `SELECT m.block, o.take_id::text, m.asset, m.label, t.kind::text FROM magic_runs m
 		JOIN run_outputs o ON o.run_id = m.run_id JOIN takes t ON t.id = o.take_id AND t.deleted_at IS NULL
 		WHERE m.board_id = $1 ORDER BY m.created_at, o.idx`, boardID)
 	if err != nil || len(rows) == 0 {
@@ -1030,7 +1153,8 @@ func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc)
 	for _, r := range rows {
 		if r.Asset != nil {
 			addView(doc, *r.Asset, r.TakeID, deref(r.Label))
-		} else if b := findBlock(doc, r.Block); b != nil && !slices.Contains(b.Takes, r.TakeID) && len(b.Takes) < 200 {
+		} else if b := findBlock(doc, r.Block); b != nil && !slices.Contains(b.Takes, r.TakeID) && len(b.Takes) < 200 &&
+			takeFits(b.Kind, r.Kind) {
 			b.Takes = append(b.Takes, r.TakeID)
 		}
 	}
@@ -1108,7 +1232,7 @@ func askAbove(ctx context.Context, tx pgx.Tx) (float64, error) {
 }
 
 var magicNoun = map[string][2]string{"video": {"shot", "shots"}, "image": {"still", "stills"}, "voice": {"line", "lines"},
-	"frame": {"frame", "frames"}}
+	"frame": {"frame", "frames"}, "music": {"cue", "cues"}, "sound": {"sound", "sounds"}}
 
 // askText is the ask card's line: "3 shots, about 6 min".
 func askText(kinds []string, seconds *float64) string {

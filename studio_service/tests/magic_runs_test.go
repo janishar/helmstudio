@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -31,7 +32,8 @@ func magicRunBoard(shotTake string) map[string]any {
 				"first": map[string]any{"block": "s1", "part": "last"}}),
 			block("v1", "lines", 0, 48, "voice", "Line 1", map[string]any{"line": "Hello.", "seed": 7, "count": 2,
 				"voice_id": "echo/ada"}),
-			block("m1", "music", 0, 96, "music", "Cue 1", map[string]any{})},
+			// API 1.85: music runs; this cue names a model the fake host has not got, so it is skipped with why
+			block("m1", "music", 0, 96, "music", "Cue 1", map[string]any{"model": "ace-step-music"})},
 		"links": []any{}, "transitions": []any{}, "assets": []any{}, "notes": []string{},
 	}
 }
@@ -54,7 +56,7 @@ func TestMagicRuns(t *testing.T) {
 		got = append(got, fmt.Sprintf("%v %v %v", k["kind"], models, k["off"]))
 	}
 	if fmt.Sprint(got) != "[video [echo-image-to-video echo-video] <nil> image [echo] <nil> voice [echo-voice-over] <nil> "+
-		"music [] Comes with Create's Music and Sound sound [] Comes with Create's Music and Sound frame [echo] <nil>]" {
+		"music [echo-music] <nil> sound [echo-sound] <nil> frame [echo] <nil>]" {
 		t.Fatal(got)
 	}
 
@@ -84,7 +86,7 @@ func TestMagicRuns(t *testing.T) {
 	if s2 := blocks[0].(map[string]any); s2["source"] != "pack" || s2["seconds"] != float64(1) || s2["host"] != "fake" {
 		t.Fatal(s2) // Echo keyframes: 0.5 s a second at 720p, 2 s long
 	}
-	if m1 := blocks[2].(map[string]any); m1["reason"] != "Music comes with Create's Music and Sound" || m1["seconds"] != nil {
+	if m1 := blocks[2].(map[string]any); m1["reason"] != "its model ace-step-music is on no host" || m1["seconds"] != nil {
 		t.Fatal(m1)
 	}
 	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 5}, 200)
@@ -98,7 +100,7 @@ func TestMagicRuns(t *testing.T) {
 	run := func(user string, body map[string]any, want int) map[string]any {
 		return e.call(user, "POST", base+"/run", body, want)
 	}
-	if r := run(userA, map[string]any{"revision": 1, "blocks": []string{"m1"}}, 422); r["detail"] != "Cue 1: Music comes with Create's Music and Sound" {
+	if r := run(userA, map[string]any{"revision": 1, "blocks": []string{"m1"}}, 422); r["detail"] != "Cue 1: its model ace-step-music is on no host" {
 		t.Fatal(r)
 	}
 	run(userA, map[string]any{"revision": 2, "blocks": []string{"s2"}}, 409)
@@ -109,7 +111,7 @@ func TestMagicRuns(t *testing.T) {
 	// the stale pick: Shot 2 from Shot 1's last frame, Line 1 twice (seeds 7 and 8), the cue skipped
 	r := run(userA, map[string]any{"revision": 1, "stale": true}, 202)
 	started, skipped := r["started"].([]any), r["skipped"].([]any)
-	if len(started) != 3 || fmt.Sprint(skipped) != "[map[block:m1 reason:Music comes with Create's Music and Sound]]" {
+	if len(started) != 3 || fmt.Sprint(skipped) != "[map[block:m1 reason:its model ace-step-music is on no host]]" {
 		t.Fatal(r)
 	}
 	board := r["board"].(map[string]any)
@@ -230,4 +232,97 @@ func TestMagicRunsSkipRefused(t *testing.T) {
 	if n := e.count(`SELECT count(*) FROM magic_runs WHERE board_id = $1`, b["id"]); n != 1 {
 		t.Fatal(n)
 	}
+}
+
+// API 1.85 (plan 39 phase H): a music block runs echo music with its lyrics, BPM and seconds; a sound made from a
+// shot's video runs the model's video workflow on the shot's take and keeps only the audio take; the board's take
+// carries its sound class.
+func TestMagicMusicAndSound(t *testing.T) {
+	e := setup(t)
+	shot := e.clipTake(userA, 2, true, nil)
+	e.exec(`UPDATE takes SET bytes = 5 WHERE id = $1`, shot) // its object's size, so a run may read it
+	doc := magicRunBoard(shot)
+	s1 := doc["blocks"].([]any)[0]
+	doc["lanes"] = append(doc["lanes"].([]any), map[string]any{"id": "sound", "name": "Sound", "role": "sound"})
+	music := map[string]any{"id": "m1", "lane": "music", "at": 0, "length": 96, "kind": "music", "name": "Cue 1",
+		"request": map[string]any{"kind": "music", "prompt": "soft rain", "lyrics": "[verse]\nla", "bpm": 72, "key": "D minor"},
+		"takes":   []string{}, "effects": []any{}}
+	sound := map[string]any{"id": "x1", "lane": "sound", "at": 0, "length": 48, "kind": "sound", "name": "Bus",
+		"request": map[string]any{"kind": "sound", "from": "s1", "prompt": "a bus pulls away"}, "takes": []string{}, "effects": []any{}}
+	doc["blocks"] = []any{s1, music, sound}
+	b := e.call(userA, "POST", "/v1/studio/magic/boards", map[string]any{"name": "Sound", "doc": doc}, 201)
+	base := "/v1/studio/magic/boards/" + b["id"].(string)
+	plan := e.call(userA, "POST", base+"/plan", map[string]any{"blocks": []string{"m1", "x1"}}, 200)
+	if plan["ask_text"] != "2 blocks, about 2 s" { // 4 s at 0.3 and 2 s at 0.2
+		t.Fatal(plan)
+	}
+	// the sound first: the fake host runs one at a time
+	runs := map[string]map[string]any{}
+	var session string
+	for _, id := range []string{"x1", "m1"} {
+		r := e.call(userA, "POST", base+"/run", map[string]any{"revision": 1, "blocks": []string{id}}, 202)
+		session = r["board"].(map[string]any)["session_id"].(string)
+		s := r["started"].([]any)[0].(map[string]any)
+		runs[id] = e.call(userA, "GET", "/v1/studio/runs/"+s["run_id"].(string), nil, 200)
+		if id == "x1" {
+			e.relay()
+		}
+	}
+	if m := runs["m1"]; m["workflow_id"] != "echo-music" || flatInputs(m) != "music.bpm=72 music.instrumental=false "+
+		"music.lyrics=[verse]\nla music.seconds=4 music.seed=-1 prompt.text=soft rain" {
+		t.Fatal(flatInputs(m))
+	}
+	x := runs["x1"]
+	if x["workflow_id"] != "echo-sound-video" || flatInputs(x) != "foley.seed=-1 foley.source=map[take_id:"+shot+"] prompt.text=a bus pulls away" {
+		t.Fatal(x["workflow_id"], flatInputs(x))
+	}
+	// the sound run makes the audio and the video with it: the block keeps the audio
+	run := x["id"].(string)
+	prefix := "u/" + userA + "/runs/" + run + "/1/"
+	e.emit(userA, session, run, "status", 1, map[string]any{"status": "running", "host": "fake"})
+	e.emit(userA, session, run, "output", 2, map[string]any{"index": 0, "key": prefix + "0.wav", "kind": "audio",
+		"bytes": 100, "audio": map[string]any{"duration_s": 2.0, "sample_rate": 44100, "channels": 2}})
+	e.emit(userA, session, run, "output", 3, map[string]any{"index": 1, "key": prefix + "1.mp4", "kind": "video",
+		"width": 256, "height": 128, "bytes": 1000, "video": map[string]any{"duration_s": 2.0, "fps": 24, "frames": 48,
+			"has_audio": true, "poster": map[string]any{"key": prefix + "1.poster.png", "width": 256, "height": 128, "bytes": 10}}})
+	e.emit(userA, session, run, "status", 4, map[string]any{"status": "succeeded", "host": "fake"})
+	now := e.call(userA, "GET", base, nil, 200)
+	takes := blockOf(now, "x1")["takes"].([]any)
+	if len(takes) != 1 || statusOf(now, "x1") != "done" {
+		t.Fatal(blockOf(now, "x1"), now["status"])
+	}
+	// the take's class is the projector's (plan 38); the board passes it on
+	e.exec(`UPDATE takes SET sound = 'sound' WHERE id = $1`, takes[0])
+	now = e.call(userA, "GET", base, nil, 200)
+	mt := now["takes"].(map[string]any)[takes[0].(string)].(map[string]any)
+	if mt["kind"] != "audio" || mt["sound"] != "sound" {
+		t.Fatal(mt)
+	}
+	for _, h := range now["runs"].([]any) {
+		if h := h.(map[string]any); h["block"] == "x1" && fmt.Sprint(h["takes"]) != fmt.Sprint(takes) {
+			t.Fatal(h)
+		}
+	}
+	// a new take of the shot puts the sound out of date
+	other := e.clipTake(userA, 2, true, nil)
+	edited := e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": now["revision"], "ops": []any{
+		map[string]any{"op": "take_add", "id": "s1", "take": other}}}, 200)
+	if statusOf(edited["board"].(map[string]any), "x1") != "out_of_date" {
+		t.Fatal(edited["board"].(map[string]any)["status"])
+	}
+}
+
+// flatInputs is a run's inputs as sorted k=v pairs.
+func flatInputs(run map[string]any) string {
+	in := run["inputs"].(map[string]any)
+	var parts []string
+	keys := make([]string, 0, len(in))
+	for k := range in {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s=%v", k, in[k]))
+	}
+	return strings.Join(parts, " ")
 }

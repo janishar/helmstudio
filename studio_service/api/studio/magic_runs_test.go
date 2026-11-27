@@ -56,6 +56,18 @@ func TestStandardInputsPerPack(t *testing.T) {
 			`prompt.text=Tonight I let it go. seed.seed=42 speak.voice=map[voice_id:` + voice + `]`},
 		{"zonos3.", "mac.native", "zonos3-voice-over", "voice", `{"line":"Hi."}`, magicPics{}, voice,
 			`prompt.text=Hi. seed.seed=42 speak.voice=map[voice_id:` + voice + `]`},
+		// API 1.85, music and sound: 8 s on each length param's grid and bounds (MiniMax's and ACE-Step's least is
+		// 10 s); empty lyrics are an instrumental; a key only when the param has it; MiniMax takes no key or BPM
+		{"minimax-music3.", "mac.torch", "minimax-music3", "music", `{"prompt":"quiet piano","key":"D minor","bpm":72}`, magicPics{}, "",
+			`lm.instrumental=true lm.lyrics= lm.seconds=10 prompt.text=quiet piano seed.seed=42`},
+		{"ace-step.", "mac.torch", "ace-step-music", "music", `{"prompt":"piano","lyrics":"[verse] la","key":"D minor","bpm":72.4}`, magicPics{}, "",
+			`prompt.text=piano seed.seed=42 song.bpm=72 song.instrumental=false song.key=D minor song.lyrics=[verse] la song.seconds=10`},
+		{"ace-step.", "mac.torch", "ace-step-music", "music", `{"prompt":"piano","key":"H major"}`, magicPics{}, "",
+			`prompt.text=piano seed.seed=42 song.instrumental=true song.lyrics= song.seconds=10`},
+		{"stable-audio-3.", "mac.torch", "sa3-sound", "sound", `{"prompt":"rain on a shelter"}`, magicPics{}, "",
+			`prompt.text=rain on a shelter seed.seed=42 sound.seconds=8`},
+		{"mmaudio.", "mac.torch", "mmaudio-sound", "sound", `{"prompt":"rain"}`, magicPics{}, "",
+			`prompt.text=rain seed.seed=42 sound.seconds=8`},
 		// echo video has no frames or seed: none is set
 		{"", "fake.fake", "echo-video", "video", `{"prompt":"fox"}`, pics, "",
 			`canvas.height=576 canvas.width=1024 duration.frames=121 prompt.text=fox`},
@@ -127,7 +139,7 @@ func TestMagicKindsGreying(t *testing.T) {
 			"Echo video[prompt length size]map[first:Echo video can't take a first frame last:Echo video can't take a last frame seed:Echo video can't take a seed]; " +
 			"LTX 2.5[prompt first last length size seed]map[]|",
 		"image": "Echo[prompt refs]map[seed:Echo can't take a seed size:Echo can't take a size]|",
-		"voice": "|", "music": "|" + offMusicSound, "sound": "|" + offMusicSound,
+		"voice": "|", "music": "|", "sound": "|",
 		"frame": "Echo[prompt refs]map[seed:Echo can't take a seed size:Echo can't take a size]|",
 	}
 	for k, v := range want {
@@ -256,5 +268,86 @@ func TestMagicPrompt(t *testing.T) {
 		if got := magicPrompt(d, c.b, c.mention, c.refs); got != c.want {
 			t.Errorf("%d:\n got %s\nwant %s", i, got, c.want)
 		}
+	}
+}
+
+// API 1.85 (plan 39 phase H): Music and Sound. MiniMax Music 3 is the default; MMAudio's two workflows are one model
+// whose `video` runs a request with `from`; a sound from a shot needs its take; a block keeps only takes of its kind.
+func TestMagicMusicAndSound(t *testing.T) {
+	ws := []registry.Workflow{canonical(t, "ace-step.", "mac.torch", "ace-step-music"),
+		canonical(t, "minimax-music3.", "mac.torch", "minimax-music3"), canonical(t, "stable-audio-3.", "mac.torch", "sa3-sound"),
+		canonical(t, "mmaudio.", "mac.torch", "mmaudio-video"), canonical(t, "mmaudio.", "mac.torch", "mmaudio-sound")}
+	got := map[string]string{}
+	for _, k := range magicKinds(ws).Kinds {
+		var models []string
+		for _, m := range k.Models {
+			s := fmt.Sprintf("%s%v%v", m.WorkflowID, m.Fields, m.Greyed)
+			if m.Video != nil {
+				s += " video " + m.Video.WorkflowID
+			}
+			models = append(models, s)
+		}
+		got[k.Kind] = strings.Join(models, "; ")
+	}
+	want := map[string]string{
+		"music": "minimax-music3[prompt lyrics length seed]map[bpm:MiniMax Music 3 can't take a BPM key:MiniMax Music 3 can't take a key]; " +
+			"ace-step-music[prompt lyrics length key bpm seed]map[]",
+		"sound": "sa3-sound[prompt length seed]map[from:Stable Audio 3 Small-SFX can't take a shot's video]; " +
+			"mmaudio-sound[from prompt length seed]map[] video mmaudio-video",
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("%s:\n got %s\nwant %s", k, got[k], v)
+		}
+	}
+	take := "66666666-6666-4666-8666-666666666666"
+	shot := block("video", 144, `{"prompt":"a bus"}`)
+	shot.ID, shot.Name = "s2", "Shot 2 · bus"
+	sound := block("sound", 96, `{"from":"s2"}`)
+	d := magic.Doc{Target: board, Blocks: []*magic.Block{shot, sound}}
+	if w, why := magicModel(ws, "sound", sound.Request); w.ID != "mmaudio-video" || why != "" {
+		t.Fatal(w.ID, why) // no model: the first that takes a video
+	}
+	if got := whyNot(ws, d, sound); got != "Shot 2 has no take yet" {
+		t.Fatal(got)
+	}
+	shot.Takes = []string{take}
+	sound.Request["model"] = "mmaudio-sound"
+	if got := whyNot(ws, d, sound); got != "" {
+		t.Fatal(got)
+	}
+	w, _ := magicModel(ws, "sound", sound.Request)
+	inputs := standardInputs(w, d, sound, magicPics{}, "", 7)
+	if got := flat(inputs); w.ID != "mmaudio-video" || got != "foley.seconds=4 foley.source=map[take_id:"+take+"] prompt.text= seed.seed=7" {
+		t.Fatal(w.ID, got)
+	}
+	if _, detail := resolve(w, inputs); detail != "" {
+		t.Fatal(detail)
+	}
+	sound.Request["model"] = "sa3-sound"
+	if got := whyNot(ws, d, sound); got != "Stable Audio 3 Small-SFX can't take a shot's video" {
+		t.Fatal(got)
+	}
+	sound.Request["from"] = "gone"
+	delete(sound.Request, "model")
+	if got := whyNot(ws, d, sound); got != "its shot is not on the board" {
+		t.Fatal(got)
+	}
+	// the shot's take is an input: a new take puts the sound out of date
+	sound.Request["from"] = "s2"
+	before := inputsHash(d, sound)
+	shot.Takes = append(shot.Takes, "77777777-7777-4777-8777-777777777777")
+	if inputsHash(d, sound) == before {
+		t.Fatal("the shot's take is not an input")
+	}
+	r := magicRunRow{Takes: []string{"a", "v"}, TakeKinds: []string{"audio", "video"}}
+	if got := fitTakes(sound, r); fmt.Sprint(got) != "[a]" {
+		t.Fatal(got)
+	}
+	if got := fitTakes(shot, r); fmt.Sprint(got) != "[a v]" {
+		t.Fatal(got)
+	}
+	if got := askText([]string{"music", "music"}, ptr(30.0)); got != "2 cues, about 30 s" {
+		t.Fatal(got)
 	}
 }

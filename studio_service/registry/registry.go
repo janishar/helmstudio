@@ -364,6 +364,7 @@ type Standard struct {
 	Fields  map[string]string `json:"fields"` // shared field → "<node>.<param>"
 	Set     map[string]any    `json:"set,omitempty"`
 	Seconds *float64          `json:"seconds,omitempty"` // the declared GPU seconds per unit
+	Default bool              `json:"default,omitempty"` // API 1.85: the kind's default model (first in the picker)
 }
 
 // Host is one hosts KV value.

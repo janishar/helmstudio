@@ -93,6 +93,7 @@ type MagicTake struct {
 	PosterURL *string `json:"poster_url"`
 	Seed      *int64  `json:"seed"`
 	RunID     *string `json:"run_id"`
+	Sound     *string `json:"sound,omitempty"` // API 1.85: an audio take's class
 }
 
 // MagicBlockRun is one run of a block (its run history).
@@ -128,6 +129,14 @@ type MagicModel struct {
 	Greyed     map[string]string `json:"greyed"`
 	Seconds    *float64          `json:"seconds"`
 	Advanced   []MagicParam      `json:"advanced"`
+	Video      *MagicVideo       `json:"video,omitempty"` // API 1.85: its workflow for a sound from a shot's video
+}
+
+// MagicVideo is a model's workflow for a sound made from a shot's video (MMAudio Sound from a video).
+type MagicVideo struct {
+	WorkflowID string       `json:"workflow_id"`
+	Title      string       `json:"title"`
+	Advanced   []MagicParam `json:"advanced"`
 }
 
 // MagicKindInfo is one kind: its shared fields and models.
