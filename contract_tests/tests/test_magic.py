@@ -153,7 +153,8 @@ def test_boards_and_edits(maker):
     assert agent["revision"] == 5 and agent["frames"] == 192
     v1 = next(x for x in agent["blocks"] if x["id"] == "v1")
     assert v1["status"] == "draft" and v1["tied_to"] == ["s1"] and v1["at_s"] == 0.417
-    assert v1["request"]["kind"] == "voice"  # from 1.88 the whole request, to send back with changes
+    # from 1.88 the whole request, to send back with changes
+    assert v1["request"]["kind"] == "voice"
     assert agent["transitions"][0]["at_s"] == 4
 
     # rename, delete

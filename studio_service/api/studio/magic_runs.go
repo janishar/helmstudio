@@ -1286,6 +1286,7 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 	}
 	ws := s.registry.Workflows()
 	total, runs, known, unknownRun := 0.0, 0.0, true, false // runs: the total without board frames (they never ask)
+	anyRun := false                                         // a run that is not a board frame: a limit of 0 always asks for it
 	lanes := map[string]*dto.MagicPlanLane{}
 	var kinds []string
 	for _, b := range blocks {
@@ -1303,6 +1304,7 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 			continue
 		}
 		kinds = append(kinds, b.Kind)
+		anyRun = anyRun || b.Kind != "frame"
 		w, _ := magicModel(ws, b.Kind, b.Request)
 		// the host and peak as POST /runs/plan answers them, for the request without its pictures
 		_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
@@ -1360,7 +1362,7 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 	if known {
 		out.Seconds = &total
 	}
-	out.Ask = unknownRun || runs > out.LimitMinutes*60
+	out.Ask = unknownRun || runs > out.LimitMinutes*60 || (anyRun && out.LimitMinutes == 0)
 	out.AskText = askText(kinds, out.Seconds)
 	return nil
 }
