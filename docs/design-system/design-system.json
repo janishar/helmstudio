@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T02:40:00Z",
+  "at": "2026-11-28T03:00:00Z",
   "via": "Claude Code",
-  "note": "Scrollbars: 0.25rem, a square accent (a1) thumb on no track, through ::-webkit-scrollbar (Chromium ignores those once scrollbar-width is set); Firefox keeps thin in the accent (owner, 2026-11-28: \"make scrollbar rectangular and thin\")"
+  "note": "StatusBanner: the gateway's own page (Kong, while web restarts): helmstudio is starting, a Retry that counts down 3 s and reloads, Kong's message small (owner, 2026-11-28: \"error screen not comver these\")"
  }
 }
