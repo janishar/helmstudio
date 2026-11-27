@@ -98,6 +98,36 @@ func checkTakes(ctx context.Context, tx pgx.Tx, ownerID string, before, doc magi
 	return nil
 }
 
+// takesSince is the take ids the revisions after base added, ok only when every one of them is a run's or morph's
+// take (studio's "take" write, magicFill / morphFill) and all are kept: an edit at base then applies on top.
+func takesSince(ctx context.Context, tx pgx.Tx, row boardRow, base int) ([]string, bool, error) {
+	if base > row.Revision {
+		return nil, false, nil
+	}
+	var n int
+	var onlyTakes *bool
+	var raw []byte
+	err := tx.QueryRow(ctx, `SELECT count(*), bool_and(by = 'studio' AND ops_summary = 'take'),
+		(SELECT doc FROM magic_board_revisions WHERE board_id = $1 AND revision = $2)
+		FROM magic_board_revisions WHERE board_id = $1 AND revision > $2 AND revision <= $3`,
+		row.ID, base, row.Revision).Scan(&n, &onlyTakes, &raw)
+	if err != nil || n != row.Revision-base || onlyTakes == nil || !*onlyTakes || raw == nil {
+		return nil, false, err
+	}
+	was, err := magic.Parse(raw)
+	if err != nil {
+		return nil, false, nil
+	}
+	had := magic.TakeIDs(was)
+	var out []string
+	for _, t := range magic.TakeIDs(row.doc()) {
+		if !slices.Contains(had, t) {
+			out = append(out, t)
+		}
+	}
+	return out, true, nil
+}
+
 // boardPointers are a revision's undo_to and redo_to.
 func boardPointers(ctx context.Context, tx pgx.Tx, id string, revision int) (*int, *int, error) {
 	var undo, redo *int
@@ -330,8 +360,14 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 		if err != nil {
 			return err
 		}
+		var arrived []string // API 1.103: takes runs added since base_revision, which the edit must keep
 		if body.BaseRevision != row.Revision {
-			return staleBoard(row)
+			var ok bool
+			if arrived, ok, err = takesSince(ctx, tx, row, body.BaseRevision); err != nil {
+				return err
+			} else if !ok {
+				return staleBoard(row)
+			}
 		}
 		before := row.doc()
 		doc := before
@@ -341,6 +377,9 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 				return &MagicEditError{Detail: r.Error, OpIndex: i}
 			}
 			doc = r.Doc
+		}
+		if kept := magic.TakeIDs(doc); slices.ContainsFunc(arrived, func(t string) bool { return !slices.Contains(kept, t) }) {
+			return staleBoard(row) // the edit drops a take its caller never saw
 		}
 		if why := magic.Check(doc); why != "" {
 			return network.NewUnprocessableError(why, nil)

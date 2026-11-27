@@ -4050,11 +4050,13 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
 
 - **`POST …/boards/{board_id}/edits {base_revision, ops, dry_run?}`**: `ops` (`MagicOp`, 1 to **200**; more =
   `too_many_ops`) applied in order under the board's row lock to the current document, which must be
-  `base_revision` (else the 409 `board changed since you opened it (now revision <n>)`, a dry run too). **All or
+  `base_revision` (else the 409 `board changed since you opened it (now revision <n>)`, a dry run too; from 1.103
+  not when every revision since is studio's `take`, a finished run's or morph's take added, and the ops keep those
+  takes: they then apply on top of the current document, and `revision` says where it landed). **All or
   nothing**: one revision for the call (`by` user, `undo_to` the one before), so one undo undoes it. 200
   `MagicEditResult {revision, dry_run, board, diff, warnings}`: `diff` by id per list (blocks, lanes, transitions,
   assets; links by their block), `warnings` what the board shows after it (`Line 1 runs 3 s past Shot 1`), never a
-  refusal. `dry_run: true`: the same answer, `revision` = `base_revision`, nothing stored. `X-Helm-Client` labels the
+  refusal. `dry_run: true`: the same answer, `revision` = the current one, nothing stored. `X-Helm-Client` labels the
   revision's `via` as the Timeline's does.
 - **The ops** (`web_service/lib/magic.ts` `apply` and `studio_service/api/magic` `Apply`, held equal by
   `fixtures/magic/edits.json` and its replay in `make contracts-check`): `add` (a block at a point; `mode` insert

@@ -3290,10 +3290,11 @@ export interface paths {
          * Named ops applied in order, all or nothing (or tried: dry_run)
          * @description contracts/README.md, Magic: edits by ops. Applies `ops` (at most 200) in order with the board rules to the
          *     current document, which must be `base_revision`, and stores the result as one revision (one undo undoes the
-         *     call). `dry_run: true` answers the same and stores nothing (`revision` = `base_revision`). An op that makes a
+         *     call). `dry_run: true` answers the same and stores nothing (`revision` = the current one). An op that makes a
          *     block, lane or transition and leaves out its id gets one from studio (answered in `diff`). `X-Helm-Client`
          *     labels the revision's `via`. 409 `board changed since you opened it (now revision <n>)` when `base_revision`
-         *     is not the current one (a dry run too). 422 `MagicEditError` when an op cannot apply (`op_index` and the
+         *     is not the current one (a dry run too), unless (from 1.103) every revision since is studio's `take` (a run's
+         *     or morph's take added) and the ops keep those takes: then they apply on top of the current one. 422 `MagicEditError` when an op cannot apply (`op_index` and the
          *     reason, `That lane is gone.`), `take <id> not found`, or `{detail}` for a body that does not fit (`ops[1]:
          *     unknown field x`; `too_many_ops` past 200). Nothing is stored on any error.
          */
@@ -9580,7 +9581,7 @@ export interface components {
             links: components["schemas"]["MagicIdDiff"];
         };
         MagicEditResult: {
-            /** @description the stored revision; a dry run: base_revision */
+            /** @description the stored revision; a dry run: the current one it applied on (base_revision, or later from 1.103) */
             revision: number;
             dry_run: boolean;
             /** @description as GET answers it (a dry run: what it would be) */

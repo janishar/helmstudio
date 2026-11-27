@@ -162,16 +162,25 @@ func TestMagicRuns(t *testing.T) {
 	if mt := now["takes"].(map[string]any)[take].(map[string]any); mt["run_id"] != s2["id"] {
 		t.Fatal(mt)
 	}
-	edited := e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 2, "ops": []any{
+	// API 1.103: an edit made before the take arrived lands on top (only a run's take since), unless it drops it
+	if r := e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 1, "ops": []any{
+		map[string]any{"op": "delete", "ids": []string{"s2"}, "mode": "overwrite"}}}, 409); r["detail"] != "board changed since you opened it (now revision 2)" {
+		t.Fatal(r)
+	}
+	edited := e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 1, "ops": []any{
 		map[string]any{"op": "block", "id": "s2", "set": map[string]any{"request": map[string]any{"kind": "video",
 			"prompt": "heavier rain", "model": "echo-image-to-video", "first": map[string]any{"block": "s1", "part": "last"}}}}}}, 200)
-	if statusOf(edited["board"].(map[string]any), "s2") != "out_of_date" {
+	if statusOf(edited["board"].(map[string]any), "s2") != "out_of_date" || edited["revision"] != float64(3) ||
+		fmt.Sprint(blockOf(edited["board"].(map[string]any), "s2")["takes"]) != "["+take+"]" {
 		t.Fatal(edited)
 	}
 	undone := e.call(userA, "POST", base+"/undo", map[string]any{"revision": 3}, 200)
 	if fmt.Sprint(blockOf(undone, "s2")["takes"]) != "["+take+"]" || statusOf(undone, "s2") != "done" {
 		t.Fatal(undone)
 	}
+	// a user's revision since (the edit, the undo) keeps the 409
+	e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 2, "dry_run": true, "ops": []any{
+		map[string]any{"op": "block", "id": "s2", "set": map[string]any{"name": "Rain"}}}}, 409)
 	// the estimate from your own runs now: the take (as a 2 s 720p video) took 4 s on host fake: 2 s a unit
 	e.exec(`UPDATE takes SET video = '{"duration_s": 2}', width = 1280, height = 720,
 		made_with = made_with || '{"render_s": 4}' WHERE id = $1`, take)
