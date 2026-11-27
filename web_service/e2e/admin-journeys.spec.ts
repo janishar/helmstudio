@@ -479,12 +479,15 @@ test("a10b model folders: add the fake host's second folder, see it on the strip
   await dlg.getByRole("button", { name: "Save" }).click();
   await expect(dlg).toBeHidden();
   // the runner applies the list and reports both (the 15 s poll)
-  await expect(strip).toContainText("/models2", { timeout: 60_000 });
+  // by the chip's title: the strip's text runs "fake/models" into its free space ("27 GB"), so a text match on
+  // "/models2" also finds "/models27"
+  const second = strip.getByTitle("/models2", { exact: true });
+  await expect(second).toBeVisible({ timeout: 60_000 });
   await shot(admin, "a10b-two-folders");
-  await strip.getByTitle("/models2").click({ button: "right" });
+  await second.click({ button: "right" });
   await admin.getByRole("menuitem", { name: "Remove…" }).click();
   await admin.getByRole("alertdialog").getByRole("button", { name: "Remove" }).click();
-  await expect(strip).not.toContainText("/models2", { timeout: 60_000 });
+  await expect(second).toHaveCount(0, { timeout: 60_000 });
 });
 
 test("a11 a user changes their password, signs out and back in", async () => {
