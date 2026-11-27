@@ -130,7 +130,7 @@
 :is(.mg, .mg-side) .lh {
   position: sticky;
   left: 0;
-  z-index: 7;
+  z-index: 10; /* over the playhead (8) and a dragged block (9) */
   flex: 0 0 var(--lh);
   box-sizing: border-box;
   padding: 6px 10px 6px 2px;
@@ -166,6 +166,16 @@
   background: var(--s4);
   color: var(--t1);
   font: 600 13px var(--font-sans);
+}
+:is(.mg, .mg-side) .rulc {
+  /* the ruler's label cell: the ruler and the playhead's time slide under it, as the lanes under their labels */
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  width: var(--lh);
+  height: 26px;
+  margin-bottom: -26px;
+  background: var(--in);
 }
 :is(.mg, .mg-side) .rul {
   position: relative;

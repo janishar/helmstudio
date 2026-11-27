@@ -395,6 +395,7 @@ export function Lanes({
       style={{ "--lh": `${head}px` } as React.CSSProperties}
     >
       <div className="relative" style={{ width: head + trackW }}>
+        <div className="rulc" aria-hidden />
         <div
           className="rul"
           role="slider"
