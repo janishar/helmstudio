@@ -8,7 +8,7 @@ Built:
 - Selected (`aria-pressed`): a 2px `a1` outline inside the picture. Starred: a 14px `a1` star top right. While selecting, a ticked `a1` disc top left.
 - Title: `take-title`, one line. Sub-line: `mono-sub` in `t2`.
 
-Board only, not built (CreateMusicSound frame 7, picked 2026-11-27):
+Audio looks (CreateMusicSound frame 7, picked 2026-11-27; built in alpha.6):
 - Music: an album cover. The gradient comes from the prompt's mood; a vinyl disc peeks from the right; the title in `wordmark` white top left; a Music badge (`kind-music`) and the length bottom left.
 - Sound and voice: one glowing orb on `s1` with a soft halo in the kind's colour: sky `kind-sound` with the audio-lines glyph, amber `kind-voice` with the mic glyph; a badge top right and the length centred under it in `t1b`. Colour and badge tell them apart.
 - Hover on an audio card shows a round play mark (`t1` disc, `g` glyph, `shadow-play`).

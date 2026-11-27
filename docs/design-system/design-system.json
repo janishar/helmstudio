@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-26T22:33:07Z",
+  "at": "2026-11-27T00:06:56Z",
   "via": "Claude Code",
-  "note": "Review fixes: ContextMenu music menu clear of the open submenu; TempoKey on ACE-Step 1.5 · 2B (BPM and key are not on MiniMax Music 3)"
+  "note": "Music and Sound parts built in alpha.6 (plan 38): board-only marks dropped from KindTabs, ModelPopup, TempoKey, LyricsBox, RangeBar, Variations, Segmented, Chip, Badge, FilterChips, TakeCard, TakeTile, ContextMenu and their tokens; Magic marks kept"
  }
 }

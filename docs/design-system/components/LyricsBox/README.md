@@ -1,6 +1,6 @@
 # LyricsBox
 
-Board only, not built (CreateMusicSound frame 1): the Lyrics box under Music's style prompt, with section tag chips that insert at the caret and an Instrumental switch.
+The Lyrics box under Music's style prompt, with section tag chips that insert at the caret and an Instrumental switch.
 
 - Box `lyr`: `s1`, 1px `s4` border, `radius-field`, 8px 10px padding, parts 6px apart.
 - Bar `lyr-bar`: the `heading` "Lyrics", then one tag chip `tg` per section the model knows ([verse], [chorus], [bridge], [intro], [outro]): 26px, 1px dashed `dash`, 7px corners, `mono` 11px `t2`. A click inserts the tag at the caret.

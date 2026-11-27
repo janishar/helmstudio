@@ -1,6 +1,6 @@
 /* helmstudio — the app's component classes (web_service/app/globals.css and the Tailwind utilities on its components),
    written out against the tokens. Class names are the app's own where it has one; hs-* names stand for a utility
-   string in a component; the take looks marked "board only" come from docs/mock/CreateMusicSound.dc.html frame 7. */
+   string in a component; the take looks (music covers, sound and voice orbs) come from docs/mock/CreateMusicSound.dc.html frame 7. */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Bricolage+Grotesque:wght@600;700&family=JetBrains+Mono:wght@400;500&display=swap");
 
 body {
@@ -237,7 +237,7 @@ button { font: inherit; color: inherit; }
 .hs-tile.sound > span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hs-tile.sound .wave { display: block; height: 30px; width: 100%; box-sizing: border-box; }
 
-/* board only, not built: music covers and sound / voice orbs (CreateMusicSound frame 7) */
+/* music covers and sound / voice orbs (CreateMusicSound frame 7) */
 .k-sound { --k: var(--kind-sound); --kd: var(--on-kind-sound); }
 .k-voice { --k: var(--kind-voice); --kd: var(--on-kind-voice); }
 .hs-thumb.cov, .hs-thumb.o8 { position: relative; border: 0; }
@@ -2922,7 +2922,7 @@ outline-offset: 2px;
 .hs-dock .hs-admin { flex-direction: row; gap: 8px; padding: 0 4px; }
 .hs-dock .hs-sep { width: 1px; height: 32px; flex: 0 0 auto; }
 
-/* board only, not built: Create's Music and Sound parts (docs/mock/CreateMusicSound.dc.html, plan 38 P0) */
+/* Create's Music and Sound parts (docs/mock/CreateMusicSound.dc.html, plan 38 P0) */
 /* a composer chip that this model cannot use: greyed in place, the reason on hover ("Not on MiniMax Music 3") */
 .chip[aria-disabled="true"], .hs-src[aria-disabled="true"] { opacity: 0.45; cursor: not-allowed; }
 /* a source tile in the composer (Reference, From a sound, Match a video); dashed while empty */

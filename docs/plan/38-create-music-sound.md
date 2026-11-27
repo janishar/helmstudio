@@ -2,7 +2,7 @@
 
 [← Plan index](../README.md)
 
-Status: **approved, building (owner, 2026-11-27: "approved, build it")**, release list
+Status: **built (P1–P5); P6 in progress (owner, 2026-11-27: "approved, build it")**, release list
 [0.1.0-alpha.6](../release/0.1.0-alpha.6.md) item 6. The board is approved; this file is how it is built. Section §44
 (§45 is plan 39, Magic, which waits for this plan's contract phase and packs).
 

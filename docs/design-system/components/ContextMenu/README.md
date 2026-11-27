@@ -12,6 +12,6 @@ Our own right-click menu (context-menu.tsx, docs/mock/ContextMenus.dc.html): one
 - Submenu (`cm sub`): `size-submenu` wide, beside its row, 4px off; flips left near the edge.
 - Keys: ↑ ↓, → ← for submenus, Enter, Esc, a typed letter jumps to the next row starting with it. Shift + right-click is the browser's own menu. Text fields get Cut, Copy, Paste, Select all, Insert @… (and the Mac app's spelling); empty space gets none.
 
-Board only, not built (CreateMusicSound 3d, 4b, 5c, 5d), new rows on audio takes: a music take adds Repaint…, Cover…, Extend… after Use in, then Download; a sound variation has Repaint…, Vary…, Extend…; a sound made from a video adds Save with the video; the video made with its sound adds Sound only. Rows a model cannot do are greyed with "Not on <model>".
+New rows on audio takes: a music take adds Repaint…, Cover…, Extend… after Use in, then Download; a sound variation has Repaint…, Vary…, Extend…; a sound made from a video adds Save with the video; the video made with its sound adds Sound only. Rows a model cannot do are greyed with "Not on <model>".
 
 The consumer provides a title and items `{label, icon, keys, onPick, off, danger, checked, items}`; labels are verbs or short noun phrases with "…" when they need more input.

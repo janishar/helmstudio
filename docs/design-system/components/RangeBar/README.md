@@ -1,6 +1,6 @@
 # RangeBar
 
-Board only, not built (CreateMusicSound frames 1 and 3a): the song's section markers over the stage waveform, and the Repaint range picker on it.
+The song's section markers over the stage waveform, and the Repaint range picker on it.
 
 - Markers `cues` (28px) hold one `cue` per section: 3px top rule, 4px corners, 85% `s2`, `mono` 11px `t1`. Rules: verse `a1`, chorus `c-chorus` `a2`, intro and outro `c-edge` `kind-sound`, bridge `c-bridge` `kind-music`. A click seeks there; in Repaint it takes that section's range. Only ACE-Step takes with tagged lyrics have markers.
 - Waveform `wb`: bars in `a2` on `s1`, 12px corners.
