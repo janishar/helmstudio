@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T03:20:00Z",
+  "at": "2026-11-28T03:40:00Z",
   "via": "Claude Code",
-  "note": "Scrollbars show only while their area scrolls and go 0.8 s after (owner, 2026-11-28: \"now scrollbar is always visible can we not bring while scroling\")"
+  "note": "MagicBlockDialog New board: sizes one a row, and Custom (Width x Height, a multiple of 16) (owner, 2026-11-28: \"option vertical places and custo size as well\")"
  }
 }

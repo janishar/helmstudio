@@ -170,26 +170,63 @@ const SIZES = [
 ];
 const FPS = [24, 25, 30];
 
-/** the New board dialog: size and fps, set once (the header shows them locked after) */
+/** the New board dialog: size (a preset or Custom) and fps, set once (the header shows them locked after) */
 function NewBoard({ onCreate }: { onCreate: (w: number, h: number, fps: number) => void }) {
-  const [size, setSize] = useState(SIZES[0]);
+  const [size, setSize] = useState<(typeof SIZES)[number] | "custom">(SIZES[0]);
+  const [cw, setCw] = useState("1280");
+  const [ch, setCh] = useState("720");
   const [fps, setFps] = useState(24);
+  // a custom side: a multiple of 16 (what the models take), 16 to 8192 (studio's rule)
+  const side = (v: string) => Math.min(8192, Math.max(16, Math.round((+v || 0) / 16) * 16));
+  const w = size === "custom" ? side(cw) : size.w;
+  const h = size === "custom" ? side(ch) : size.h;
   return (
     <div className="mg-add flex flex-col gap-3">
       <div className="fld">
         <span className="lb">Size</span>
-        <div className="seg flex-wrap" role="group" aria-label="Size">
+        <div className="seg flex-col items-stretch" role="group" aria-label="Size">
           {SIZES.map((s) => (
             <button
               key={s.w + "x" + s.h}
               type="button"
+              className="text-left"
               aria-pressed={size === s}
               onClick={() => setSize(s)}
             >
               {s.ratio} · {s.w} × {s.h}
             </button>
           ))}
+          <button
+            type="button"
+            className="text-left"
+            aria-pressed={size === "custom"}
+            onClick={() => setSize("custom")}
+          >
+            Custom
+          </button>
         </div>
+        {size === "custom" && (
+          <div className="flex items-center gap-2">
+            <input
+              aria-label="Width"
+              inputMode="numeric"
+              className="h-9 w-24 rounded-xl border border-s5 bg-s1 px-3 text-t1"
+              value={cw}
+              onChange={(e) => setCw(e.target.value.replace(/\D/g, ""))}
+            />
+            <span className="text-t2">×</span>
+            <input
+              aria-label="Height"
+              inputMode="numeric"
+              className="h-9 w-24 rounded-xl border border-s5 bg-s1 px-3 text-t1"
+              value={ch}
+              onChange={(e) => setCh(e.target.value.replace(/\D/g, ""))}
+            />
+            <span className="mono text-[11px] text-t2">
+              {w} × {h}
+            </span>
+          </div>
+        )}
       </div>
       <div className="fld">
         <span className="lb">fps</span>
@@ -207,7 +244,7 @@ function NewBoard({ onCreate }: { onCreate: (w: number, h: number, fps: number) 
         <button
           type="button"
           className="key h-9 rounded-xl px-3.5 text-[13px]"
-          onClick={() => onCreate(size.w, size.h, fps)}
+          onClick={() => onCreate(w, h, fps)}
         >
           Create
         </button>
