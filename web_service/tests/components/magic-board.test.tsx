@@ -4,7 +4,8 @@
 // remembered, a new board's empty state.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MagicBoard, loadStore } from "@/components/magic/board";
+import { MagicBoard } from "@/components/magic/board";
+import { loadStore } from "@/components/magic/use-board";
 import { NOT_YET } from "@/components/magic/menus";
 import { closeMenu } from "@/components/context-menu";
 
@@ -46,7 +47,7 @@ function click(el: Element, init: PointerEventInit = {}) {
 
 describe("the board", () => {
   it("draws every lane, its blocks and their statuses (frame 1)", () => {
-    render(<MagicBoard />);
+    render(<MagicBoard local />);
     for (const lane of ["Storyboard", "Shots", "Mara's lines", "Music", "Sound", "Lane 7"])
       expect(screen.getByRole("group", { name: `Lane ${lane}` })).toBeTruthy();
     const shot3 = blockEl(/Video block Shot 3/);
@@ -63,7 +64,7 @@ describe("the board", () => {
   });
 
   it("select a shot: its details and what is tied to it; Delete closes the gap; Undo puts it back", () => {
-    render(<MagicBoard />);
+    render(<MagicBoard local />);
     click(blockEl(/Video block Shot 2/));
     const side = screen.getByRole("complementary", { name: "Block details" });
     expect(within(side).getByRole("heading", { name: "Shot 2 · umbrella" })).toBeTruthy();
@@ -83,7 +84,7 @@ describe("the board", () => {
   });
 
   it("Add at a point: the kind with its orb, Music and Sound greyed, Insert pushes what is after", () => {
-    render(<MagicBoard />);
+    render(<MagicBoard local />);
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
     const dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     const music = within(dlg).getByRole("button", { name: /Music/ }) as HTMLButtonElement;
@@ -113,21 +114,21 @@ describe("the board", () => {
   });
 
   it("the side panel's toggle is remembered in this browser", () => {
-    const { unmount } = render(<MagicBoard />);
+    const { unmount } = render(<MagicBoard local />);
     const toggle = screen.getByRole("button", { name: "Side panel" });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(toggle);
     expect(screen.queryByRole("complementary", { name: "Block details" })).toBeNull();
     expect(localStorage.getItem("magic-side-panel")).toBe("0");
     unmount();
-    render(<MagicBoard />);
+    render(<MagicBoard local />);
     expect(screen.getByRole("button", { name: "Side panel" }).getAttribute("aria-expanded")).toBe(
       "false",
     );
   });
 
   it("a new board is empty, with a lane to start (frame 11)", () => {
-    render(<MagicBoard />);
+    render(<MagicBoard local />);
     fireEvent.click(screen.getByRole("button", { name: "The Last Tide" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "New board" }));
     expect(screen.getByRole("heading", { name: "A new board" })).toBeTruthy();

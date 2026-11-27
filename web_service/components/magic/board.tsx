@@ -1,7 +1,7 @@
 "use client";
 // The Magic page (plan 39 phase B, MagicBoard frames 1, 2, 4, 5, 10, 11): the board name and its tools, the Assets
-// row, the lanes, the floating player and the side panel. Phase B keeps boards in this browser (localStorage) with
-// fake takes; every edit is a named op (lib/magic.ts), so phase C sends the same ops to studio.
+// row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
+// `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Camera,
@@ -31,67 +31,35 @@ import { Player, type PlayerApi } from "@/components/magic/player";
 import {
   apply,
   clock,
-  commit,
   duration,
   end,
-  everywhere,
-  history,
   inLane,
-  inputsOf,
   overruns,
-  redo,
   secs,
   shown,
   statusOf,
-  undo,
   type Block,
   type Doc,
-  type History,
   type Kind,
   type Mode,
   type Op,
   type Takes,
 } from "@/lib/magic";
-import { EST_HOST, EST_S, artFor, emptyDoc, estText, sampleBoard } from "@/lib/magic-fixture";
+import { EST_HOST, EST_S, estText } from "@/lib/magic-fixture";
+import { LoadingBoard } from "@/components/magic/loading";
+import {
+  useApiBoard,
+  useLocalBoard,
+  type Board,
+  type Snapshot,
+  type Store,
+} from "@/components/magic/use-board";
 import "./magic.css";
 
-// ------------------------------------------------------------------------------------------------ this browser's boards
-
-type Snapshot = { id: string; name: string; doc: Doc; at: string; rev?: number };
-type Saved = { id: string; name: string; doc: Doc; takes: Takes; snapshots: Snapshot[] };
-type Store = { current: string; boards: Saved[] };
-const KEY = "helm.magic.boards";
 const PANEL = "magic-side-panel";
+/** Why runs can't go while boards are in studio (plan 39 phase D brings the standard request). */
+export const RUNS_LATER = "Runs come with the standard request";
 
-/** The store with the open board's document and takes written in. */
-const withBoard = (s: Store, doc: Doc, takes: Takes): Store => ({
-  ...s,
-  boards: s.boards.map((b) => (b.id === s.current ? { ...b, doc, takes } : b)),
-});
-const newId = () => Math.random().toString(36).slice(2, 10);
-function sample(): Saved {
-  const s = sampleBoard();
-  return { id: newId(), name: s.name, doc: s.doc, takes: s.takes, snapshots: [] };
-}
-/** The boards kept in this browser; the first visit gets the sample board. */
-export function loadStore(): Store {
-  try {
-    const raw = localStorage.getItem(KEY);
-    const s = raw ? (JSON.parse(raw) as Store) : null;
-    if (s?.boards?.length) return s;
-  } catch {
-    /* unreadable: start again */
-  }
-  const b = sample();
-  return { current: b.id, boards: [b] };
-}
-function saveStore(s: Store) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(s));
-  } catch {
-    /* full or blocked: the board still works for this visit */
-  }
-}
 const noSub = () => () => undefined;
 const readPanel = () => {
   try {
@@ -108,50 +76,52 @@ const subPhone = (cb: () => void) => {
   return () => m.removeEventListener("change", cb);
 };
 
-/** Runs (fake in phase B) move on every tick; a take is done at 100. */
-const TICK_MS = 400;
-const STEP = 9;
-
 // ------------------------------------------------------------------------------------------------ the page
 
-export function MagicBoard({ initial }: { initial?: Store }) {
-  const [store, setStore] = useState<Store>(() => initial ?? loadStore());
-  const saved = store.boards.find((b) => b.id === store.current) ?? store.boards[0];
-  const [h, setH] = useState<History>(() => history(saved.doc));
-  const [takes, setTakes] = useState<Takes>(saved.takes);
-  const doc = h.now;
-  const fps = doc.target.fps;
+/** The Magic page: the boards in studio, or (`local`, or an `initial` store: the tests' fake mode) in this browser. */
+export function MagicBoard({ initial, local }: { initial?: Store; local?: boolean }) {
+  return local || initial ? <LocalBoard initial={initial} /> : <StudioBoard />;
+}
 
-  // persist: the board's document and takes are written back as they change
-  useEffect(() => {
-    saveStore(withBoard(store, h.now, takes));
-  }, [store, h.now, takes]);
-  const switchTo = (id: string, next?: Store) => {
-    const s = withBoard(next ?? store, h.now, takes);
-    const b = s.boards.find((x) => x.id === id)!;
-    const n = { ...s, current: id };
-    setStore(n);
-    saveStore(n);
-    setH(history(b.doc));
-    setTakes(b.takes);
-    setSel([]);
-  };
+function LocalBoard({ initial }: { initial?: Store }) {
+  const board = useLocalBoard(initial);
+  return <Editor key={board.id} board={board} sample={!initial} />;
+}
+
+function StudioBoard() {
+  const board = useApiBoard();
+  if (!board.ready)
+    return board.error ? (
+      <main id="main" className="mg flex-1 px-5 pt-4">
+        <ErrorNote>{board.error}</ErrorNote>
+      </main>
+    ) : (
+      <LoadingBoard />
+    );
+  return <Editor key={board.id} board={board} sample={false} />;
+}
+
+function Editor({ board, sample }: { board: Board; sample: boolean }) {
+  const doc = board.doc;
+  const takes = board.takes;
+  const fps = doc.target.fps;
 
   // frame 1 opens with Shot 2 selected, its details in the side panel
   const [sel, setSel] = useState<string[]>(() =>
-    !initial && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : [],
+    sample && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : [],
   );
   const [mode, setMode] = useState<Mode>("insert");
   const [snapOn, setSnapOn] = useState(true);
   const [pps, setPps] = useState(26);
   const [viewW, setViewW] = useState(0);
-  const [frame, setFrame] = useState(Math.round(10.5 * 24));
+  const [frame, setFrame] = useState(sample ? Math.round(10.5 * 24) : 0);
   const [adding, setAdding] = useState<AddAt | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [usedAsset, setUsedAsset] = useState<string | null>(null);
   const [kept, setKept] = useState<string[]>([]);
   const [said, setSaid] = useState("");
-  const [error, setError] = useState("");
+  const [refused, setError] = useState("");
+  const error = refused || board.error;
   const [clip, setClip] = useState<Block[] | null>(null);
   const player = useRef<PlayerApi | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -175,7 +145,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
   const edit = useCallback(
     (ops: Op | Op[]) => {
       const list = Array.isArray(ops) ? ops : [ops];
-      let d = h.now;
+      let d = doc;
       for (const op of list) {
         const r = apply(d, op);
         if ("error" in r) {
@@ -185,72 +155,24 @@ export function MagicBoard({ initial }: { initial?: Store }) {
         d = r.doc;
       }
       setError("");
-      setH(commit(h, d));
-      setSaid(describe(list[0], h.now));
+      board.edit(list, d);
+      setSaid(describe(list[0], doc));
       // what the op removed leaves the selection
       setSel((s) => s.filter((id) => d.blocks.some((b) => b.id === id)));
       return true;
     },
-    [h],
+    [doc, board],
   );
 
-  /** A run (fake in phase B): a take per block, running, made from the block's inputs now. A studio write: it reaches
-   * every document in the history, so Undo never takes a take back. */
+  /** Runs blocks (fake in the fake mode); in studio, not yet. */
   const run = useCallback(
     (ids: string[]) => {
-      const fresh: Takes = {};
-      for (const id of ids) {
-        const b = h.now.blocks.find((x) => x.id === id);
-        if (!b || b.kind === "music" || b.kind === "sound") continue;
-        const tid = `${b.id}-t${newId()}`;
-        fresh[tid] = {
-          id: tid,
-          block: b.id,
-          status: "running",
-          progress: 0,
-          inputs: inputsOf(h.now, b, takes),
-          seed: 40 + b.takes.length + 2,
-          art: artFor(`${b.name}${b.takes.length}`, b.kind),
-        };
-      }
-      const byBlock = Object.values(fresh);
-      if (!byBlock.length) return;
-      setTakes((t) => ({ ...t, ...fresh }));
-      setH((x) =>
-        everywhere(x, (d) => ({
-          ...d,
-          blocks: d.blocks.map((b) => {
-            const add = byBlock.filter((t) => t.block === b.id).map((t) => t.id);
-            return add.length ? { ...b, takes: [...b.takes, ...add] } : b;
-          }),
-        })),
-      );
-      setSaid(`Running ${byBlock.length} block${byBlock.length > 1 ? "s" : ""}`);
+      if (!board.run) return setSaid(RUNS_LATER);
+      const n = board.run(ids);
+      if (n) setSaid(`Running ${n} block${n > 1 ? "s" : ""}`);
     },
-    [h.now, takes],
+    [board],
   );
-  // fake runs move along, and finish
-  const running = Object.values(takes).some((t) => t.status === "running");
-  useEffect(() => {
-    if (!running) return;
-    const t = setInterval(
-      () =>
-        setTakes((all) =>
-          Object.fromEntries(
-            Object.entries(all).map(([id, t]) => {
-              if (t.status !== "running") return [id, t];
-              const p = (t.progress ?? 0) + STEP;
-              return [
-                id,
-                p >= 100 ? { ...t, status: "done", progress: 100 } : { ...t, progress: p },
-              ];
-            }),
-          ),
-        ),
-      TICK_MS,
-    );
-    return () => clearInterval(t);
-  }, [running]);
 
   const seek = useCallback((f: number) => {
     player.current?.seek(Math.max(0, f));
@@ -270,6 +192,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
       sel,
       edit,
       run,
+      runOff: board.run ? undefined : RUNS_LATER,
       select: setSel,
       open,
       add: (lane, at, kind) => setAdding({ lane, at, kind }),
@@ -291,7 +214,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
         : null,
       copyText: (s) => void navigator.clipboard?.writeText(s).catch(() => undefined),
     }),
-    [doc, takes, mode, frame, sel, edit, run, open, seek, clip],
+    [doc, takes, mode, frame, sel, edit, run, board.run, open, seek, clip],
   );
 
   // zoom: fit (the whole board across) up to 240 px a second, ×1.25 a step
@@ -311,8 +234,8 @@ export function MagicBoard({ initial }: { initial?: Store }) {
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
       let done = true;
-      if (cmd && k === "z") setH((x) => (e.shiftKey ? redo(x) : undo(x)));
-      else if (cmd && k === "y") setH(redo);
+      if (cmd && k === "z") (e.shiftKey ? board.redo : board.undo)();
+      else if (cmd && k === "y") board.redo();
       else if (cmd && k === "d" && sel.length) edit({ op: "duplicate", ids: sel });
       else if (cmd && (k === "=" || k === "+")) setPps((p) => zoomIn(p));
       else if (cmd && k === "-") setPps((p) => zoomOut(p));
@@ -351,42 +274,19 @@ export function MagicBoard({ initial }: { initial?: Store }) {
     openMenu(e, {
       title: "Boards",
       items: [
-        ...store.boards.map((b) => ({
+        ...board.boards.map((b) => ({
           label: b.name,
-          checked: b.id === saved.id,
-          onPick: () => switchTo(b.id),
+          checked: b.id === board.id,
+          onPick: () => b.id !== board.id && board.switchTo(b.id),
         })),
         "-",
-        {
-          label: "New board",
-          icon: Plus,
-          onPick: () => {
-            const b: Saved = {
-              id: newId(),
-              name: "Untitled board",
-              doc: emptyDoc(),
-              takes: {},
-              snapshots: [],
-            };
-            switchTo(b.id, { ...store, boards: [...store.boards, b] });
-          },
-        },
-        {
-          label: "Sample board",
-          onPick: () => {
-            const b = sample();
-            switchTo(b.id, { ...store, boards: [...store.boards, b] });
-          },
-        },
+        { label: "New board", icon: Plus, onPick: board.newBoard },
+        { label: "Sample board", onPick: board.sampleBoard },
         {
           label: "Rename",
           onPick: () => {
-            const name = prompt("Board name", saved.name)?.trim();
-            if (name)
-              setStore((s) => ({
-                ...s,
-                boards: s.boards.map((b) => (b.id === saved.id ? { ...b, name } : b)),
-              }));
+            const name = prompt("Board name", board.name)?.trim();
+            if (name && name !== board.name) board.rename(name);
           },
         },
         "-",
@@ -394,25 +294,13 @@ export function MagicBoard({ initial }: { initial?: Store }) {
           label: "Delete board",
           icon: Trash2,
           danger: true,
-          off: store.boards.length > 1 ? undefined : "It's the only board",
-          onPick: () => {
-            const rest = store.boards.filter((b) => b.id !== saved.id);
-            switchTo(rest[0].id, { ...store, boards: rest });
-          },
+          off: board.boards.length > 1 ? undefined : "It's the only board",
+          onPick: board.remove,
         },
       ] as Item[],
     });
 
-  const snapshots = saved.snapshots;
-  const setSnapshots = (f: (s: Snapshot[]) => Snapshot[]) =>
-    setStore((s) => {
-      const next = {
-        ...s,
-        boards: s.boards.map((b) => (b.id === saved.id ? { ...b, snapshots: f(b.snapshots) } : b)),
-      };
-      saveStore(next);
-      return next;
-    });
+  const snapshots = board.snapshots;
 
   const addLane = () =>
     edit({
@@ -429,7 +317,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
         id="main"
         className="mg relative flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-3.5 pt-4 pb-5 md:px-5"
       >
-        <h1 className="sr-only">Magic: {saved.name}</h1>
+        <h1 className="sr-only">Magic: {board.name}</h1>
         <div className="flex flex-wrap items-center gap-3">
           <button
             type="button"
@@ -437,7 +325,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
             onClick={boardsMenu}
             className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
           >
-            {saved.name}
+            {board.name}
             <ChevronDown size={16} aria-hidden />
           </button>
           <span className="pill max-md:hidden">
@@ -466,18 +354,18 @@ export function MagicBoard({ initial }: { initial?: Store }) {
           <button
             type="button"
             className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
-            disabled={!h.past.length}
+            disabled={!board.canUndo}
             aria-keyshortcuts="Meta+Z Control+Z"
-            onClick={() => setH(undo)}
+            onClick={board.undo}
           >
             Undo
           </button>
           <button
             type="button"
             className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
-            disabled={!h.future.length}
+            disabled={!board.canRedo}
             aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z"
-            onClick={() => setH(redo)}
+            onClick={board.redo}
           >
             Redo
           </button>
@@ -485,7 +373,7 @@ export function MagicBoard({ initial }: { initial?: Store }) {
             type="button"
             className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-5 text-sm"
             disabled
-            title="Comes once boards are kept in studio"
+            title="Comes once blocks have takes"
           >
             <span className="max-md:hidden">Send to Timeline</span>
             <span className="md:hidden">Send</span>
@@ -496,7 +384,10 @@ export function MagicBoard({ initial }: { initial?: Store }) {
         </div>
 
         {!doc.lanes.length ? (
-          <EmptyBoard onLane={addLane} />
+          <>
+            {error && <ErrorNote>{error}</ErrorNote>}
+            <EmptyBoard onLane={addLane} />
+          </>
         ) : (
           <div className="mb">
             <div className="btools" role="toolbar" aria-label="Board tools">
@@ -563,16 +454,16 @@ export function MagicBoard({ initial }: { initial?: Store }) {
               <button
                 type="button"
                 className="chip bevel"
-                disabled={!runnable.length}
+                disabled={!runnable.length || !board.run}
                 onClick={() =>
                   run(runnable.filter((b) => statusOf(doc, b, takes).s !== "done").map((b) => b.id))
                 }
-                title="Runs every block that isn't done"
+                title={board.run ? "Runs every block that isn't done" : RUNS_LATER}
               >
                 <Play10 />
                 Run board
               </button>
-              {runnable.length > 0 && (
+              {runnable.length > 0 && board.run && (
                 <span className="est" title="From your own recent runs of these models">
                   <Clock3 size={13} aria-hidden />
                   <b>{estText(boardEst)}</b> · {EST_HOST}
@@ -880,28 +771,18 @@ export function MagicBoard({ initial }: { initial?: Store }) {
               onClose={() => setPanel(false)}
               onSave={() => {
                 const name = `Snapshot ${snapshots.length + 1}`;
-                setSnapshots((s) => [
-                  {
-                    id: newId(),
-                    name,
-                    doc: h.now,
-                    at: new Date().toISOString(),
-                    rev: h.past.length,
-                  },
-                  ...s,
-                ]);
+                board.saveSnapshot(name);
                 setSaid(`Saved ${name}`);
               }}
               onRestore={(s) => {
-                setH((x) => commit(x, s.doc));
+                board.restoreSnapshot(s);
                 setSaid(`Restored ${s.name}`);
               }}
               onRename={(s) => {
                 const name = prompt("Snapshot name", s.name)?.trim();
-                if (name)
-                  setSnapshots((all) => all.map((x) => (x.id === s.id ? { ...x, name } : x)));
+                if (name) board.renameSnapshot(s, name);
               }}
-              onDelete={(s) => setSnapshots((all) => all.filter((x) => x.id !== s.id))}
+              onDelete={board.deleteSnapshot}
             />
           )}
         </aside>
@@ -1197,8 +1078,8 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
         <button
           type="button"
           className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
-          disabled={audio}
-          title={audio ? NOT_YET : undefined}
+          disabled={audio || !!act.runOff}
+          title={audio ? NOT_YET : act.runOff}
           onClick={() => act.run([b.id])}
         >
           Run
@@ -1206,8 +1087,8 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
         <button
           type="button"
           className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
-          disabled={audio}
-          title={audio ? NOT_YET : undefined}
+          disabled={audio || !!act.runOff}
+          title={audio ? NOT_YET : act.runOff}
           onClick={() =>
             act.run(
               inLane(d, b.lane)
@@ -1219,7 +1100,7 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
           Run up to here
         </button>
       </div>
-      {!audio && (
+      {!audio && !act.runOff && (
         <span className="est" title="From your own recent runs of this model">
           <Clock3 size={13} aria-hidden />
           <b>{estText(EST_S[b.kind as Kind])}</b> · {EST_HOST}
@@ -1232,7 +1113,7 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
   );
 }
 
-/** Nothing selected: the board in numbers and its snapshots (frame 11), kept in this browser for now. */
+/** Nothing selected: the board in numbers and its snapshots (frame 11). */
 function BoardPanel({
   d,
   takes,

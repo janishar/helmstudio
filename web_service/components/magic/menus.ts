@@ -105,6 +105,8 @@ export type Act = {
   sel: string[];
   edit: (op: Op | Op[]) => unknown;
   run: (ids: string[]) => void;
+  /** why runs can't go yet (boards in studio before the standard request, plan 39 phase D); estimates hide with it */
+  runOff?: string;
   select: (ids: string[]) => void;
   /** select it and show its details in the side panel */
   open: (id: string) => void;
@@ -125,6 +127,9 @@ const laneOf = (d: Doc, id: string) => d.lanes.find((l) => l.id === id);
 const audio = (k: Kind) => k === "music" || k === "sound";
 /** a block's run estimate, as the menu shows it ("≈ 1:50", "≈ 12 s") */
 const est = (k: Kind) => estText(EST_S[k], true);
+/** a run item, off with the board's reason while runs can't go (its estimate hidden) */
+const gate = (a: Act, it: MenuItem): MenuItem =>
+  a.runOff ? { ...it, keys: undefined, off: it.off ?? a.runOff } : it;
 /** the shots on the board (its Shots lanes), in time */
 const shotsOf = (d: Doc) =>
   d.lanes.filter((l) => l.role === "shots").flatMap((l) => inLane(d, l.id));
@@ -179,13 +184,13 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
   const tiedTo = link && blockById(d, link.to[0]);
   const lane = laneOf(d, b.lane);
   const open: MenuItem = { label: "Open", icon: Maximize2, keys: "↵", onPick: () => a.open(b.id) };
-  const run: MenuItem = {
+  const run: MenuItem = gate(a, {
     label: "Run",
     icon: WandSparkles,
     keys: est(b.kind),
     off: audio(b.kind) ? NOT_YET : undefined,
     onPick: () => a.run([b.id]),
-  };
+  });
   const play: MenuItem = { label: "Play", icon: Play, keys: "Space", onPick: () => a.play(b.at) };
   const dup: MenuItem = {
     label: "Duplicate",
@@ -309,7 +314,12 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
       title,
       items: [
         open,
-        { label: "Redraw", icon: RefreshCw, keys: est("frame"), onPick: () => a.run([b.id]) },
+        gate(a, {
+          label: "Redraw",
+          icon: RefreshCw,
+          keys: est("frame"),
+          onPick: () => a.run([b.id]),
+        }),
         {
           label: "Style",
           icon: Brush,
@@ -325,7 +335,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
         {
           label: "Generate from board",
           icon: Clapperboard,
-          keys: est("video"),
+          keys: a.runOff ? undefined : est("video"),
           off: made ? `${made.name} is made from it` : shots ? undefined : "Add a Shots lane first",
           onPick: () =>
             shots &&
@@ -363,7 +373,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
     items: [
       open,
       run,
-      {
+      gate(a, {
         label: "Run up to here",
         icon: FastForward,
         onPick: () =>
@@ -372,7 +382,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
               .filter((x) => x.at <= b.at)
               .map((x) => x.id),
           ),
-      },
+      }),
       { label: "Compare takes", icon: Columns2, off: SOON.dialog },
       pinned
         ? {
@@ -470,7 +480,7 @@ export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[]
   return {
     title: `${bs.length} blocks`,
     items: [
-      {
+      gate(a, {
         label: `Run ${runnable.length}`,
         icon: WandSparkles,
         keys: estText(
@@ -479,7 +489,7 @@ export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[]
         ),
         off: runnable.length ? undefined : NOT_YET,
         onPick: () => a.run(runnable.map((b) => b.id)),
-      },
+      }),
       {
         label: "Move to lane",
         icon: ArrowDownUp,
@@ -535,7 +545,7 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
           onPick: () => a.add(lane.id, a.playhead, k),
         })),
       },
-      {
+      gate(a, {
         label: "Run lane",
         icon: WandSparkles,
         keys: runnable.length
@@ -546,7 +556,7 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
           : undefined,
         off: !bs.length ? "Nothing on it" : runnable.length ? undefined : NOT_YET,
         onPick: () => a.run(runnable.map((b) => b.id)),
-      },
+      }),
       {
         label: "Default kind",
         icon: Shapes,

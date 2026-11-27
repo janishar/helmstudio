@@ -1,6 +1,7 @@
-// Magic, phase B (plan 39 §45.12): one fresh user on the test stack opens Magic from the rail and, on the sample board
-// kept in the browser, adds a shot at a point, moves it, ties a line to another shot, and undoes. Board: MagicBoard
-// frames 1, 2, 4, 5. Screenshots go to E2E_SHOTS.
+// Magic, phase C (plan 39 §45.12): one fresh user on the test stack opens Magic from the rail on a new board kept in
+// studio, makes the sample board, adds a shot at a point, moves it, ties a line to another shot, undoes (studio's
+// undo), saves a snapshot, and finds it all again after a reload. Board: MagicBoard frames 1, 2, 4, 5, 11.
+// Screenshots go to E2E_SHOTS.
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
 import { newUser, signIn } from "./users";
@@ -22,17 +23,20 @@ test.afterAll(async () => {
   await page?.close();
 });
 
-test("Magic opens from the rail on the sample board", async () => {
+test("Magic opens from the rail on a new board; the sample board is one pick away", async () => {
   await page
     .getByRole("navigation", { name: "Sections" })
     .getByRole("link", { name: "Magic" })
     .click();
   await expect(page).toHaveURL(/\/magic$/);
+  await expect(page.getByRole("heading", { name: "A new board" })).toBeVisible();
+  await page.getByRole("button", { name: "Untitled board" }).click();
+  await page.getByRole("menuitem", { name: "Sample board" }).click();
   for (const lane of ["Storyboard", "Shots", "Mara's lines", "Music", "Sound", "Lane 7"])
     await expect(page.getByRole("group", { name: `Lane ${lane}` })).toBeVisible();
-  await expect(page.getByRole("button", { name: /Video block Shot 3/ })).toContainText(
-    "Out of date",
-  );
+  // kept in studio: no takes yet, so every block is a draft; runs come with the standard request
+  await expect(page.getByRole("button", { name: /Video block Shot 3/ })).toContainText("Draft");
+  await expect(page.getByRole("button", { name: "Run board" })).toBeDisabled();
   await page.screenshot({ path: `${SHOTS}/1-board.png` });
 });
 
@@ -80,7 +84,12 @@ test("tie Line 2 to Shot 3, then undo back to Shot 2", async () => {
   await expect(line.getByRole("button", { name: /Tie to/ })).toHaveCount(0);
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(line.getByRole("button", { name: "Tie to Shot 2" })).toBeVisible();
-  // and the board is still there after a reload (kept in this browser)
+  // a snapshot, then the board and it are still there after a reload (kept in studio)
+  await page.getByRole("button", { name: /^Snapshots/ }).click();
+  await page.getByRole("button", { name: "Save snapshot" }).click();
+  await expect(status()).toHaveText("Saved Snapshot 1");
   await page.reload();
   await expect(page.getByRole("button", { name: "Video block Shot 4, 4 s" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "The Last Tide" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Snapshots · 1" })).toBeVisible();
 });
