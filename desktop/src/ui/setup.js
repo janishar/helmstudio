@@ -220,7 +220,7 @@ function runnerPane(i) {
   again.disabled = !!i.busy;
   u.append(
     el('h3', 'd err', keeps ? `The ${i.env} runner keeps stopping` : `The ${i.env} runner didn’t start`),
-    el('p', 'big', keeps ? 'It stopped 5 times in 10 minutes, so it is not restarted again until you say so.' : i.cause),
+    el('p', 'big', keeps ? 'It stopped 5 times in 10 minutes, so it is not restarted again until you say so.' : `${i.cause} Restart runner sets it up again (about 2 GB, needs the internet).`),
     lastLines(i.lines || []),
     actions(button('ghost', 'Show log', () => window.helm.act('runner-log')), again),
   );

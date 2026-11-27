@@ -220,13 +220,21 @@ test('2c: a port another app holds asks for another; the picked one is saved and
   await new Promise((r) => held.once('listening', r));
   const runner = new StepRunner({ steps: steps.every.filter((x) => x.id === 'services'), logFile: path.join(dir, 'log'), exec: fake });
   let asked;
-  runner.on('update', (snap) => snap.ask?.kind === 'port' && !asked && ((asked = snap.ask.data), held.close(), runner.answer('port', `${asked.suggest}`)));
+  let asks = 0;
+  // first another of our own ports (asked again), then the suggested one
+  runner.on('update', (snap) => {
+    if (snap.ask?.kind !== 'port' || snap.steps[0].status !== 'ask') return;
+    asked = snap.ask.data;
+    if (++asks === 1) return runner.answer('port', c.composeEnv.POSTGRES_HOST_PORT);
+    if (asks === 2) (held.close(), runner.answer('port', `${asked.suggest}`));
+  });
   try {
     const out = await runner.run();
     assert.equal(out, 'done', JSON.stringify(runner.error));
   } finally {
     held.close();
   }
+  assert.equal(asks, 2, 'a port another of ours uses is asked again');
   assert.deepEqual([asked.port, asked.holder, asked.label, asked.key], [kong, 'node', 'the studio', 'KONG_HTTP_PORT']);
   assert.ok(asked.suggest > kong);
   assert.deepEqual(s.ports, { KONG_HTTP_PORT: asked.suggest });

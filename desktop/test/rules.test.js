@@ -96,6 +96,7 @@ test('2c ports: a picked port reaches compose, the studio address, NATS, S3 and 
   assert.equal(c.s3Port, 8437);
   assert.equal(c.runners.find((x) => x.env === 'mlx').healthPort, 8199);
   assert.deepEqual(r.applyPorts(structuredClone(cfg), undefined), cfg);
+  assert.deepEqual(r.applyPorts(structuredClone(cfg), { KONG_HTTP_PORT: '1; x', NATS_HOST_PORT: 80 }), cfg, 'a hand-edited port that is not one is left out');
   assert.deepEqual([1023, 1024, 65535, 65536, 8.5, NaN].map(r.validPort), [false, true, true, false, false, false]);
 });
 

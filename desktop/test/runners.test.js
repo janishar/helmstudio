@@ -84,7 +84,8 @@ test('2b: a runner that stops is restarted with back-off, any exit code; after 5
   assert.equal(a.issues.torch.kind, 'nostart', 'every stop came within 5 s of its start');
   assert.equal(a.state().torch.kind, 'nostart');
   assert.match(a.issues.torch.lines.join('\n'), /exit 3[\s\S]*stopped 5 of 5 · not restarted/);
-  await assert.rejects(a.waitReady(null, 5000), /The torch runner didn’t start/);
+  // at a start, the step's failure in 2b's words
+  await assert.rejects(a.waitReady(null, 5000), { title: 'The torch runner didn’t start', message: 'It stops within 5 s of every start.' });
   a.restartOne('torch'); // Restart runner: the count reset, started now
   assert.equal(a.issues.torch, undefined);
   assert.equal(a.state().torch, 'run');

@@ -77,6 +77,7 @@ let studioPage = false; // the studio window shows our page (setup.html: 2a, 2g,
 let issueWin = null; // 2b: a runner that keeps stopping or didn't start
 let runnerIssue = null; // {kind: 'runner', env, what, cause, lines, busy}
 let note = null; // 2a's notification (kept, else it is collected before a click)
+const quitSignal = new AbortController(); // Quit stops 2b's venv set up again
 // the update (board frames 8–9): state checking | none | checkfail | available | download | verify | ready | installing
 // | dlfail | sumfail | installfail; release: the newest one found
 let upd = { state: 'none', release: null, got: 0, error: null };
@@ -297,7 +298,7 @@ function studioWindow() {
   wc.on('did-fail-provisional-load', failed);
   let hang = null;
   let hung = false;
-  wc.on('unresponsive', () => (hang = setTimeout(() => ((hung = true), wc.forcefullyCrashRenderer()), 10000)));
+  wc.on('unresponsive', () => (clearTimeout(hang), (hang = setTimeout(() => ((hung = true), wc.forcefullyCrashRenderer()), 10000))));
   wc.on('responsive', () => clearTimeout(hang));
   wc.on('render-process-gone', (_e, d) => {
     clearTimeout(hang);
@@ -388,12 +389,14 @@ async function restartRunner() {
   if (i.what === 'nostart') {
     showRunnerIssue({ ...i, busy: true });
     try {
-      await stack.setupVenv(r.venv, (cmd, args, o) => run(cmd, args, { ...o, onLine: (l) => runners.note(i.env, l) }));
+      await stack.setupVenv(r.venv, (cmd, args, o) => run(cmd, args, { ...o, signal: quitSignal.signal, onLine: (l) => runners.note(i.env, l) }));
     } catch (e) {
+      if (quitting) return;
       runners.note(i.env, `setup failed: ${e.message}`);
       return showRunnerIssue({ ...i, busy: false, cause: `Setting it up again failed: ${e.message}`, lines: tailOf(runners.logOf(i.env), 4) });
     }
   }
+  if (quitting) return; // Quit while it was set up: nothing starts after the stop
   issueWin?.close();
   runners.restartOne(i.env);
 }
@@ -540,6 +543,7 @@ async function quitEntirely(then = () => {}) {
   updAbort?.abort();
   phase = 'stopping';
   quitting = true;
+  quitSignal.abort();
   setStatus('wait', 'Stopping…');
   runner?.cancel();
   const log = (l) => runner?.log(l);
@@ -666,7 +670,7 @@ ipcMain.handle('hello', (e) => {
 });
 // the error states' buttons, only from our own pages (file:), never from the studio's web page
 ipcMain.on('act', (e, name) => {
-  if (!e.senderFrame?.url.startsWith('file:')) return;
+  if (!e.senderFrame?.url.startsWith('file:') || quitting) return;
   const logs = () => fs.mkdirSync(p.logs, { recursive: true });
   ({
     restart: restartStack,
@@ -682,11 +686,11 @@ ipcMain.on('act', (e, name) => {
 const fromStudio = (e, word) => studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents && isWord(word);
 ipcMain.on('replace-misspelling', (e, word) => fromStudio(e, word) && e.sender.replaceMisspelling(word));
 ipcMain.on('add-to-dictionary', (e, word) => fromStudio(e, word) && e.sender.session.addWordToSpellCheckerDictionary(word));
-ipcMain.on('answer', (_e, kind, value) => runner?.answer(kind, value));
+ipcMain.on('answer', (e, kind, value) => e.senderFrame?.url.startsWith('file:') && runner?.answer(kind, value)); // our pages only
 ipcMain.on('retry', () => phase === 'failed' && startUp());
 ipcMain.on('show-log', () => (fs.mkdirSync(p.logs, { recursive: true }), fs.appendFileSync(logFile, ''), shell.openPath(logFile)));
-ipcMain.handle('choose-folder', async (_e, current) => {
-  const r = await dialog.showOpenDialog(setupWin, {
+ipcMain.handle('choose-folder', async (e, current) => {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
     defaultPath: current?.replace(/^~/, app.getPath('home')),
     properties: ['openDirectory', 'createDirectory'],
     buttonLabel: 'Choose',

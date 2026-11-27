@@ -230,7 +230,8 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
       if (!clash) return;
       c.log(`port ${clash.port} is in use by ${clash.holder}`);
       const port = Number(await c.ask('port', clash));
-      if (!rules.validPort(port) || port === clash.port) continue; // Try again with the same port: checks again
+      // Try again with the same port checks again; one another of ours uses would clash with it
+      if (!rules.validPort(port) || rules.hostPorts(cfg).some((x) => x.port === port)) continue;
       settings.ports = { ...settings.ports, [clash.key]: port };
       settings.save();
       rules.applyPorts(shipped, settings.ports);
@@ -270,7 +271,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     for (let volume = gone(); volume; volume = gone()) {
       c.log(`the models folder ${settings.modelsDir} is on ${volume}, not connected`);
       const a = await c.ask('drive', { volume, dir: settings.modelsDir }, () => !gone());
-      if (!a?.dir) return; // Continue, or the drive is back
+      if (typeof a?.dir !== 'string' || !path.isAbsolute(tilde(a.dir))) return; // Continue, or the drive is back
       settings.modelsDir = tilde(a.dir);
       settings.save();
     }
@@ -770,7 +771,10 @@ class Runners {
     while (!(await this.healthy())) {
       if (signal?.aborted) throw new Error('cancelled');
       const [env, given] = Object.entries(this.issues)[0] || [];
-      if (given) throw new Error(`The ${env} runner ${given.kind === 'keeps' ? 'keeps stopping' : 'didn’t start'}: ${given.cause || `see ${this.logOf(env)}`}`);
+      if (given)
+        throw Object.assign(new Error(given.cause || (given.kind === 'keeps' ? 'It stopped 5 times in 10 minutes, so it is not restarted again until you say so.' : `See ${this.logOf(env)}.`)), {
+          title: `The ${env} runner ${given.kind === 'keeps' ? 'keeps stopping' : 'didn’t start'}`,
+        });
       if (Date.now() > end) throw new Error(`The runners did not answer on their health ports: see ${this.p.logs}/runner-*.log`);
       await new Promise((r) => setTimeout(r, 1000));
     }

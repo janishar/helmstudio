@@ -67,6 +67,7 @@ function hostPorts(cfg) {
 // studio's address, the runners' NATS, S3 and health ports
 function applyPorts(cfg, ports = {}) {
   for (const [key, port] of Object.entries(ports || {})) {
+    if (!validPort(port)) continue; // settings.json edited by hand
     if (key.startsWith('runner:')) {
       const r = cfg.runners.find((x) => x.env === key.slice(7));
       if (r) r.healthPort = port;
