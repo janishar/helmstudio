@@ -51,5 +51,18 @@
         ]
       }
     ]
+  },
+  "standard": {
+    "kind": "music",
+    "model": "Echo music",
+    "fields": {
+      "prompt": "prompt.text",
+      "lyrics": "music.lyrics",
+      "instrumental": "music.instrumental",
+      "length": "music.seconds",
+      "bpm": "music.bpm",
+      "seed": "music.seed"
+    },
+    "seconds": 0.3
   }
 }

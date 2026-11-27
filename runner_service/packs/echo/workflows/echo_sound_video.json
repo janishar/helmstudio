@@ -35,5 +35,15 @@
         "media": "foley.video"
       }
     }
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "Echo sound",
+    "fields": {
+      "from": "foley.source",
+      "prompt": "prompt.text",
+      "seed": "foley.seed"
+    },
+    "seconds": 0.2
   }
 }

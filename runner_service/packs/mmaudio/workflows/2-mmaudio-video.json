@@ -72,5 +72,16 @@
         ]
       }
     ]
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "MMAudio",
+    "fields": {
+      "from": "foley.source",
+      "prompt": "prompt.text",
+      "length": "foley.seconds",
+      "seed": "seed.seed"
+    },
+    "seconds": 1.1
   }
 }

@@ -26,12 +26,12 @@ def test_every_published_node_kind_has_an_implementation():
 
 
 def test_standard_blocks_fit_their_workflows():
-    """API 1.81: the fake host serves Magic's image, video and voice kinds; a standard field that names a param of the
-    wrong type, a wired one or a node that is not there stops the runner."""
+    """API 1.81: the fake host serves Magic's image, video and voice kinds (1.85: music and sound too); a standard
+    field that names a param of the wrong type, a wired one or a node that is not there stops the runner."""
     workflows = {w["id"]: w for w in VALUES["workflows"]["workflows"]}
     schemas_ = registry.node_schemas(VALUES)
     kinds = {w["standard"]["kind"] for w in workflows.values() if "standard" in w}
-    assert kinds == {"image", "video", "voice"}
+    assert kinds == {"image", "video", "voice", "music", "sound"}
     assert all(registry.standard_errors(w, schemas_) == [] for w in workflows.values())
     w = json.loads(json.dumps(workflows["echo-image-to-video"]))
     w["standard"]["fields"] |= {
@@ -51,6 +51,13 @@ def test_standard_blocks_fit_their_workflows():
         "standard: kind voice does not make video takes",
         "standard.fields.prompt: keyframes.text is wired",
         "standard.set.canvas.colour: echo/canvas has no param colour",
+    ]
+    # 1.85: a sound from a shot's video needs a media param that accepts video; lyrics a text
+    w = json.loads(json.dumps(workflows["echo-sound-video"]))
+    w["standard"]["fields"] |= {"from": "foley.seed", "lyrics": "foley.delay_ms"}
+    assert registry.standard_errors(w, schemas_) == [
+        "standard.fields.from: foley.seed is a seed param",
+        "standard.fields.lyrics: foley.delay_ms is a int param",
     ]
 
 

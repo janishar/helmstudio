@@ -42,5 +42,15 @@
       "default": 4,
       "max": 8
     }
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "Echo sound",
+    "fields": {
+      "prompt": "prompt.text",
+      "length": "sound.seconds",
+      "seed": "sound.seed"
+    },
+    "seconds": 0.2
   }
 }

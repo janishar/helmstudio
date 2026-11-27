@@ -107,11 +107,16 @@ STANDARD_MEDIA = {
 STANDARD_TYPES = {
     "prompt": {"text", "string"},
     "line": {"text", "string"},
-    "length": {"frames"},
+    "length": {"frames", "float"},
     "width": {"int"},
     "height": {"int"},
     "seed": {"seed"},
     "voice": {"voice"},
+    # API 1.85 (plan 39 phase H): music and sound
+    "lyrics": {"text", "string"},
+    "instrumental": {"bool"},
+    "key": {"enum"},
+    "bpm": {"int"},
 }
 
 
@@ -149,6 +154,8 @@ def standard_errors(workflow: dict, node_schemas: dict) -> list[str]:
             ok = p["type"] in STANDARD_TYPES[field]
         elif field == "refs":
             ok = image_rows
+        elif field == "from":  # a shot's video (MMAudio's video to sound)
+            ok = p["type"] == "media" and "video" in (p.get("accepts") or [])
         else:  # first, last
             ok = p["type"] == "image" or (image_rows and timed)
         if not ok:

@@ -71,5 +71,18 @@
       "default": 1,
       "max": 4
     }
+  },
+  "standard": {
+    "kind": "music",
+    "model": "MiniMax Music 3",
+    "default": true,
+    "fields": {
+      "prompt": "prompt.text",
+      "lyrics": "lm.lyrics",
+      "instrumental": "lm.instrumental",
+      "length": "lm.seconds",
+      "seed": "seed.seed"
+    },
+    "seconds": 4.9
   }
 }

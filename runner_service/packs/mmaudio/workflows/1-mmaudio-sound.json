@@ -67,5 +67,15 @@
       "default": 4,
       "max": 8
     }
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "MMAudio",
+    "fields": {
+      "prompt": "prompt.text",
+      "length": "sound.seconds",
+      "seed": "seed.seed"
+    },
+    "seconds": 0.5
   }
 }
