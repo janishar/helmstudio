@@ -7,6 +7,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pin } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { JOIN_ICON, KIND_NAME, Wave } from "@/components/magic/icons";
+import { MorphBlocks } from "@/components/magic/send";
 import {
   assetMenu,
   blockMenu,
@@ -439,6 +440,7 @@ export function Lanes({
                       onDown={down}
                     />
                   ))}
+                  <MorphBlocks act={act} lane={lane} pf={pf} />
                   {joins(shownDoc, lane.id)
                     // a cut is drawn on a Shots lane only (where the picture cuts); elsewhere only a set transition
                     .filter((j) => j.kind !== "cut" || lane.role === "shots")

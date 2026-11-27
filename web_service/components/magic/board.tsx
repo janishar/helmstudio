@@ -12,6 +12,14 @@ import { BlockDialog } from "@/components/magic/block-dialog";
 import { FrameDialog } from "@/components/magic/frame-dialog";
 import { ImportDialog } from "@/components/magic/import";
 import { RoughCut } from "@/components/magic/rough-cut";
+import {
+  MorphDialog,
+  SendButton,
+  SendToast,
+  SendsChip,
+  useSends,
+  type Send,
+} from "@/components/magic/send";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { useVoices } from "@/lib/library";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
@@ -132,6 +140,12 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const [importing, setImporting] = useState<{ asset?: string } | null>(null);
   const [rough, setRough] = useState<string | null | undefined>(null);
   const [picking, setPicking] = useState<Pick | null>(null);
+  // phase G: a morph opened, the board's sends, the toast of the newest one (it follows its send while it bakes)
+  const [morph, setMorph] = useState<string | null>(null);
+  const sendsList = useSends(board.sends);
+  const [sent, setSent] = useState<Send | null>(null);
+  const sentNow = sent && sendsList.list.find((s) => s.id === sent.id);
+  const toast = sentNow ?? sent;
   const voices = useVoices();
   const [kept, setKept] = useState<string[]>([]);
   const [said, setSaid] = useState("");
@@ -252,6 +266,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       openAsset: setAssetOpen,
       importTo: board.gallery ? (asset) => setImporting({ asset }) : undefined,
       rough: setRough,
+      openMorph: setMorph,
       gallery: board.gallery ? setPicking : null,
       views: board.run ? board.makeViews : null,
       fromBoard: board.run
@@ -449,14 +464,12 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             <Clock3 size={13} aria-hidden />
             Snapshots{snapshots.length ? ` · ${snapshots.length}` : ""}
           </button>
-          <button
-            type="button"
-            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
-            disabled
-            title="Comes with Send to Timeline"
-          >
-            Sends · 0
-          </button>
+          <SendsChip
+            list={sendsList.list}
+            sends={board.sends}
+            onRestore={(rev) => board.restoreSnapshot({ id: "", name: "", at: "", rev })}
+            onChanged={sendsList.reload}
+          />
           <button
             type="button"
             className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
@@ -475,18 +488,14 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           >
             Redo
           </button>
-          <button
-            type="button"
-            className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-5 text-sm"
-            disabled
-            title="Comes once blocks have takes"
-          >
-            <span className="max-md:hidden">Send to Timeline</span>
-            <span className="md:hidden">Send</span>
-            <small className="mono text-[11px] font-medium tracking-normal max-md:hidden">
-              new sequence
-            </small>
-          </button>
+          <SendButton
+            doc={doc}
+            sends={board.sends}
+            onSent={(s) => {
+              setSent(s);
+              sendsList.reload();
+            }}
+          />
         </div>
 
         {!doc.lanes.length ? (
@@ -873,6 +882,14 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           onMade={setAssetOpen}
         />
         <RoughCut doc={doc} takes={takes} from={rough} onClose={() => setRough(null)} />
+        <MorphDialog
+          act={act}
+          id={morph}
+          kinds={board.kinds}
+          estimate={morph ? board.estimate(morph) : undefined}
+          onClose={() => setMorph(null)}
+        />
+        <SendToast send={toast} onClose={() => setSent(null)} />
         <GalleryPicker
           open={!!picking}
           onClose={() => setPicking(null)}

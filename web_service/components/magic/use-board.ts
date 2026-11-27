@@ -28,6 +28,7 @@ import {
   type Takes,
 } from "@/lib/magic";
 import { artFor, emptyDoc, sampleBoard } from "@/lib/magic-fixture";
+import { studioSends, type SendApi } from "@/components/magic/send";
 
 export type Snapshot = { id: string; name: string; at: string; rev?: number; doc?: Doc };
 
@@ -75,6 +76,8 @@ export type Board = {
   sampleBoard: () => void;
   rename: (name: string) => void;
   remove: () => void;
+  /** Send to Timeline (phase G): studio's sends of this board; null in the fake mode */
+  sends: SendApi | null;
 };
 
 // ------------------------------------------------------------------------------------------------ in studio
@@ -211,7 +214,11 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
   useEffect(() => {
     if (!wire || !wire.doc.blocks.length) return;
     let gone = false;
-    const ids = wire.doc.blocks.slice(0, 200).map((b) => b.id);
+    // the blocks and (API 1.82) the morphs
+    const ids = [
+      ...wire.doc.blocks.map((b) => b.id),
+      ...wire.doc.transitions.filter((t) => t.kind === "morph" && t.between).map((t) => t.id),
+    ].slice(0, 200);
     ok(
       api.POST("/v1/studio/magic/boards/{board_id}/plan", {
         ...board(wire.id),
@@ -364,6 +371,8 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
         );
         if (current.current === id) show(r.board);
       }),
+    // the revision studio last answered (an edit still on its way is a 409, said in the dialog)
+    sends: studioSends(id, wire.revision),
     estimate: (b) => estimates[b],
     plan: (pick) =>
       ok(api.POST("/v1/studio/magic/boards/{board_id}/plan", { ...board(id), body: pick })),
@@ -571,6 +580,7 @@ export function useLocalBoard(initial?: Store): Board {
         })),
       );
     },
+    sends: null,
     estimate: () => undefined,
     plan: null,
     askAbove: 5,

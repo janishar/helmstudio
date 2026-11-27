@@ -46,6 +46,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { Item, MenuItem } from "@/components/context-menu";
+import type { S } from "@/lib/api";
 import { mod } from "@/components/context-menu";
 import {
   CutIcon,
@@ -107,6 +108,8 @@ export type Act = {
   sel: string[];
   edit: (op: Op | Op[]) => unknown;
   run: (ids: string[]) => void;
+  /** a morph opened (its dialog, API 1.82) */
+  openMorph?: (id: string) => void;
   /** why runs can't go yet; estimates hide with it */
   runOff?: string;
   /** a block's estimate as a menu shows it ("≈ 1:50"); absent: the kind's guess (the fake mode) */
@@ -830,6 +833,67 @@ export function joinTitle(d: Doc, j: Join): string {
 }
 
 /** A join (a transition point): its kind, its length, Remove (a cut). A lane's start or end: Fade or none. */
+/** A morph's own items (API 1.82): open it, generate its take. */
+function morphItems(a: Act, j: Join): Item[] {
+  const t = a.doc.transitions.find(
+    (x) => x.kind === "morph" && x.between?.join() === j.between?.join(),
+  );
+  if (!t) return [];
+  return [
+    "-",
+    {
+      label: "Open",
+      icon: Maximize2,
+      keys: "↵",
+      off: a.openMorph ? undefined : "Comes with the board",
+      onPick: () => a.openMorph?.(t.id),
+    },
+    gate(a, {
+      label: t.takes?.length ? "Generate again" : "Generate",
+      icon: WandSparkles,
+      keys: a.estimate?.(t.id) ?? "generated",
+      onPick: () => a.run([t.id]),
+    }),
+  ];
+}
+
+/** A send (frame 9's sends list): open its sequence, put the board back as it was sent, take it off the list. */
+export function sendMenu(
+  on: {
+    open: (s: S<"MagicSend">) => void;
+    restore: (s: S<"MagicSend">) => void;
+    remove: (s: S<"MagicSend">) => void;
+  },
+  s: S<"MagicSend">,
+): { title: string; items: Item[] } {
+  return {
+    title: s.name,
+    items: [
+      {
+        label: "Open in Timeline",
+        icon: Film,
+        off:
+          s.status === "baking"
+            ? "Still baking"
+            : s.status === "failed"
+              ? (s.failure ?? "Not sent")
+              : s.timeline_gone
+                ? "Its sequence was deleted"
+                : undefined,
+        onPick: () => on.open(s),
+      },
+      { label: `Restore board to rev ${s.revision}`, icon: RotateCcw, onPick: () => on.restore(s) },
+      "-",
+      {
+        label: "Remove from list",
+        icon: Trash2,
+        keys: s.status === "baking" ? "stops it" : undefined,
+        onPick: () => on.remove(s),
+      },
+    ],
+  };
+}
+
 export function joinMenu(a: Act, j: Join): { title: string; items: Item[] } {
   const fps = a.doc.target.fps;
   const where = j.between ? { between: j.between } : j.start ? { start: j.start } : { end: j.end };
@@ -849,6 +913,7 @@ export function joinMenu(a: Act, j: Join): { title: string; items: Item[] } {
             : (k.note ?? secs(j.kind === k.kind ? j.length : DEFAULT_S[k.kind] * fps, fps)),
         onPick: () => set(k.kind),
       })),
+      ...(j.kind === "morph" && j.between ? morphItems(a, j) : []),
       "-",
       {
         label: "Length",
