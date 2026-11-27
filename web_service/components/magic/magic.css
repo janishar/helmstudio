@@ -1185,3 +1185,8 @@
     0 0 0 6px color-mix(in srgb, var(--k) 16%, transparent),
     0 0 30px 4px color-mix(in srgb, var(--k) 45%, transparent);
 }
+
+/* the toolbar stays first; the failed / out-of-date bars (order -1) come right under it, clear of the floating player */
+:is(.mg, .mg-side) .mb > .btools {
+  order: -2;
+}

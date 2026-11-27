@@ -1277,7 +1277,8 @@ function EmptyBoard({ onLane, onAsset }: { onLane: () => void; onAsset: () => vo
 
 // ------------------------------------------------------------------------------------------------ the side panel
 
-/** What to do about a failed or out-of-date block (frame 11): a bar under the lanes, up to three. */
+/** What to do about a failed or out-of-date block (frame 11): a bar under the toolbar, up to three (at the bottom the
+ * floating player covered its Run). */
 function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
   const rows = doc.blocks
     .map((b) => ({ b, st: statusOf(doc, b, takes) }))
@@ -1292,7 +1293,7 @@ function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
         key={b.id}
         className={`warn ${st.s === "failed" ? "bad" : ""}`}
         role="alert"
-        style={{ order: 1 }}
+        style={{ order: -1 }}
       >
         <b>{st.s === "failed" ? `${name} failed` : `${name} out of date`}</b>
         {st.s === "failed" && <span>{st.error}</span>}
