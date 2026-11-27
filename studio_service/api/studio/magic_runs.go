@@ -156,6 +156,50 @@ func advancedParams(w registry.Workflow) []dto.MagicParam {
 	return out
 }
 
+// modelFamily is the family of w's <family>/model node, "" without one (its variants are GET /models's).
+func modelFamily(w registry.Workflow) string {
+	family, _ := strings.CutSuffix(w.Nodes[modelNode(w)].Kind, "/model")
+	return family
+}
+
+// runVariant is the model variant a run of w for request req loads (API 1.94): its Advanced `<model node>.variant`
+// when it is one of the param's values, else the workflow's own; "" without a model node.
+func runVariant(w registry.Workflow, req map[string]any) string {
+	node := modelNode(w)
+	if node == "" {
+		return ""
+	}
+	if adv, ok := req["advanced"].(map[string]any); ok {
+		if v, ok := adv[node+".variant"].(string); ok {
+			if p, found := findParam(w, node+".variant"); found && slices.Contains(p.Enum, v) {
+				return v
+			}
+		}
+	}
+	v, _ := w.Nodes[node].Params["variant"].(string)
+	return v
+}
+
+// variantTitle is the title of the variant a run loaded ("Turbo"), from whichever runner publishes its model; its id
+// when none does, nil when the run has no model node.
+func (s *Service) variantTitle(kind, variant *string) *string {
+	if kind == nil || variant == nil || *variant == "" {
+		return nil
+	}
+	family, _ := strings.CutSuffix(*kind, "/model")
+	for _, p := range s.registry.Published() {
+		for _, m := range p.Models {
+			if m.Family != family {
+				continue
+			}
+			if i := slices.IndexFunc(m.Variants, func(v registry.Variant) bool { return v.ID == *variant }); i >= 0 && m.Variants[i].Title != "" {
+				return &m.Variants[i].Title
+			}
+		}
+	}
+	return variant
+}
+
 // magicKinds is GET /magic/kinds from the registry's workflows.
 func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 	out := dto.MagicKinds{Kinds: []dto.MagicKindInfo{}}
@@ -179,7 +223,7 @@ func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 					greyed[f] = w.Standard.Model + " can't take " + magicFieldWords[f]
 				}
 			}
-			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title, Env: w.Env,
+			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title, Env: w.Env, Family: modelFamily(w),
 				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w), Video: video})
 		}
 		out.Kinds = append(out.Kinds, info)
@@ -830,7 +874,8 @@ type magicRunRow struct {
 	Takes                    []string
 	TakeKinds                []string // each take's kind, in Takes' order
 	RenderS                  *float64
-	Turn                     *int // API 1.89: a dialogue's turn
+	Turn                     *int    // API 1.89: a dialogue's turn
+	ModelKind, Variant       *string // API 1.94: its <family>/model node's kind and the variant it loaded
 }
 
 // takeFits is whether a take of kind takeKind joins a block of kind (API 1.85): a voice, music or sound block takes
@@ -862,7 +907,10 @@ func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, e
 		coalesce((SELECT array_agg(t.kind::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
 		(SELECT (t.made_with->>'render_s')::float8 FROM run_outputs o JOIN takes t ON t.id = o.take_id
-			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1), m.turn
+			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1), m.turn,
+		(SELECT n.value->>'kind' FROM jsonb_each(r.nodes) n WHERE n.value->>'kind' LIKE '%/model' ORDER BY n.key LIMIT 1),
+		(SELECT n.value->'params'->>'variant' FROM jsonb_each(r.nodes) n WHERE n.value->>'kind' LIKE '%/model'
+			ORDER BY n.key LIMIT 1)
 		FROM (SELECT *, row_number() OVER (PARTITION BY block, turn ORDER BY created_at DESC) AS n FROM magic_runs
 			WHERE board_id = $1 AND asset IS NULL) m
 		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL
@@ -1013,7 +1061,8 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		r.Takes = fitTakes(b, r) // API 1.85: a sound block's run lists its audio take
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
 			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
-			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label, Turn: r.Turn})
+			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label, Turn: r.Turn,
+			Variant: s.variantTitle(r.ModelKind, r.Variant)})
 		for _, t := range r.Takes {
 			byTake[t] = r.RunID
 		}
@@ -1406,14 +1455,15 @@ func median(xs []float64) float64 {
 	return (xs[n/2-1] + xs[n/2]) / 2
 }
 
-// recentRate is the caller's GPU seconds per unit of workflow on host: the median over their last 5 takes of it there
-// with a render time; nil with none.
-func recentRate(ctx context.Context, tx pgx.Tx, ownerID, workflowID, host, kind string) (*float64, error) {
+// recentRate is the caller's GPU seconds per unit of workflow on host with its model at variant (API 1.94; "" for a
+// workflow without a model node): the median over their last 5 takes of it there with a render time; nil with none.
+func recentRate(ctx context.Context, tx pgx.Tx, ownerID, workflowID, host, variant, kind string) (*float64, error) {
 	type take struct{ RenderS, W, H, Seconds float64 }
 	rows, err := collect[take](ctx, tx, `SELECT (made_with->>'render_s')::float8, coalesce(width, 0)::float8,
 		coalesce(height, 0)::float8, coalesce((video->>'duration_s')::float8, (audio->>'duration_s')::float8, 0)
 		FROM takes WHERE owner_id = $1 AND made_with->>'workflow_id' = $2 AND made_with->>'host' = $3
-		AND made_with ? 'render_s' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 5`, ownerID, workflowID, host)
+		AND coalesce(made_with->'model'->>'variant', '') = $4
+		AND made_with ? 'render_s' AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 5`, ownerID, workflowID, host, variant)
 	if err != nil {
 		return nil, err
 	}
@@ -1550,16 +1600,19 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 			count = 1
 		}
 		units := blockUnits(d, b) * min(max(count, 1), 4)
+		// API 1.94: the estimate follows the variant: your runs of it there, else the pack's rate, which is its own
+		// variant's (another variant with no runs of yours is unknown)
+		variant := runVariant(w, b.Request)
 		var rate *float64
 		if pb.Host != nil {
-			if rate, err = recentRate(ctx, tx, ownerID, w.ID, *pb.Host, b.Kind); err != nil {
+			if rate, err = recentRate(ctx, tx, ownerID, w.ID, *pb.Host, variant, b.Kind); err != nil {
 				return err
 			}
 		}
 		switch {
 		case rate != nil:
 			pb.Source = "yours"
-		case w.Standard.Seconds != nil:
+		case w.Standard.Seconds != nil && variant == runVariant(w, nil):
 			rate, pb.Source = w.Standard.Seconds, "pack"
 		}
 		if rate != nil {

@@ -158,7 +158,21 @@ func TestMagicKindsGreying(t *testing.T) {
 				strings.Contains(s, "duration.frames") || strings.Contains(s, "keyframes.images") {
 				t.Fatal(s)
 			}
+			if m.Family != "ltx" {
+				t.Fatal(m.Family)
+			}
+		} else if m.Family != "" { // echo has no model node
+			t.Fatal(m)
 		}
+	}
+	// API 1.94: a request's variant is its Advanced model.variant when it is one of the param's values, else the
+	// workflow's own; echo has none
+	ltx := ws[3]
+	own, _ := ltx.Nodes["model"].Params["variant"].(string)
+	adv := func(v any) map[string]any { return map[string]any{"advanced": map[string]any{"model.variant": v}} }
+	if own == "" || runVariant(ltx, nil) != own || runVariant(ltx, adv("dev")) != "dev" ||
+		runVariant(ltx, adv("nope")) != own || runVariant(ltx, adv(3)) != own || runVariant(ws[0], adv("dev")) != "" {
+		t.Fatal(own, runVariant(ltx, adv("dev")))
 	}
 }
 

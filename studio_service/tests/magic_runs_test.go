@@ -179,6 +179,21 @@ func TestMagicRuns(t *testing.T) {
 	if b := plan["blocks"].([]any)[0].(map[string]any); b["source"] != "yours" || b["seconds"] != float64(4) {
 		t.Fatal(plan)
 	}
+	// API 1.94: yours is at the request's variant (echo has no model node: ""), so a take made at another is not
+	// counted; a run says the variant its graph's model node loaded (its id when no runner publishes the model)
+	e.exec(`UPDATE takes SET made_with = made_with || '{"model": {"id": "x", "variant": "turbo", "precision": "int8"}}'
+		WHERE id = $1`, take)
+	plan = e.call(userA, "POST", base+"/plan", map[string]any{"blocks": []string{"s2"}}, 200)
+	if b := plan["blocks"].([]any)[0].(map[string]any); b["source"] != "pack" {
+		t.Fatal(plan)
+	}
+	e.exec(`UPDATE runs SET nodes = nodes || '{"model": {"kind": "qwen-image/model", "params": {"variant": "turbo"}}}'
+		WHERE id = $1`, s2["id"])
+	for _, r := range e.call(userA, "GET", base, nil, 200)["runs"].([]any) {
+		if r := r.(map[string]any); r["block"] == "s2" && r["variant"] != "turbo" || r["block"] == "v1" && r["variant"] != nil {
+			t.Fatal(r)
+		}
+	}
 	// the agent view's status is the same; another user still sees nothing
 	agent := e.call(userA, "GET", base+"?view=agent", nil, 200)
 	for _, b := range agent["blocks"].([]any) {

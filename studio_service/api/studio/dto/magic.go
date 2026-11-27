@@ -126,6 +126,8 @@ type MagicBlockRun struct {
 	Style *string `json:"style,omitempty"`
 	// API 1.89: a dialogue's run of this turn
 	Turn *int `json:"turn,omitempty"`
+	// API 1.94: the model variant it ran on, its title ("Turbo")
+	Variant *string `json:"variant,omitempty"`
 }
 
 // MagicParam is one Advanced field of a model.
@@ -139,7 +141,8 @@ type MagicModel struct {
 	WorkflowID string            `json:"workflow_id"`
 	Name       string            `json:"name"`
 	Title      string            `json:"title"`
-	Env        string            `json:"env,omitempty"` // API 1.89: Run on greys a host without it
+	Env        string            `json:"env,omitempty"`    // API 1.89: Run on greys a host without it
+	Family     string            `json:"family,omitempty"` // API 1.94: its model node's family (GET /models), absent without one
 	Fields     []string          `json:"fields"`
 	Greyed     map[string]string `json:"greyed"`
 	Seconds    *float64          `json:"seconds"`
