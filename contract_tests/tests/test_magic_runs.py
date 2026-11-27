@@ -1,0 +1,144 @@
+"""Magic's standard request and runs (API 1.81, plan 39 phase D; contracts/README.md "Magic: the standard request",
+"Magic: runs"): through Kong in fake mode, the kinds with the echo models and the greyed fields, the settings, a
+board's plan (the pack's rate, the ask rule), a run of a block's standard request in the board's own session (hidden
+from the sessions list) that becomes a take on its block with the status done, a request changed since making it
+out of date, the run history, and user B 404 on another user's board's run and plan. Every JSON answer is checked
+against openapi.yaml with CONTRACT_SCHEMAS=1. No GPU."""
+
+from helpers import STUDIO, ok, wait_for
+from test_magic import BOARDS
+
+KINDS = f"{STUDIO}/magic/kinds"
+SETTINGS = f"{STUDIO}/magic/settings"
+
+
+def shot(bid: str, at: int, prompt: str) -> dict:
+    return {
+        "id": bid,
+        "lane": "shots",
+        "at": at,
+        "length": 24,
+        "kind": "video",
+        "name": f"Shot {bid[1:]}",
+        "request": {
+            "kind": "video",
+            "model": "echo-video",
+            "prompt": prompt,
+            "advanced": {"video.delay_ms": 0},
+        },
+        "takes": [],
+        "effects": [],
+    }
+
+
+def run_doc() -> dict:
+    return {
+        "target": {"width": 1280, "height": 720, "fps": 24, "sample_rate": 48000},
+        "lanes": [
+            {"id": "shots", "name": "Shots", "role": "shots"},
+            {"id": "music", "name": "Music", "role": "music"},
+        ],
+        "blocks": [
+            shot("s1", 0, "a fox in the rain"),
+            {
+                "id": "m1",
+                "lane": "music",
+                "at": 0,
+                "length": 48,
+                "kind": "music",
+                "name": "Cue 1",
+                "request": {"kind": "music"},
+                "takes": [],
+                "effects": [],
+            },
+        ],
+        "links": [],
+        "transitions": [],
+        "assets": [],
+        "notes": [],
+    }
+
+
+def test_kinds_and_settings(api):
+    kinds = {k["kind"]: k for k in ok(api.get(KINDS))["kinds"]}
+    assert list(kinds) == ["video", "image", "voice", "music", "sound", "frame"]
+    video = {m["workflow_id"]: m for m in kinds["video"]["models"]}
+    assert video["echo-video"]["name"] == "Echo video"
+    assert video["echo-video"]["greyed"]["first"] == "Echo video can't take a first frame"
+    assert "first" in video["echo-image-to-video"]["fields"]
+    assert any(p["path"] == "video.delay_ms" for p in video["echo-video"]["advanced"])
+    assert [m["workflow_id"] for m in kinds["image"]["models"]] == ["echo"]
+    assert [m["workflow_id"] for m in kinds["voice"]["models"]] == ["echo-voice-over"]
+    assert (
+        kinds["music"]["off"] == "Comes with Create's Music and Sound"
+        and not kinds["music"]["models"]
+    )
+    assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 5}
+    assert ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 2.5})) == {
+        "ask_above_gpu_minutes": 2.5
+    }
+    assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 2.5}
+    assert api.put(SETTINGS, json={"ask_above_gpu_minutes": -1}).status_code == 422
+    ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 5}))
+
+
+def test_a_block_runs_into_a_take(api, api_b):
+    b = ok(api.post(BOARDS, json={"name": "Runs", "doc": run_doc()}), 201)
+    base = f"{BOARDS}/{b['id']}"
+    assert b["session_id"] is None and b["status"]["s1"] == {"status": "draft"}
+
+    plan = ok(api.post(f"{base}/plan", json={"stale": True}))
+    assert plan["order"] == ["s1", "m1"] and plan["limit_minutes"] == 5
+    s1, m1 = plan["blocks"]
+    assert s1["source"] == "pack" and s1["seconds"] == 0.5 and s1["host"]
+    assert m1["reason"] == "Music comes with Create's Music and Sound"
+    assert plan["ask"] is False and plan["ask_text"] == "1 shot, about 1 s"
+
+    r = api.post(f"{base}/run", json={"revision": 1, "blocks": ["m1"]})
+    assert (
+        r.status_code == 422
+        and r.json()["detail"] == "Cue 1: Music comes with Create's Music and Sound"
+    )
+    assert api.post(f"{base}/run", json={"revision": 9, "blocks": ["s1"]}).status_code == 409
+    for path, body in (("run", {"revision": 1, "stale": True}), ("plan", {"stale": True})):
+        r = api_b.post(f"{base}/{path}", json=body)
+        assert r.status_code == 404 and r.json() == {"detail": "not found"}
+
+    started = ok(api.post(f"{base}/run", json={"revision": 1, "lane": "shots"}), 202)
+    assert [s["block"] for s in started["started"]] == ["s1"] and started["skipped"] == []
+    session = started["board"]["session_id"]
+    assert session and all(
+        s["id"] != session for s in ok(api.get(f"{STUDIO}/sessions"))["sessions"]
+    )
+    run_id = started["started"][0]["run_id"]
+    run = ok(api.get(f"{STUDIO}/runs/{run_id}"))
+    assert run["workflow_id"] == "echo-video" and run["session_id"] == session
+    assert run["inputs"]["prompt.text"] == "a fox in the rain"
+    assert (run["inputs"]["canvas.width"], run["inputs"]["canvas.height"]) == (1024, 576)
+
+    def done():
+        board = ok(api.get(base))
+        return board if board["status"]["s1"]["status"] == "done" else None
+
+    board = wait_for(done, what="the shot's take")
+    take = board["doc"]["blocks"][0]["takes"][0]
+    assert board["takes"][take]["run_id"] == run_id and board["takes"][take]["url"]
+    history = [x for x in board["runs"] if x["block"] == "s1"]
+    assert [(x["status"], x["takes"], x["current"], x["by"]) for x in history] == [
+        ("succeeded", [take], True, "user")
+    ]
+    # a request changed since: out of date, the take kept
+    req = dict(board["doc"]["blocks"][0]["request"], prompt="a fox in heavier rain")
+    edited = ok(
+        api.post(
+            f"{base}/edits",
+            json={
+                "base_revision": board["revision"],
+                "ops": [{"op": "block", "id": "s1", "set": {"request": req}}],
+            },
+        )
+    )
+    assert edited["board"]["status"]["s1"] == {"status": "out_of_date"}
+    assert edited["board"]["runs"][0]["current"] is False
+    agent = ok(api.get(f"{base}?view=agent"))
+    assert {x["id"]: x["status"] for x in agent["blocks"]} == {"s1": "out_of_date", "m1": "draft"}
