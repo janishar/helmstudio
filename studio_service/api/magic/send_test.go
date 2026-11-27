@@ -153,3 +153,20 @@ func TestBuildSendDissolve(t *testing.T) {
 		t.Fatalf("no handle: %+v", out.Joins)
 	}
 }
+
+// A take far shorter than its block holds its nearest frame for the whole span of a bake: never a negative hold.
+func TestBuildSendShortTake(t *testing.T) {
+	d := sendBoard()
+	d.Transitions = []*Transition{{ID: "t2", Between: &[2]string{"s1", "s2"}, Kind: "dissolve", Length: 12}}
+	takes := sendTakes()
+	takes[tA] = timeline.Take{Kind: "video", DurationS: 1}
+	takes[tB] = timeline.Take{Kind: "video", DurationS: 1}
+	out := BuildSend(d, takes, nil, true)
+	for _, b := range out.Bakes {
+		for _, s := range b.Sides {
+			if s.Pre < 0 || s.Post < 0 {
+				t.Fatalf("%s: a negative hold %+v", b.Title, s)
+			}
+		}
+	}
+}

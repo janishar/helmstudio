@@ -100,9 +100,9 @@ describe("the send dialog's rows", () => {
   });
   it("the joins by what happens to them, the board's cuts kept with the dissolves", () => {
     expect(joinRows(plan, 1)).toEqual([
-      { names: "Dissolve, Cut", note: "kept as they are" },
-      { names: "Fade in, Wipe", note: "baked into a short clip" },
-      { names: "Morph", note: "its own clip" },
+      { how: "kept", names: "Dissolve, Cut", note: "kept as they are" },
+      { how: "baked", names: "Fade in, Wipe", note: "baked into a short clip" },
+      { how: "clip", names: "Morph", note: "its own clip" },
     ]);
   });
   it("when a send was made", () => {

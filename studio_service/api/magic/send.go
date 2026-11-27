@@ -200,11 +200,15 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		if sh.kind == "image" {
 			return SendBakeSide{TakeID: sh.take, Filters: sh.filters}
 		}
-		if hi <= lo { // nothing of it there: its nearest frame held
+		held := hi <= lo
+		if held { // nothing of it there: its nearest frame held for the whole span
 			lo = max(min(lo, sh.avail-sh.srcOff-1), 0)
 			hi = lo + 1
 		}
 		pre, post := lo-w0, w1-hi
+		if held {
+			pre, post = 0, w1-w0-1
+		}
 		return SendBakeSide{TakeID: sh.take, Start: s(sh.srcOff+lo) * sh.rate, End: s(sh.srcOff+hi) * sh.rate, Rate: sh.rate,
 			Pre: pre, Post: post, Filters: sh.filters}
 	}

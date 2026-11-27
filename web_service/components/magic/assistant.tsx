@@ -137,6 +137,34 @@ export function ProposalBar({
 
 const capital = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
+/** A history row's words: an edit made by hand is stored as its op names ("lane_delete"), an Assistant's already as
+ * words (frame 8). */
+const OP_WORDS: Record<string, string> = {
+  create: "New board",
+  add: "Added a block",
+  move: "Moved blocks",
+  trim: "Trimmed a block",
+  split: "Split a block",
+  duplicate: "Duplicated blocks",
+  delete: "Deleted blocks",
+  block: "Changed a block",
+  take: "Take added",
+  take_add: "Take added",
+  transition: "Changed a join",
+  effect: "Added an effect",
+  effect_set: "Changed an effect",
+  link: "Tied blocks",
+  unlink: "Untied blocks",
+  lane: "Changed a lane",
+  lane_add: "Added a lane",
+  lane_delete: "Deleted a lane",
+  lane_move: "Moved a lane",
+  asset: "Changed an asset",
+  asset_add: "Added an asset",
+  asset_delete: "Deleted an asset",
+};
+const opWords = (s: string) => capital(OP_WORDS[s] ?? s.replace(/_/g, " "));
+
 /** Who made a revision, in History's words. */
 export function byOf(r: Pick<Rev, "by" | "via">): { text: string; ai: boolean } {
   if (r.via === "assistant") return { text: "by Assistant", ai: true };
@@ -216,7 +244,7 @@ export function HistoryChip({
                 >
                   {by.text}
                 </span>
-                <span className="min-w-0 truncate">{capital(r.ops_summary)}</span>
+                <span className="min-w-0 truncate">{opWords(r.ops_summary)}</span>
                 <span className="mono ml-auto shrink-0 text-[11px] text-t2">
                   rev {r.revision} · {r.revision === revision ? "now" : when(r.saved_at)}
                 </span>

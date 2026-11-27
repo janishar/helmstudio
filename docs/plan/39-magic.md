@@ -510,3 +510,21 @@ the board with Apply and Discard and History (`web_service/components/magic/assi
   (two sends, two sequences). Any other reply is kept as it came first (`ON CONFLICT DO NOTHING`), so a retried
   preview that is refused no longer replaces the stored preview. History's Restore button is off on the current
   revision ("It's the board now"), as its menu already was.
+
+**Phases G+F browser walk (2026-11-27).** Walked on helmstudio-test (echo, fresh user, the sample board with its Storyboard
+lane deleted so Echo video can run the shots): Send dialog, bake to a sent sequence, Sends list and menu, join menu,
+morph block, Morph dialog (generate, pin), History. Fixed:
+
+- **A bake failed with "Numerical result out of range"** (found here): a take much shorter than its block left a bake
+  side with a negative first-frame hold (`Pre` -67) in `magic.BuildSend`, so ffmpeg refused the `tpad`. A side with
+  nothing of its take in the window now holds its nearest frame for the whole span (`Pre` 0). `TestBuildSendShortTake`.
+- The Send dialog's Joins rows have frame 9's icons (bowtie kept, half bowtie baked, sparkle a morph, a pill for effects),
+  the bake estimate its clock, and the Sends rows frame 9's clapperboard (was Film).
+- A morph block was drawn under the shots' blocks (invisible): it now sits above them (z 3, under the join chips), right of its
+  join chip on the thumbnails, 124 px at least.
+- History shows words for a hand edit ("Deleted a lane", "Changed a join", "Take added") instead of the stored op names.
+
+Left: the lost-edits worry in the phase G report is closed (lanes.tsx has phase H's sound marks, committed in 9941fe57).
+Not walked in the browser: the Assistant's proposal bar and cards (the echo model makes no tool calls; vitest and
+`test_magic_assistant` cover them); the "Baking n/m" toast was seen at 0/3 only (the fake bakes in seconds); a Morph
+dialog stays open on Escape once its focus left (after Generate), the × closes it.

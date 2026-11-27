@@ -4,10 +4,10 @@
 // toast while a send bakes and once it is sent, and the morph (frame 4b): its block over its join and its dialog.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Film } from "lucide-react";
+import { Clapperboard, Clock } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
-import { KIND_NAME } from "@/components/magic/icons";
+import { DissolveIcon, FadeIcon, KIND_NAME, MorphIcon } from "@/components/magic/icons";
 import { LENGTHS, joinMenu, sendMenu, type Act } from "@/components/magic/menus";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import {
@@ -140,15 +140,38 @@ export function goesRows(p: SendPlan): { kind: string; text: string; note: strin
 }
 
 /** The joins grouped by what happens to them (frame 9's Joins): "Dissolve, Cut" kept as they are. */
-export function joinRows(p: SendPlan, cuts: number): { names: string; note: string }[] {
-  const out: { names: string; note: string }[] = [];
+export function joinRows(p: SendPlan, cuts: number): { how: string; names: string; note: string }[] {
+  const out: { how: string; names: string; note: string }[] = [];
   for (const [how, note] of HOW) {
     const names = [...new Set(p.joins.filter((j) => j.how === how).map((j) => JOIN_NAME[j.kind]))];
     if (how === "kept" && cuts) names.push("Cut");
-    if (names.length) out.push({ names: names.join(", "), note });
+    if (names.length) out.push({ how, names: names.join(", "), note });
   }
   return out;
 }
+
+/** Frame 9's icon per row of Joins: a bowtie kept, a half bowtie baked, the sparkle a morph, a pill the effects. */
+const JOIN_HOW_ICON: Record<string, (p: { size: number }) => React.ReactNode> = {
+  kept: DissolveIcon,
+  baked: FadeIcon,
+  clip: MorphIcon,
+};
+const EffectIcon = () => (
+  <svg
+    aria-hidden
+    width={14}
+    height={14}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ flex: "0 0 auto" }}
+  >
+    <rect x="3" y="7" width="18" height="10" rx="5" />
+  </svg>
+);
 
 /** The cuts V1 keeps: joins on the board's first Shots lane that have no transition. */
 function cutsOf(d: Doc): number {
@@ -314,12 +337,14 @@ function SendBody({
           )}
           {joinRows(plan, cutsOf(doc)).map((j) => (
             <div key={j.note} className="nr">
+              {JOIN_HOW_ICON[j.how]?.({ size: 14 })}
               {j.names}
               <span className="mono">{j.note}</span>
             </div>
           ))}
           {plan.effects.map((e, i) => (
             <div key={`${e.block}-${i}`} className="nr">
+              <EffectIcon />
               Effects · {e.name.split(" · ")[0]} on{" "}
               {doc.blocks.find((b) => b.id === e.block)?.name.split(" · ")[0] ?? e.block}
               <span className="mono">
@@ -344,6 +369,7 @@ function SendBody({
       <div className="flex flex-wrap items-center gap-2">
         {plan && bakes > 0 && (
           <span className="est" title="How long the bakes take on the media host">
+            <Clock size={13} aria-hidden />
             <b>
               Bake {bakes} {bakes === 1 ? "join" : "joins"}
               {plan.bake_seconds != null ? ` · ${estText(plan.bake_seconds, true)}` : ""}
@@ -452,7 +478,7 @@ export function SendsChip({
           {!list.length && <span className="text-[13px] text-t2">Nothing sent yet</span>}
           {list.map((s) => (
             <div key={s.id} className="nr" onContextMenu={(e) => openMenu(e, sendMenu(act, s))}>
-              <Film size={14} aria-hidden />
+              <Clapperboard size={14} aria-hidden />
               <span className="min-w-0 truncate">
                 <b>{s.name}</b>
               </span>
@@ -572,7 +598,7 @@ export function MorphBlocks({ act, lane, pf }: { act: Act; lane: Lane; pf: numbe
           if (!t) return null;
           const st = morphStatus(t, act.takes);
           const take = morphTake(t);
-          const w = Math.max(j.length * pf, 52);
+          const w = Math.max(j.length * pf, 104);
           const label =
             st.s === "running"
               ? `${st.progress}%`
@@ -585,15 +611,15 @@ export function MorphBlocks({ act, lane, pf }: { act: Act; lane: Lane; pf: numbe
             <button
               key={t.id}
               type="button"
-              className="absolute top-2 flex h-8 -translate-x-1/2 items-center gap-1.5 overflow-hidden rounded-[10px] bg-s3 px-1.5 text-[11px] font-semibold"
-              style={{ left: j.at * pf, width: w, boxShadow: "inset 0 0 0 1.5px #ff9ad0" }}
+              className="absolute top-[62px] z-[3] flex h-[22px] items-center gap-1.5 overflow-hidden rounded-[10px] bg-s3 px-1.5 text-[11px] font-semibold"
+              style={{ left: j.at * pf + 16, width: w, boxShadow: "inset 0 0 0 1.5px #ff9ad0" }}
               aria-label={`Morph ${secs(j.length, d.target.fps)}, ${label}`}
               title={st.error ?? `Morph · ${secs(j.length, d.target.fps)}`}
               onClick={() => act.openMorph?.(t.id)}
               onContextMenu={(e) => openMenu(e, joinMenu(act, j))}
             >
               <span
-                className="size-5 flex-none rounded-[6px] bg-s4 bg-cover bg-center"
+                className="size-4 flex-none rounded-[5px] bg-s4 bg-cover bg-center"
                 style={
                   take && act.takes[take]?.art
                     ? { backgroundImage: act.takes[take].art }
