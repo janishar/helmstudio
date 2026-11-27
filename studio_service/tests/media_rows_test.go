@@ -79,6 +79,7 @@ func TestMediaRows(t *testing.T) {
 
 	// a references run: the rows snapped and filled, stored as checked, sent as defs media
 	made := run(userA, "minimax-h3-references", map[string]any{"prompt.text": "<Video 1> and <Audio 1>", "generate.refs": images,
+		"generate.lora":   "none", // the Turbo LoRA (the default) needs Turbo Ref, an add-on this host has not
 		"generate.videos": []any{map[string]any{"video": ref(video, "in", 0.51), "sound": "silent"}},
 		"generate.audios": rows("audio", ref(audio))}, 202)
 	stored := e.stored(made["id"].(string))["generate"].Params
