@@ -1,0 +1,69 @@
+{
+  "kinds": [
+    {
+      "kind": "video",
+      "fields": [
+        "prompt",
+        "first",
+        "last",
+        "length",
+        "size",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "ltx-image-to-video",
+          "name": "LTX 2.5",
+          "title": "LTX-2.5 Image to video",
+          "fields": [
+            "prompt",
+            "first",
+            "last",
+            "length",
+            "size",
+            "seed"
+          ],
+          "greyed": {},
+          "seconds": 14,
+          "advanced": [
+            {
+              "path": "sample1.steps",
+              "param": {
+                "name": "steps",
+                "type": "int",
+                "label": "Steps",
+                "default": 8,
+                "min": 1,
+                "max": 50,
+                "step": 1
+              }
+            }
+          ]
+        },
+        {
+          "workflow_id": "echo-video",
+          "name": "Echo video",
+          "title": "Echo video",
+          "fields": [
+            "prompt",
+            "length",
+            "size"
+          ],
+          "greyed": {
+            "first": "Echo video can't take a first frame",
+            "last": "Echo video can't take a last frame",
+            "seed": "Echo video can't take a seed"
+          },
+          "seconds": null,
+          "advanced": []
+        }
+      ]
+    },
+    {
+      "kind": "music",
+      "fields": [],
+      "models": [],
+      "off": "Comes with Create's Music and Sound"
+    }
+  ]
+}

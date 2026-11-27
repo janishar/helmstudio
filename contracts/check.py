@@ -107,6 +107,7 @@ HTTP_SCHEMAS = [
     "Skill", "SkillList", "SkillFile",  # 1.64
     "MagicDoc", "MagicBoard", "MagicBoardList", "MagicBoardCreate", "MagicEdits", "MagicEditResult", "MagicAgentView",
     "MagicRevisionList", "MagicSnapshot", "MagicSnapshotList",  # 1.80
+    "MagicKinds", "MagicSettings", "MagicPick", "MagicRunCreate", "MagicRunStarted", "MagicPlan",  # 1.81
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -428,6 +429,7 @@ def check_canonical_registries() -> None:
             errs += [f"studio: {p}" for p in graph_problems(wf, {k: v | {"envs": [wf["env"]]} for k, v in kinds.items()})
                      if p[0].startswith(("studio_", "preset_"))]
             errs += group_errors(wf.get("studio") or {})
+            errs += standard_errors(wf, kinds)
             for e in errs:
                 fail(f"fixtures/registry/{prefix}workflows.valid.json {wf['id']}: {e}")
             if not errs:
@@ -437,6 +439,51 @@ def check_canonical_registries() -> None:
         if (got := upload_limits(nodes)) != {"image_max_side": want}:
             fail(f"upload_limits: {got}, want image_max_side {want}")
     print("ok   upload_limits over the canonical registries")
+
+
+# API 1.81: a workflow's `standard` block (registry.schema.json standard; README, Magic: the standard request)
+STANDARD_MEDIA = {"image": "image", "video": "video", "voice": "audio", "music": "audio", "sound": "audio"}
+STANDARD_TYPES = {"prompt": {"text", "string"}, "line": {"text", "string"}, "length": {"frames"}, "width": {"int"},
+                  "height": {"int"}, "seed": {"seed"}, "voice": {"voice"}}
+
+
+def standard_errors(wf: dict, kinds: dict) -> list[str]:
+    """Why a workflow's standard block does not fit it: its kind against the media, each field's param (unwired, of
+    a type that field fills), each `set` key a param of the workflow."""
+    st = wf.get("standard")
+    if not st:
+        return []
+    errs = []
+    if STANDARD_MEDIA[st["kind"]] != wf.get("media", "image"):
+        errs.append(f"standard: kind {st['kind']} does not make {wf.get('media', 'image')} takes")
+
+    def param(path: str):
+        nid, name = path.split(".", 1)
+        node = wf["nodes"].get(nid)
+        if node is None:
+            return None, f"no node {nid}"
+        if name in (node.get("in") or {}):
+            return None, f"{path} is wired"
+        p = next((x for x in kinds.get(node["kind"], {}).get("params", []) if x["name"] == name), None)
+        return p, None if p else f"{node['kind']} has no param {name}"
+
+    for field, path in st["fields"].items():
+        p, why = param(path)
+        if why:
+            errs.append(f"standard.fields.{field}: {why}")
+            continue
+        item = p.get("item") or {}
+        image_rows = p["type"] == "rows" and "Image" in item.values()
+        timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in item.values())
+        ok = (p["type"] in STANDARD_TYPES[field] if field in STANDARD_TYPES
+              else image_rows if field == "refs"
+              else p["type"] == "image" or (image_rows and timed))
+        if not ok:
+            errs.append(f"standard.fields.{field}: {path} is a {p['type']} param")
+    for path in st.get("set") or {}:
+        if (why := param(path)[1]):
+            errs.append(f"standard.set.{path}: {why}")
+    return errs
 
 
 def group_errors(studio: dict) -> list[str]:

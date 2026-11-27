@@ -3964,8 +3964,8 @@ Numbers in fixtures compare by value (1 = 1.0).
 
 A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
 tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
-studio; the standard request per kind, runs and takes on blocks, Send to Timeline and the Assistant's tools come with
-later phases (plan 39 §45.11), and so do their routes.
+studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); Send to Timeline and the
+Assistant's tools come with later phases (plan 39 §45.11), and so do their routes.
 
 - **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
   "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
@@ -4028,6 +4028,63 @@ later phases (plan 39 §45.11), and so do their routes.
   block flat with `at`/`length` in frames and `at_s`/`end_s`, its status (draft or done until runs come), the take it
   shows, its prompt or line, what it is tied to and its badges; transitions with where their join is; assets with
   the blocks they are used in; no signed links.
+
+### Magic: the standard request (API 1.81; plan 39 phase D; normative)
+
+- **A workflow serves a kind** by its registry entry's `standard` block (registry.schema.json `standard`): `kind`
+  (image, video, voice; music and sound with plan 38's packs), `model` (its name in the picker), `fields` (each
+  shared field it fills → the `<node>.<param>` it fills), `set` (inputs every standard run of it carries:
+  `canvas.mode: fixed`) and `seconds` (the declared GPU seconds per unit, below). The runner checks it at start and
+  `make contracts-check` checks the canonical ones: the kind fits the media, each field's param is unwired and of a
+  type the field fills (prompt and line: text or string; refs: rows with an Image item; first and last: an image
+  param, or rows with an Image item and a `position: seconds` field; length: frames; width and height: int; seed:
+  seed; voice: voice), each `set` key a param. Today: Qwen Image (`qwen-image`), MiniMax H3 Image, LTX 2.5
+  (`ltx-image-to-video`), MiniMax H3 (`minimax-h3-image-to-video`), Qwen3-TTS and ZONOS3 (their voice-overs); the
+  fake host's Echo, Echo video, Echo keyframes and Echo voice.
+- **`GET /v1/studio/magic/kinds`**: per kind its shared fields in form order (image: prompt, refs, size, seed; video:
+  prompt, first, last, length, size, seed; voice: line, voice, seed) and its models in registry order, each with the
+  fields it fills, `greyed` (every other field of the kind → `<model> can't take a last frame`), `seconds`, and
+  `advanced` (every other param of its workflow that a form can set: not rows, image, media, voice or span; not
+  wired; the workflow's value as `default`). Music and Sound carry `off` (`Comes with Create's Music and Sound`)
+  until a model serves them; a board frame carries `off` (`Board frames come with the storyboard`).
+- **`MagicRequest`** (a block's `request`): `model` (a workflow id from the kinds; absent: the kind's first),
+  `prompt` or `line`, `refs`, `first` and `last` (`MagicRef`s), `width` and `height` (absent: the board's), `seed`,
+  `count` (1-4 runs), `voice` (an asset; its `voice_id`) or `voice_id` (a saved voice), `advanced`
+  (`<node>.<param>` → value). **Studio's resolver** turns it into a normal run request of that workflow: each field
+  the model fills goes to its param (a picture: the block's take for `take`, else the first or last frame take of
+  its video, made at once as `POST /takes/{id}/frame` does; an asset: its sheet's first take; a rows param gets
+  `{image: {take_id}}` items, a frame row at `seconds` 0 or the clip's last frame; such a rows param left empty
+  bypasses its node), the length on the frames param's grid at its fps, the size scaled to fit the params' bounds
+  and snapped to their steps; `set` then `advanced` fill the rest, the shared fields winning. A field the model
+  cannot fill is left out (the form greys it). Everything else is the run's own rules and 422s.
+
+### Magic: runs (API 1.81; normative)
+
+- **`POST …/boards/{board_id}/run {revision, blocks | lane | stale}`**: 202 `MagicRunStarted {board, started,
+  skipped}`. Each block's request is resolved and run `count` times (seeds `seed`, `seed + 1`, …) in the board's
+  own session (`MagicBoard.session_id`, made at the first run, titled `Magic · <board>`, hidden from GET
+  /v1/studio/sessions); `magic_runs` keeps run → block with the hash of the block's inputs then. Named `blocks` must
+  all run (422 with why, `Shot 2: …`; 409 `Shot 2 is already running`); a `lane`'s or `stale`'s (every block not
+  done) that cannot are `skipped` with why. 409 when `revision` is not the current one.
+- **Takes** join their block as the projector stores them: a studio revision appends the take id to the block's
+  `takes` (undo skips it, as the Timeline's fills); a block gone since leaves the take in the gallery. The board's
+  session events (`GET /v1/studio/sessions/{session_id}/events`) carry every run's status, progress and outputs: the
+  page reads the board again on them.
+- **`MagicBoard`** carries `runs` (every block's, oldest first, the last 20 each: status, progress, takes, seed,
+  `current`, `by` user or assistant, `render_s`: the run history), `takes` (the document's takes with signed links
+  and seeds) and `status` per block, **derived**: running (a run queued or running), else done (its shown take, the
+  pinned or latest, came from a run whose inputs hash is the block's now, or from no run of the board), out_of_date
+  (they differ: its request, the pictures its first, last and refs pick, the frame it was made from), failed (no
+  take, its last run failed), draft (no take). The agent view's `status` is the same.
+- **`POST …/boards/{board_id}/plan {blocks | lane | stale}`**: `MagicPlan`, nothing stored. Per block `seconds`
+  (all its runs), `source`, `host` and `peak_gb` (as POST /runs/plan) or `reason` it cannot run; the estimate is
+  **yours** (the median over your last 5 takes of that workflow on that host of render_s per unit, × the block's
+  units), else **pack** (`standard.seconds` × units), else **unknown** (null). Units: an image's megapixels, a
+  video's seconds × its pixels / (1280 × 720), a voice's seconds. Per lane and in all (null when any is unknown);
+  `order` (board frames first, then lane by lane in time); **the ask rule** `ask`: true when a run other than a
+  board frame has no estimate or the total is above `ask_above_gpu_minutes`, with `ask_text` (`3 shots, about 6
+  min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
+- **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 5; `magic_settings`).
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 

@@ -35,6 +35,15 @@
             "media": "echo.image"
           }
         }
+      },
+      "standard": {
+        "kind": "image",
+        "model": "Echo",
+        "fields": {
+          "prompt": "prompt.text",
+          "refs": "echo.refs"
+        },
+        "seconds": 1
       }
     },
     {
@@ -93,6 +102,19 @@
             "media": "sample.video"
           }
         }
+      },
+      "standard": {
+        "kind": "video",
+        "model": "Echo keyframes",
+        "fields": {
+          "prompt": "prompt.text",
+          "first": "keyframes.images",
+          "last": "keyframes.images",
+          "length": "duration.frames",
+          "width": "canvas.width",
+          "height": "canvas.height"
+        },
+        "seconds": 0.5
       }
     },
     {
@@ -423,6 +445,17 @@
             "media": "video.video"
           }
         }
+      },
+      "standard": {
+        "kind": "video",
+        "model": "Echo video",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "duration.frames",
+          "width": "canvas.width",
+          "height": "canvas.height"
+        },
+        "seconds": 0.5
       }
     },
     {
@@ -554,6 +587,16 @@
             "media": "speak.audio"
           }
         }
+      },
+      "standard": {
+        "kind": "voice",
+        "model": "Echo voice",
+        "fields": {
+          "line": "prompt.text",
+          "voice": "speak.voice",
+          "seed": "speak.seed"
+        },
+        "seconds": 0.2
       }
     },
     {
