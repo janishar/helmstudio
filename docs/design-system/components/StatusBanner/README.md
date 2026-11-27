@@ -8,3 +8,5 @@ One banner for the whole app while the studio isn't answering (components/status
 - While it shows: an ErrorNote that says the same ("The studio isn’t answering.") is held back (one message, not five), the Generate keys grey with "Studio isn’t answering", and the status tile says "Studio down".
 
 The consumer provides nothing: the shell mounts it once; every call reports to it through the shared client.
+
+When the app itself can't load (Kong has no healthy upstream, e.g. web is being rebuilt) the banner can't show; Kong serves its own page to browsers instead (kong/error.html, ErrorStates a4): Forest ink `g` ground, the h mark, **"helmstudio is starting"**, "The app is restarting or not reachable. This page retries by itself." in `t2`, a Retry button in `a1` / `on1` counting down 3 s and reloading by itself, and Kong's message and request id small and muted at the bottom. Self-contained (inline CSS, no fetches); other Kong errors (404, 429) read "Something went wrong" with no auto retry.

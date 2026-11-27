@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>helmstudio</title>
+<!-- Kong's HTML error page (KONG_ERROR_TEMPLATE_HTML). Filled with string.format: the first format slot is the message, the second the
+     request id; a literal percent sign must be written doubled. Forest ink tokens: g, t1, t2, a1, on1; the h mark from docs/brand/logo/a-as-drawn/mark.svg. -->
+<style>
+  html, body { margin: 0; height: 100vh; background: #0e1512; color: #f0f2e8;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
+  main { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 0 16px; text-align: center; }
+  h1 { margin: 6px 0 0; font-size: 22px; font-weight: 600; }
+  p { margin: 0; color: #a9b8ab; max-width: 420px; }
+  button { margin-top: 8px; padding: 8px 18px; border: 0; border-radius: 8px; background: #b9e37a; color: #17200a;
+    font: inherit; font-weight: 600; cursor: pointer; }
+  small { position: fixed; bottom: 12px; left: 0; right: 0; text-align: center; color: #a9b8ab; opacity: .6;
+    font-size: 11px; }
+</style>
+</head>
+<body>
+<main>
+  <svg viewBox="0 0 24 24" width="56" height="56" aria-label="helmstudio"><path d="M8 16C8 12.4 10.4 10.6 13.3 10.6S18.4 12.6 18.4 16V21" fill="none" stroke="#b9e37a" stroke-width="3.2" stroke-linecap="round"/><path d="M8 7V21" stroke="#ff8552" stroke-width="3.2" stroke-linecap="round"/><path d="M5.3 1.6H10.7A.9.9 0 0 1 11.6 2.5V5L8 8.4L4.4 5V2.5A.9.9 0 0 1 5.3 1.6Z" fill="#ff8552"/></svg>
+  <h1 id="t">helmstudio is starting</h1>
+  <p id="d">The app is restarting or not reachable. This page retries by itself.</p>
+  <button onclick="location.reload()">Retry <span id="c"></span></button>
+</main>
+<small><span id="m">%s</span> · request_id: %s</small>
+<script>
+  // Only the gateway's "no upstream" errors (500/502/503/504) say "starting" and retry; others (404, 429) say so plainly.
+  var down = /upstream|unexpected|unavailable|timed out|resolution|peer/i.test(document.getElementById('m').textContent);
+  if (!down) {
+    document.getElementById('t').textContent = 'Something went wrong';
+    document.getElementById('d').textContent = document.getElementById('m').textContent + '.';
+  } else {
+    var n = 3, c = document.getElementById('c');
+    (function tick() { c.textContent = '(' + n + ')'; if (n-- <= 0) location.reload(); else setTimeout(tick, 1000); })();
+  }
+</script>
+</body>
+</html>

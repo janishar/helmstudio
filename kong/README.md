@@ -13,6 +13,8 @@ The gateway: Kong 3.9 DB-less ([kong.yml](kong.yml), baked into the image) plus 
 | `/files/` | files:8080 | no API key: the HMAC-signed, expiring link is the auth; streamed (no request buffering), up to 2 GiB (a LoRA PUT) |
 | `/` | web:3000 | no API key: the BFF adds the web app's key server-side; 1 h read timeout (SSE) |
 
+Error pages: browsers (Accept: text/html) get [error.html](error.html) (`KONG_ERROR_TEMPLATE_HTML`, a `string.format` template: two `%s`, message then request id; write a literal percent as `%%`); JSON and plain stay Kong's.
+
 Global plugins: `apikey-auth-plugin` (key → `GET http://auth:8080/verify/apikey`, 2 s timeout, fail closed with 503,
 SHA-256-keyed cache 60 s / 10 s, raw key stripped, `X-Client-Id` / `X-Key-Scopes` set), `correlation-id`
 (`X-Correlation-ID`), `request-size-limiting` (256 MB).
