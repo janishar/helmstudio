@@ -184,6 +184,9 @@ func reqRefs(req map[string]any) []map[string]any {
 // magicModel is the workflow a block's request runs: its `model` when that serves the kind, else the kind's first.
 func magicModel(ws []registry.Workflow, kind string, req map[string]any) (registry.Workflow, string) {
 	models := standardModels(ws, kind)
+	if req["morph"] == true { // API 1.82: a morph's model takes a first and a last frame
+		models = morphModels(models)
+	}
 	if want := reqString(req, "model"); want != "" {
 		for _, w := range models {
 			if w.ID == want {
@@ -671,7 +674,7 @@ var openRun = map[string]bool{"queued": true, "running": true}
 // blockStatuses derives every block's status from the document and its runs (contracts/README.md, Magic: runs).
 func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
 	out := map[string]dto.MagicStatus{}
-	for _, b := range d.Blocks {
+	for _, b := range withMorphs(d) { // API 1.82: morphs too
 		var mine []magicRunRow
 		for _, r := range runs {
 			if r.Block == b.ID {
@@ -724,7 +727,7 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 			by = "assistant"
 		}
 		current := false
-		if b := findBlock(d, r.Block); b != nil {
+		if b := runBlockOf(d, r.Block); b != nil {
 			current = r.InputsHash == inputsHash(d, b)
 		}
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
@@ -786,7 +789,7 @@ func pickBlocks(d magic.Doc, pick dto.MagicPick, status map[string]dto.MagicStat
 	switch {
 	case pick.Blocks != nil:
 		for _, id := range pick.Blocks {
-			b := findBlock(d, id)
+			b := runBlockOf(d, id) // API 1.82: or a morph
 			if b == nil {
 				return nil, network.NewUnprocessableError("unknown block "+id, nil)
 			}
@@ -796,13 +799,13 @@ func pickBlocks(d magic.Doc, pick dto.MagicPick, status map[string]dto.MagicStat
 		if !slices.ContainsFunc(d.Lanes, func(l *magic.Lane) bool { return l.ID == *pick.Lane }) {
 			return nil, network.NewUnprocessableError("unknown lane "+*pick.Lane, nil)
 		}
-		for _, b := range d.Blocks {
+		for _, b := range withMorphs(d) {
 			if b.Lane == *pick.Lane {
 				out = append(out, b)
 			}
 		}
 	default:
-		for _, b := range d.Blocks {
+		for _, b := range withMorphs(d) {
 			if st := status[b.ID].Status; st != "done" && st != "running" {
 				out = append(out, b)
 			}

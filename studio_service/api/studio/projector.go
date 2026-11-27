@@ -236,6 +236,9 @@ func (p *Projector) applyOutput(ctx context.Context, tx pgx.Tx, run model.Run, e
 			err = magicFill(ctx, tx, run, takeID) // API 1.81: a board run's take joins its block
 		}
 		if err == nil {
+			err = morphFill(ctx, tx, run, takeID) // API 1.82: a morph's take joins its transition
+		}
+		if err == nil {
 			err = p.nameTimelinesOf(ctx, tx, run) // API 1.76: an untitled sequence takes its first prompt's name
 		}
 	}

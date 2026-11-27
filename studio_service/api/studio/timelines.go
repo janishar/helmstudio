@@ -593,19 +593,8 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 // insertTimeline stores a new sequence (revision 1) with its own session and answers it in out.
 func (s *Service) insertTimeline(ctx context.Context, tx pgx.Tx, caller common.Caller, name, source string, doc timeline.Doc,
 	defaults any, out *dto.Timeline) error {
-	sessionID := utility.NewID()
-	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, name); err != nil {
-		return err
-	}
-	data, _ := json.Marshal(clean(doc, nil))
-	row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id, title_source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+timelineCols, utility.NewID(), caller.ID, name, data,
-		defaults, sessionID, source)
+	row, err := insertTimelineRow(ctx, tx, caller.ID, common.ViaOf(caller.Via), name, source, doc, defaults)
 	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
-		VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
 		return err
 	}
 	if err := askTimelineName(ctx, tx, s.registry, s.remoteOn, &row); err != nil {
@@ -613,6 +602,24 @@ func (s *Service) insertTimeline(ctx context.Context, tx pgx.Tx, caller common.C
 	}
 	*out, err = s.timelineDTO(ctx, tx, row)
 	return err
+}
+
+// insertTimelineRow stores a new sequence (revision 1, by the user through via) with its own session.
+func insertTimelineRow(ctx context.Context, tx pgx.Tx, ownerID, via, name, source string, doc timeline.Doc, defaults any) (timelineRow, error) {
+	sessionID := utility.NewID()
+	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, ownerID, name); err != nil {
+		return timelineRow{}, err
+	}
+	data, _ := json.Marshal(clean(doc, nil))
+	row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id, title_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+timelineCols, utility.NewID(), ownerID, name, data,
+		defaults, sessionID, source)
+	if err != nil {
+		return row, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
+		VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, ownerID, data, via)
+	return row, err
 }
 
 // cloneDoc is src with new clip ids (links follow) and no pending shots (a V1 slot stays empty, a New line's

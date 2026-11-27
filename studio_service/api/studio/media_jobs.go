@@ -65,17 +65,18 @@ type mediaRow struct {
 	StartedAt, FinishedAt                *time.Time
 	TakeIDs                              []string // thumbs: its takes, in input order
 	VideoTakeID                          *string  // mux (API 1.79): the video take; SourceTakeID is the audio
+	SendID                               *string  // bake (API 1.82): the Magic send it bakes for
 }
 
 const mediaCols = `id::text, owner_id::text, kind, status, host, env, timeline_id::text, timeline_name, revision, parents,
 	source_take_id::text, at, mode, reason, frames, progress, take_id::text, failure, created_at, heard_at, started_at,
-	finished_at, take_ids::text[], video_take_id::text`
+	finished_at, take_ids::text[], video_take_id::text, send_id::text`
 
 func (r mediaRow) dto() dto.MediaJob {
 	return dto.MediaJob{ID: r.ID, Kind: r.Kind, Status: r.Status, Host: r.Host, Env: r.Env, TimelineID: r.TimelineID,
 		Revision: r.Revision, SourceTakeID: r.SourceTakeID, Mode: r.Mode, Reason: r.Reason, Progress: nullable(r.Progress),
 		TakeID: r.TakeID, Failure: nullable(r.Failure), CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt,
-		VideoTakeID: r.VideoTakeID}
+		VideoTakeID: r.VideoTakeID, SendID: r.SendID}
 }
 
 // mediaCommand is cmd.media.job's data.
@@ -85,6 +86,7 @@ type mediaCommand struct {
 	OutputPrefix string                `json:"output_prefix"`
 	Export       *mediaExport          `json:"export,omitempty"`
 	Frame        *mediaFrame           `json:"frame,omitempty"`
+	Bake         *timeline.BakeJob     `json:"bake,omitempty"` // API 1.82
 	host, env    string
 }
 
@@ -149,16 +151,17 @@ func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCom
 	}
 	var open int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')
-		AND kind <> 'thumbs'`, j.OwnerID).Scan(&open); err != nil {
+		AND kind NOT IN ('thumbs', 'bake')`, j.OwnerID).Scan(&open); err != nil {
 		return mediaRow{}, err
-	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" {
+	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" && j.Kind != "bake" { // a send's bakes are its own
 		return mediaRow{}, network.NewConflictError(fmt.Sprintf("You have %d unfinished exports or frames; wait for one to finish.",
 			MaxOpenMediaJobs), nil)
 	}
 	row, err := one[mediaRow](ctx, tx, `INSERT INTO media_jobs (id, owner_id, kind, host, env, timeline_id, timeline_name,
-		revision, parents, source_take_id, at, mode, reason, frames, take_ids, video_take_id) VALUES ($1, $2, $3, $4, $5, $6, $7,
-		$8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID,
-		j.TimelineName, j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs, j.VideoTakeID)
+		revision, parents, source_take_id, at, mode, reason, frames, take_ids, video_take_id, send_id) VALUES ($1, $2, $3, $4, $5,
+		$6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env,
+		j.TimelineID, j.TimelineName, j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs,
+		j.VideoTakeID, j.SendID)
 	if err != nil {
 		return row, err
 	}
@@ -457,6 +460,9 @@ func endMedia(ctx context.Context, tx pgx.Tx, job *mediaRow, status string, fail
 	row, err := one[mediaRow](ctx, tx, `UPDATE media_jobs SET status = $2, failure = $3::jsonb, finished_at = clock_timestamp()
 		WHERE id = $1 RETURNING `+mediaCols, job.ID, status, string(f))
 	*job = row
+	if err == nil && row.Kind == "bake" && status != "succeeded" { // API 1.82: its send fails with it
+		err = bakeFailed(ctx, tx, row)
+	}
 	if err == nil && row.Kind == "thumbs" && status != "succeeded" {
 		_, err = tx.Exec(ctx, `UPDATE takes SET thumb_tries = thumb_tries + 1 WHERE id = ANY($1::uuid[]) AND thumb IS NULL`,
 			row.TakeIDs)
@@ -892,6 +898,9 @@ func (p *Projector) applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRo
 			progress = CASE WHEN kind = 'export' THEN jsonb_build_object('frames', frames, 'total', frames) ELSE progress END,
 			finished_at = clock_timestamp(), started_at = coalesce(started_at, clock_timestamp()) WHERE id = $1`,
 			job.ID, takeID, mode, reason)
+		if err == nil && job.Kind == "bake" { // API 1.82: the send's sequence once its last bake is in
+			err = bakeDone(ctx, tx, job)
+		}
 		return err
 	}
 	log.Printf("media projector: job %s: unknown status %q", job.ID, data.Status)
@@ -949,6 +958,9 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, store storage.Store, job med
 			return "", "the result is outside the job's prefix", nil
 		}
 		return id, "", insertMuxTake(ctx, tx, job, id, r)
+	}
+	if job.Kind == "bake" {
+		return storeBakeTake(ctx, tx, job, id, r)
 	}
 	prefix := common.OwnerPrefix(job.OwnerID) + "exports/" + job.ID + "/"
 	v := r.Video

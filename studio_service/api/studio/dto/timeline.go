@@ -573,6 +573,7 @@ type MediaJob struct {
 	StartedAt    *time.Time `json:"started_at"`
 	FinishedAt   *time.Time `json:"finished_at"`
 	VideoTakeID  *string    `json:"video_take_id,omitempty"` // API 1.79, mux only
+	SendID       *string    `json:"send_id,omitempty"`       // API 1.82, bake only
 }
 
 // MediaJobList is GET …/exports.

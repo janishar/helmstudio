@@ -168,27 +168,8 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 			}
 			next++
 		}
-		matrix, rng := "bt601", "tv"
-		if s := takes[c.Take()].Stream; s != nil {
-			switch s.Color["space"] {
-			case "bt709":
-				matrix = "bt709"
-			case "bt2020nc", "bt2020_ncl":
-				matrix = "bt2020nc"
-			}
-			if r := s.Color["range"]; r == "pc" || r == "full" {
-				rng = "pc"
-			}
-		}
-		steps = append(steps, "setpts=PTS-STARTPTS",
-			fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=bicubic+accurate_rnd+bitexact:in_color_matrix=%s:in_range=%s:out_color_matrix=bt709:out_range=tv",
-				tg.Width, tg.Height, matrix, rng),
-			fmt.Sprintf("pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black", tg.Width, tg.Height),
-			"setsar=1", "fps="+rate, "format=yuv420p",
-			// every chain on one timebase: xfade refuses two sides counting in different units after a concat
-			"settb=AVTB",
-			// the frames carry their colour: videotoolbox writes its own VUI and drops primaries and transfer
-			"setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709")
+		steps = append(steps, "setpts=PTS-STARTPTS")
+		steps = append(steps, pictureSteps(tg, rate, takes[c.Take()].Stream)...)
 		chains = append(chains, strings.Join(steps, ",")+"["+label+"]")
 		vlabels = append(vlabels, label)
 	}
@@ -267,6 +248,32 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 	}
 	return append(args, "-map", "[aout]", "-map_metadata", "-1", "-c:a", "aac", "-b:a", "192k",
 		"-ar", strconv.Itoa(tg.SampleRate), "-ac", "2", "-movflags", "+faststart", "-f", "mp4", "{out}")
+}
+
+// pictureSteps put a clip's frames on the target: scaled to fit (its own colour matrix and range read from stream),
+// padded black, square pixels, the target's rate, yuv420p on one timebase, tagged bt709.
+func pictureSteps(tg Target, rate string, stream *Stream) []string {
+	matrix, rng := "bt601", "tv"
+	if s := stream; s != nil {
+		switch s.Color["space"] {
+		case "bt709":
+			matrix = "bt709"
+		case "bt2020nc", "bt2020_ncl":
+			matrix = "bt2020nc"
+		}
+		if r := s.Color["range"]; r == "pc" || r == "full" {
+			rng = "pc"
+		}
+	}
+	return []string{
+		fmt.Sprintf("scale=%d:%d:force_original_aspect_ratio=decrease:flags=bicubic+accurate_rnd+bitexact:in_color_matrix=%s:in_range=%s:out_color_matrix=bt709:out_range=tv",
+			tg.Width, tg.Height, matrix, rng),
+		fmt.Sprintf("pad=%d:%d:(ow-iw)/2:(oh-ih)/2:color=black", tg.Width, tg.Height),
+		"setsar=1", "fps=" + rate, "format=yuv420p",
+		// every chain on one timebase: xfade refuses two sides counting in different units after a concat
+		"settb=AVTB",
+		// the frames carry their colour: videotoolbox writes its own VUI and drops primaries and transfer
+		"setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709"}
 }
 
 func in(n int) string { return "{in:" + strconv.Itoa(n) + "}" }

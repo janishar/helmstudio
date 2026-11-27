@@ -1,0 +1,155 @@
+package magic
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/helmstudio/studio_service/api/timeline"
+)
+
+const (
+	tA = "aaaaaaaa-0000-4000-8000-000000000001"
+	tB = "aaaaaaaa-0000-4000-8000-000000000002"
+	tC = "aaaaaaaa-0000-4000-8000-000000000003"
+	tM = "aaaaaaaa-0000-4000-8000-000000000004"
+	tV = "aaaaaaaa-0000-4000-8000-000000000005"
+)
+
+func sendBoard() Doc {
+	str := func(s string) *string { return &s }
+	return Doc{Target: DefaultTarget,
+		Lanes: []*Lane{{ID: "story", Name: "Storyboard", Role: "storyboard"}, {ID: "shots", Name: "Shots", Role: "shots"},
+			{ID: "lines", Name: "Lines", Role: "voice"}, {ID: "broll", Name: "B-roll", Role: "shots"}},
+		Blocks: []*Block{
+			{ID: "f1", Lane: "story", At: 0, Length: 48, Kind: "frame", Name: "Frame 1", Takes: []string{tC}},
+			{ID: "s1", Lane: "shots", At: 0, Length: 96, Kind: "video", Name: "Shot 1 · pier", Takes: []string{tA}},
+			{ID: "s2", Lane: "shots", At: 96, Length: 96, Kind: "video", Name: "Shot 2", Takes: []string{tB},
+				Effects: []Effect{{Name: "Grade · warm", Params: map[string]any{"temperature": 12.0, "contrast": 4.0}}}},
+			{ID: "s3", Lane: "shots", At: 192, Length: 96, Kind: "video", Name: "Shot 3", Takes: []string{tA}},
+			{ID: "s4", Lane: "shots", At: 300, Length: 48, Kind: "video", Name: "Shot 4"},
+			{ID: "v1", Lane: "lines", At: 100, Length: 300, Kind: "voice", Name: "Line 1", Takes: []string{tV}},
+			{ID: "b1", Lane: "broll", At: 0, Length: 48, Kind: "video", Name: "Cutaway", Takes: []string{tA}},
+		},
+		Links: []*Link{{Block: "v1", To: []string{"s2"}}},
+		Transitions: []*Transition{
+			{ID: "t1", Start: str("shots"), Kind: "fade", Length: 24},
+			{ID: "t2", Between: &[2]string{"s1", "s2"}, Kind: "wipe", Length: 12},
+			{ID: "t3", Between: &[2]string{"s2", "s3"}, Kind: "morph", Length: 24, Takes: []string{tM}},
+		},
+	}.filled()
+}
+
+func sendTakes() map[string]timeline.Take {
+	return map[string]timeline.Take{tA: {Kind: "video", DurationS: 4, HasAudio: true}, tB: {Kind: "video", DurationS: 4},
+		tC: {Kind: "image"}, tM: {Kind: "video", DurationS: 1}, tV: {Kind: "audio", DurationS: 20}}
+}
+
+// The send keeps every board time: V1's clips add up to the last shot's end, the joins' bakes and the morph take the
+// halves of their shots, the effects bake the rest of Shot 2, the gap before Shot 4 and Shot 4 itself are slots,
+// the voice is linked to Shot 2's clip and cut at V1's end; the sequence passes the Timeline's rules.
+func TestBuildSend(t *testing.T) {
+	out := BuildSend(sendBoard(), sendTakes(), map[string]string{"s3": "out_of_date"}, true)
+	v1 := out.Doc.Tracks[0].Clips
+	g := timeline.NewGrid(out.Doc.Target)
+	total := 0
+	for _, c := range v1 {
+		switch {
+		case c.Hold != nil:
+			total += g.F(*c.Hold)
+		default:
+			total += g.F(*c.Out) - g.F(*c.In)
+		}
+	}
+	if total != 348 {
+		t.Fatalf("V1 is %d frames, want 348: %+v", total, v1)
+	}
+	kinds := map[string]int{}
+	for _, b := range out.Bakes {
+		kinds[b.Kind]++
+	}
+	if kinds["fade_in"] != 1 || kinds["wipe"] != 1 || kinds["effects"] != 1 || len(out.Bakes) != 3 {
+		t.Fatalf("bakes %v", kinds)
+	}
+	for _, b := range out.Bakes {
+		if b.Kind == "wipe" {
+			if b.Frames != 12 || len(b.Sides) != 2 || b.Sides[0].Start != 90.0/24 || b.Sides[1].Pre != 6 {
+				t.Fatalf("wipe %+v", b)
+			}
+			if len(b.Sides[1].Filters) != 2 {
+				t.Fatalf("the wipe's second side has Shot 2's grade: %+v", b.Sides[1])
+			}
+		}
+	}
+	hows := map[string]string{}
+	for _, j := range out.Joins {
+		hows[j.Transition] = j.How
+	}
+	if hows["t1"] != "baked" || hows["t2"] != "baked" || hows["t3"] != "clip" {
+		t.Fatalf("joins %v", hows)
+	}
+	if len(out.Doc.Tracks) != 2 {
+		t.Fatalf("tracks %d", len(out.Doc.Tracks))
+	}
+	line := out.Doc.Tracks[1].Clips[0]
+	if line.Link == nil || *line.Out != (348.0-100)/24 {
+		t.Fatalf("line %+v", line)
+	}
+	linked := ""
+	for _, c := range v1 {
+		if c.ID == *line.Link {
+			linked = c.ID
+		}
+	}
+	if linked == "" {
+		t.Fatalf("the line's link %s is not a V1 clip", *line.Link)
+	}
+	want := []string{"Shot 3 is out of date", "Shot 4 has no take", "B-roll stays here", "Line 1 is cut"}
+	for _, w := range want {
+		found := false
+		for _, got := range out.Warnings {
+			found = found || strings.HasPrefix(got, w)
+		}
+		if !found {
+			t.Fatalf("no warning %q in %q", w, out.Warnings)
+		}
+	}
+	takes := sendTakes()
+	if _, probs := timeline.Normalize(out.Doc, takes, nil); probs != nil {
+		t.Fatalf("the sequence breaks the Timeline's rules: %v", probs)
+	}
+	for _, b := range out.Bakes {
+		job, err := timeline.BuildBake(out.Doc.Target, b.Kind, make([]timeline.BakeSide, len(b.Sides)), b.Frames)
+		if err != nil || !strings.Contains(strings.Join(job.Args, " "), "{out}") {
+			t.Fatalf("bake %s: %v", b.Kind, err)
+		}
+	}
+}
+
+// A dissolve goes as the Timeline's own when both takes have the media past the cut (the second clip starts half
+// the dissolve into its take), else it is baked; with keep false it is always baked.
+func TestBuildSendDissolve(t *testing.T) {
+	d := sendBoard()
+	d.Transitions = []*Transition{{ID: "t2", Between: &[2]string{"s1", "s2"}, Kind: "dissolve", Length: 12}}
+	d.Blocks[2].Effects = nil
+	takes := sendTakes()
+	takes[tB] = timeline.Take{Kind: "video", DurationS: 4.5}
+	takes[tA] = timeline.Take{Kind: "video", DurationS: 4.5}
+	out := BuildSend(d, takes, nil, true)
+	if out.Joins[0].How != "kept" || len(out.Bakes) != 0 {
+		t.Fatalf("want a kept dissolve: %+v %+v", out.Joins, out.Bakes)
+	}
+	c := out.Doc.Tracks[0].Clips[1]
+	if c.TransitionIn == nil || *c.In != 0.25 {
+		t.Fatalf("the second clip %+v", c)
+	}
+	if _, probs := timeline.Normalize(out.Doc, takes, nil); probs != nil {
+		t.Fatalf("rules: %v", probs)
+	}
+	if out := BuildSend(d, takes, nil, false); out.Joins[0].How != "baked" || len(out.Bakes) != 1 {
+		t.Fatalf("keep false: %+v", out.Joins)
+	}
+	takes[tB] = timeline.Take{Kind: "video", DurationS: 4}
+	if out := BuildSend(d, takes, nil, true); out.Joins[0].How != "baked" {
+		t.Fatalf("no handle: %+v", out.Joins)
+	}
+}

@@ -152,7 +152,9 @@ func storeBoard(ctx context.Context, tx pgx.Tx, row *boardRow, doc magic.Doc, w 
 		return err
 	}
 	_, err = tx.Exec(ctx, `DELETE FROM magic_board_revisions r WHERE r.board_id = $1 AND r.revision <= $2
-		AND NOT EXISTS (SELECT 1 FROM magic_snapshots s WHERE s.board_id = r.board_id AND s.revision = r.revision)`,
+		AND NOT EXISTS (SELECT 1 FROM magic_snapshots s WHERE s.board_id = r.board_id AND s.revision = r.revision)
+		AND NOT EXISTS (SELECT 1 FROM magic_sends m WHERE m.board_id = r.board_id AND m.revision = r.revision
+			AND m.removed_at IS NULL)`, // API 1.82: a listed send's revision is kept
 		row.ID, next-keptRevisions)
 	*row = updated
 	return err
@@ -413,6 +415,9 @@ func (s *Service) restoreBoard(ctx context.Context, caller common.Caller, id str
 		doc, err := magic.Parse(raw)
 		if err == nil { // API 1.81: an undo, redo or restore never takes a run's take back
 			doc, err = withRunTakes(ctx, tx, row.ID, doc)
+		}
+		if err == nil { // API 1.82: nor a morph's
+			doc, err = withMorphTakes(ctx, tx, row.ID, doc)
 		}
 		if err != nil {
 			return err
