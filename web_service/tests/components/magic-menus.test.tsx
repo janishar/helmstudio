@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { closeMenu, openMenu, type Item, type MenuItem } from "@/components/context-menu";
 import {
-  NOT_YET,
   assetMenu,
   blockMenu,
   emptyMenu,
@@ -50,6 +49,19 @@ function actOn(
   } as Act & { edit: ReturnType<typeof vi.fn>; run: ReturnType<typeof vi.fn> };
 }
 const block = (d: Doc, id: string) => d.blocks.find((b) => b.id === id)!;
+/** studio's models (API 1.85): music and sound, MMAudio takes a shot's video */
+const MODELS: Act["models"] = (k) =>
+  k === "music"
+    ? [
+        { id: "minimax-music3", name: "MiniMax Music 3", video: false },
+        { id: "ace-step-music", name: "ACE-Step 1.5", video: false },
+      ]
+    : k === "sound"
+      ? [
+          { id: "sa3-sound", name: "Stable Audio 3 Small-SFX", video: false },
+          { id: "mmaudio-sound", name: "MMAudio", video: true },
+        ]
+      : [];
 /** the menu's labels, "-" for a separator */
 const labels = (items: Item[]) =>
   items.filter((x): x is MenuItem | "-" => !!x).map((x) => (x === "-" ? "-" : x.label));
@@ -79,7 +91,27 @@ describe("a block's menu, by kind", () => {
     ]);
     expect(item(m.items, "Run").keys).toBe("≈ 1:50");
     expect(item(m.items, "Delete").danger).toBe(true);
-    expect(item(m.items, "Make sound from video").off).toBe(NOT_YET);
+    // plan 39 phase H: a sound under the shot, tied to it, made from its video on a model that takes one, then run
+    expect(item(m.items, "Make sound from video").off).toBe("No sound model takes a video");
+    const withModels = actOn({ models: MODELS, runWhenAdded: vi.fn() });
+    const make = item(
+      blockMenu(withModels, block(withModels.doc, "s2")).items,
+      "Make sound from video",
+    );
+    expect(make.off).toBeUndefined();
+    make.onPick!();
+    const [add, link] = withModels.edit.mock.calls[0][0];
+    expect(add).toMatchObject({
+      op: "add",
+      mode: "overwrite",
+      block: {
+        lane: "sound",
+        kind: "sound",
+        request: { kind: "sound", model: "mmaudio-sound", from: "s2" },
+      },
+    });
+    expect(link).toEqual({ op: "link", block: add.block.id, to: ["s2"] });
+    expect(withModels.runWhenAdded).toHaveBeenCalledWith(add.block.id);
     item(m.items, "Split at playhead").onPick!();
     expect(a.edit).toHaveBeenCalledWith({ op: "split", id: "s2", at: 240 });
     item(m.items, "Delete").onPick!();
@@ -131,11 +163,26 @@ describe("a block's menu, by kind", () => {
       "-",
       "Delete",
     ]);
-    expect(item(music.items, "Run").off).toBe(NOT_YET);
+    expect(item(music.items, "Run").off).toBeUndefined();
+    // Model ›: studio's music models, the default checked while the block names none
+    expect(item(music.items, "Model").off).toBe("No music model on any host");
+    const withModels = actOn({ models: MODELS });
+    const models = item(blockMenu(withModels, block(withModels.doc, "m1")).items, "Model")
+      .items as MenuItem[];
+    expect(models.map((x) => x.label)).toEqual(["MiniMax Music 3", "ACE-Step 1.5"]);
+    models[1].onPick!();
+    expect(withModels.edit.mock.calls[0][0].set.request.model).toBe("ace-step-music");
     const tie = item(music.items, "Tie to").items as MenuItem[];
     expect(tie.at(-1)).toMatchObject({ label: "Shots 1–3", checked: true });
     const sound = blockMenu(a, block(a.doc, "x2"));
     expect(labels(sound.items)).toContain("Make from Shot 2 video");
+    const sa = actOn({ models: MODELS });
+    item(blockMenu(sa, block(sa.doc, "x2")).items, "Make from Shot 2 video").onPick!();
+    expect(sa.edit.mock.calls[0][0].set.request).toMatchObject({
+      from: "s2",
+      model: "mmaudio-sound",
+    });
+    expect(sa.run).toHaveBeenCalledWith(["x2"]);
   });
 
   it("a storyboard frame: Redraw, Style ›, Generate from board (greyed once a shot is made from it)", () => {
@@ -237,7 +284,7 @@ describe("the other things on the board", () => {
       "From Gallery",
       "Playhead here",
     ]);
-    expect(item(m.items, "Add Music").off).toBe(NOT_YET);
+    expect(item(m.items, "Add Music").off).toBeUndefined();
     expect(item(m.items, "Paste").off).toBe("Copy a block first");
     item(m.items, "Add Video").onPick!();
     expect(a.add).toHaveBeenCalledWith("l7", 432, "video");
@@ -285,7 +332,7 @@ describe("the other things on the board", () => {
   });
 
   it("opens in the shared menu with its header, estimate and greyed reason", () => {
-    const a = actOn();
+    const a = actOn({ runOff: "Runs come with the standard request" });
     const m = blockMenu(a, block(a.doc, "m1"));
     render(
       <button type="button" onContextMenu={(e) => openMenu(e, m)}>
@@ -297,7 +344,7 @@ describe("the other things on the board", () => {
     expect(menu).toBeTruthy();
     const run = screen.getByRole("menuitem", { name: /Run/ });
     expect(run.getAttribute("aria-disabled")).toBe("true");
-    expect(run.title).toBe(NOT_YET);
+    expect(run.title).toBe("Runs come with the standard request");
     expect(screen.getByRole("menuitem", { name: /Delete/ }).className).toContain("danger");
   });
 });
@@ -338,7 +385,12 @@ describe("phase E: assets, views and the Gallery", () => {
     const x = { ...a.doc.assets[0], views: { "mara-2": "Side" } };
     const m = viewMenu(a, x, "mara-2");
     expect(m.title).toBe("@mara · Side");
-    expect(labels(m.items)).toEqual(["Rename view", "Make it the first", "-", "Take off the sheet"]);
+    expect(labels(m.items)).toEqual([
+      "Rename view",
+      "Make it the first",
+      "-",
+      "Take off the sheet",
+    ]);
     item(m.items, "Make it the first").onPick!();
     expect(a.edit).toHaveBeenLastCalledWith({
       op: "asset",
@@ -374,6 +426,8 @@ describe("phase E: assets, views and the Gallery", () => {
     const lines = a.doc.lanes.find((l) => l.id === "lines")!;
     item(emptyMenu(a, lines, 0).items, "From Gallery").onPick!();
     expect(gallery.mock.calls[1][0].kind).toBe("audio");
-    expect(item(emptyMenu(actOn(), l7, 0).items, "From Gallery").off).toBe("The Gallery is in studio");
+    expect(item(emptyMenu(actOn(), l7, 0).items, "From Gallery").off).toBe(
+      "The Gallery is in studio",
+    );
   });
 });

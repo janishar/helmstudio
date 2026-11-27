@@ -4,7 +4,9 @@
 import { describe, expect, it } from "vitest";
 import { statusOf, type Doc } from "@/lib/magic";
 import { emptyDoc } from "@/lib/magic-fixture";
+import { soundLook } from "@/components/magic/sound-mark";
 import {
+  advancedOf,
   modelOf,
   packSeconds,
   runLine,
@@ -75,5 +77,51 @@ describe("the board's takes from studio", () => {
     expect(packSeconds(m, { ...d.blocks[0], request: { kind: "video", count: 2 } }, d)).toBe(112);
     expect(runLine(run({}), 2).title).toBe("Run 2");
     expect(runLine(run({}), 2).sub).toMatch(/^seed 7 · 1:52 · /);
+  });
+});
+
+describe("phase H: music and sound", () => {
+  it("a music take's cover, a sound take's class, the look by the take's class", () => {
+    const d = doc([]);
+    d.blocks.push({
+      id: "m1",
+      lane: "l1",
+      at: 0,
+      length: 96,
+      kind: "music",
+      name: "Cue 1",
+      request: { kind: "music", prompt: "soft rain" },
+      takes: [T],
+      effects: [],
+    });
+    const url = "https://x/0.wav";
+    const out = takesOf(d, [run({ block: "m1", takes: [T] })], {
+      [T]: {
+        id: T,
+        kind: "audio",
+        url,
+        thumb_url: url,
+        poster_url: null,
+        seed: 7,
+        run_id: "r1",
+        sound: "music",
+      },
+    });
+    expect(out[T].art).toMatch(/^linear-gradient\(150deg/); // never the wav as a picture
+    expect(out[T].sound).toBe("music");
+    expect(soundLook(d.blocks[1], out[T])).toBe("music");
+    // a sound placed on a music block draws as a sound
+    expect(soundLook(d.blocks[1], { ...out[T], sound: "sound" })).toBe("sound");
+    expect(soundLook(d.blocks[0], undefined)).toBeNull();
+  });
+
+  it("a sound from a shot's video runs the first model that takes one, with its video workflow's Advanced", () => {
+    const sound = FAKE_KINDS.kinds.find((k) => k.kind === "sound")!;
+    expect(modelOf(FAKE_KINDS, { kind: "sound" })?.workflow_id).toBe("sa3-sound");
+    const m = modelOf(FAKE_KINDS, { kind: "sound", from: "s2" });
+    expect(m?.workflow_id).toBe("mmaudio-sound");
+    expect(modelOf(FAKE_KINDS, { kind: "sound", model: "mmaudio-video" })).toBe(m);
+    expect(advancedOf(m, { kind: "sound", from: "s2" })).toBe(sound.models[1].video!.advanced);
+    expect(modelOf(FAKE_KINDS, { kind: "music" })?.name).toBe("MiniMax Music 3");
   });
 });

@@ -33,8 +33,12 @@ export type MagicRequest = {
   /** a voice block's voice (an asset id), a frame's style */
   voice?: string;
   style?: "sketch" | "rough" | "full";
-  /** a sound made from a shot's video */
+  /** a sound made from a shot's video (its shown take; API 1.85: the model's video workflow runs) */
   from?: string;
+  /** a music block's lyrics (empty: an instrumental), key ("D minor", absent: Auto) and BPM (absent: Auto) (API 1.85) */
+  lyrics?: string;
+  key?: string;
+  bpm?: number;
   /** a storyboard frame's shot size, angle and move (API 1.83), and the model of the shot made from it */
   framing?: Framing;
   shot_model?: string;
@@ -320,7 +324,8 @@ function morphSet(
     t.request = op.request;
   }
   if (op.pinned !== undefined) {
-    if (op.pinned !== null && !(t.takes ?? []).includes(op.pinned)) return "That take isn't the morph's.";
+    if (op.pinned !== null && !(t.takes ?? []).includes(op.pinned))
+      return "That take isn't the morph's.";
     if (op.pinned === null) delete t.pinned;
     else t.pinned = op.pinned;
   }
@@ -515,7 +520,8 @@ export function apply(doc: Doc, op: Op): Applied {
         if (q.refs) q.refs = q.refs.filter((r) => !picks(r));
         if (picks(q.first)) delete q.first;
         if (picks(q.last)) delete q.last;
-        if (gone && q.prompt !== undefined) q.prompt = replaceMention(q.prompt, gone.handle, gone.name);
+        if (gone && q.prompt !== undefined)
+          q.prompt = replaceMention(q.prompt, gone.handle, gone.name);
       }
       return { doc: d };
     }
@@ -572,8 +578,7 @@ export const HANDLE = /^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$/;
 const unique = (ids: string[]) => [...new Set(ids)];
 /** Drops the names of takes no longer on its sheet (none: no views). */
 function keepViews(a: Asset) {
-  if (a.views)
-    for (const id of Object.keys(a.views)) if (!a.sheet.includes(id)) delete a.views[id];
+  if (a.views) for (const id of Object.keys(a.views)) if (!a.sheet.includes(id)) delete a.views[id];
   if (a.views && !Object.keys(a.views).length) delete a.views;
 }
 /** The first unused a<n> among the board's assets. */
@@ -757,6 +762,8 @@ export type TakeInfo = {
   /** a studio take's signed link and kind (the block dialog's stage) */
   url?: string;
   kind?: "image" | "video" | "audio";
+  /** an audio take's class (API 1.85): music draws an album cover, sound and voice an orb */
+  sound?: "music" | "sound" | "voice";
 };
 export type Takes = Record<string, TakeInfo>;
 

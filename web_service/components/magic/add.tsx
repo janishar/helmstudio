@@ -1,12 +1,12 @@
 "use client";
-// Add at a point (MagicBoard frame 2a, with 2b's greyed kinds until plan 38 ships Create's Music and Sound): the kind
-// with its orb, the length, Insert or Overwrite and what it starts from; then (frames 2c-2h, plan 39 phase D) the
-// standard request for an image, a video or a voice, and Generate. A board frame or a dialogue is added as a draft.
+// Add at a point (MagicBoard frame 2a): the kind with its orb, the length, Insert or Overwrite and what it starts from;
+// then (frames 2c-2h, plan 39 phases D and H) the standard request for an image, a video, a voice, music or a sound,
+// and Generate. A board frame or a dialogue is added as a draft.
 import { useEffect, useRef, useState } from "react";
 import { Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { KIND_ICON } from "@/components/magic/icons";
-import { NOT_YET, defaultKind } from "@/components/magic/menus";
+import { defaultKind } from "@/components/magic/menus";
 import { EstimateLine, RequestForm } from "@/components/magic/request";
 import { KIND_NAME } from "@/components/magic/icons";
 import {
@@ -41,7 +41,6 @@ const NAMES: Record<Pick, string> = {
   sound: "Sound",
   frame: "Frame",
 };
-const greyed = (k: Pick) => k === "music" || k === "sound";
 
 export type AddAt = { lane: string; at: number; kind?: Kind };
 
@@ -186,7 +185,7 @@ function Form({
   const fps = doc.target.fps;
   const lane = doc.lanes.find((l) => l.id === where.lane)!;
   const first = where.kind ?? defaultKind(lane);
-  const [kind, setKind] = useState<Pick>(greyed(first) ? "video" : first);
+  const [kind, setKind] = useState<Pick>(first);
   // the gap the point sits in, up to the next block on the lane
   const next = inLane(doc, lane.id).find((b) => b.at >= where.at);
   const prev = inLane(doc, lane.id).findLast((b) => end(b) <= where.at);
@@ -199,6 +198,14 @@ function Form({
   // a board frame at the same time on a storyboard lane: the shot can be made from it
   const frame = doc.blocks.find(
     (b) => b.kind === "frame" && b.at <= where.at && where.at < end(b) && b.lane !== lane.id,
+  );
+  // a sound added under a shot is made from its video (frame 2g: From · Shot 2 video; A prompt in step 2)
+  const shotUnder = doc.blocks.find(
+    (b) =>
+      b.kind === "video" &&
+      b.at <= where.at &&
+      where.at < end(b) &&
+      doc.lanes.find((l) => l.id === b.lane)?.role === "shots",
   );
   const [fromFrame, setFromFrame] = useState(false);
   const after = next
@@ -228,6 +235,7 @@ function Form({
       ...(shotKind && fromLast && prev ? { first: { block: prev.id, part: "last" as const } } : {}),
       ...(kind === "dialogue" ? { turns: [] } : {}),
       ...(k === "frame" ? { style: "sketch" as const } : {}),
+      ...(k === "sound" && shotUnder ? { from: shotUnder.id } : {}),
     },
     takes: [],
     effects: [],
@@ -246,8 +254,6 @@ function Form({
               type="button"
               className="kt"
               aria-pressed={kind === t.k}
-              disabled={greyed(t.k)}
-              title={greyed(t.k) ? NOT_YET : undefined}
               onClick={() => setKind(t.k)}
             >
               <span className="kn">
@@ -256,15 +262,11 @@ function Form({
                 </i>
                 {t.name}
               </span>
-              <small>{greyed(t.k) ? "Not yet" : t.sub}</small>
+              <small>{t.sub}</small>
             </button>
           );
         })}
       </div>
-      <p className="m-0 text-[12px] text-t2">
-        Music and Sound come with Create&apos;s Music and Sound. Until then their lanes take a file
-        or a Gallery take.
-      </p>
       <div className="fld">
         <span className="lb">Length</span>
         <div className="seg" role="group" aria-label="Length">

@@ -2,6 +2,7 @@
 // runs"): the kinds studio serves (GET /v1/studio/magic/kinds), a model's greyed fields, the pack's estimate before a
 // block has its own, and the board's takes and run placeholders made from studio's answer (MagicBoard runs, takes).
 import type { S } from "@/lib/api";
+import { coverFor } from "@/lib/takes";
 import {
   inputsOf,
   type Block,
@@ -20,16 +21,28 @@ export type Plan = S<"MagicPlan">;
 /** a block's estimate as the page shows it */
 export type Estimate = { seconds: number | null; host: string | null; source: string };
 
-/** The kinds a request form serves (Add's step 2 and the block dialog). */
-export const FORM_KINDS: Kind[] = ["image", "video", "voice"];
+/** The kinds a request form serves (Add's step 2 and the block dialog); Music and Sound from API 1.85. */
+export const FORM_KINDS: Kind[] = ["image", "video", "voice", "music", "sound"];
+
+/** Music's keys (ACE-Step's, the one model that takes a key); absent is Auto. */
+export const KEYS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"].flatMap(
+  (n) => [`${n} major`, `${n} minor`],
+);
 
 export const kindOf = (kinds: Kinds | null, k: Kind) => kinds?.kinds.find((x) => x.kind === k);
 
-/** The model a request runs: its `model`, else the kind's first (studio's default). */
+/** The model a request runs: its `model`, else the kind's first (studio's default); a sound from a shot's video with
+ * no model picked, the first model that takes a video (API 1.85). */
 export function modelOf(kinds: Kinds | null, req: MagicRequest): Model | undefined {
   const ms = kindOf(kinds, req.kind)?.models ?? [];
-  return ms.find((m) => m.workflow_id === req.model) ?? (req.model ? undefined : ms[0]);
+  if (req.model)
+    return ms.find((m) => m.workflow_id === req.model || m.video?.workflow_id === req.model);
+  return (req.from && ms.find((m) => m.fields.includes("from"))) || ms[0];
 }
+
+/** A model's Advanced for a request: its video workflow's when the request is made from a shot's video. */
+export const advancedOf = (m: Model | undefined, req: MagicRequest) =>
+  (req.from && m?.video ? m.video.advanced : m?.advanced) ?? [];
 
 /** A field's label in the form. */
 export const FIELD_LABEL: Record<Field, string> = {
@@ -42,6 +55,10 @@ export const FIELD_LABEL: Record<Field, string> = {
   size: "Size",
   seed: "Seed",
   voice: "Voice",
+  lyrics: "Lyrics",
+  key: "Key",
+  bpm: "BPM",
+  from: "From",
 };
 
 /** A block's units of GPU work, as studio counts them (§45.10). */
@@ -100,12 +117,20 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
   const owner = new Map<string, string>();
   for (const b of doc.blocks) for (const t of b.takes) owner.set(t, b.id);
   for (const [id, t] of Object.entries(takes)) {
-    const thumb = t.thumb_url ?? t.poster_url;
+    const thumb = t.kind === "audio" ? undefined : (t.thumb_url ?? t.poster_url);
+    const block = out[id]?.block ?? owner.get(id) ?? "";
+    const b = doc.blocks.find((x) => x.id === block);
     out[id] = {
-      ...(out[id] ?? { id, block: owner.get(id) ?? "", status: "done", inputs: CURRENT }),
-      art: thumb ? `url("${thumb}")` : undefined,
+      ...(out[id] ?? { id, block, status: "done", inputs: CURRENT }),
+      // API 1.85: a music take's album cover, its gradient from the block's style
+      art: thumb
+        ? `url("${thumb}")`
+        : t.sound === "music"
+          ? coverFor(b?.request.prompt || b?.name || id)
+          : undefined,
       url: t.url,
       kind: t.kind,
+      sound: t.sound,
       seed: t.seed ?? out[id]?.seed,
     };
   }
@@ -191,8 +216,62 @@ export const FAKE_KINDS: Kinds = {
         },
       ],
     },
-    { kind: "music", fields: [], models: [], off: "Comes with Create's Music and Sound" },
-    { kind: "sound", fields: [], models: [], off: "Comes with Create's Music and Sound" },
+    {
+      kind: "music",
+      fields: ["prompt", "lyrics", "length", "key", "bpm", "seed"],
+      models: [
+        {
+          workflow_id: "minimax-music3",
+          name: "MiniMax Music 3",
+          title: "MiniMax Music 3",
+          fields: ["prompt", "lyrics", "length", "seed"],
+          greyed: {
+            key: "MiniMax Music 3 can't take a key",
+            bpm: "MiniMax Music 3 can't take a BPM",
+          },
+          seconds: 4.9,
+          advanced: [],
+        },
+        {
+          workflow_id: "ace-step-music",
+          name: "ACE-Step 1.5",
+          title: "ACE-Step Music",
+          fields: ["prompt", "lyrics", "length", "key", "bpm", "seed"],
+          greyed: {},
+          seconds: 0.55,
+          advanced: [],
+        },
+      ],
+    },
+    {
+      kind: "sound",
+      fields: ["from", "prompt", "length", "seed"],
+      models: [
+        {
+          workflow_id: "sa3-sound",
+          name: "Stable Audio 3 Small-SFX",
+          title: "Stable Audio 3 Sound",
+          fields: ["prompt", "length", "seed"],
+          greyed: { from: "Stable Audio 3 Small-SFX can't take a shot's video" },
+          seconds: 0.1,
+          advanced: [],
+        },
+        {
+          workflow_id: "mmaudio-sound",
+          name: "MMAudio",
+          title: "MMAudio Sound",
+          fields: ["from", "prompt", "length", "seed"],
+          greyed: {},
+          seconds: 0.5,
+          advanced: [],
+          video: {
+            workflow_id: "mmaudio-video",
+            title: "MMAudio Sound from a video",
+            advanced: [],
+          },
+        },
+      ],
+    },
     {
       kind: "frame",
       fields: ["prompt", "refs", "size", "seed"],

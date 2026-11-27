@@ -592,7 +592,7 @@ export function useLocalBoard(initial?: Store): Board {
       const fresh: Takes = {};
       for (const id of ids) {
         const b = h.now.blocks.find((x) => x.id === id);
-        if (!b || b.kind === "music" || b.kind === "sound") continue;
+        if (!b || b.request.turns?.length) continue; // a dialogue can't run yet (music and sound can: phase H)
         const tid = `${b.id}-t${newId()}`;
         fresh[tid] = {
           id: tid,

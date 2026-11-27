@@ -59,6 +59,7 @@ import {
 import {
   clock,
   end,
+  freshId,
   inLane,
   secs,
   shown,
@@ -81,8 +82,6 @@ import { missingViews, viewName } from "@/lib/magic-assets";
 
 const RUNS_OFF = "Runs come with the standard request";
 
-/** Why a kind can't run or be added yet (plan 39 §45.11 phase H). */
-export const NOT_YET = "Comes with Create's Music and Sound";
 export const SOON = {
   dialog: "Comes with the block dialog",
   compare: "Comes with saved boards",
@@ -96,7 +95,6 @@ export const EFFECTS: Effect[] = [
   { name: "Stabilize" },
 ];
 export const LENGTHS = [0.5, 1, 2];
-const MUSIC_MODELS = ["ACE-Step 1.5 XL", "ACE-Step 1.5 2B", "MiniMax Music 3"];
 const STYLES = ["sketch", "rough", "full"] as const;
 
 /** What the menus act through: the board's own actions. */
@@ -112,6 +110,11 @@ export type Act = {
   openMorph?: (id: string) => void;
   /** why runs can't go yet; estimates hide with it */
   runOff?: string;
+  /** run a block once an edit just made has put it on the board (absent: run it now) */
+  runWhenAdded?: (id: string) => void;
+  /** API 1.85: the models studio serves a kind (`video`: one takes a shot's video), and a model's name by its id */
+  models?: (k: Kind) => { id: string; name: string; video: boolean }[];
+  modelName?: (k: Kind, id?: string) => string | undefined;
   /** a block's estimate as a menu shows it ("≈ 1:50"); absent: the kind's guess (the fake mode) */
   estimate?: (id: string) => string | undefined;
   select: (ids: string[]) => void;
@@ -150,7 +153,8 @@ const icon = (C: (p: { className?: string }) => React.ReactNode) => C as unknown
 const kindIcon = (k: Kind) => KIND_ICON[k];
 const blockById = (d: Doc, id: string) => d.blocks.find((b) => b.id === id);
 const laneOf = (d: Doc, id: string) => d.lanes.find((l) => l.id === id);
-const audio = (k: Kind) => k === "music" || k === "sound";
+/** what runs: every block but a dialogue (its turns can't run yet) */
+const runs = (b: Block) => !b.request.turns?.length;
 /** a block's run estimate, as the menu shows it ("≈ 1:50", "≈ 12 s") */
 const est = (k: Kind) => estText(EST_S[k], true);
 /** a run item, off with the board's reason while runs can't go (its estimate hidden) */
@@ -214,7 +218,6 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
     label: "Run",
     icon: WandSparkles,
     keys: a.estimate ? a.estimate(b.id) : est(b.kind),
-    off: audio(b.kind) ? NOT_YET : undefined,
     onPick: () => a.run([b.id]),
   });
   const play: MenuItem = { label: "Play", icon: Play, keys: "Space", onPick: () => a.play(b.at) };
@@ -290,12 +293,17 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
         {
           label: "Model",
           icon: Cpu,
-          items: MUSIC_MODELS.map((m) => ({
-            label: m,
-            checked: b.request.model === m,
+          items: (a.models?.("music") ?? []).map((m, i) => ({
+            label: m.name,
+            checked: b.request.model ? b.request.model === m.id : i === 0,
             onPick: () =>
-              a.edit({ op: "block", id: b.id, set: { request: { ...b.request, model: m } } }),
+              a.edit({
+                op: "block",
+                id: b.id,
+                set: { request: { ...b.request, model: m.id, advanced: undefined } },
+              }),
           })),
+          off: a.models?.("music").length ? undefined : "No music model on any host",
         },
         "-",
         tie,
@@ -310,18 +318,41 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
     };
   if (b.kind === "sound") {
     const shot = (b.request.from && blockById(d, b.request.from)) || tiedTo;
+    const video = a.models?.("sound").find((m) => m.video);
     return {
       title,
       items: [
         open,
         run,
         play,
-        {
+        gate(a, {
           label: shot ? `Make from ${shot.name.split(" · ")[0]} video` : "Make from a shot's video",
           icon: Film,
-          off: shot ? NOT_YET : "Tie it to a shot first",
-          onPick: () => undefined,
-        },
+          off: !shot
+            ? "Tie it to a shot first"
+            : !video
+              ? "No sound model takes a video"
+              : shown(shot, a.takes)
+                ? undefined
+                : `${shot.name.split(" · ")[0]} has no take yet`,
+          // the request made from the shot's video on a model that takes one (MMAudio), then its run
+          onPick: () => {
+            const keep = a.models?.("sound").some((m) => m.video && m.id === b.request.model);
+            a.edit({
+              op: "block",
+              id: b.id,
+              set: {
+                request: {
+                  ...b.request,
+                  from: shot!.id,
+                  model: keep ? b.request.model : video!.id,
+                  advanced: keep ? b.request.advanced : undefined,
+                },
+              },
+            });
+            a.run([b.id]);
+          },
+        }),
         "-",
         tie,
         unlink,
@@ -454,27 +485,46 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
           : "No line, cue or sound to tie yet",
       },
       lane?.role !== "shots" && lane && move,
-      b.kind === "video" && {
-        label: "Make sound from video",
-        icon: AudioLines,
-        off: NOT_YET,
-        onPick: () =>
-          sounds &&
-          a.edit({
-            op: "add",
-            mode: "overwrite",
-            block: {
-              lane: sounds.id,
-              at: b.at,
-              length: b.length,
-              kind: "sound",
-              name: `Sound of ${b.name.split(" · ")[0]}`,
-              request: { kind: "sound", model: "MMAudio", from: b.id },
-              takes: [],
-              effects: [],
-            },
-          }),
-      },
+      b.kind === "video" &&
+        gate(a, {
+          label: "Make sound from video",
+          icon: AudioLines,
+          off: !sounds
+            ? "Add a Sound lane first"
+            : !a.models?.("sound").some((m) => m.video)
+              ? "No sound model takes a video"
+              : take
+                ? undefined
+                : "No take yet",
+          // a sound under the shot on the Sound lane, tied to it, made from its video, then run (MagicBoard frame 10)
+          onPick: () => {
+            const id = freshId(d, "b");
+            a.edit([
+              {
+                op: "add",
+                mode: "overwrite",
+                block: {
+                  id,
+                  lane: sounds!.id,
+                  at: b.at,
+                  length: b.length,
+                  kind: "sound",
+                  name: `Sound of ${b.name.split(" · ")[0]}`,
+                  request: {
+                    kind: "sound",
+                    model: a.models?.("sound").find((m) => m.video)?.id,
+                    from: b.id,
+                  },
+                  takes: [],
+                  effects: [],
+                },
+              },
+              { op: "link", block: id, to: [b.id] },
+            ]);
+            if (a.runWhenAdded) a.runWhenAdded(id);
+            else a.run([id]);
+          },
+        }),
       b.kind === "video" && {
         label: "Use last frame in a new shot",
         icon: ImagePlus,
@@ -507,7 +557,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
 /** Several blocks: run them, move, effects, duplicate, delete. */
 export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[] } {
   const bs = ids.map((id) => blockById(a.doc, id)).filter((b): b is Block => !!b);
-  const runnable = bs.filter((b) => !audio(b.kind));
+  const runnable = bs.filter(runs);
   const lanes = new Set(bs.map((b) => b.lane));
   return {
     title: `${bs.length} blocks`,
@@ -519,7 +569,7 @@ export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[]
           runnable.reduce((n, b) => n + EST_S[b.kind], 0),
           true,
         ),
-        off: runnable.length ? undefined : NOT_YET,
+        off: runnable.length ? undefined : "Dialogue blocks can't run yet",
         onPick: () => a.run(runnable.map((b) => b.id)),
       }),
       {
@@ -562,7 +612,7 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
   const d = a.doc;
   const bs = inLane(d, lane.id);
   const i = d.lanes.indexOf(lane);
-  const runnable = bs.filter((b) => !audio(b.kind));
+  const runnable = bs.filter(runs);
   return {
     title: `Lane · ${lane.name}`,
     items: [
@@ -573,7 +623,6 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
         items: KINDS.map((k) => ({
           label: KIND_LABEL[k],
           icon: kindIcon(k),
-          off: audio(k) ? NOT_YET : undefined,
           onPick: () => a.add(lane.id, a.playhead, k),
         })),
       },
@@ -586,7 +635,11 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
               true,
             )
           : undefined,
-        off: !bs.length ? "Nothing on it" : runnable.length ? undefined : NOT_YET,
+        off: !bs.length
+          ? "Nothing on it"
+          : runnable.length
+            ? undefined
+            : "Dialogue blocks can't run yet",
         onPick: () => a.run(runnable.map((b) => b.id)),
       }),
       {
@@ -664,7 +717,6 @@ export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; item
       ...KINDS.map((k) => ({
         label: `Add ${KIND_LABEL[k]}`,
         icon: kindIcon(k),
-        off: audio(k) ? NOT_YET : undefined,
         onPick: () => a.add(lane.id, at, k),
       })),
       "-",
@@ -1050,7 +1102,6 @@ export function runMenu(
       gate(a, {
         label: seed != null ? `Run again · seed ${seed}` : "Run again",
         icon: WandSparkles,
-        off: audio(b.kind) ? NOT_YET : undefined,
         onPick: () => {
           if (seed != null && seed !== b.request.seed)
             a.edit({ op: "block", id: b.id, set: { request: { ...b.request, seed } } });

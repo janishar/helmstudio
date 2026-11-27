@@ -10,6 +10,8 @@ import { secs, type Block, type Doc, type MagicRequest, type Ref } from "@/lib/m
 import { estText } from "@/lib/magic-fixture";
 import {
   FIELD_LABEL,
+  KEYS,
+  advancedOf,
   kindOf,
   modelOf,
   packSeconds,
@@ -93,11 +95,16 @@ export function RequestForm({
   const greyed = (f: Field) => (model ? model.greyed[f] : undefined);
   const choices = picks(doc, block.id);
 
+  // music's prompt is its style (MagicBoard 2f)
+  const label = (f: Field) => (f === "prompt" && block.kind === "music" ? "Style" : FIELD_LABEL[f]);
   const field = (f: Field, body: React.ReactNode) => {
     const why = greyed(f);
     return (
-      <div key={f} className={`fld ${f === "prompt" || f === "line" || f === "refs" ? "col-span-full" : ""} ${why ? "opacity-50" : ""}`}>
-        <span className="lb">{FIELD_LABEL[f]}</span>
+      <div
+        key={f}
+        className={`fld ${f === "prompt" || f === "line" || f === "refs" || f === "lyrics" ? "col-span-full" : ""} ${why ? "opacity-50" : ""}`}
+      >
+        <span className="lb">{label(f)}</span>
         <fieldset disabled={!!why} className="m-0 contents border-0 p-0">
           {body}
         </fieldset>
@@ -130,7 +137,7 @@ export function RequestForm({
         <AtText
           doc={doc}
           self={block.id}
-          label="Prompt"
+          label={label("prompt")}
           value={req.prompt ?? ""}
           refs={req.refs ?? []}
           // a model that takes no refs keeps them out (its @ picks are then words only)
@@ -184,8 +191,79 @@ export function RequestForm({
       field(
         "length",
         <span className="mono text-[13px]">
-          {secs(block.length, fps)} · {block.length} f
+          {/* audio runs for the block's seconds; a video on its frames */}
+          {block.kind === "music" || block.kind === "sound"
+            ? secs(block.length, fps)
+            : `${secs(block.length, fps)} · ${block.length} f`}
         </span>,
+      ),
+    // API 1.85: music's lyrics (empty: an instrumental), key and BPM; a sound made from a shot's video
+    lyrics: () =>
+      field(
+        "lyrics",
+        <textarea
+          aria-label="Lyrics"
+          placeholder="Instrumental"
+          className="in min-h-12 px-2.5 py-2 text-[13px]"
+          value={req.lyrics ?? ""}
+          onChange={(e) => set({ lyrics: e.target.value || undefined })}
+        />,
+      ),
+    key: () =>
+      field(
+        "key",
+        <select
+          aria-label="Key"
+          className="in h-8 px-2 text-[13px]"
+          value={req.key ?? ""}
+          onChange={(e) => set({ key: e.target.value || undefined })}
+        >
+          <option value="">Auto</option>
+          {KEYS.map((k) => (
+            <option key={k}>{k}</option>
+          ))}
+        </select>,
+      ),
+    bpm: () =>
+      field(
+        "bpm",
+        <input
+          type="number"
+          aria-label="BPM"
+          placeholder="Auto"
+          className="in h-8 w-full px-2 text-[13px]"
+          min={30}
+          max={300}
+          value={req.bpm ?? ""}
+          onChange={(e) =>
+            set({
+              bpm:
+                e.target.value === ""
+                  ? undefined
+                  : Math.min(300, Math.max(30, Math.round(+e.target.value))),
+            })
+          }
+        />,
+      ),
+    from: () =>
+      field(
+        "from",
+        <select
+          aria-label="From"
+          className="in h-8 px-2 text-[13px]"
+          value={req.from ?? ""}
+          // a model that takes no video keeps its prompt only; Advanced is the workflow's that runs
+          onChange={(e) => set({ from: e.target.value || undefined, advanced: undefined })}
+        >
+          <option value="">A prompt</option>
+          {doc.blocks
+            .filter((x) => x.kind === "video")
+            .map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name.split(" · ")[0]} video
+              </option>
+            ))}
+        </select>,
       ),
     size: () =>
       field(
@@ -279,7 +357,7 @@ export function RequestForm({
   };
 
   if (kind?.off) return <p className="m-0 text-[13px] text-t2">{kind.off}</p>;
-  const adv = model?.advanced ?? [];
+  const adv = advancedOf(model, req);
   const advValues = (req.advanced ?? {}) as Record<string, unknown>;
   return (
     <div className="flex flex-col gap-3">

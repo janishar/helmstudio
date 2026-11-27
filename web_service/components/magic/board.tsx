@@ -23,10 +23,10 @@ import {
 import { GalleryPicker } from "@/components/gallery/picker";
 import { useVoices } from "@/lib/library";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
+import { SoundMark, soundLook } from "@/components/magic/sound-mark";
 import { AssetsRow, Lanes, StatusChip, refText } from "@/components/magic/lanes";
 import {
   EFFECTS,
-  NOT_YET,
   blockMenu,
   effectMenu,
   nextLaneName,
@@ -65,7 +65,8 @@ import "./magic.css";
 const PANEL = "magic-side-panel";
 /** Why runs can't go (a board with no way to run). */
 export const RUNS_LATER = "Runs come with the standard request";
-/** What runs: image, video and voice blocks that are not dialogues (phase D), board frames (phase E). */
+/** What runs: image, video and voice blocks that are not dialogues (phase D), board frames (phase E), music and sound
+ * (phase H). */
 const runsHere = (b: Block) =>
   (FORM_KINDS.includes(b.kind) || b.kind === "frame") && !b.request.turns?.length;
 /** a Gallery pick a menu asked for */
@@ -237,6 +238,18 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       edit,
       run,
       runOff: board.run ? undefined : RUNS_LATER,
+      runWhenAdded: (id) => (toRun.current = id),
+      // API 1.85: studio's models per kind (Music's Model ›, a sound from a shot's video) and their names
+      models: (k) =>
+        (board.kinds?.kinds.find((x) => x.kind === k)?.models ?? []).map((m) => ({
+          id: m.workflow_id,
+          name: m.name,
+          video: m.fields.includes("from"),
+        })),
+      modelName: (k, id) =>
+        board.kinds?.kinds
+          .find((x) => x.kind === k)
+          ?.models.find((m) => m.workflow_id === id || m.video?.workflow_id === id)?.name,
       estimate: board.plan
         ? (id: string) => {
             const s = board.estimate(id)?.seconds;
@@ -367,9 +380,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
 
   const zPct = Math.round((Math.log(pps / lo) / Math.log(MAX_PPS / lo)) * 100) || 0;
 
-  const runnable = doc.blocks.filter((b) =>
-    board.plan ? runsHere(b) : b.kind !== "music" && b.kind !== "sound",
-  );
+  const runnable = doc.blocks.filter(runsHere);
   const todo = runnable.filter((b) => statusOf(doc, b, takes).s !== "done");
   const ests = (todo.length ? todo : runnable).map(estOf);
   const boardEst = ests.some((e) => e?.seconds == null)
@@ -1164,7 +1175,7 @@ function BlockPanel({
   const out = d.transitions.find((t) => t.between?.[0] === b.id);
   const jn = (t?: { kind: string; length: number }) =>
     t ? `${t.kind[0].toUpperCase()}${t.kind.slice(1)} ${secs(t.length, fps)}` : "Cut";
-  const audio = b.kind === "music" || b.kind === "sound";
+  const look = soundLook(b, take);
   const short = (id: string) => d.blocks.find((x) => x.id === id)?.name ?? "";
   return (
     <>
@@ -1180,7 +1191,15 @@ function BlockPanel({
           </span>
         </span>
       </div>
-      <div className="pic" style={{ backgroundColor: "var(--s2)", backgroundImage: take?.art }}>
+      <div
+        className="pic isolate"
+        style={{ backgroundColor: "var(--s2)", backgroundImage: look ? undefined : take?.art }}
+      >
+        {look && (
+          <span className="absolute inset-0 -z-10 grid place-items-center">
+            <SoundMark look={look} art={take?.art} large />
+          </span>
+        )}
         {runningTake ? (
           <span className="mst run rounded-full bg-black/60 px-2 py-0.5">
             {nth(runningTake.id) ? `Take ${nth(runningTake.id)}` : "Running"} ·{" "}
@@ -1218,7 +1237,7 @@ function BlockPanel({
       <div className="kv">
         <div>
           <span>Model</span>
-          <b>{b.request.model ?? "Not picked"}</b>
+          <b>{act.modelName?.(b.kind, b.request.model) ?? b.request.model ?? "Not picked"}</b>
         </div>
         <div>
           <span>Length</span>
@@ -1310,8 +1329,8 @@ function BlockPanel({
         <button
           type="button"
           className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
-          disabled={audio || !!act.runOff}
-          title={audio ? NOT_YET : act.runOff}
+          disabled={!!act.runOff}
+          title={act.runOff}
           onClick={() => act.run([b.id])}
         >
           Run
@@ -1319,8 +1338,8 @@ function BlockPanel({
         <button
           type="button"
           className="chip bevel flex-1 justify-center rounded-[10px] bg-s4"
-          disabled={audio || !!act.runOff}
-          title={audio ? NOT_YET : act.runOff}
+          disabled={!!act.runOff}
+          title={act.runOff}
           onClick={() =>
             act.run(
               inLane(d, b.lane)
@@ -1332,7 +1351,7 @@ function BlockPanel({
           Run up to here
         </button>
       </div>
-      {!audio && !act.runOff && est && (
+      {!act.runOff && est && (
         <span className="est" title="From your own recent runs of this model">
           <Clock3 size={13} aria-hidden />
           <b>{est.seconds == null ? "Time unknown" : estText(est.seconds)}</b>

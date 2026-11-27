@@ -74,7 +74,7 @@ const KINDS = {
     },
     { kind: "image", fields: ["prompt", "refs", "size", "seed"], models: [] },
     { kind: "voice", fields: ["line", "voice", "seed"], models: [] },
-    { kind: "music", fields: [], models: [], off: "Comes with Create's Music and Sound" },
+    { kind: "music", fields: [], models: [] },
   ],
 };
 const TAKE = "11111111-1111-4111-8111-111111111111";

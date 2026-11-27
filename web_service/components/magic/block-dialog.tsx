@@ -1,5 +1,5 @@
 "use client";
-// A block opened (MagicBoard frame 3; plan 39 phase D): left, its @ references, what is tied to it, notes the
+// A block opened (MagicBoard frame 3; plan 39 phases D and H: music and sound too): left, its @ references, what is tied to it, notes the
 // Assistant also reads and the run history (who ran it, how long); middle, the standard request with Advanced open
 // and Generate with its estimate; right, the take on stage, the takes (the picked one outlined, the pinned one
 // marked, a running one with its progress) and Pin. Takes and runs have their right-click menus.
@@ -11,6 +11,7 @@ import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
 import { StatusChip, refText } from "@/components/magic/lanes";
 import { runMenu, takeMenu, type Act } from "@/components/magic/menus";
 import { EstimateLine, RequestForm } from "@/components/magic/request";
+import { SoundMark, soundLook } from "@/components/magic/sound-mark";
 import { clock, end, shown, type Block, type MagicRequest, type Ref } from "@/lib/magic";
 import {
   FORM_KINDS,
@@ -84,6 +85,7 @@ function Body({
   const stage = picked ? a.takes[picked] : undefined;
   const n = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
   const model = modelOf(kinds, req);
+  const look = stage ? soundLook(b, stage) : null;
   const form = FORM_KINDS.includes(b.kind) && !req.turns?.length;
   const refs: { r: Ref; why: string }[] = [
     ...(req.first ? [{ r: req.first, why: "first frame of this shot" }] : []),
@@ -237,7 +239,7 @@ function Body({
         <section className="flex min-w-0 flex-col gap-2.5" aria-label="Takes">
           <div
             className="flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center p-2"
-            style={{ backgroundColor: "var(--s2)", backgroundImage: stage?.art }}
+            style={{ backgroundColor: "var(--s2)", backgroundImage: look ? undefined : stage?.art }}
           >
             {stage?.kind === "video" && stage.url ? (
               <video
@@ -247,7 +249,16 @@ function Body({
                 aria-label={`Take ${n(picked)}`}
               />
             ) : stage?.kind === "audio" && stage.url ? (
-              <audio src={stage.url} controls aria-label={`Take ${n(picked)}`} />
+              // plan 39 phase H: the take's cover or orb over its player
+              <span className="flex w-full flex-col items-center gap-2">
+                {look && <SoundMark look={look} art={stage.art} large />}
+                <audio
+                  src={stage.url}
+                  controls
+                  aria-label={`Take ${n(picked)}`}
+                  className="w-full"
+                />
+              </span>
             ) : (
               !stage && <span className="text-[12px] text-t2">No take yet</span>
             )}
@@ -286,10 +297,14 @@ function Body({
                     )
                   }
                 >
-                  <span
-                    className="h-6 w-10 shrink-0 rounded bg-s3 bg-cover"
-                    style={{ backgroundImage: t.art }}
-                  />
+                  {soundLook(b, t) ? (
+                    <SoundMark look={soundLook(b, t)!} art={t.art} />
+                  ) : (
+                    <span
+                      className="h-6 w-10 shrink-0 rounded bg-s3 bg-cover"
+                      style={{ backgroundImage: t.art }}
+                    />
+                  )}
                   <b className="min-w-0 grow truncate">{label}</b>
                   {b.pinned === id && <Pin size={12} aria-label="pinned" />}
                 </button>

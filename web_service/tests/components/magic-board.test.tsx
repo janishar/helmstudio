@@ -6,7 +6,6 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { MagicBoard } from "@/components/magic/board";
 import { loadStore } from "@/components/magic/use-board";
-import { NOT_YET } from "@/components/magic/menus";
 import { closeMenu } from "@/components/context-menu";
 
 vi.mock("@/components/magic/magic.css", () => ({}));
@@ -83,13 +82,12 @@ describe("the board", () => {
     expect(screen.queryByRole("button", { name: /Video block Shot 2/ })).toBeNull();
   });
 
-  it("Add at a point: the kind with its orb, Music and Sound greyed, Insert pushes what is after", () => {
+  it("Add at a point: the kind with its orb, Music and Sound on (phase H), Insert pushes what is after", () => {
     render(<MagicBoard local />);
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
     const dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     const music = within(dlg).getByRole("button", { name: /Music/ }) as HTMLButtonElement;
-    expect(music.disabled).toBe(true);
-    expect(music.title).toBe(NOT_YET);
+    expect(music.disabled).toBe(false);
     expect(within(dlg).getByRole("button", { name: /Video/ }).getAttribute("aria-pressed")).toBe(
       "true",
     );
@@ -107,6 +105,45 @@ describe("the board", () => {
     const still = blockEl(/Image block Still 1, 8 s/);
     expect(still.textContent).toMatch(/\d+%/);
     expect(screen.getByRole("group", { name: "Lane Lane 7" }).textContent).toContain("1 block");
+  });
+
+  it("phase H: Music's step 2 (frame 2f) with Style, Lyrics, Key and BPM; a sound from a shot's video (2g)", () => {
+    render(<MagicBoard local />);
+    fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
+    let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+    fireEvent.click(within(dlg).getByRole("button", { name: /Music/ }));
+    fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
+    dlg = screen.getByRole("dialog", { name: /^Music · Cue/ });
+    // MiniMax Music 3 is the default: no key or BPM, with why
+    expect(
+      within(dlg).getByRole("button", { name: "MiniMax Music 3" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    expect(within(dlg).getByRole("textbox", { name: "Style" })).toBeTruthy();
+    expect(within(dlg).getByRole("textbox", { name: "Lyrics" })).toBeTruthy();
+    expect(within(dlg).getByText("MiniMax Music 3 can't take a key")).toBeTruthy();
+    expect(within(dlg).getByRole("combobox", { name: "Key" }).matches(":disabled")).toBe(true);
+    fireEvent.click(within(dlg).getByRole("button", { name: "ACE-Step 1.5" }));
+    expect(within(dlg).getByRole("combobox", { name: "Key" }).matches(":disabled")).toBe(false);
+    fireEvent.change(within(dlg).getByRole("combobox", { name: "Key" }), {
+      target: { value: "D minor" },
+    });
+    fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
+    expect(blockEl(/Music block Cue 2, 4 s/).textContent).toMatch(/\d+%/);
+  });
+
+  it("phase H: a sound added under Shot 2 starts from its video, on MMAudio (frame 2g)", () => {
+    render(<MagicBoard local />);
+    fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 120 + 10 * 26 });
+    let dlg = screen.getByRole("dialog", { name: /Add at/ });
+    fireEvent.click(within(dlg).getByRole("button", { name: /Sound/ }));
+    fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
+    dlg = screen.getByRole("dialog", { name: /^Sound · Sound/ });
+    expect((within(dlg).getByRole("combobox", { name: "From" }) as HTMLSelectElement).value).toBe(
+      "s2",
+    );
+    expect(within(dlg).getByRole("button", { name: "MMAudio" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
   });
 
   it("Add step 2 greys what the model can't take, with why (frame 2d); a board frame is added as a draft", () => {

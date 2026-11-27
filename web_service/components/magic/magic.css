@@ -1123,3 +1123,23 @@
     display: none;
   }
 }
+
+/* plan 39 phase H: the large cover and orb on a block's take stage */
+:is(.mg, .mg-side) .mcv.lg {
+  width: 112px;
+  height: 112px;
+  border-radius: 12px;
+}
+:is(.mg, .mg-side) .mcv.lg .disc {
+  right: -40px;
+  width: 94px;
+  height: 94px;
+  margin-top: -47px;
+}
+:is(.mg, .mg-side) .mo.lg {
+  width: 64px;
+  height: 64px;
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 30px 4px color-mix(in srgb, var(--k) 45%, transparent);
+}

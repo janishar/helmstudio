@@ -144,7 +144,11 @@ const COVERS = [
 /** A music take's cover gradient, picked in the client from a hash of its prompt (else its title): the same song
  * always gets the same cover (plan 38 44.10.9). */
 export function coverOf(t: Take): string {
-  const text = t.made_with?.prompt || t.title;
+  return coverFor(t.made_with?.prompt || t.title);
+}
+
+/** The album cover's gradient for a text (a music take's prompt or title; a Magic music block's style). */
+export function coverFor(text: string): string {
   let h = 0;
   for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
   const [a, b, c] = COVERS[Math.abs(h) % COVERS.length];

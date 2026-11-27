@@ -40,6 +40,10 @@ import {
   type Takes,
 } from "@/lib/magic";
 import { wheelZoom, zoomAbout } from "@/lib/timeline-tools";
+import { SoundMark, soundLook, type SoundLook } from "@/components/magic/sound-mark";
+
+/** The wave's colour under each look's mark. */
+const WAVE: Record<SoundLook, string> = { voice: "#f2b84b", music: "#d59bf6", sound: "#7cc7f2" };
 
 const LH_PX = 120;
 const LH_PHONE = 64;
@@ -630,6 +634,7 @@ function BlockView({
     );
   const status = <StatusChip d={d} b={b} takes={takes} />;
   const art = take?.art;
+  const look = soundLook(b, take);
   const audioRow = (orb: React.ReactNode, color: string) => (
     <div className="arow">
       {orb}
@@ -674,65 +679,24 @@ function BlockView({
         <div className={`art fs ${art ? "" : "none"}`} style={{ backgroundImage: art }} />
       )}
       {b.kind === "voice" && (
-        <>
-          <span className="scr">
-            {b.request.turns?.length
-              ? `${b.request.turns.length} turns`
-              : b.request.line
-                ? `"${b.request.line}"`
-                : "No line yet"}
-          </span>
-          {audioRow(
-            <span className="mo k8v" aria-hidden>
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M12 19v3" />
-                <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                <rect x="9" y="2" width="6" height="13" rx="3" />
-              </svg>
-            </span>,
-            "#f2b84b",
-          )}
-        </>
+        <span className="scr">
+          {b.request.turns?.length
+            ? `${b.request.turns.length} turns`
+            : b.request.line
+              ? `"${b.request.line}"`
+              : "No line yet"}
+        </span>
       )}
-      {b.kind === "music" &&
-        audioRow(
-          <span className="mcv" aria-hidden style={{ background: art ?? "var(--s5)" }}>
-            <span className="disc" />
-          </span>,
-          "#d59bf6",
-        )}
-      {b.kind === "sound" &&
-        audioRow(
-          <span className="mo k8s" aria-hidden>
-            <svg
-              width="12"
-              height="12"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-            >
-              <path d="M2 10v3M6 6v11M10 3v18M14 8v7M18 5v13M22 10v3" />
-            </svg>
-          </span>,
-          "#7cc7f2",
-        )}
+      {/* plan 39 phase H: the cover or orb by the shown take's class (a sound placed on the Music lane is an orb) */}
+      {look && audioRow(<SoundMark look={look} art={art} />, WAVE[look])}
       <div className="bf">
         {b.kind === "voice" || b.kind === "music" ? null : chips}
         {fx}
         {(b.kind === "voice" || b.kind === "music" || b.kind === "sound") && tieMark}
         {(b.kind === "music" || (b.kind === "sound" && b.request.model)) && (
-          <span className="text-[10px] text-t2">{b.request.model}</span>
+          <span className="text-[10px] text-t2">
+            {act.modelName?.(b.kind, b.request.model) ?? b.request.model}
+          </span>
         )}
         <span className="grow" />
         {b.pinned && (
