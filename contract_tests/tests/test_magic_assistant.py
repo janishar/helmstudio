@@ -107,7 +107,11 @@ def test_the_assistant_makes_a_board_and_asks_before_views_above_the_limit(api, 
 
     def waiting():
         got = ok(user.get(turl))
-        cards = [e["card"] for e in got["entries"] if e["kind"] == "card" and e["card"]["state"] == "waiting"]
+        cards = [
+            e["card"]
+            for e in got["entries"]
+            if e["kind"] == "card" and e["card"]["state"] == "waiting"
+        ]
         return cards[0] if cards else None
 
     def say(text: str) -> None:
@@ -133,7 +137,9 @@ def test_the_assistant_makes_a_board_and_asks_before_views_above_the_limit(api, 
         ok(user.post(f"{turl}/messages", json={"kind": "answer", "client_id": TAB, "card_id": card["id"],
                                                "answer": "not_now"}), 202)  # fmt: skip
         got = wait_for(idle, timeout=60, what="the answer after Not now")
-        assert "Made board From the brief" in [e["line"]["text"] for e in got["entries"] if e["kind"] == "line"]
+        assert "Made board From the brief" in [
+            e["line"]["text"] for e in got["entries"] if e["kind"] == "line"
+        ]
         assert ok(user.get(url))["asset_runs"] == []  # Not now: no view runs
     finally:
         user.delete(turl)
@@ -141,3 +147,46 @@ def test_the_assistant_makes_a_board_and_asks_before_views_above_the_limit(api, 
         if made:
             user.delete(f"{BOARDS}/{made['id']}")
         user.put(SETTINGS, json={"ask_above_gpu_minutes": 5})
+
+
+def test_the_assistant_stops_a_boards_runs_by_words_with_no_card(api_b, assistant):  # noqa: F811
+    # alpha.6 (owner, 2026-11-27: "yes build it"): "stop the shots" is cancel_runs: no card, one line, the runs end
+    user = api_b
+    doc = run_doc()
+    doc["blocks"] = [shot("s1", 0, "rain"), shot("s2", 24, "more rain")]
+    for b in doc["blocks"]:
+        b["request"]["advanced"] = {"video.delay_ms": 3000}
+    bid = ok(user.post(BOARDS, json={"name": "Stop", "doc": doc}), 201)["id"]
+    url = f"{BOARDS}/{bid}"
+    turl = f"{THREADS}/{ok(user.post(THREADS, json={'client_id': TAB}), 201)['id']}"
+
+    def idle():
+        got = ok(user.get(turl))
+        return got if got["state"] == "idle" else None
+
+    try:
+        started = ok(user.post(f"{url}/run", json={"revision": 1, "blocks": ["s1", "s2"]}), 202)[
+            "started"
+        ]
+        assert len(started) == 2, started
+        fake("POST", "/__script", {assistant: [
+            {"content": "Stopping.", "tool_calls": [{"tool": "cancel_runs", "args": {"board_id": bid, "lane": "shots"}}]},
+            {"content": "Stopped both shots."},
+        ]})  # fmt: skip
+        ok(user.post(f"{turl}/messages", json={"kind": "message", "client_id": TAB, "text": "stop the shots",
+                                               "screen": screen("/magic")}), 202)  # fmt: skip
+        got = wait_for(idle, timeout=60, what="the assistant's answer")
+        texts = [e["line"]["text"] for e in got["entries"] if e["kind"] == "line"]
+        assert "Stopped 2 runs" in texts, texts
+        assert not [e for e in got["entries"] if e["kind"] == "card"]
+
+        def ended():
+            runs = ok(user.get(url))["runs"]
+            return runs if all(r["status"] not in ("queued", "running") for r in runs) else None
+
+        assert {r["status"] for r in wait_for(ended, timeout=60, what="the runs ended")} == {
+            "cancelled"
+        }
+    finally:
+        user.delete(turl)
+        user.delete(url)
