@@ -4212,6 +4212,10 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `Line 2 has no words`, `Line 2's @mara has no voice`, no turns (`A dialogue needs a line`), the model's own (it must
   take a line and a voice). `magic_runs.turn` keeps each run's turn; `MagicBlockRun.turn` says it. A Run of a dialogue
   runs the turns that are not done (all of them when every one is); its count is one run per turn.
+- **A run's turn follows its line** (API 1.90). A run is for the turn it ran for while its inputs match that turn's,
+  else for the turn whose inputs it matches now (a line moved up or down, or a line before it removed), else for the
+  turn it ran for (its line changed: out of date). `MagicBlockRun.turn` is that turn and `current` is against it; a
+  turn's `take` is its newest run's take made from its inputs now, else its newest run's take.
 - **Per turn status.** Each turn's runs (the last 20 of each turn) are hashed as a line block of that turn (its text,
   speaker, the speaker's voice, the model, seed and Advanced, the block's length), so changing one line puts only that
   turn out of date. `MagicStatus.turns[i]` is each turn's status and `take` (its newest run's take); the block's own
@@ -4225,7 +4229,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   block's inputs: a change keeps its takes current.
 - **Loop.** `MagicRequest.loop` on a sound block repeats its take to fill the block when played and sent (one clip
   after another, the last cut at the block's end). The web offers it for a sound made from a prompt (a sound made from
-  a shot's video follows the shot). Not one of the block's inputs.
+  a shot's video follows the shot; from 1.90 Loop is off while the request has `from`, played and sent). Not one
+  of the block's inputs.
 - **Takes.** `MagicTake.duration_s` (a video's or audio take's seconds) and `sections` (a song with tagged lyrics,
   Take.audio.sections): the page draws a music block's sections as markers (a click seeks), else, for lyrics with
   `[tags]` and no take that has sections, the tags spread over the block by their lines.

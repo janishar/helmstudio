@@ -9151,7 +9151,7 @@ export interface components {
             shot_model?: string;
             /** @description from 1.89: Run on: its runs go to this host only (RunRequest.host); absent: Auto. Not one of its inputs: a change leaves its takes current */
             host?: string;
-            /** @description from 1.89, a sound block: its take repeats to fill the block when played and sent (one clip after another); not one of its inputs */
+            /** @description from 1.89, a sound block: its take repeats to fill the block when played and sent (one clip after another); not one of its inputs; from 1.90 off while the sound is made from a shot's video (`from`) */
             loop?: boolean;
         };
         /** @description an effect badge (baked when sent) */
@@ -9706,7 +9706,7 @@ export interface components {
              * @enum {string}
              */
             style?: "sketch" | "rough" | "full";
-            /** @description from 1.89: a dialogue's run of this turn (its index in `turns`) */
+            /** @description from 1.89: a dialogue's run of this turn (its index in `turns`); from 1.90 the turn it ran for while its inputs match that turn's, else the turn whose inputs it matches now (a line moved, or one before it removed), else the turn it ran for; `current` is against that turn */
             turn?: number;
         };
         /** @description from 1.83: one run of Make views */
