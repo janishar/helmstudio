@@ -1819,7 +1819,7 @@
         },
         "tool_calls": {
           "type": "array",
-          "maxItems": 4,
+          "maxItems": 12,
           "description": "from API 1.15, a server-ask run (or a remote call) with `tools`: the native OpenAI tool calls of the answer, as sent (pipelines normalises them into a turn)",
           "items": {
             "type": "object",

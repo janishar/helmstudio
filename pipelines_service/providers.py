@@ -78,6 +78,10 @@ class CallError(Exception):
         self.kind, self.retry_after = kind, retry_after  # network | answer | refused | off
 
 
+# tool calls an answer may carry (API 1.100: 12, from 4; a Magic board starts views for each of its assets at once)
+MAX_TOOL_CALLS = 12
+
+
 def _addr(ip: str):
     a = ipaddress.ip_address(ip.split("%")[0])
     return getattr(a, "ipv4_mapped", None) or a
@@ -323,7 +327,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     raw = [(c["id"], c["name"], json.dumps(c["args"])) for c in msg.tool_calls]
     raw += [(c["id"], c["name"], c["args"] or "") for c in msg.invalid_tool_calls]
     calls = [{"id": str(i or n)[:200], "name": (name_ or "")[:64], "arguments": a[:16384]}
-             for n, (i, name_, a) in enumerate(raw[:4])]  # fmt: skip
+             for n, (i, name_, a) in enumerate(raw[:MAX_TOOL_CALLS])]  # fmt: skip
     text = msg.content if isinstance(msg.content, str) else json.dumps(msg.content)
     usage = msg.usage_metadata or {}
     if not usage.get("input_tokens") and not usage.get("output_tokens"):
@@ -335,8 +339,8 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     out = {"text": text[:32768], "tool_calls": calls, "tokens_in": usage.get("input_tokens", 0),
            "tokens_out": usage.get("output_tokens", 0), "seconds": round(time.monotonic() - t, 3),
            "cache": cache_hits(msg.response_metadata.get("token_usage"))}  # fmt: skip
-    if len(raw) > 4:  # never cut silently: the turn is invalid (asked once more)
-        out["error"] = f"the answer has {len(raw)} tool calls; at most 4 per turn"
+    if len(raw) > MAX_TOOL_CALLS:  # never cut silently: the turn is invalid (asked once more)
+        out["error"] = f"the answer has {len(raw)} tool calls; at most {MAX_TOOL_CALLS} per turn"
     return out
 
 

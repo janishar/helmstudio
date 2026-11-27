@@ -89,14 +89,16 @@ async def test_tools_go_out_as_a_list_usage_is_estimated_and_extra_calls_refuse_
     tools = agents.compact(
         agents.native_tools(agent())
     )  # as submit puts them in ask.tools: JSON text
-    calls = [{"name": "memory_read", "arguments": {}}] * 5
+    calls = [
+        {"name": "memory_read", "arguments": {}}
+    ] * 13  # one over providers.MAX_TOOL_CALLS (12)
     fake.script["m"] = [{"no_usage": True, "content": "hi"}, {"tool_calls": calls}]
     req = {"model": "m", "system": "s" * 40, "prompt": "p" * 400, "max_tokens": 300, "tools": tools}
     got = await providers.chat("local", p, req)
     assert isinstance(fake.requests[0]["body"]["tools"], list)
     assert (got["tokens_in"], got["tokens_out"]) == (110, 300)  # no usage: the bound counted
     got = await providers.chat("local", p, req)
-    assert len(got["tool_calls"]) == 4 and "5 tool calls" in got["error"]
+    assert len(got["tool_calls"]) == 12 and "13 tool calls" in got["error"]
     assert providers.answer_of(got)["tries"][0]["error"] == got["error"]
 
 

@@ -187,6 +187,8 @@
       "run_blocks",
       "cancel_runs",
       "make_views",
+      "design_voice",
+      "save_voice",
       "board_frame",
       "send_to_timeline"
      ]
@@ -196,11 +198,11 @@
     },
     "confirmed": {
      "type": "boolean",
-     "description": "from API 1.87: the user's Yes on the call's card (edit_board, restore_board, run_blocks, send_to_timeline; from API 1.93 make_views), asked again under the same call_id; absent: studio answers its `preview` first (contracts/README.md, Magic: the Assistant)"
+     "description": "from API 1.87: the user's Yes on the call's card (edit_board, restore_board, run_blocks, send_to_timeline; from API 1.93 make_views; from alpha.6 design_voice and save_voice), asked again under the same call_id; absent: studio answers its `preview` first (contracts/README.md, Magic: the Assistant)"
     },
     "ask": {
      "type": "boolean",
-     "description": "from API 1.93, run_blocks and make_views only: answer the preview even within the limit (Auto mode past its hour's caps asks once; contracts/README.md, Magic: the Assistant)"
+     "description": "from API 1.93, run_blocks and make_views only (from alpha.6 design_voice too): answer the preview even within the limit (Auto mode past its hour's caps asks once; contracts/README.md, Magic: the Assistant)"
     }
    },
    "allOf": [
@@ -736,6 +738,38 @@
      "if": {
       "properties": {
        "tool": {
+        "const": "design_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/design_voice/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "save_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/save_voice/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
         "const": "board_frame"
        }
       }
@@ -868,6 +902,8 @@
       "run_blocks",
       "cancel_runs",
       "make_views",
+      "design_voice",
+      "save_voice",
       "board_frame",
       "send_to_timeline"
      ]
@@ -1462,6 +1498,38 @@
       "properties": {
        "result": {
         "$ref": "../tools/catalog.json#/tools/make_views/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "design_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/design_voice/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "save_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/save_voice/output"
        }
       }
      }
