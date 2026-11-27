@@ -37,7 +37,8 @@ export function Expand({
 }: {
   title: string;
   value: string;
-  box: RefObject<HTMLTextAreaElement | null>;
+  /** the box it measures and gives the focus back to (a textarea, or the script's line list) */
+  box: RefObject<HTMLElement | null>;
   maxLength?: number;
   placeholder?: string;
   mentions?: boolean;

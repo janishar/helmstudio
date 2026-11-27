@@ -3,8 +3,9 @@
 // (each line's @element chip with its voice badge, its style and text; a line's error under it with its fix), the
 // Cast tile and the inspector's cast rows, Style per line, and the Voice-over | Dialogue switch. A script line speaks in
 // its element's voice (`voice_id`); the voice is set on the element (PUT /v1/studio/library/{id}).
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Mic } from "lucide-react";
+import { Expand } from "@/components/expand-text";
 import { Modal } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
 import { TileWords, tileClass } from "@/components/create/elements";
@@ -200,6 +201,10 @@ function Chip({ s, bad, onClick }: { s: Speaker; bad: boolean; onClick?: () => v
   );
 }
 
+/** The script's fixed height, as the prompt keeps its own (owner, 2026-11-27: "same is the case with voice"): 8 lines
+ * of 22px, in both views; more scrolls inside (the hint rows too) and Expand opens it big. */
+export const SCRIPT_HEIGHT = 176;
+
 /** The script: the board's lines while not editing (click to edit), a mentions textarea while editing. `errors` are
  * studio's (or the local check's) per line; a line whose speaker has no fitting voice offers Pick a voice. */
 export function ScriptEditor({
@@ -219,6 +224,7 @@ export function ScriptEditor({
   onVoice: (el: Item) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const list = useRef<HTMLOListElement>(null);
   const lines = scriptLines(value);
   const id = `script-${f.node}`;
   if (editing || !value.trim())
@@ -238,7 +244,7 @@ export function ScriptEditor({
           id={id}
           expand="Script"
           autoFocus={editing}
-          rows={Math.max(3, lines.length)}
+          style={{ height: SCRIPT_HEIGHT }}
           maxLength={f.param.max}
           placeholder={
             "@mara (quiet): You said you'd be back by noon.\n@jon: I know. The road was closed."
@@ -265,76 +271,90 @@ export function ScriptEditor({
   const nums = new Map<number, number>();
   for (const ln of lines) if (!("blank" in ln)) nums.set(ln.line, nums.size + 1);
   return (
-    <ol
-      aria-label="Script"
-      className="m-0 flex list-none flex-col gap-1.5 px-1.5 py-1 text-[15px] leading-[22px]"
-      onClick={(e) => {
-        if (!(e.target as HTMLElement).closest("button")) setEditing(true);
-      }}
-      title="Click to edit the script"
-    >
-      {lines.map((ln: ScriptLine) => {
-        if ("blank" in ln) return <li key={ln.line} aria-label="Blank line" className="h-2.5" />;
-        const n = nums.get(ln.line)!;
-        const err = errors[ln.line];
-        const s = "handle" in ln ? cast.find((c) => c.handle === ln.handle) : undefined;
-        const errId = `${id}-err-${ln.line}`;
-        const fix = err && s?.el && /has no voice|does not fit/.test(err) ? s.el : undefined;
-        return [
-          <li key={ln.line} className="flex flex-wrap items-center gap-2">
-            <span
-              className={`mono w-4 text-right text-[11px] ${err ? "text-bad" : ""}`}
-              aria-label={`Line ${n}`}
-            >
-              {n}
-            </span>
-            {"handle" in ln ? (
-              <>
-                {s && (
-                  <Chip
-                    s={s}
-                    bad={!!err || !!s.reason}
-                    onClick={s.el ? () => onVoice(s.el!) : () => setEditing(true)}
-                  />
-                )}
-                {ln.style ? (
-                  <span className="text-t2 italic">({ln.style}):</span>
-                ) : (
-                  <span className="-ml-[5px] text-t2">:</span>
-                )}
-                <span aria-describedby={err ? errId : undefined}>{ln.text}</span>
-              </>
-            ) : (
-              <span className="mono text-[13px] text-bad" aria-describedby={errId}>
-                {value.split("\n")[ln.line - 1]}
-              </span>
-            )}
-          </li>,
-          err && (
-            <li
-              key={`${ln.line}-err`}
-              className="flex flex-wrap items-center gap-2.5 rounded-[10px] bg-[color-mix(in_srgb,var(--bad)_10%,transparent)] py-1.5 pr-2 pl-6"
-            >
-              <p
-                id={errId}
-                className="mono m-0 flex-[1_1_260px] text-[12px] leading-[17px] text-bad"
+    <div className="group relative min-w-0">
+      <ol
+        ref={list}
+        aria-label="Script"
+        className="m-0 flex list-none flex-col gap-1.5 overflow-y-auto py-1 pr-9 pl-1.5 text-[15px] leading-[22px] [&>li]:shrink-0"
+        style={{ height: SCRIPT_HEIGHT, scrollbarGutter: "stable" }}
+        onClick={(e) => {
+          if (!(e.target as HTMLElement).closest("button")) setEditing(true);
+        }}
+        title="Click to edit the script"
+      >
+        {lines.map((ln: ScriptLine) => {
+          if ("blank" in ln) return <li key={ln.line} aria-label="Blank line" className="h-2.5" />;
+          const n = nums.get(ln.line)!;
+          const err = errors[ln.line];
+          const s = "handle" in ln ? cast.find((c) => c.handle === ln.handle) : undefined;
+          const errId = `${id}-err-${ln.line}`;
+          const fix = err && s?.el && /has no voice|does not fit/.test(err) ? s.el : undefined;
+          return [
+            <li key={ln.line} className="flex flex-wrap items-center gap-2">
+              <span
+                className={`mono w-4 text-right text-[11px] ${err ? "text-bad" : ""}`}
+                aria-label={`Line ${n}`}
               >
-                Line {n}: {err}
-              </p>
-              {fix && (
-                <button
-                  type="button"
-                  className="chip bevel h-8 rounded-[10px] bg-s5"
-                  onClick={() => onVoice(fix)}
-                >
-                  Pick a voice
-                </button>
+                {n}
+              </span>
+              {"handle" in ln ? (
+                <>
+                  {s && (
+                    <Chip
+                      s={s}
+                      bad={!!err || !!s.reason}
+                      onClick={s.el ? () => onVoice(s.el!) : () => setEditing(true)}
+                    />
+                  )}
+                  {ln.style ? (
+                    <span className="text-t2 italic">({ln.style}):</span>
+                  ) : (
+                    <span className="-ml-[5px] text-t2">:</span>
+                  )}
+                  <span aria-describedby={err ? errId : undefined}>{ln.text}</span>
+                </>
+              ) : (
+                <span className="mono text-[13px] text-bad" aria-describedby={errId}>
+                  {value.split("\n")[ln.line - 1]}
+                </span>
               )}
-            </li>
-          ),
-        ];
-      })}
-    </ol>
+            </li>,
+            err && (
+              <li
+                key={`${ln.line}-err`}
+                className="flex flex-wrap items-center gap-2.5 rounded-[10px] bg-[color-mix(in_srgb,var(--bad)_10%,transparent)] py-1.5 pr-2 pl-6"
+              >
+                <p
+                  id={errId}
+                  className="mono m-0 flex-[1_1_260px] text-[12px] leading-[17px] text-bad"
+                >
+                  Line {n}: {err}
+                </p>
+                {fix && (
+                  <button
+                    type="button"
+                    className="chip bevel h-8 rounded-[10px] bg-s5"
+                    onClick={() => onVoice(fix)}
+                  >
+                    Pick a voice
+                  </button>
+                )}
+              </li>
+            ),
+          ];
+        })}
+      </ol>
+      <Expand
+        title="Script"
+        value={value}
+        box={list}
+        maxLength={f.param.max}
+        mentions
+        editor={(p) => (
+          <PromptArea {...p} className={`${p.className} mono`} value={value} onChange={onChange} />
+        )}
+      />
+    </div>
   );
 }
 

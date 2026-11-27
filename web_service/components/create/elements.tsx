@@ -536,7 +536,7 @@ function Editor({
           value={text}
           placeholder="Optional: words added after the prompt where it is mentioned"
           onChange={(e) => setText(e.target.value)}
-          className="resize-y rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
+          className="resize-none rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
         />
       </label>
       <p className="m-0 text-[12px] text-t2">

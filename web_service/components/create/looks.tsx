@@ -635,7 +635,7 @@ function Editor({
           value={text}
           placeholder="Words added after the prompt when the look is chosen"
           onChange={(e) => setText(e.target.value)}
-          className="resize-y rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
+          className="resize-none rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
         />
       </label>
       <div className="label flex flex-col gap-1.5">

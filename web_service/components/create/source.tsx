@@ -7,6 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ImageOff, Pause, Play, Video, X } from "lucide-react";
 import { Info } from "@/components/kit";
+import { TextArea } from "@/components/expand-text";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { ItemFields } from "@/components/create/rows";
 import { Bars, Sections } from "@/components/create/audio";
@@ -1425,7 +1426,9 @@ export function OfferPop({
           {action} · {seed != null ? `seed ${seed}` : take.title}
         </span>
         {text && action !== "Extend" && (
-          <textarea
+          // a fixed 3 lines that scroll, with Expand, as the prompt (owner, 2026-11-27)
+          <TextArea
+            expand="Style"
             aria-label="Style"
             rows={3}
             className="in h-auto resize-none py-2 leading-[19px]"

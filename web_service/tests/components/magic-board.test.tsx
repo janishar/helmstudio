@@ -130,7 +130,20 @@ describe("the board", () => {
     expect(modelName(dlg)).toBe("MiniMax Music 3");
     expect(within(dlg).getByText("or ACE-Step 1.5")).toBeTruthy();
     expect(within(dlg).getByRole("textbox", { name: "Style" })).toBeTruthy();
-    expect(within(dlg).getByRole("textbox", { name: "Lyrics" })).toBeTruthy();
+    // the request's text boxes keep a fixed 66px and scroll, with Expand, as Create's prompt (owner, 2026-11-27)
+    const lyrics = within(dlg).getByRole("textbox", { name: "Lyrics" }) as HTMLTextAreaElement;
+    for (const box of [lyrics, within(dlg).getByRole("textbox", { name: "Style" })]) {
+      expect(box.className).toContain("h-[66px]");
+      expect(box.className).toContain("resize-none");
+      expect(within(box.parentElement!).getByRole("button", { name: "Expand" })).toBeTruthy();
+    }
+    fireEvent.click(within(lyrics.parentElement!).getByRole("button", { name: "Expand" }));
+    const big = screen.getAllByRole("dialog", { name: "Lyrics" }).at(-1)!;
+    fireEvent.change(within(big).getByRole("textbox", { name: "Lyrics" }), {
+      target: { value: "la la" },
+    });
+    expect(lyrics.value).toBe("la la");
+    fireEvent.click(within(big).getByRole("button", { name: "Done" }));
     expect(within(dlg).getByText("MiniMax Music 3 can't take a key")).toBeTruthy();
     expect(within(dlg).getByRole("combobox", { name: "Key" }).matches(":disabled")).toBe(true);
     pickModel(dlg, "ACE-Step 1.5");

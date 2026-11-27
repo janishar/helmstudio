@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T08:50:00Z",
+  "at": "2026-11-27T09:20:00Z",
   "via": "Claude Code",
-  "note": "LyricsBox keeps a fixed 6 lines and scrolls, as the prompt (owner, 2026-11-27: the box still growing)"
+  "note": "Create's text boxes keep a fixed height and scroll, with Expand: the dialogue script 176px in both views, Cover/Vary style, Magic's request boxes 66px; Field, PromptBox, MagicBlockDialog (owner, 2026-11-27: check all the prompt and text section in create)"
  }
 }

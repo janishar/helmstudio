@@ -3,9 +3,15 @@
 // (@mara) and other blocks' pictures (@Shot 1 · last frame). An asset is written as @handle and joins the refs; a
 // picture joins the refs only (a block's name is no handle). The text stays plain; studio writes the handles as names.
 import { useId, useRef, useState } from "react";
+import { Expand } from "@/components/expand-text";
 import { insertMention, mentionAt } from "@/lib/mentions";
 import { atMatches, mentionedRefs } from "@/lib/magic-assets";
 import type { Doc, Ref } from "@/lib/magic";
+
+/** A request's text box (the board's .pr): a fixed 66px that scrolls, with Expand, as Create's prompt (owner,
+ * 2026-11-27: "check all the prompt and text section") */
+export const BOX =
+  "in h-[66px] resize-none overflow-y-auto py-2 pr-9 pl-2.5 text-[13px] leading-[22px]";
 
 export function AtText({
   doc,
@@ -15,7 +21,7 @@ export function AtText({
   onChange,
   label,
   placeholder,
-  className = "in min-h-16 px-2.5 py-2 text-[13px]",
+  className = BOX,
 }: {
   doc: Doc;
   /** the block it is for (its own picture is not offered) */
@@ -39,11 +45,15 @@ export function AtText({
   const key = (r: Ref) => ("asset" in r ? `a:${r.asset}` : `b:${r.block}:${r.part}`);
   const withRef = (rs: Ref[], r: Ref) => (rs.some((x) => key(x) === key(r)) ? rs : [...rs, r]);
 
-  const change = (text: string, rs = refs) => onChange(text, [...rs, ...mentionedRefs(doc, text, rs)]);
+  const change = (text: string, rs = refs) =>
+    onChange(text, [...rs, ...mentionedRefs(doc, text, rs)]);
   function pick(i: number) {
     const it = items[i];
     if (!it || !at) return;
-    const asset = "asset" in it.ref ? doc.assets.find((a) => a.id === (it.ref as { asset: string }).asset) : null;
+    const asset =
+      "asset" in it.ref
+        ? doc.assets.find((a) => a.id === (it.ref as { asset: string }).asset)
+        : null;
     // an asset is written as its handle; a picture only joins the refs (the typed @… goes)
     const out = asset
       ? insertMention(value, at.start, at.end, asset.handle)
@@ -53,7 +63,7 @@ export function AtText({
     requestAnimationFrame(() => ta.current?.setSelectionRange(out.caret, out.caret));
   }
   return (
-    <div className="relative flex flex-col">
+    <div className="group relative flex flex-col">
       <textarea
         ref={ta}
         aria-label={label}
@@ -84,6 +94,13 @@ export function AtText({
             setClosed(at!.start);
           }
         }}
+      />
+      <Expand
+        title={label}
+        value={value}
+        box={ta}
+        placeholder={placeholder}
+        editor={(p) => <textarea {...p} value={value} onChange={(e) => change(e.target.value)} />}
       />
       {open && items.length > 0 && (
         <div

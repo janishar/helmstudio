@@ -6,7 +6,8 @@ import { Clock3, Plus, X } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { RunOnChip } from "@/components/create/run-on";
 import { useHosts } from "@/components/create/memory-chip";
-import { AtText } from "@/components/magic/at-text";
+import { TextArea } from "@/components/expand-text";
+import { AtText, BOX } from "@/components/magic/at-text";
 import { LinkGlyph } from "@/components/magic/icons";
 import { STATUS, refText } from "@/components/magic/lanes";
 import { turnMenu } from "@/components/magic/menus";
@@ -81,7 +82,9 @@ export type Tie = { to: string[]; onUnlink: () => void };
 
 /** "Tied to Shot 2 · moves with it", "Tied to Shots 1–3 · stretches with them". */
 export function tieText(d: Doc, to: string[]): string {
-  const names = to.map((id) => d.blocks.find((b) => b.id === id)?.name.split(" · ")[0] ?? "a gone shot");
+  const names = to.map(
+    (id) => d.blocks.find((b) => b.id === id)?.name.split(" · ")[0] ?? "a gone shot",
+  );
   if (names.length === 1) return `Tied to ${names[0]} · moves with it`;
   const nums = names.map((n) => /(\d+)$/.exec(n)?.[1]);
   const run = nums.every(Boolean) ? `Shots ${nums[0]}–${nums.at(-1)}` : names.join(", ");
@@ -90,7 +93,15 @@ export function tieText(d: Doc, to: string[]): string {
 
 /** Run on (MagicBoard frame 3, as Create's: docs/mock/RunOn.dc.html): Auto, or a host, greyed when it can't take the
  * model's workflow. */
-function RunOnField({ req, env, set }: { req: MagicRequest; env?: string; set: (p: Partial<MagicRequest>) => void }) {
+function RunOnField({
+  req,
+  env,
+  set,
+}: {
+  req: MagicRequest;
+  env?: string;
+  set: (p: Partial<MagicRequest>) => void;
+}) {
   const list = machines(useHosts());
   return (
     <div className="fld">
@@ -158,7 +169,9 @@ function Turns({
                 aria-label={`Line ${i + 1} speaker`}
                 className="in h-8 w-[110px] shrink-0 px-2 text-[13px]"
                 value={t.speaker}
-                onChange={(e) => put(turns.map((x, j) => (j === i ? { ...x, speaker: e.target.value } : x)))}
+                onChange={(e) =>
+                  put(turns.map((x, j) => (j === i ? { ...x, speaker: e.target.value } : x)))
+                }
               >
                 <option value="">Speaker</option>
                 {speakers.map((a) => (
@@ -172,13 +185,18 @@ function Turns({
                 className="in h-8 min-w-0 grow px-2 text-[13px]"
                 value={t.text}
                 placeholder="What they say"
-                onChange={(e) => put(turns.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+                onChange={(e) =>
+                  put(turns.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))
+                }
               />
               {st &&
                 (st.s === "running" ? (
                   <span className="mst run">{Math.round(st.progress)}%</span>
                 ) : (
-                  <span className={`mst ${STATUS[st.s][0]}`} title={st.s === "failed" ? st.error : undefined}>
+                  <span
+                    className={`mst ${STATUS[st.s][0]}`}
+                    title={st.s === "failed" ? st.error : undefined}
+                  >
                     {STATUS[st.s][1]}
                   </span>
                 ))}
@@ -298,9 +316,10 @@ export function RequestForm({
     line: () =>
       field(
         "line",
-        <textarea
+        <TextArea
+          expand="Line"
           aria-label="Line"
-          className="in min-h-12 px-2.5 py-2 text-[13px]"
+          className={BOX}
           value={req.line ?? ""}
           onChange={(e) => set({ line: e.target.value })}
         />,
@@ -352,10 +371,11 @@ export function RequestForm({
     lyrics: () =>
       field(
         "lyrics",
-        <textarea
+        <TextArea
+          expand="Lyrics"
           aria-label="Lyrics"
           placeholder="Instrumental"
-          className="in min-h-12 px-2.5 py-2 text-[13px]"
+          className={BOX}
           value={req.lyrics ?? ""}
           onChange={(e) => set({ lyrics: e.target.value || undefined })}
         />,
@@ -468,7 +488,9 @@ export function RequestForm({
                 aria-label="Seeds"
                 className="in h-8 w-auto shrink-0 px-1.5 text-[13px]"
                 value={req.count ?? 1}
-                onChange={(e) => set({ count: +e.target.value === 1 ? undefined : +e.target.value })}
+                onChange={(e) =>
+                  set({ count: +e.target.value === 1 ? undefined : +e.target.value })
+                }
               >
                 {[1, 2, 3, 4].map((n) => (
                   <option key={n} value={n}>
