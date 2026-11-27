@@ -177,12 +177,15 @@
       "read_model_guide",
       "look_at",
       "list_boards",
+      "create_board",
       "show_board",
+      "magic_kinds",
       "try_board_edit",
       "edit_board",
       "restore_board",
       "plan_board",
       "run_blocks",
+      "make_views",
       "board_frame",
       "send_to_timeline"
      ]
@@ -192,7 +195,11 @@
     },
     "confirmed": {
      "type": "boolean",
-     "description": "from API 1.87: the user's Yes on the call's card (edit_board, restore_board, run_blocks, send_to_timeline), asked again under the same call_id; absent: studio answers its `preview` first (contracts/README.md, Magic: the Assistant)"
+     "description": "from API 1.87: the user's Yes on the call's card (edit_board, restore_board, run_blocks, send_to_timeline; from API 1.93 make_views), asked again under the same call_id; absent: studio answers its `preview` first (contracts/README.md, Magic: the Assistant)"
+    },
+    "ask": {
+     "type": "boolean",
+     "description": "from API 1.93, run_blocks and make_views only: answer the preview even within the limit (Auto mode past its hour's caps asks once; contracts/README.md, Magic: the Assistant)"
     }
    },
    "allOf": [
@@ -568,6 +575,22 @@
      "if": {
       "properties": {
        "tool": {
+        "const": "create_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/create_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
         "const": "show_board"
        }
       }
@@ -576,6 +599,22 @@
       "properties": {
        "args": {
         "$ref": "../tools/catalog.json#/tools/show_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "magic_kinds"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/magic_kinds/input"
        }
       }
      }
@@ -656,6 +695,22 @@
       "properties": {
        "args": {
         "$ref": "../tools/catalog.json#/tools/run_blocks/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "make_views"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/make_views/input"
        }
       }
      }
@@ -786,12 +841,15 @@
       "read_model_guide",
       "look_at",
       "list_boards",
+      "create_board",
       "show_board",
+      "magic_kinds",
       "try_board_edit",
       "edit_board",
       "restore_board",
       "plan_board",
       "run_blocks",
+      "make_views",
       "board_frame",
       "send_to_timeline"
      ]
@@ -1234,6 +1292,22 @@
      "if": {
       "properties": {
        "tool": {
+        "const": "create_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/create_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
         "const": "show_board"
        }
       }
@@ -1242,6 +1316,22 @@
       "properties": {
        "result": {
         "$ref": "../tools/catalog.json#/tools/show_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "magic_kinds"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/magic_kinds/output"
        }
       }
      }
@@ -1322,6 +1412,22 @@
       "properties": {
        "result": {
         "$ref": "../tools/catalog.json#/tools/run_blocks/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "make_views"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/make_views/output"
        }
       }
      }

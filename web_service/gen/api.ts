@@ -326,9 +326,9 @@ export interface paths {
          *     items newest `updated_at` first, then starter looks by `name` (code points), then `id`. `limit` cuts the list
          *     (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md, Elements).
          *     From 1.92 `words` is the pickers' search (contracts/README.md, Search in lists): every whitespace-separated word
-         *     must occur, case-insensitively, anywhere in the item's `name`, `handle` (a leading `@` of the word ignored),
-         *     `text` or, for a voice, its `voice` line (`speaker`, `design`, `style`, `language`); it filters without changing
-         *     the order and combines with `q`. No cursor: a user has at most 200 items, so the list is always whole.
+         *     must occur, case-insensitively, anywhere in the item's `name`, `handle`, `text` or, for a voice, its `voice`
+         *     line (`speaker`, `design`, `style`, `language`); a word's leading `@` is ignored, more than 200 characters is
+         *     422. It filters without changing the order and combines with `q`. No cursor: a user has at most 200 items, so the list is always whole.
          *     `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
          *     it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
          *     (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
@@ -9912,6 +9912,14 @@ export interface components {
             /** @description the take it shows: pinned, else its latest */
             take_id: string | null;
             takes: number;
+            /** @description from 1.93: its takes, newest first (pin one with a block op's `pinned`; look at them with look_at) */
+            take_ids: string[];
+            /** @description from 1.93: take_id is the take the user (or a block op) pinned; false: its latest */
+            pinned: boolean;
+            /** @description from 1.93, failed: why, in plain words (its newest run's error) */
+            error?: string;
+            /** @description from 1.93, a dialogue only: each turn's status, in the turns' order (MagicStatus.turns) */
+            turns?: components["schemas"]["MagicStatus"]["turns"];
             prompt?: string;
             line?: string;
             note?: string;
@@ -9946,6 +9954,9 @@ export interface components {
                 end?: components["schemas"]["MagicId"];
                 kind: components["schemas"]["MagicTransitionKind"];
                 length: components["schemas"]["MagicFrames"];
+                request?: components["schemas"]["MagicTransition"]["request"];
+                takes?: components["schemas"]["MagicTransition"]["takes"];
+                pinned?: components["schemas"]["MagicTransition"]["pinned"];
                 at_s: number;
             }[];
             assets: {
@@ -9954,7 +9965,18 @@ export interface components {
                 kind: "character" | "prop" | "place";
                 handle: string;
                 name: string;
-                /** @description the blocks that @-pick it or speak in its voice */
+                /** @description from 1.93: its sheet takes in order, each with its view's name when it has one (MagicAsset.sheet and views) */
+                sheet: {
+                    /** Format: uuid */
+                    take_id: string;
+                    /** @description "Front", "Side" */
+                    view?: string;
+                }[];
+                /** @description from 1.93: its voice (a speaker with none cannot run) */
+                voice_id?: string;
+                /** @description from 1.93 */
+                note?: string;
+                /** @description the blocks that @-pick it, speak in its voice, from 1.93 also a dialogue's speaker or a first or last frame of it (lib/magic.ts usedIn: what the asset dialog says before a delete) */
                 used_in: components["schemas"]["MagicId"][];
             }[];
             notes: string[];

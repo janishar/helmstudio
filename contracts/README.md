@@ -4301,6 +4301,24 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `restore_board` (card `board_edit`), `plan_board` (`…/plan`), `run_blocks` (card `magic_run`, asked only above the
   limit), `board_frame` (what each visible lane shows at a board time: block, take, seconds into it, status; nothing
   is rendered: look at a take with look_at) and `send_to_timeline` (card `send`). They are not on helm mcp yet.
+- **From 1.93** (owner, 2026-11-27: "Yes, fix them", after the Assistant's Magic audit): `list_boards` takes `q`;
+  `create_board` (`POST …/boards` {name?, target?}: an empty board, the one assistant write with no card, since
+  nothing is lost or run; answers {board_id, name, revision}, then the Assistant opens it with navigate `/magic` b);
+  `magic_kinds` (GET /v1/studio/magic/kinds, optionally one `kind`: model workflow ids, greyed fields, env, Advanced
+  params); `make_views` {board_id, revision, asset, views, model?} (`…/assets/{asset_id}/views`, card `magic_run`
+  under the ask rule: the views are planned in process as image runs, within the limit they start at once with no
+  card, above it or with no estimate the preview is {revision, plan, frames: [], rest} as run_blocks' and the Yes
+  starts them). The agent view adds a block's `take_ids` (newest first), `pinned`, `error` (failed: why) and a
+  dialogue's `turns` (MagicStatus.turns), an asset's `sheet` [{take_id, view?}], `voice_id` and `note`, a morph's
+  `request`, `takes` and `pinned`; an asset's `used_in` counts what lib/magic.ts usedIn counts (refs, voice, a
+  dialogue's speakers, first and last picks). run_blocks' and make_views' final reply carry `seconds` (the estimate
+  of what started; null unknown).
+- **Auto mode's caps** (1.93): with the chat's Auto on, every Magic run that starts without a card (run_blocks within
+  the limit, its board frames, make_views within the limit) is reserved in `assistant_spend` (kind `auto`, keyed by
+  the call: one take per run, its estimate in GPU seconds, unknown as 0). Once the hour's takes or GPU minutes are at
+  a cap, pipelines asks studio with `ask` true: studio answers the preview even within the limit, and the card's
+  note is `Auto paused · 8 of 8 takes this hour` (or GPU minutes); the user's Yes runs it (not counted: the user
+  said yes). Auto off: nothing is counted, nothing changes.
 - **The summary** of an edit names what changed by block name: `Added Shot 2 and Frame 4; moved Line 2; removed
   Shot 5` (more than two blocks in one action: a kind with several is counted, one alone named, `Added 3 shots and
   Frame 4`, the board's frame 8), then lanes, assets, transitions and ties (`Added lane Music`, `Added a dissolve`);

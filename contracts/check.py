@@ -4565,6 +4565,8 @@ def check_openapi() -> None:
                     fail(f"{where} {code}: use a components/responses error")
 
 
+# API 1.93: an assistant write with no card: create_board makes an empty board (nothing is lost or run)
+CARDLESS_WRITES = {"create_board"}
 ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.61 a plugin tool with a risk flag
 
 
@@ -4660,8 +4662,9 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
             fail(f"{w}: a write tool is mcp only, or the assistant's behind a card")
         if t.get("destructive") and (t["read_only"] or t["surfaces"] != ["mcp"]):
             fail(f"{w}: destructive is an mcp-only write (plan 16)")
-        if not t["read_only"] and "assistant" in t["surfaces"] and "card" not in t and t["served_by"] != "pipelines":
-            fail(f"{w}: an assistant write needs a card (only memory writes go without)")
+        if (not t["read_only"] and "assistant" in t["surfaces"] and "card" not in t and t["served_by"] != "pipelines"
+                and n not in CARDLESS_WRITES):
+            fail(f"{w}: an assistant write needs a card (only memory writes and {sorted(CARDLESS_WRITES)} go without)")
         if "card" in t:
             used.add(t["card"])
             if t["card"] not in cards:
@@ -4686,6 +4689,24 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
                      f"(differ: {sorted(k for k in set(magic) | set(have) if magic.get(k) != have.get(k))})")
             if any(not o.get("description") for o in ops):
                 fail(f"tools/catalog.json {n}: every op needs a one-line description")
+    # 1.93: every copy of the standard request's description is one text, and it names a dialogue's turns, Run on
+    # (host) and loop, so the model never applies Create's "@name: text" script to Magic (owner, 2026-11-27)
+    texts = set()
+
+    def requests(node) -> None:
+        if isinstance(node, dict):
+            r = node.get("request")
+            if isinstance(r, dict) and r.get("type") == "object" and "standard request" in r.get("description", ""):
+                texts.add(r["description"])
+            for v in node.values():
+                requests(v)
+        elif isinstance(node, list):
+            for v in node:
+                requests(v)
+
+    requests({n: catalog["tools"][n] for n in ("try_board_edit", "edit_board") if n in catalog["tools"]})
+    if len(texts) != 1 or not all(w in next(iter(texts)) for w in ("turns [{speaker", "host (Run on", "loop (")):
+        fail("tools/catalog.json: the Magic request's descriptions must be one text naming turns, host and loop")
     shell = set(actions["screens"]["shell"]["actions"])
     to = set(actions["screens"]["shell"]["actions"]["navigate"]["input"]["properties"]["to"]["enum"])
     for sn, sc in actions["screens"].items():
