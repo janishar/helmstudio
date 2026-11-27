@@ -2,6 +2,7 @@ package dto
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -27,6 +28,53 @@ type MagicBoard struct {
 	Runs      []MagicBlockRun        `json:"runs"`
 	Takes     map[string]MagicTake   `json:"takes"`
 	Status    map[string]MagicStatus `json:"status"`
+	// API 1.83: the runs that make assets' views
+	AssetRuns []MagicAssetRun `json:"asset_runs"`
+}
+
+// MagicAssetRun is one run of Make views: an asset's view being made (API 1.83).
+type MagicAssetRun struct {
+	Asset     string    `json:"asset"`
+	View      string    `json:"view"`
+	RunID     string    `json:"run_id"`
+	Status    string    `json:"status"`
+	Progress  *int      `json:"progress,omitempty"`
+	Error     *string   `json:"error"`
+	Takes     []string  `json:"takes"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// MagicViewsCreate is POST …/assets/{asset_id}/views: the views to make on the board's revision.
+type MagicViewsCreate struct {
+	Revision int      `json:"revision"`
+	Views    []string `json:"views"`
+	Model    string   `json:"model,omitempty"`
+}
+
+// Validate requires the revision and 1-6 named views, each once.
+func (b *MagicViewsCreate) Validate() string {
+	if b.Revision < 1 {
+		return "revision is required"
+	}
+	if len(b.Views) < 1 || len(b.Views) > 6 {
+		return "views must be 1 to 6 names"
+	}
+	for i, v := range b.Views {
+		if strings.TrimSpace(v) == "" || len([]rune(v)) > 40 || slices.Contains(b.Views[:i], v) {
+			return "views are names of 1-40 characters, each once"
+		}
+	}
+	return ""
+}
+
+// MagicViewStarted is a view's run; MagicViewsStarted is …/views' 202.
+type MagicViewStarted struct {
+	View  string `json:"view"`
+	RunID string `json:"run_id"`
+}
+type MagicViewsStarted struct {
+	Board   MagicBoard         `json:"board"`
+	Started []MagicViewStarted `json:"started"`
 }
 
 // MagicStatus is a block's derived status (API 1.81).
@@ -61,6 +109,8 @@ type MagicBlockRun struct {
 	By         string    `json:"by"` // user | assistant
 	CreatedAt  time.Time `json:"created_at"`
 	RenderS    *float64  `json:"render_s"`
+	// API 1.83: a board frame's style when it ran
+	Style *string `json:"style,omitempty"`
 }
 
 // MagicParam is one Advanced field of a model.

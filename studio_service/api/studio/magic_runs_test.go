@@ -65,7 +65,7 @@ func TestStandardInputsPerPack(t *testing.T) {
 		if w.Standard == nil || w.Standard.Kind != c.kind {
 			t.Fatalf("%s: standard %+v", c.id, w.Standard)
 		}
-		inputs := standardInputs(w, block(c.kind, 192, c.request), board, c.pics, c.voice, 42)
+		inputs := standardInputs(w, magic.Doc{Target: board}, block(c.kind, 192, c.request), c.pics, c.voice, 42)
 		if got := flat(inputs); got != c.want {
 			t.Errorf("%s:\n got %s\nwant %s", c.id, got, c.want)
 		}
@@ -109,7 +109,7 @@ func flat(m map[string]any) string {
 }
 
 // GET /magic/kinds: the fake host's models, fastest first, each field it cannot fill greyed with why; Music, Sound
-// and board frames off.
+// off; a board frame is served by the image models (API 1.83).
 func TestMagicKindsGreying(t *testing.T) {
 	ws := []registry.Workflow{canonical(t, "", "fake.fake", "echo-video"), canonical(t, "", "fake.fake", "echo-image-to-video"),
 		canonical(t, "", "fake.fake", "echo"), canonical(t, "ltx.", "mac.mlx", "ltx-image-to-video")}
@@ -127,7 +127,8 @@ func TestMagicKindsGreying(t *testing.T) {
 			"Echo video[prompt length size]map[first:Echo video can't take a first frame last:Echo video can't take a last frame seed:Echo video can't take a seed]; " +
 			"LTX 2.5[prompt first last length size seed]map[]|",
 		"image": "Echo[prompt refs]map[seed:Echo can't take a seed size:Echo can't take a size]|",
-		"voice": "|", "music": "|" + offMusicSound, "sound": "|" + offMusicSound, "frame": "|" + offFrame,
+		"voice": "|", "music": "|" + offMusicSound, "sound": "|" + offMusicSound,
+		"frame": "Echo[prompt refs]map[seed:Echo can't take a seed size:Echo can't take a size]|",
 	}
 	for k, v := range want {
 		if got[k] != v {
@@ -224,5 +225,35 @@ func TestEstimateParts(t *testing.T) {
 	p := registry.Param{Min: &step, Max: &max, Step: &step}
 	if w, h := fitSize(1920, 1080, p, p); w != 1024 || h != 576 {
 		t.Fatal(w, h)
+	}
+}
+
+// API 1.83: a frame's prompt is its style, framing and words with who and where; a shot made from a frame with none
+// of its own takes the frame's; the board's @handles become their names, with their picture's row.
+func TestMagicPrompt(t *testing.T) {
+	d := magic.Doc{Target: board, Assets: []*magic.Asset{{ID: "a1", Handle: "mara", Name: "Mara"},
+		{ID: "a2", Handle: "bus-stop", Name: "Bus stop"}}}
+	frame := block("frame", 96, `{"style":"rough","framing":{"size":"wide","angle":"low","move":"push_in"},
+		"prompt":"@mara waits in the rain."}`)
+	frame.ID = "f1"
+	shot := block("video", 96, `{}`)
+	shot.FromFrame = &frame.ID
+	d.Blocks = []*magic.Block{frame, shot}
+	cases := []struct {
+		b       *magic.Block
+		mention string
+		refs    []string
+		want    string
+	}{
+		{frame, "<image{n}>", []string{"a1", "a2"}, "A rough storyboard drawing: simple shapes, grey shading. Wide shot, from a low angle. " +
+			"Mara <image1> waits in the rain. With Bus stop <image2>."},
+		{frame, "", []string{"a1"}, "A rough storyboard drawing: simple shapes, grey shading. Wide shot, from a low angle. Mara waits in the rain."},
+		{shot, "", nil, "Wide shot, from a low angle. Mara waits in the rain. The camera slowly pushes in."},
+		{block("video", 96, `{"prompt":"@mara runs, @fox follows"}`), "", nil, "Mara runs, @fox follows"},
+	}
+	for i, c := range cases {
+		if got := magicPrompt(d, c.b, c.mention, c.refs); got != c.want {
+			t.Errorf("%d:\n got %s\nwant %s", i, got, c.want)
+		}
 	}
 }

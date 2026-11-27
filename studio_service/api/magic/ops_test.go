@@ -19,7 +19,11 @@ type replayFixture struct {
 
 // replay is each case's ops applied in order, all or nothing: the document after the last, or {error, op_index}.
 func replay(t *testing.T) (replayFixture, []any) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "..", "contracts", "fixtures", "magic", "edits.json"))
+	path := filepath.Join("..", "..", "..", "contracts", "fixtures", "magic", "edits.json")
+	if p := os.Getenv("MAGIC_FIXTURE"); p != "" { // a draft of the fixture
+		path = p
+	}
+	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}

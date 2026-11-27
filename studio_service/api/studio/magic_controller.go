@@ -117,6 +117,16 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		reply(ctx, http.StatusAccepted, out, err)
 	})
 	group.POST("/magic/boards/:id/plan", magicIDBody(c.service.PlanMagicBoard))
+	// API 1.83: Make views of an asset
+	group.POST("/magic/boards/:id/assets/:asset_id/views", func(ctx *gin.Context) {
+		body, err := strictBody[dto.MagicViewsCreate](ctx, false)
+		var out dto.MagicViewsStarted
+		if err == nil {
+			out, err = c.service.MakeMagicViews(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"),
+				ctx.Param("asset_id"), body)
+		}
+		reply(ctx, http.StatusAccepted, out, err)
+	})
 	group.DELETE("/magic/boards/:id/snapshots/:snapshot_id", func(ctx *gin.Context) {
 		noContent(ctx, c.service.DeleteMagicSnapshot(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"),
 			ctx.Param("snapshot_id")))

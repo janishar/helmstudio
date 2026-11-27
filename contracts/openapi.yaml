@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.82.0
+  version: 1.83.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders); from 1.79 music and sound: a sound class on audio takes and workflows (`SoundClass` music, sound or voice: `Take.sound`, `Workflow.sound`, `NodeSchema.sound`, the `kind` and `media` filters by class, an upload''s and a plugin take''s `sound`), offers by class, stereo audio and a song''s sections (`AudioInfo.channels`, `sections`), a `span` on an audio input, Auto int and float values (`auto: true`), lyrics tags (`ParamSchema.tags`), chip groups and a per-workflow count (`StudioLayout.groups`, `count`) and Save with the video (POST /v1/studio/takes/{take_id}/mux, media job kind `mux`; contracts/README.md, Music and sound); from 1.80 Magic boards (contracts/README.md, Magic); from 1.81 Magic''s standard request and runs: a workflow''s `standard` block (registry.schema.json), GET /v1/studio/magic/kinds, the Magic settings, a board''s run and plan, its runs, takes and statuses (contracts/README.md, Magic: the standard request; Magic: runs); from 1.82 Magic''s Send to Timeline: a board sent as a new sequence (POST …/boards/{board_id}/send, the sends list), fade, wipe and lane fades baked by a media job of kind `bake` (TakeSource `bake`), a morph''s own request and takes on its transition (contracts/README.md, Magic: Send to Timeline)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders); from 1.79 music and sound: a sound class on audio takes and workflows (`SoundClass` music, sound or voice: `Take.sound`, `Workflow.sound`, `NodeSchema.sound`, the `kind` and `media` filters by class, an upload''s and a plugin take''s `sound`), offers by class, stereo audio and a song''s sections (`AudioInfo.channels`, `sections`), a `span` on an audio input, Auto int and float values (`auto: true`), lyrics tags (`ParamSchema.tags`), chip groups and a per-workflow count (`StudioLayout.groups`, `count`) and Save with the video (POST /v1/studio/takes/{take_id}/mux, media job kind `mux`; contracts/README.md, Music and sound); from 1.80 Magic boards (contracts/README.md, Magic); from 1.81 Magic''s standard request and runs: a workflow''s `standard` block (registry.schema.json), GET /v1/studio/magic/kinds, the Magic settings, a board''s run and plan, its runs, takes and statuses (contracts/README.md, Magic: the standard request; Magic: runs); from 1.82 Magic''s Send to Timeline: a board sent as a new sequence (POST …/boards/{board_id}/send, the sends list), fade, wipe and lane fades baked by a media job of kind `bake` (TakeSource `bake`), a morph''s own request and takes on its transition (contracts/README.md, Magic: Send to Timeline); from 1.83 Magic assets and the storyboard: an asset''s ops and named views, Make views (POST …/assets/{asset_id}/views), a block''s own picture (`take_add`), board frames that run on the image models with their style and framing, a shot made from a frame, the board''s `asset_runs` (contracts/README.md, Magic: assets and the storyboard)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -3456,7 +3456,7 @@ paths:
       tags: [studio]
       operationId: studioMagicKinds
       summary: 'From 1.81: per kind, its shared fields and the models that serve it (what each fills, the greyed reasons, its Advanced)'
-      description: 'contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks, a board frame always (the storyboard''s phase).'
+      description: 'contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks. From 1.83 a board frame is served by the image models (its fields are the image ones; its style and framing are words of its prompt).'
       responses:
         '200': {description: the kinds, content: {application/json: {schema: {$ref: '#/components/schemas/MagicKinds'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -3520,6 +3520,29 @@ paths:
         '200': {description: the plan, content: {application/json: {schema: {$ref: '#/components/schemas/MagicPlan'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/assets/{asset_id}/views:
+    post:
+      tags: [studio]
+      operationId: studioMakeMagicViews
+      summary: 'From 1.83: Make views: one run of an image model per named view of an asset, in the board''s session'
+      description: |
+        contracts/README.md, Magic: assets and the storyboard. Each view ("Front", "Side") is a run of `model` (an image
+        model GET /v1/studio/magic/kinds lists; absent: the first) with the asset's name, note and the view in words,
+        its first sheet take as the reference when it has one; each take joins the asset's `sheet` named in `views` as a
+        studio revision (undo skips it). 202 with the board and the runs. 409 when `revision` is not the current one;
+        422 for an asset not on the board (`unknown asset a1`), a sheet that would pass 50, a model on no host, or the
+        run's own refusal (`Front: …`).
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {name: asset_id, in: path, required: true, schema: {$ref: '#/components/schemas/MagicId'}, description: 'an asset of the board'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicViewsCreate'}}}
+      responses:
+        '202': {description: started, content: {application/json: {schema: {$ref: '#/components/schemas/MagicViewsStarted'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
@@ -8730,6 +8753,15 @@ components:
         count: {type: integer, minimum: 1, maximum: 4, description: 'from 1.81: how many runs one Generate makes (seeds seed, seed + 1, …)'}
         voice_id: {type: string, maxLength: 80, description: 'from 1.81: a saved voice (library item of kind voice) when `voice` names no asset with one'}
         advanced: {type: object, description: 'the model''s own params, `<node>.<param>` → value as a run''s inputs (the shared fields win)'}
+        framing:
+          type: object
+          additionalProperties: false
+          description: 'from 1.83: a storyboard frame''s shot size and angle (words of its prompt) and the move of the shot made from it'
+          properties:
+            size: {type: string, enum: [wide, medium, close, over_shoulder]}
+            angle: {type: string, enum: [eye, low, high]}
+            move: {type: string, enum: [still, push_in, pan, follow]}
+        shot_model: {type: string, maxLength: 80, description: 'from 1.83: a storyboard frame''s pick of the video model Generate from board makes its shot with'}
     MagicEffect:
       type: object
       required: [name]
@@ -8799,6 +8831,22 @@ components:
         voice_id: {type: string, maxLength: 80}
         note: {type: string, maxLength: 4000}
         imported_from: {type: string, maxLength: 80, description: 'the take or Element it was copied from, for the record only'}
+        views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}, description: 'from 1.83: names of sheet takes by take id ("Front", "Side"); only takes on its sheet'}
+    MagicAssetNew:
+      type: object
+      required: [kind, handle, name]
+      additionalProperties: false
+      description: 'from 1.83: an asset as asset_add gives it: `id` optional (studio makes `a<n>`), `sheet` absent = none'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        kind: {type: string, enum: [character, prop, place]}
+        handle: {type: string, pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'its @ name (LibraryItem.handle''s rule), unique on the board'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+        views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}}
+        voice_id: {type: string, maxLength: 80}
+        note: {type: string, maxLength: 4000}
+        imported_from: {type: string, maxLength: 80}
     MagicDoc:
       type: object
       required: [target, lanes, blocks, links, transitions, assets, notes]
@@ -8826,6 +8874,7 @@ components:
         runs: {type: array, items: {$ref: '#/components/schemas/MagicBlockRun'}, description: 'from 1.81: every block''s runs, oldest first (the last 20 of each block); from 1.82 a morph''s too (`block` its transition id)'}
         takes: {type: object, additionalProperties: {$ref: '#/components/schemas/MagicTake'}, description: 'from 1.81: the takes the document names, by id (one deleted since is left out)'}
         status: {type: object, additionalProperties: {$ref: '#/components/schemas/MagicStatus'}, description: 'from 1.81: every block''s status by id (derived, contracts/README.md, Magic: runs); from 1.82 every morph transition''s too'}
+        asset_runs: {type: array, items: {$ref: '#/components/schemas/MagicAssetRun'}, description: 'from 1.83: the Make views runs, oldest first (the last 20 of each asset)'}
         created_at: {type: string, format: date-time}
         updated_at: {type: string, format: date-time}
     MagicBoardSummary:
@@ -8908,6 +8957,25 @@ components:
         - {type: object, required: [op, id, by], additionalProperties: false, properties: {op: {const: lane_move}, id: {$ref: '#/components/schemas/MagicId'}, by: {type: integer, enum: [-1, 1]}}}
         - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: lane_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
         - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: asset_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, asset], additionalProperties: false, description: 'from 1.83', properties: {op: {const: asset_add}, asset: {$ref: '#/components/schemas/MagicAssetNew'}}}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          description: 'from 1.83: an asset''s kind, name, note, voice (null takes it off), sheet (each take once) and views'
+          properties:
+            op: {const: asset}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties:
+                kind: {type: string, enum: [character, prop, place]}
+                name: {type: string, maxLength: 80}
+                note: {type: string, maxLength: 4000}
+                voice_id: {oneOf: [{type: string, maxLength: 80}, {type: 'null'}]}
+                sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+                views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}}
+        - {type: object, required: [op, id, take], additionalProperties: false, description: 'from 1.83: a picture of your own (an upload, a Gallery take) joins a block''s takes, pinned', properties: {op: {const: take_add}, id: {$ref: '#/components/schemas/MagicId'}, take: {type: string, format: uuid}}}
     MagicIds: {type: array, minItems: 1, maxItems: 2000, uniqueItems: true, items: {$ref: '#/components/schemas/MagicId'}}
     MagicEdits:
       type: object
@@ -9106,6 +9174,34 @@ components:
         by: {type: string, enum: [user, assistant], description: 'who ran it (X-Helm-Client assistant)'}
         created_at: {type: string, format: date-time}
         render_s: {type: [number, 'null'], description: 'its first take''s render time'}
+        style: {type: string, enum: [sketch, rough, full], description: 'from 1.83: a board frame''s style when it ran'}
+    MagicAssetRun:
+      type: object
+      required: [asset, view, run_id, status, error, takes, created_at]
+      description: 'from 1.83: one run of Make views'
+      properties:
+        asset: {$ref: '#/components/schemas/MagicId'}
+        view: {type: string, description: 'the view it makes ("Front")'}
+        run_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        progress: {type: integer, minimum: 0, maximum: 100}
+        error: {type: [string, 'null']}
+        takes: {type: array, items: {type: string, format: uuid}}
+        created_at: {type: string, format: date-time}
+    MagicViewsCreate:
+      type: object
+      required: [revision, views]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the board''s current revision (409 when stale)'}
+        views: {type: array, minItems: 1, maxItems: 6, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 40}, description: 'the views to make, one run each ("Front", "Side", "Back")'}
+        model: {type: string, maxLength: 80, description: 'an image model''s workflow id; absent: the image kind''s first'}
+    MagicViewsStarted:
+      type: object
+      required: [board, started]
+      properties:
+        board: {$ref: '#/components/schemas/MagicBoard'}
+        started: {type: array, items: {type: object, required: [view, run_id], properties: {view: {type: string}, run_id: {type: string, format: uuid}}}}
     MagicParam:
       type: object
       required: [path, param]
@@ -9131,7 +9227,7 @@ components:
         kind: {$ref: '#/components/schemas/MagicKind'}
         fields: {type: array, items: {$ref: '#/components/schemas/MagicField'}, description: 'the kind''s shared fields in form order'}
         models: {type: array, items: {$ref: '#/components/schemas/MagicModel'}, description: 'the workflows that serve it, the registry''s order; empty: none on any host'}
-        'off': {type: string, description: 'why the kind cannot run yet (Music and Sound: `Comes with Create''s Music and Sound`; a board frame: `Board frames come with the storyboard`)'}
+        'off': {type: string, description: 'why the kind cannot run yet (Music and Sound: `Comes with Create''s Music and Sound`; before 1.83 a board frame: `Board frames come with the storyboard`)'}
     MagicKinds:
       type: object
       required: [kinds]

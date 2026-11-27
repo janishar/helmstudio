@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -85,6 +86,8 @@ type Asset struct {
 	VoiceID      *string  `json:"voice_id,omitempty"`
 	Note         *string  `json:"note,omitempty"`
 	ImportedFrom *string  `json:"imported_from,omitempty"`
+	// Views names sheet takes ("Front", "Side"), by take id (API 1.83)
+	Views map[string]string `json:"views,omitempty"`
 }
 
 // Doc is one board (MagicDoc).
@@ -516,6 +519,8 @@ type fields struct {
 	Set     json.RawMessage `json:"set"`
 	After   *string         `json:"after"`
 	By      *int            `json:"by"`
+	Asset   json.RawMessage `json:"asset"`
+	Take    string          `json:"take"`
 }
 
 // opFields is each op's fields (MagicOp): the ones it takes, then the required ones.
@@ -537,6 +542,102 @@ var opFields = map[string][2][]string{
 	"lane_move":    {{"id", "by"}, {"id", "by"}},
 	"lane_delete":  {{"id"}, {"id"}},
 	"asset_delete": {{"id"}, {"id"}},
+	"asset_add":    {{"asset"}, {"asset"}}, // API 1.83: assets, a block's own picture
+	"asset":        {{"id", "set"}, {"id", "set"}},
+	"take_add":     {{"id", "take"}, {"id", "take"}},
+}
+
+// AssetNew is an asset as asset_add gives it (its id optional).
+type AssetNew struct {
+	ID           *string           `json:"id"`
+	Kind         string            `json:"kind"`
+	Handle       string            `json:"handle"`
+	Name         string            `json:"name"`
+	Sheet        []string          `json:"sheet"`
+	Views        map[string]string `json:"views"`
+	VoiceID      *string           `json:"voice_id"`
+	Note         *string           `json:"note"`
+	ImportedFrom *string           `json:"imported_from"`
+}
+
+// handlePattern is an asset's @ handle (LibraryItem.handle's rule).
+var handlePattern = regexp.MustCompile(`^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$`)
+
+// AssetKinds are an asset's kinds.
+var AssetKinds = []string{"character", "prop", "place"}
+
+// unique is ids each once, in order (never nil).
+func unique(ids []string) []string {
+	out := []string{}
+	for _, t := range ids {
+		if !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// keepViews drops the names of takes no longer on a's sheet (none: no views).
+func keepViews(a *Asset) {
+	for id := range a.Views {
+		if !slices.Contains(a.Sheet, id) {
+			delete(a.Views, id)
+		}
+	}
+	if len(a.Views) == 0 {
+		a.Views = nil
+	}
+}
+
+func (d *Doc) asset(id string) *Asset {
+	for _, a := range d.Assets {
+		if a.ID == id {
+			return a
+		}
+	}
+	return nil
+}
+
+// FreshAssetID is the first unused a<n> among d's assets.
+func (d *Doc) FreshAssetID() string {
+	for n := 1; ; n++ {
+		if id := fmt.Sprintf("a%d", n); d.asset(id) == nil {
+			return id
+		}
+	}
+}
+
+// ReplaceMention is text with every mention of handle h (the Mentions grammar: `@@` is a literal @, an @ after a word
+// character is text, a token is the run of letters, digits, _ and - minus trailing - and _) written as with.
+func ReplaceMention(text, h, with string) string {
+	word := func(c byte) bool {
+		return c == '_' || c >= '0' && c <= '9' || c >= 'A' && c <= 'Z' || c >= 'a' && c <= 'z'
+	}
+	var out strings.Builder
+	for i := 0; i < len(text); {
+		if strings.HasPrefix(text[i:], "@@") {
+			out.WriteString("@@")
+			i += 2
+			continue
+		}
+		if text[i] == '@' && (i == 0 || !word(text[i-1])) {
+			j := i + 1
+			for j < len(text) && (word(text[j]) || text[j] == '-') {
+				j++
+			}
+			tok := strings.TrimRight(text[i+1:j], "-_")
+			if tok != "" && (tok[0]|0x20) >= 'a' && (tok[0]|0x20) <= 'z' && strings.EqualFold(tok, h) {
+				out.WriteString(with)
+			} else {
+				out.WriteString(text[i : i+1+len(tok)])
+			}
+			i += 1 + len(tok)
+			continue
+		}
+		out.WriteByte(text[i])
+		i++
+	}
+	return out.String()
 }
 
 // OpNames are the ops, sorted.
@@ -1040,18 +1141,115 @@ func apply(doc Doc, op Op) Applied {
 		d.without(func(b *Block) bool { return b.Lane == f.ID })
 		return done()
 	case "asset_delete":
+		gone := d.asset(f.ID)
 		d.Assets = slices.DeleteFunc(d.Assets, func(a *Asset) bool { return a.ID == f.ID })
-		for _, b := range d.Blocks {
-			refs, ok := b.Request["refs"].([]any)
-			if !ok {
-				continue
-			}
-			b.Request["refs"] = slices.DeleteFunc(slices.Clone(refs), func(r any) bool {
-				m, _ := r.(map[string]any)
-				a, has := m["asset"]
-				return has && a == f.ID
-			})
+		picks := func(r any) bool {
+			m, _ := r.(map[string]any)
+			a, has := m["asset"]
+			return has && a == f.ID
 		}
+		for _, b := range d.Blocks {
+			// its @ picks go (refs, the first and last frame; a voice stays as it is); its mentions in the prompt become its name
+			if refs, ok := b.Request["refs"].([]any); ok {
+				b.Request["refs"] = slices.DeleteFunc(slices.Clone(refs), picks)
+			}
+			for _, k := range []string{"first", "last"} {
+				if picks(b.Request[k]) {
+					delete(b.Request, k)
+				}
+			}
+			if p, ok := b.Request["prompt"].(string); ok && gone != nil {
+				b.Request["prompt"] = ReplaceMention(p, gone.Handle, gone.Name)
+			}
+		}
+		return Applied{Doc: d}
+	case "asset_add":
+		var na AssetNew
+		if err := strict(f.Asset, &na); err != nil {
+			return refused("asset: " + err.Error())
+		}
+		switch {
+		case na.ID != nil && d.asset(*na.ID) != nil:
+			return refused("That id is taken.")
+		case !slices.Contains(AssetKinds, na.Kind):
+			return refused("kind must be character, prop or place")
+		case strings.TrimSpace(na.Name) == "":
+			return refused("Give it a name.")
+		case !handlePattern.MatchString(na.Handle):
+			return refused("A handle starts with a letter: letters, digits, - or _.")
+		case slices.ContainsFunc(d.Assets, func(a *Asset) bool { return strings.EqualFold(a.Handle, na.Handle) }):
+			return refused("That handle is taken.")
+		}
+		a := &Asset{Kind: na.Kind, Handle: na.Handle, Name: na.Name, Sheet: na.Sheet, Views: na.Views,
+			VoiceID: na.VoiceID, Note: na.Note, ImportedFrom: na.ImportedFrom}
+		if na.ID != nil {
+			a.ID = *na.ID
+		} else {
+			a.ID = d.FreshAssetID()
+		}
+		a.Sheet = unique(a.Sheet)
+		keepViews(a)
+		d.Assets = append(d.Assets, a)
+		return Applied{Doc: d}
+	case "asset":
+		a := d.asset(f.ID)
+		if a == nil {
+			return refused("That asset is gone.")
+		}
+		var set struct {
+			Kind    *string            `json:"kind"`
+			Name    *string            `json:"name"`
+			Note    *string            `json:"note"`
+			VoiceID *string            `json:"voice_id"`
+			Sheet   *[]string          `json:"sheet"`
+			Views   *map[string]string `json:"views"`
+		}
+		if err := strict(f.Set, &set); err != nil {
+			return refused("set: " + err.Error())
+		}
+		var keys map[string]json.RawMessage
+		_ = json.Unmarshal(f.Set, &keys)
+		switch {
+		case set.Kind != nil && !slices.Contains(AssetKinds, *set.Kind):
+			return refused("kind must be character, prop or place")
+		case set.Name != nil && strings.TrimSpace(*set.Name) == "":
+			return refused("Give it a name.")
+		}
+		if set.Kind != nil {
+			a.Kind = *set.Kind
+		}
+		if set.Name != nil {
+			a.Name = *set.Name
+		}
+		if set.Note != nil {
+			a.Note = set.Note
+		}
+		if _, ok := keys["voice_id"]; ok { // null or "" takes it off
+			a.VoiceID = set.VoiceID
+			if set.VoiceID != nil && *set.VoiceID == "" {
+				a.VoiceID = nil
+			}
+		}
+		if set.Sheet != nil {
+			a.Sheet = unique(*set.Sheet)
+		}
+		if set.Views != nil {
+			a.Views = *set.Views
+		}
+		keepViews(a)
+		return Applied{Doc: d}
+	case "take_add":
+		b := get(f.ID)
+		if b == nil {
+			return refused("That block is gone.")
+		}
+		if !slices.Contains(b.Takes, f.Take) {
+			if len(b.Takes) >= 200 {
+				return refused("A block keeps at most 200 takes.")
+			}
+			b.Takes = append(b.Takes, f.Take)
+		}
+		b.Pinned = &f.Take
 		return Applied{Doc: d}
 	}
 	return refused("unknown op " + op.Name)

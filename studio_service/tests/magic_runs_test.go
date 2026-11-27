@@ -54,7 +54,7 @@ func TestMagicRuns(t *testing.T) {
 		got = append(got, fmt.Sprintf("%v %v %v", k["kind"], models, k["off"]))
 	}
 	if fmt.Sprint(got) != "[video [echo-image-to-video echo-video] <nil> image [echo] <nil> voice [echo-voice-over] <nil> "+
-		"music [] Comes with Create's Music and Sound sound [] Comes with Create's Music and Sound frame [] Board frames come with the storyboard]" {
+		"music [] Comes with Create's Music and Sound sound [] Comes with Create's Music and Sound frame [echo] <nil>]" {
 		t.Fatal(got)
 	}
 

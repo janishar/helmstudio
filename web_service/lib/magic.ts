@@ -35,8 +35,16 @@ export type MagicRequest = {
   style?: "sketch" | "rough" | "full";
   /** a sound made from a shot's video */
   from?: string;
+  /** a storyboard frame's shot size, angle and move (API 1.83), and the model of the shot made from it */
+  framing?: Framing;
+  shot_model?: string;
   refs?: Ref[];
   advanced?: Record<string, unknown>;
+};
+export type Framing = {
+  size?: "wide" | "medium" | "close" | "over_shoulder";
+  angle?: "eye" | "low" | "high";
+  move?: "still" | "push_in" | "pan" | "follow";
 };
 /** An effect badge; baked when sent. */
 export type Effect = { name: string; params?: Record<string, number | string>; off?: boolean };
@@ -79,7 +87,10 @@ export type Asset = {
   voice_id?: string;
   note?: string;
   imported_from?: string;
+  /** names of sheet takes ("Front", "Side"), by take id */
+  views?: Record<string, string>;
 };
+export type AssetKind = Asset["kind"];
 export type Doc = {
   target: Target;
   lanes: Lane[];
@@ -125,7 +136,18 @@ export type Op =
   | { op: "lane"; id: string; set: Partial<Omit<Lane, "id">> }
   | { op: "lane_move"; id: string; by: -1 | 1 }
   | { op: "lane_delete"; id: string }
-  | { op: "asset_delete"; id: string };
+  | { op: "asset_delete"; id: string }
+  | { op: "asset_add"; asset: Omit<Asset, "id" | "sheet"> & { id?: string; sheet?: string[] } }
+  | {
+      op: "asset";
+      id: string;
+      /** voice_id null takes it off */
+      set: Partial<Pick<Asset, "kind" | "name" | "note" | "sheet" | "views">> & {
+        voice_id?: string | null;
+      };
+    }
+  /** a block's own picture (an upload, a Gallery take): added to its takes and pinned */
+  | { op: "take_add"; id: string; take: string };
 
 export type Applied = { doc: Doc } | { error: string };
 
@@ -484,13 +506,106 @@ export function apply(doc: Doc, op: Op): Applied {
       return { doc: tidy(d) };
     }
     case "asset_delete": {
+      const gone = d.assets.find((a) => a.id === op.id);
       d.assets = d.assets.filter((a) => a.id !== op.id);
-      for (const b of d.blocks)
-        if (b.request.refs)
-          b.request.refs = b.request.refs.filter((r) => !("asset" in r) || r.asset !== op.id);
+      const picks = (r?: Ref) => !!r && "asset" in r && r.asset === op.id;
+      // its @ picks go (refs, the first and last frame; a voice stays as it is); its mentions in the prompt become its name
+      for (const b of d.blocks) {
+        const q = b.request;
+        if (q.refs) q.refs = q.refs.filter((r) => !picks(r));
+        if (picks(q.first)) delete q.first;
+        if (picks(q.last)) delete q.last;
+        if (gone && q.prompt !== undefined) q.prompt = replaceMention(q.prompt, gone.handle, gone.name);
+      }
+      return { doc: d };
+    }
+    case "asset_add": {
+      const n = op.asset;
+      if (n.id && d.assets.some((a) => a.id === n.id)) return { error: "That id is taken." };
+      if (!ASSET_KINDS.includes(n.kind)) return { error: "kind must be character, prop or place" };
+      if (!n.name.trim()) return { error: "Give it a name." };
+      if (!HANDLE.test(n.handle))
+        return { error: "A handle starts with a letter: letters, digits, - or _." };
+      if (d.assets.some((a) => a.handle.toLowerCase() === n.handle.toLowerCase()))
+        return { error: "That handle is taken." };
+      const a = structuredClone({ ...n, id: n.id ?? freshAssetId(d) }) as Asset;
+      a.sheet = unique(a.sheet ?? []);
+      keepViews(a);
+      d.assets.push(a);
+      return { doc: d };
+    }
+    case "asset": {
+      const a = d.assets.find((x) => x.id === op.id);
+      if (!a) return { error: "That asset is gone." };
+      const s = structuredClone(op.set);
+      if (s.kind !== undefined && !ASSET_KINDS.includes(s.kind))
+        return { error: "kind must be character, prop or place" };
+      if (s.name !== undefined && !s.name.trim()) return { error: "Give it a name." };
+      if (s.kind !== undefined) a.kind = s.kind;
+      if (s.name !== undefined) a.name = s.name;
+      if (s.note !== undefined) a.note = s.note;
+      if ("voice_id" in s) {
+        if (s.voice_id) a.voice_id = s.voice_id;
+        else delete a.voice_id;
+      }
+      if (s.sheet !== undefined) a.sheet = unique(s.sheet);
+      if (s.views !== undefined) a.views = s.views;
+      keepViews(a);
+      return { doc: d };
+    }
+    case "take_add": {
+      const b = get(op.id);
+      if (!b) return { error: "That block is gone." };
+      if (!b.takes.includes(op.take)) {
+        if (b.takes.length >= 200) return { error: "A block keeps at most 200 takes." };
+        b.takes.push(op.take);
+      }
+      b.pinned = op.take;
       return { doc: d };
     }
   }
+}
+
+export const ASSET_KINDS: AssetKind[] = ["character", "prop", "place"];
+/** An asset's @ handle (LibraryItem.handle's rule, lib/mentions.ts HANDLE). */
+export const HANDLE = /^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$/;
+const unique = (ids: string[]) => [...new Set(ids)];
+/** Drops the names of takes no longer on its sheet (none: no views). */
+function keepViews(a: Asset) {
+  if (a.views)
+    for (const id of Object.keys(a.views)) if (!a.sheet.includes(id)) delete a.views[id];
+  if (a.views && !Object.keys(a.views).length) delete a.views;
+}
+/** The first unused a<n> among the board's assets. */
+export function freshAssetId(d: Doc): string {
+  let n = 1;
+  while (d.assets.some((a) => a.id === `a${n}`)) n++;
+  return `a${n}`;
+}
+const WORD = /[A-Za-z0-9_]/;
+/** The text with every mention of handle h (the Mentions grammar, lib/mentions.ts: `@@` is a literal @, an @ after a
+ * word character is text, a token is the run of letters, digits, _ and - minus trailing - and _) written as `to`. */
+export function replaceMention(text: string, h: string, to: string): string {
+  let out = "";
+  let i = 0;
+  while (i < text.length) {
+    if (text.startsWith("@@", i)) {
+      out += "@@";
+      i += 2;
+      continue;
+    }
+    if (text[i] === "@" && (i === 0 || !WORD.test(text[i - 1]))) {
+      let j = i + 1;
+      while (j < text.length && /[A-Za-z0-9_-]/.test(text[j])) j++;
+      const tok = text.slice(i + 1, j).replace(/[-_]+$/, "");
+      out += tok && /^[A-Za-z]/.test(tok) && tok.toLowerCase() === h.toLowerCase() ? to : `@${tok}`;
+      i += 1 + tok.length;
+      continue;
+    }
+    out += text[i];
+    i++;
+  }
+  return out;
 }
 
 /** Seconds a new transition of each kind lasts. */
@@ -614,12 +729,16 @@ export function overruns(d: Doc): Overrun[] {
 export const duration = (d: Doc) => Math.max(0, ...d.blocks.map(end));
 
 /** The blocks an asset is used in (its @ picks, a voice that is it). */
-export const usedIn = (d: Doc, asset: string) =>
-  d.blocks.filter(
+export const usedIn = (d: Doc, asset: string) => {
+  const picks = (r?: Ref) => !!r && "asset" in r && r.asset === asset;
+  return d.blocks.filter(
     (b) =>
       b.request.voice === asset ||
-      (b.request.refs ?? []).some((r) => "asset" in r && r.asset === asset),
+      picks(b.request.first) ||
+      picks(b.request.last) ||
+      (b.request.refs ?? []).some(picks),
   );
+};
 
 // ------------------------------------------------------------------------------------------------ takes and status
 
@@ -657,14 +776,22 @@ export function inputsOf(d: Doc, b: Block, takes: Takes): string {
     const x = id ? byId.get(id) : undefined;
     return x ? (shown(x, takes)?.id ?? null) : null;
   };
-  const pick = (r?: Ref) => (!r ? null : "block" in r ? take(r.block) : r.asset);
+  const asset = (id: string) => {
+    const a = d.assets.find((x) => x.id === id);
+    return a ? [a.sheet, a.voice_id ?? null] : null;
+  };
+  const pick = (r?: Ref) => (!r ? null : "block" in r ? take(r.block) : asset(r.asset));
   const picks = (b.request.refs ?? []).map(pick);
+  // a shot made from a frame follows the frame's request too (its words make the shot's prompt)
+  const frame = b.from_frame ? byId.get(b.from_frame) : undefined;
   return JSON.stringify([
     b.request,
     take(b.from_frame),
     picks,
     pick(b.request.first),
     pick(b.request.last),
+    b.request.voice ? asset(b.request.voice) : null,
+    frame?.request ?? null,
   ]);
 }
 

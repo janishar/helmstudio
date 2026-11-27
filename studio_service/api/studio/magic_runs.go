@@ -11,6 +11,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -37,7 +38,16 @@ var magicKindFields = map[string][]string{
 	"image": {"prompt", "refs", "size", "seed"},
 	"video": {"prompt", "first", "last", "length", "size", "seed"},
 	"voice": {"line", "voice", "seed"},
-	"music": {}, "sound": {}, "frame": {},
+	"frame": {"prompt", "refs", "size", "seed"}, // API 1.83: a board frame is a still of an image model
+	"music": {}, "sound": {},
+}
+
+// magicServes is the standard kind that serves a block kind: a board frame is a still (API 1.83).
+func magicServes(kind string) string {
+	if kind == "frame" {
+		return "image"
+	}
+	return kind
 }
 
 // magicKindOrder is the kinds as GET /magic/kinds lists them (Add's order).
@@ -45,7 +55,6 @@ var magicKindOrder = []string{"video", "image", "voice", "music", "sound", "fram
 
 const (
 	offMusicSound = "Comes with Create's Music and Sound"
-	offFrame      = "Board frames come with the storyboard"
 	maxBlockRuns  = 20 // the runs of one block a board answers
 )
 
@@ -74,7 +83,7 @@ func modelFields(kind string, st *registry.Standard) []string {
 func standardModels(ws []registry.Workflow, kind string) []registry.Workflow {
 	var out []registry.Workflow
 	for _, w := range ws {
-		if w.Standard != nil && w.Standard.Kind == kind {
+		if w.Standard != nil && w.Standard.Kind == magicServes(kind) {
 			out = append(out, w)
 		}
 	}
@@ -135,10 +144,7 @@ func magicKinds(ws []registry.Workflow) dto.MagicKinds {
 			info.Models = append(info.Models, dto.MagicModel{WorkflowID: w.ID, Name: w.Standard.Model, Title: w.Title,
 				Fields: fields, Greyed: greyed, Seconds: w.Standard.Seconds, Advanced: advancedParams(w)})
 		}
-		switch {
-		case kind == "frame":
-			info.Off = offFrame
-		case (kind == "music" || kind == "sound") && len(info.Models) == 0:
+		if (kind == "music" || kind == "sound") && len(info.Models) == 0 {
 			info.Off = offMusicSound
 		}
 		out.Kinds = append(out.Kinds, info)
@@ -199,8 +205,6 @@ func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
 		return "Music " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
 	case "sound":
 		return "Sound " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
-	case "frame":
-		return offFrame
 	}
 	if turns, _ := b.Request["turns"].([]any); len(turns) > 0 {
 		return "Dialogue blocks can't run yet"
@@ -245,10 +249,86 @@ func blockVoice(d magic.Doc, b *magic.Block) string {
 	return reqString(b.Request, "voice_id")
 }
 
-// magicPics are a block's pictures as take ids: its first and last frame and its refs ("" none).
+// magicPics are a block's pictures as take ids: its first and last frame and its refs ("" none); RefAssets is the
+// asset each ref's picture is of ("" a block's), so the prompt can name its row.
 type magicPics struct {
 	First, Last string
 	Refs        []string
+	RefAssets   []string
+}
+
+// magicStyle and magicFraming are the words a frame's style and framing add to its prompt (and a shot made from it).
+var magicStyle = map[string]string{
+	"sketch": "A storyboard sketch: loose pencil lines, black and white",
+	"rough":  "A rough storyboard drawing: simple shapes, grey shading",
+	"full":   "A finished storyboard frame: full colour, cinematic light",
+}
+
+var magicFraming = map[string]map[string]string{
+	"size":  {"wide": "wide shot", "medium": "medium shot", "close": "close-up", "over_shoulder": "over-the-shoulder shot"},
+	"angle": {"eye": "at eye level", "low": "from a low angle", "high": "from a high angle"},
+	"move":  {"still": "the camera holds still", "push_in": "the camera slowly pushes in", "pan": "the camera pans", "follow": "the camera follows the action"},
+}
+
+// framingWords are a request's framing parts as words ("wide shot, at eye level"), the move apart.
+func framingWords(req map[string]any) (shot, move string) {
+	fr, _ := req["framing"].(map[string]any)
+	word := func(k string) string { v, _ := fr[k].(string); return magicFraming[k][v] }
+	var parts []string
+	for _, k := range []string{"size", "angle"} {
+		if w := word(k); w != "" {
+			parts = append(parts, w)
+		}
+	}
+	return strings.Join(parts, ", "), word("move")
+}
+
+// sentences joins parts as sentences: each trimmed, empty ones left out, a capital first and one full stop each.
+func sentences(parts ...string) string {
+	var out []string
+	for _, p := range parts {
+		p = strings.TrimRight(strings.TrimSpace(p), ". ")
+		if p != "" {
+			out = append(out, strings.ToUpper(p[:1])+p[1:]+".")
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// magicPrompt is the prompt block b's run sends: its own; a frame's after its style and framing, with who and where
+// it names; a shot made from a frame with no prompt of its own, the frame's framing, words and move. The board's
+// @handles become their names, with the row of the asset's picture when the model takes references (`mention`,
+// <image{n}>), so Create's resolver never reads them as elements.
+func magicPrompt(d magic.Doc, b *magic.Block, mention string, refAssets []string) string {
+	text := reqString(b.Request, "prompt")
+	switch {
+	case b.Kind == "frame":
+		shot, _ := framingWords(b.Request)
+		var with []string // who and where the frame picks that its words don't name
+		for _, a := range d.Assets {
+			if slices.Contains(refAssets, a.ID) && magic.ReplaceMention(text, a.Handle, "") == text {
+				with = append(with, "@"+a.Handle)
+			}
+		}
+		feat := ""
+		if len(with) > 0 {
+			feat = "With " + strings.Join(with, ", ")
+		}
+		text = sentences(magicStyle[cmp.Or(reqString(b.Request, "style"), "sketch")], shot, text, feat)
+	case strings.TrimSpace(text) == "" && b.FromFrame != nil:
+		if f := findBlock(d, *b.FromFrame); f != nil {
+			shot, move := framingWords(f.Request)
+			text = sentences(shot, reqString(f.Request, "prompt"), move)
+		}
+	}
+	for _, a := range d.Assets {
+		name := a.Name
+		if i := slices.Index(refAssets, a.ID); i >= 0 && mention != "" {
+			name += " " + strings.ReplaceAll(mention, "{n}", strconv.Itoa(i+1))
+		}
+		text = magic.ReplaceMention(text, a.Handle, name)
+	}
+	return text
 }
 
 // fitSize is w × h scaled down to fit the int params' maxes, each side then on its step and in its bounds.
@@ -298,8 +378,8 @@ func rowField(p registry.Param, typ string) string {
 
 // standardInputs is a run's inputs for block b's request on workflow w (its standard block): each shared field the
 // model fills on its param, `set` and `advanced` under them; voiceID is the voice it speaks in ("" none).
-func standardInputs(w registry.Workflow, b *magic.Block, target magic.Target, pics magicPics, voiceID string, seed int64) map[string]any {
-	st, req := w.Standard, b.Request
+func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magicPics, voiceID string, seed int64) map[string]any {
+	st, req, target := w.Standard, b.Request, d.Target
 	inputs := map[string]any{}
 	if adv, ok := req["advanced"].(map[string]any); ok { // only this model's own: a key kept from another is dropped
 		for _, p := range advancedParams(w) {
@@ -317,10 +397,15 @@ func standardInputs(w registry.Workflow, b *magic.Block, target magic.Target, pi
 		p, found := findParam(w, path)
 		return path, p, found
 	}
-	for _, f := range []string{"prompt", "line"} {
-		if path, _, ok := param(f); ok {
-			inputs[path] = reqString(req, f)
+	if path, _, ok := param("prompt"); ok {
+		mention := ""
+		if _, refs, ok := param("refs"); ok {
+			mention = refs.Mention
 		}
+		inputs[path] = magicPrompt(d, b, mention, pics.RefAssets)
+	}
+	if path, _, ok := param("line"); ok {
+		inputs[path] = reqString(req, "line")
 	}
 	if path, _, ok := param("seed"); ok {
 		inputs[path] = float64(seed)
@@ -473,7 +558,15 @@ func inputsHash(d magic.Doc, b *magic.Block) string {
 	if id, ok := b.Request["voice"].(string); ok {
 		voice = pick(map[string]any{"asset": id})
 	}
-	data, _ := json.Marshal([]any{b.Request, b.Length, pick(first), pick(last), picked, voice})
+	// a shot made from a frame follows the frame's request too (its words make the shot's prompt)
+	// (appended only then, so a hash kept from before 1.83 still matches)
+	parts := []any{b.Request, b.Length, pick(first), pick(last), picked, voice}
+	if b.FromFrame != nil {
+		if x := findBlock(d, *b.FromFrame); x != nil {
+			parts = append(parts, x.Request)
+		}
+	}
+	data, _ := json.Marshal(parts)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:16])
 }
@@ -540,7 +633,7 @@ func (s *Service) magicPicture(ctx context.Context, tx pgx.Tx, ownerID string, d
 type magicRunRow struct {
 	Block, RunID, InputsHash string
 	Seed                     *int64
-	Via                      *string
+	Via, Label               *string
 	CreatedAt                time.Time
 	WorkflowID, Status       string
 	Progress                 json.RawMessage
@@ -551,14 +644,14 @@ type magicRunRow struct {
 
 // boardRuns are the board's runs, the last 20 of each block, oldest first; deleted runs and takes are left out.
 func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, error) {
-	return collect[magicRunRow](ctx, tx, `SELECT m.block, m.run_id::text, m.inputs_hash, m.seed, m.via, m.created_at,
+	return collect[magicRunRow](ctx, tx, `SELECT m.block, m.run_id::text, m.inputs_hash, m.seed, m.via, m.label, m.created_at,
 		r.workflow_id, r.status, r.progress, r.error,
 		coalesce((SELECT array_agg(o.take_id::text ORDER BY o.idx) FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}'),
 		(SELECT (t.made_with->>'render_s')::float8 FROM run_outputs o JOIN takes t ON t.id = o.take_id
 			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1)
 		FROM (SELECT *, row_number() OVER (PARTITION BY block ORDER BY created_at DESC) AS n FROM magic_runs
-			WHERE board_id = $1) m
+			WHERE board_id = $1 AND asset IS NULL) m
 		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL
 		WHERE m.n <= $2 ORDER BY m.created_at, m.run_id`, boardID, maxBlockRuns)
 }
@@ -636,12 +729,15 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		}
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
 			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
-			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS})
+			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label})
 		for _, t := range r.Takes {
 			byTake[t] = r.RunID
 		}
 	}
 	out.Status = blockStatuses(d, runs)
+	if out.AssetRuns, err = assetRuns(ctx, tx, row.ID); err != nil {
+		return err
+	}
 	_, rows, err := loadTakes(ctx, tx, row.OwnerID, magic.TakeIDs(d))
 	if err != nil {
 		return err
@@ -833,7 +929,8 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 			return nil, err
 		}
 		if t != "" {
-			pics.Refs = append(pics.Refs, t)
+			asset, _ := r["asset"].(string)
+			pics.Refs, pics.RefAssets = append(pics.Refs, t), append(pics.RefAssets, asset)
 		}
 	}
 	voiceID := blockVoice(d, b)
@@ -843,6 +940,11 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 		count = 1
 	}
 	hash, via := inputsHash(d, b), common.ViaOf(caller.Via)
+	var label *string // a frame keeps the style it is drawn in
+	if b.Kind == "frame" {
+		style := cmp.Or(reqString(b.Request, "style"), "sketch")
+		label = &style
+	}
 	var out []dto.Run
 	for i := range int(min(max(count, 1), 4)) {
 		runSeed := int64(-1)
@@ -850,12 +952,12 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 			runSeed = int64(seed) + int64(i)
 		}
 		run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
-			Inputs: standardInputs(w, b, d.Target, pics, voiceID, runSeed)})
+			Inputs: standardInputs(w, d, b, pics, voiceID, runSeed)})
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via, label)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via, label); err != nil {
 			return nil, err
 		}
 		out = append(out, run)
@@ -867,8 +969,9 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 // block or board gone since leaves the take in the gallery.
 func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) error {
 	var boardID, block string
-	err := tx.QueryRow(ctx, `SELECT board_id::text, block FROM magic_runs WHERE run_id = $1 AND owner_id = $2`,
-		run.ID, run.OwnerID).Scan(&boardID, &block)
+	var asset, label *string
+	err := tx.QueryRow(ctx, `SELECT board_id::text, block, asset, label FROM magic_runs WHERE run_id = $1 AND owner_id = $2`,
+		run.ID, run.OwnerID).Scan(&boardID, &block, &asset, &label)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil
 	} else if err != nil {
@@ -882,11 +985,15 @@ func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) err
 		return err
 	}
 	doc := row.doc()
-	b := findBlock(doc, block)
-	if b == nil || slices.Contains(b.Takes, takeID) || len(b.Takes) >= 200 {
+	if asset != nil { // a view Make views made joins the asset's sheet, named
+		if !addView(doc, *asset, takeID, deref(label)) {
+			return nil
+		}
+	} else if b := findBlock(doc, block); b == nil || slices.Contains(b.Takes, takeID) || len(b.Takes) >= 200 {
 		return nil
+	} else {
+		b.Takes = append(b.Takes, takeID)
 	}
-	b.Takes = append(b.Takes, takeID)
 	if why := magic.Check(doc); why != "" {
 		return fmt.Errorf("magic fill of %s: %s", block, why)
 	}
@@ -900,8 +1007,11 @@ func magicFill(ctx context.Context, tx pgx.Tx, run model.Run, takeID string) err
 // withRunTakes is doc with every take a board run made put back on its block (still on the board, oldest first): an
 // undo, redo or restore never takes a take back (plan 39 §45.12).
 func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc) (magic.Doc, error) {
-	type made struct{ Block, TakeID string }
-	rows, err := collect[made](ctx, tx, `SELECT m.block, o.take_id::text FROM magic_runs m
+	type made struct {
+		Block, TakeID string
+		Asset, Label  *string
+	}
+	rows, err := collect[made](ctx, tx, `SELECT m.block, o.take_id::text, m.asset, m.label FROM magic_runs m
 		JOIN run_outputs o ON o.run_id = m.run_id JOIN takes t ON t.id = o.take_id AND t.deleted_at IS NULL
 		WHERE m.board_id = $1 ORDER BY m.created_at, o.idx`, boardID)
 	if err != nil || len(rows) == 0 {
@@ -909,7 +1019,9 @@ func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc)
 	}
 	doc = doc.Clone()
 	for _, r := range rows {
-		if b := findBlock(doc, r.Block); b != nil && !slices.Contains(b.Takes, r.TakeID) && len(b.Takes) < 200 {
+		if r.Asset != nil {
+			addView(doc, *r.Asset, r.TakeID, deref(r.Label))
+		} else if b := findBlock(doc, r.Block); b != nil && !slices.Contains(b.Takes, r.TakeID) && len(b.Takes) < 200 {
 			b.Takes = append(b.Takes, r.TakeID)
 		}
 	}
@@ -922,7 +1034,7 @@ func withRunTakes(ctx context.Context, tx pgx.Tx, boardID string, doc magic.Doc)
 // (1280 × 720), a voice's (any audio's) seconds.
 func magicUnits(kind string, w, h, seconds float64) float64 {
 	switch kind {
-	case "image":
+	case "image", "frame":
 		return w * h / 1e6
 	case "video":
 		return seconds * w * h / (1280 * 720)
@@ -1052,7 +1164,7 @@ func (s *Service) PlanMagicBoard(ctx context.Context, caller common.Caller, id s
 			w, _ := magicModel(ws, b.Kind, b.Request)
 			// the host and peak as POST /runs/plan answers them, for the request without its pictures
 			_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
-				Inputs: standardInputs(w, b, d.Target, magicPics{}, blockVoice(d, b), -1)})
+				Inputs: standardInputs(w, d, b, magicPics{}, blockVoice(d, b), -1)})
 			if perr == nil {
 				if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
 					host := slices.Sorted(maps.Keys(slots))[0]

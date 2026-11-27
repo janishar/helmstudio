@@ -27,7 +27,11 @@ var (
 	Roles = []string{"storyboard", "shots", "voice", "music", "sound", "free"}
 	// requestFields are a MagicRequest's
 	requestFields = []string{"kind", "model", "prompt", "line", "turns", "voice", "style", "from", "refs", "advanced", "first",
-		"last", "width", "height", "seed", "count", "voice_id"} // API 1.81: first … voice_id
+		"last", "width", "height", "seed", "count", "voice_id", // API 1.81: first … voice_id
+		"framing", "shot_model"} // API 1.83: a storyboard frame's framing and the model of the shot made from it
+	// Framing is a frame's shot size, angle and move, each one's values.
+	Framing = map[string][]string{"size": {"wide", "medium", "close", "over_shoulder"}, "angle": {"eye", "low", "high"},
+		"move": {"still", "push_in", "pan", "follow"}}
 )
 
 // CheckTarget is "" or why t is not a board's target.
@@ -126,6 +130,17 @@ func Check(d Doc) string {
 				return where + ": request: unknown field " + k
 			}
 		}
+		if fr, ok := b.Request["framing"]; ok {
+			m, ok := fr.(map[string]any)
+			if !ok {
+				return where + ": request.framing is an object"
+			}
+			for k, v := range m {
+				if s, _ := v.(string); !slices.Contains(Framing[k], s) {
+					return where + ": request.framing: " + k + " is not a framing"
+				}
+			}
+		}
 	}
 	for _, b := range sorted.Blocks {
 		if e, ok := lastEnd[b.Lane]; ok && b.At < e {
@@ -179,6 +194,11 @@ func Check(d Doc) string {
 		}
 		if why := takes(where, a.Sheet); why != "" {
 			return why
+		}
+		for t, name := range a.Views {
+			if !slices.Contains(a.Sheet, t) || strings.TrimSpace(name) == "" || len([]rune(name)) > 40 {
+				return where + ": views name sheet takes, 1-40 characters each"
+			}
 		}
 	}
 	return ""

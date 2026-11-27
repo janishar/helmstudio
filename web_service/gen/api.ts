@@ -3394,7 +3394,7 @@ export interface paths {
         };
         /**
          * From 1.81: per kind, its shared fields and the models that serve it (what each fills, the greyed reasons, its Advanced)
-         * @description contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks, a board frame always (the storyboard's phase).
+         * @description contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks. From 1.83 a board frame is served by the image models (its fields are the image ones; its style and framing are words of its prompt).
          */
         get: operations["studioMagicKinds"];
         put?: never;
@@ -3463,6 +3463,31 @@ export interface paths {
          * @description contracts/README.md, Magic: the estimate. Nothing is stored. Each block: your recent render times of its workflow on the host it would run on (the median of the last 5, scaled by length and size), else the pack's declared rate, else unknown; `ask` is the Assistant's ask rule.
          */
         post: operations["studioPlanMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/assets/{asset_id}/views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.83: Make views: one run of an image model per named view of an asset, in the board's session
+         * @description contracts/README.md, Magic: assets and the storyboard. Each view ("Front", "Side") is a run of `model` (an image
+         *     model GET /v1/studio/magic/kinds lists; absent: the first) with the asset's name, note and the view in words,
+         *     its first sheet take as the reference when it has one; each take joins the asset's `sheet` named in `views` as a
+         *     studio revision (undo skips it). 202 with the board and the runs. 409 when `revision` is not the current one;
+         *     422 for an asset not on the board (`unknown asset a1`), a sheet that would pass 50, a model on no host, or the
+         *     run's own refusal (`Front: …`).
+         */
+        post: operations["studioMakeMagicViews"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9097,6 +9122,17 @@ export interface components {
             voice_id?: string;
             /** @description the model's own params, `<node>.<param>` → value as a run's inputs (the shared fields win) */
             advanced?: Record<string, never>;
+            /** @description from 1.83: a storyboard frame's shot size and angle (words of its prompt) and the move of the shot made from it */
+            framing?: {
+                /** @enum {string} */
+                size?: "wide" | "medium" | "close" | "over_shoulder";
+                /** @enum {string} */
+                angle?: "eye" | "low" | "high";
+                /** @enum {string} */
+                move?: "still" | "push_in" | "pan" | "follow";
+            };
+            /** @description from 1.83: a storyboard frame's pick of the video model Generate from board makes its shot with */
+            shot_model?: string;
         };
         /** @description an effect badge (baked when sent) */
         MagicEffect: {
@@ -9169,6 +9205,26 @@ export interface components {
             note?: string;
             /** @description the take or Element it was copied from, for the record only */
             imported_from?: string;
+            /** @description from 1.83: names of sheet takes by take id ("Front", "Side"); only takes on its sheet */
+            views?: {
+                [key: string]: string;
+            };
+        };
+        /** @description from 1.83: an asset as asset_add gives it: `id` optional (studio makes `a<n>`), `sheet` absent = none */
+        MagicAssetNew: {
+            id?: components["schemas"]["MagicId"];
+            /** @enum {string} */
+            kind: "character" | "prop" | "place";
+            /** @description its @ name (LibraryItem.handle's rule), unique on the board */
+            handle: string;
+            name: string;
+            sheet?: string[];
+            views?: {
+                [key: string]: string;
+            };
+            voice_id?: string;
+            note?: string;
+            imported_from?: string;
         };
         /** @description one board: lanes in order, blocks (in lane, then time order), links, transitions, assets and notes (contracts/README.md, Magic: the board rules) */
         MagicDoc: {
@@ -9203,6 +9259,8 @@ export interface components {
             status?: {
                 [key: string]: components["schemas"]["MagicStatus"];
             };
+            /** @description from 1.83: the Make views runs, oldest first (the last 20 of each asset) */
+            asset_runs?: components["schemas"]["MagicAssetRun"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9347,6 +9405,31 @@ export interface components {
             /** @constant */
             op: "asset_delete";
             id: components["schemas"]["MagicId"];
+        } | {
+            /** @constant */
+            op: "asset_add";
+            asset: components["schemas"]["MagicAssetNew"];
+        } | {
+            /** @constant */
+            op: "asset";
+            id: components["schemas"]["MagicId"];
+            set: {
+                /** @enum {string} */
+                kind?: "character" | "prop" | "place";
+                name?: string;
+                note?: string;
+                voice_id?: string | null;
+                sheet?: string[];
+                views?: {
+                    [key: string]: string;
+                };
+            };
+        } | {
+            /** @constant */
+            op: "take_add";
+            id: components["schemas"]["MagicId"];
+            /** Format: uuid */
+            take: string;
         };
         MagicIds: components["schemas"]["MagicId"][];
         MagicEdits: {
@@ -9581,6 +9664,42 @@ export interface components {
             created_at: string;
             /** @description its first take's render time */
             render_s?: number | null;
+            /**
+             * @description from 1.83: a board frame's style when it ran
+             * @enum {string}
+             */
+            style?: "sketch" | "rough" | "full";
+        };
+        /** @description from 1.83: one run of Make views */
+        MagicAssetRun: {
+            asset: components["schemas"]["MagicId"];
+            /** @description the view it makes ("Front") */
+            view: string;
+            /** Format: uuid */
+            run_id: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            progress?: number;
+            error: string | null;
+            takes: string[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        MagicViewsCreate: {
+            /** @description the board's current revision (409 when stale) */
+            revision: number;
+            /** @description the views to make, one run each ("Front", "Side", "Back") */
+            views: string[];
+            /** @description an image model's workflow id; absent: the image kind's first */
+            model?: string;
+        };
+        MagicViewsStarted: {
+            board: components["schemas"]["MagicBoard"];
+            started: {
+                view: string;
+                /** Format: uuid */
+                run_id: string;
+            }[];
         };
         /** @description one Advanced field: a param of the model's workflow the standard fields do not fill */
         MagicParam: {
@@ -9611,7 +9730,7 @@ export interface components {
             fields: components["schemas"]["MagicField"][];
             /** @description the workflows that serve it, the registry's order; empty: none on any host */
             models: components["schemas"]["MagicModel"][];
-            /** @description why the kind cannot run yet (Music and Sound: `Comes with Create's Music and Sound`; a board frame: `Board frames come with the storyboard`) */
+            /** @description why the kind cannot run yet (Music and Sound: `Comes with Create's Music and Sound`; before 1.83 a board frame: `Board frames come with the storyboard`) */
             off?: string;
         };
         MagicKinds: {
@@ -15213,6 +15332,40 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioMakeMagicViews: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description an asset of the board */
+                asset_id: components["schemas"]["MagicId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicViewsCreate"];
+            };
+        };
+        responses: {
+            /** @description started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicViewsStarted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };

@@ -4008,7 +4008,9 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `end`; `cut` takes it away; a new one's length is 0.5 s for a dissolve or wipe and 1 s for a fade or morph, in whole
   frames), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins),
   `lane_add` (after `after`, else last), `lane` (`set` name, role, hidden, kind), `lane_move` (`by` -1 or 1),
-  `lane_delete` (its blocks go), `asset_delete` (its @ picks go). After an op: a block tied to shots that moved
+  `lane_delete` (its blocks go), `asset_delete` (its @ picks go: refs and, from 1.83, a first or last frame; its
+  mentions in a prompt become its name), and from 1.83 `asset_add`, `asset` and `take_add` (Magic: assets and the
+  storyboard). After an op: a block tied to shots that moved
   moves with the first of them, or keeps fitting the run when it fitted it; ties and transitions naming what is gone,
   and joins that no longer meet, go; blocks are in lane, then time order.
 - **Refusals** are a 422 `MagicEditError {detail, op_index}`, `detail` the board's own words (`That lane is gone.`,
@@ -4046,7 +4048,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   fields it fills, `greyed` (every other field of the kind → `<model> can't take a last frame`), `seconds`, and
   `advanced` (every other param of its workflow that a form can set: not rows, image, media, voice or span; not
   wired; the workflow's value as `default`). Music and Sound carry `off` (`Comes with Create's Music and Sound`)
-  until a model serves them; a board frame carries `off` (`Board frames come with the storyboard`).
+  until a model serves them; before 1.83 a board frame carried `off` (`Board frames come with the storyboard`); from
+  1.83 it is served by the image models.
 - **`MagicRequest`** (a block's `request`): `model` (a workflow id from the kinds; absent: the kind's first),
   `prompt` or `line`, `refs`, `first` and `last` (`MagicRef`s), `width` and `height` (absent: the board's), `seed`,
   `count` (1-4 runs), `voice` (an asset; its `voice_id`) or `voice_id` (a saved voice), `advanced`
@@ -4140,6 +4143,39 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   from, status, `bakes` and `baked`, `timeline_id`, `timeline_gone` once that sequence is deleted). A listed send's
   revision is kept (never pruned), so Restore board to it works. `DELETE …/sends/{send_id}` removes it from the list
   (204; its sequence stays; a send still baking is stopped, its jobs cancelled).
+
+### Magic: assets and the storyboard (API 1.83; plan 39 phase E; normative)
+
+- **Assets** are the board's own characters, props and places (`MagicAsset`): Import copies a Gallery take or an
+  Element in (its pictures' take ids, its voice, its text as the note; `imported_from` for the record), never a link,
+  so later changes in the Gallery don't reach it. `asset_add {asset}` (`MagicAssetNew`: kind, `handle` by
+  LibraryItem.handle's rule, unique on the board whatever its case: `That handle is taken.`, `A handle starts with a
+  letter: letters, digits, - or _.`; `name` 1-80: `Give it a name.`; absent `id`: the first unused `a<n>` among the
+  assets), `asset {id, set}` (kind, name, note, `voice_id`: null takes it off, `sheet`: each take once, `views`;
+  `That asset is gone.`); the handle is kept from asset_add. `views` names sheet takes (`Front`), only ones on the
+  sheet (others are dropped). `take_add {id, take}`: a picture of your own (an upload, a Gallery take) joins a block's
+  `takes` (at most 200: `A block keeps at most 200 takes.`) and is pinned; one it has is only pinned.
+- **@ picks**: a request's `refs`, `first` and `last` name assets by id; a prompt names them as `@handle` (the
+  Mentions grammar). Studio's resolver writes each board asset's mention as its name, followed by its picture's row
+  (`Mara <image1>`) when the model takes references and the asset is one of them, so Create's resolver never reads a
+  board's handle as an element; other mentions (the user's Elements) are left to it. An asset is **used in** the
+  blocks whose refs, first or last frame, or voice name it.
+- **Make views**: `POST …/boards/{board_id}/assets/{asset_id}/views {revision, views, model?}` (1-6 names): one run
+  of an image model per view (`A character sheet view of Mara (her note): front. …`; a character's or prop's square at
+  the board's short side, at most 1024; its first sheet take the reference), in the board's session; `magic_runs`
+  keeps them against the asset (`asset`, `label` the view) and the projector adds each take to its sheet named by the
+  view, as a studio revision. `MagicBoard.asset_runs` lists them (the last 20 of each asset).
+- **Board frames run** (`kind` frame) on the image kind's models: GET /magic/kinds lists them with the image fields.
+  The prompt is the frame's style (`sketch` absent: `A storyboard sketch: loose pencil lines, black and white`; rough;
+  full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset
+  it picks that its words don't name. `magic_runs.label` keeps the style it ran in (`MagicBlockRun.style`). Frames
+  never go to the Timeline.
+- **A shot made from a frame** (`from_frame`): its first frame is the frame's take unless it picks one; with no prompt
+  of its own its prompt is the frame's framing, words and `move` (`The camera slowly pushes in`). Generate from board
+  adds it under the frame (the frame's `shot_model`) and runs it. Its inputs include the frame's request, so the shot
+  goes **out of date** when the frame changes (its take or its words).
+- **The rough cut** is the web's: the board's frames in time order, each for its length, with its `line` (else the
+  lines of the voice blocks under it), and the voice takes under them played; nothing is stored.
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 
