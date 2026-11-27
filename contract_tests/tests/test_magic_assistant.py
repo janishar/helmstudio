@@ -91,3 +91,53 @@ def test_the_assistant_proposes_an_edit_and_runs_after_the_users_yes(api, api_b,
         user.delete(turl)
         user.delete(url)
         user.put(SETTINGS, json={"ask_above_gpu_minutes": 5})
+
+
+def test_the_assistant_makes_a_board_and_asks_before_views_above_the_limit(api, api_b, assistant):  # noqa: F811
+    # API 1.93 (owner, 2026-11-27: "Yes, fix them"): create_board needs no card; make_views waits for the magic_run card
+    user = api_b
+    turl = f"{THREADS}/{ok(user.post(THREADS, json={'client_id': TAB}), 201)['id']}"
+    bid = ok(user.post(BOARDS, json={"name": "Views", "doc": run_doc()}), 201)["id"]
+    url = f"{BOARDS}/{bid}"
+    made = None
+
+    def idle():
+        got = ok(user.get(turl))
+        return got if got["state"] == "idle" else None
+
+    def waiting():
+        got = ok(user.get(turl))
+        cards = [e["card"] for e in got["entries"] if e["kind"] == "card" and e["card"]["state"] == "waiting"]
+        return cards[0] if cards else None
+
+    def say(text: str) -> None:
+        ok(user.post(f"{turl}/messages", json={"kind": "message", "client_id": TAB, "text": text,
+                                               "screen": screen("/magic")}), 202)  # fmt: skip
+
+    try:
+        rev = ok(user.post(f"{url}/edits", json={"base_revision": 1, "ops": [{"op": "asset_add", "asset": {
+            "id": "mara", "kind": "character", "handle": "mara", "name": "Mara"}}]}))["revision"]  # fmt: skip
+        agent = ok(user.get(url, params={"view": "agent"}))
+        assert agent["assets"][0]["sheet"] == [] and all("take_ids" in b for b in agent["blocks"])
+        ok(user.put(SETTINGS, json={"ask_above_gpu_minutes": 0}))
+        fake("POST", "/__script", {assistant: [
+            {"content": "Making a board.", "tool_calls": [{"tool": "create_board", "args": {"name": "From the brief"}}]},
+            {"content": "Views.", "tool_calls": [{"tool": "make_views", "args": {
+                "board_id": bid, "revision": rev, "asset": "mara", "views": ["Front"]}}]},
+            {"content": "Left it."},
+        ]})  # fmt: skip
+        say("Start a board and make Mara's front view")
+        card = wait_for(waiting, timeout=60, what="the magic_run card")
+        assert card["kind"] == "magic_run" and card["title"].startswith("Make 1 view"), card
+        made = next(b for b in ok(user.get(BOARDS))["boards"] if b["name"] == "From the brief")
+        ok(user.post(f"{turl}/messages", json={"kind": "answer", "client_id": TAB, "card_id": card["id"],
+                                               "answer": "not_now"}), 202)  # fmt: skip
+        got = wait_for(idle, timeout=60, what="the answer after Not now")
+        assert "Made board From the brief" in [e["line"]["text"] for e in got["entries"] if e["kind"] == "line"]
+        assert ok(user.get(url))["asset_runs"] == []  # Not now: no view runs
+    finally:
+        user.delete(turl)
+        user.delete(url)
+        if made:
+            user.delete(f"{BOARDS}/{made['id']}")
+        user.put(SETTINGS, json={"ask_above_gpu_minutes": 5})
