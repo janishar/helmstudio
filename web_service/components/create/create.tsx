@@ -55,7 +55,7 @@ import {
   spanSource,
   useFrameGrid,
 } from "@/components/create/source";
-import { actionOffers, mediaItem, offerLabel, soundActions, videoOf } from "@/lib/source";
+import { actionOffers, mediaItem, offerLabel, partOf, soundActions, videoOf } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
@@ -190,6 +190,7 @@ import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
   carryKind,
+  chipText,
   display,
   fields as fieldsOf,
   isVoice,
@@ -1103,6 +1104,25 @@ export function Create({
   const sourceTake = useTakes(sourceId ? [sourceId] : [])(sourceId ?? "");
   const wholeClip =
     spanField && sourceTake?.video ? `whole clip · ${sourceTake.video.frames} frames` : "";
+  // a Length on Auto beside a video source follows the clip (MMAudio, board CreateMusicSound 5): "0:05 · video"
+  const clipS =
+    source && sourceTake?.video
+      ? (([a, b]) => b - a)(
+          partOf(raws[source.key] as S<"MediaRef">, sourceTake.video.duration_s, source.param),
+        )
+      : 0;
+  const autoTexts = Object.fromEntries(
+    clipS > 0
+      ? valueChips
+          .filter(
+            (f) => f.param.auto === true && f.param.name === "seconds" && f.node === source?.node,
+          )
+          .map((f) => [
+            f.key,
+            { text: `${chipText(f, String(clipS))} · video`, title: "From the video" },
+          ])
+      : [],
+  );
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
   const looks = useLooks();
@@ -2915,6 +2935,7 @@ export function Create({
                 spoken={audio}
                 kindModels={kindModels}
                 values={valueChips}
+                autoTexts={autoTexts}
                 groups={chipGroups}
                 greyed={lacks.chips}
                 off={offChips}

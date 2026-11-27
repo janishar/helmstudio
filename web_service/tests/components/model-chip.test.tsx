@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 // The model chip's tooltip with one variant left (alpha.5 item 4): the workflow's own `only`, or only one downloaded.
 import { afterEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { Chips } from "@/components/create/form";
 import type { Field } from "@/lib/workflow";
 
@@ -82,5 +82,41 @@ describe("Music's and Sound's chips (docs/mock/CreateMusicSound.dc.html 2a-2e)",
     ]);
     const l = screen.getByText("Auto");
     expect(l.getAttribute("title")).toBe("Off while Instrumental is on");
+  });
+  it("Language's popup leads with Auto from the lyrics (2e); a Length on Auto beside a clip reads it (5)", () => {
+    const seconds: Field = {
+      ...lang,
+      key: "foley.seconds",
+      node: "foley",
+      param: {
+        name: "seconds",
+        type: "float",
+        label: "Length",
+        default: 0,
+        auto: true,
+        min: 1,
+        max: 30,
+      } as Field["param"],
+      initial: 0,
+    };
+    const withHelp = {
+      ...lang,
+      param: { ...lang.param, option_help: { auto: "from the lyrics" } },
+    };
+    render(
+      <Chips
+        fields={[withHelp, seconds]}
+        raws={{ "foley.seconds": "0" }}
+        onChange={() => undefined}
+        show={() => undefined}
+        values={[withHelp, seconds]}
+        autoTexts={{ "foley.seconds": { text: "0:05 · video", title: "From the video" } }}
+      />,
+    );
+    expect(screen.getByText("0:05 · video").closest("[title]")?.getAttribute("title")).toBe(
+      "From the video",
+    );
+    fireEvent.click(screen.getAllByText("Auto")[0]);
+    expect(screen.getByText("from the lyrics")).toBeTruthy();
   });
 });

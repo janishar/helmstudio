@@ -1211,7 +1211,8 @@ function Editor({
               <button
                 key={o}
                 type="button"
-                className={`opt bevel min-w-16 px-3 text-[13px] ${sub ? "flex h-auto min-h-9 flex-col items-start py-1.5 text-left" : ""} ${why ? "cursor-not-allowed" : ""}`}
+                // an enum's Auto with its line is a row of its own over the values ("Auto from the lyrics": 2e)
+                className={`opt bevel min-w-16 px-3 text-[13px] ${sub ? "flex h-auto min-h-9 flex-col items-start py-1.5 text-left" : ""} ${sub && o === "auto" ? "basis-full" : ""} ${why ? "cursor-not-allowed" : ""}`}
                 aria-pressed={raw === o}
                 aria-label={sub || why ? optionText(p, o, f.kind) : undefined}
                 aria-disabled={why ? true : undefined}
@@ -1668,6 +1669,7 @@ export function Chips({
   valueBlocks = {},
   stage1,
   values = [],
+  autoTexts = {},
   groups = [],
   greyed = [],
   off = {},
@@ -1676,6 +1678,9 @@ export function Chips({
   /** music and sound (docs/mock/CreateMusicSound.dc.html): quick int, float and enum settings as chips, each with its
    * popup (Length with Auto, Vocal language) */
   values?: Field[];
+  /** a value chip's text and tooltip while it is on Auto, when Auto is known ("0:05 · video": MMAudio's Length
+   * follows the clip) */
+  autoTexts?: Record<string, { text: string; title: string }>;
   /** quick settings shown as one chip with one popup (`studio.groups`, TempoKey: "BPM · key") */
   groups?: { label: string; fields: Field[] }[];
   /** chips another model of the kind has and this one lacks, greyed in place with why ("Not on MiniMax Music 3") */
@@ -1884,6 +1889,7 @@ export function Chips({
       {values.map((f) => {
         const id = `val-pop-${idOf(f.key)}`;
         const label = f.param.label ?? f.param.name;
+        const follows = isAuto(f.param, rawOf(f, raws)) ? autoTexts[f.key] : undefined;
         if (off[f.key])
           return (
             <span
@@ -1900,8 +1906,8 @@ export function Chips({
             key={f.key}
             id={id}
             label={label}
-            text={chipText(f, rawOf(f, raws))}
-            title={label}
+            text={follows?.text ?? chipText(f, rawOf(f, raws))}
+            title={follows?.title ?? label}
             open={pop === id}
             setOpen={setPop}
             all={() => show(f.key)}
