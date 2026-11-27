@@ -28,6 +28,11 @@
   html {
     @apply font-sans;
   }
+  /* every scrollbar the theme's: thin, a soft thumb on no track (the browser's grey bar showed on the Magic strip) */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--s4) transparent;
+  }
   /* 14/20 text on the body, not the root: the root stays 16px, so Tailwind's rem units land on the mock's px */
   body {
     font-size: 14px;
