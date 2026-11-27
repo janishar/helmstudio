@@ -3,7 +3,18 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, Square, Clock3, Lock, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import {
+  Camera,
+  Square,
+  Clock3,
+  Lock,
+  X,
+  Plus,
+  RefreshCw,
+  SlidersHorizontal,
+  Undo2,
+  Redo2,
+} from "lucide-react";
 import { mod, openMenu } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -546,21 +557,25 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           />
           <button
             type="button"
-            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            className="chip bevel rounded-[10px] bg-s4 px-0 w-9 justify-center max-md:hidden"
             disabled={!board.canUndo}
+            aria-label="Undo"
+            title="Undo (⌘Z)"
             aria-keyshortcuts="Meta+Z Control+Z"
             onClick={board.undo}
           >
-            Undo
+            <Undo2 size={16} aria-hidden />
           </button>
           <button
             type="button"
-            className="chip bevel rounded-[10px] bg-s4 max-md:hidden"
+            className="chip bevel rounded-[10px] bg-s4 px-0 w-9 justify-center max-md:hidden"
             disabled={!board.canRedo}
+            aria-label="Redo"
+            title="Redo (⇧⌘Z)"
             aria-keyshortcuts="Meta+Shift+Z Control+Shift+Z"
             onClick={board.redo}
           >
-            Redo
+            <Redo2 size={16} aria-hidden />
           </button>
           <SendButton
             doc={doc}
