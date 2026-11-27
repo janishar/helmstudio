@@ -192,7 +192,7 @@ export function Picker({
       p.some((x) => x.id === t.id) ? p.filter((x) => x.id !== t.id) : [...p, t].slice(0, max),
     );
   return (
-    <div className="flex max-h-[76dvh] flex-col gap-3">
+    <div className="flex h-[76dvh] flex-col gap-3">
       {frames && (
         <div role="group" aria-label="Kind" className="seg self-start">
           {(["image", "video"] as const).map((k) => (
@@ -242,7 +242,7 @@ export function Picker({
       {error && (
         <ErrorNote onRetry={() => fetchPage(takes?.length ? next : null)}>{error}</ErrorNote>
       )}
-      <div className="min-h-40 overflow-y-auto p-0.5">
+      <div className="min-h-40 flex-1 overflow-y-auto p-0.5">
         <div
           role="list"
           aria-label={kind === "image" ? "Images" : "Takes"}

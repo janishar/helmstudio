@@ -31,12 +31,16 @@ export function ImportDialog({
   const takes = (picked: S<"Take">[]) => {
     if (!picked.length) return;
     if (asset) {
-      const sheet = [...asset.sheet, ...picked.map((t) => t.id).filter((t) => !asset.sheet.includes(t))];
+      const sheet = [
+        ...asset.sheet,
+        ...picked.map((t) => t.id).filter((t) => !asset.sheet.includes(t)),
+      ];
       a.edit({ op: "asset", id: asset.id, set: { sheet: sheet.slice(0, 50) } });
       return;
     }
     const id = freshAssetId(a.doc);
-    if (a.edit({ op: "asset_add", asset: { id, ...fromTakes(a.doc, picked) } }) !== false) onMade(id);
+    if (a.edit({ op: "asset_add", asset: { id, ...fromTakes(a.doc, picked) } }) !== false)
+      onMade(id);
   };
   const element = (e: S<"LibraryItem">) => {
     if (asset) {
@@ -51,7 +55,8 @@ export function ImportDialog({
       });
     } else {
       const id = freshAssetId(a.doc);
-      if (a.edit({ op: "asset_add", asset: { id, ...fromElement(a.doc, e) } }) !== false) onMade(id);
+      if (a.edit({ op: "asset_add", asset: { id, ...fromElement(a.doc, e) } }) !== false)
+        onMade(id);
     }
     onClose();
   };
@@ -66,18 +71,19 @@ export function ImportDialog({
       <div className="flex flex-col gap-3">
         <div role="group" aria-label="From" className="seg self-start">
           {(["takes", "elements"] as const).map((t) => (
-            <button
-              key={t}
-              type="button"
-              aria-pressed={tab === t}
-              onClick={() => setTab(t)}
-            >
+            <button key={t} type="button" aria-pressed={tab === t} onClick={() => setTab(t)}>
               {t === "takes" ? "Takes" : "Elements"}
             </button>
           ))}
         </div>
         {tab === "takes" ? (
-          <Picker max={asset ? 12 : 6} onClose={onClose} onPick={takes} kind="image" action="Import" />
+          <Picker
+            max={asset ? 12 : 6}
+            onClose={onClose}
+            onPick={takes}
+            kind="image"
+            action="Import"
+          />
         ) : (
           <Elements onPick={element} onClose={onClose} />
         )}
@@ -108,7 +114,7 @@ function Elements({
       (!query || e.handle?.startsWith(query) || e.name.toLowerCase().includes(query)),
   );
   return (
-    <div className="flex max-h-[70dvh] flex-col gap-3">
+    <div className="flex h-[76dvh] flex-col gap-3">
       <input
         type="search"
         aria-label="Search elements"
@@ -120,11 +126,13 @@ function Elements({
       <div
         role="listbox"
         aria-label="Elements"
-        className="grid min-h-40 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto p-0.5"
+        className="grid min-h-40 flex-1 content-start grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5 overflow-y-auto p-0.5"
       >
         {lib === null && <p className="text-t2">Loading…</p>}
         {lib && !shown.length && (
-          <p className="text-t2">{query ? "No element matches." : "No elements yet: make some in Create."}</p>
+          <p className="text-t2">
+            {query ? "No element matches." : "No elements yet: make some in Create."}
+          </p>
         )}
         {shown.map((e) => (
           <button
