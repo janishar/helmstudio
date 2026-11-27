@@ -11,7 +11,7 @@ import {
   Blend,
   Brush,
   Check,
-  CircleStop,
+  Square,
   Clapperboard,
   ClipboardPaste,
   Columns2,
@@ -226,7 +226,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
     going && a.stop
       ? {
           label: "Stop",
-          icon: CircleStop,
+          icon: Square,
           keys: `${Math.round(going.progress ?? 0)}%`,
           onPick: () => a.stop!([b.id]),
         }

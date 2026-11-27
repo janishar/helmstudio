@@ -4,7 +4,7 @@
 // Drag a block to move it (snapping to edges, the playhead and the ruler; Alt is Overwrite), its right edge to trim;
 // the board draws the op's result while dragging, with dashed outlines where things were.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CircleStop, Pin } from "lucide-react";
+import { Square, Pin } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { sectionColor } from "@/components/create/audio";
 import { JOIN_ICON, KIND_NAME, Wave } from "@/components/magic/icons";
@@ -146,7 +146,7 @@ export function StatusChip({
             title="Stops its runs: a queued one at once, a running one at its next safe point"
             onClick={onStop}
           >
-            <CircleStop size={13} aria-hidden />
+            <Square size={13} aria-hidden />
             Stop
           </button>
         )}

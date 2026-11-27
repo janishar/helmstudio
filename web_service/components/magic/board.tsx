@@ -3,7 +3,7 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, CircleStop, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Camera, Square, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { mod, openMenu } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -660,7 +660,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                   title="Stops the board's queued and running runs (asks first)"
                   onClick={() => setStopAsk(true)}
                 >
-                  <CircleStop size={13} aria-hidden />
+                  <Square size={13} aria-hidden />
                   Stop runs ({board.going.length})
                 </button>
               )}
