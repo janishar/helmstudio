@@ -277,7 +277,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     setOpened(id);
   }, []);
   // the Assistant's screen actions and summary (tools/actions.json `magic`)
-  const byAssistant = board.going.filter((g) => g.by === "assistant").map((g) => g.run);
   useScreenTools({
     // eslint-disable-next-line react-hooks/refs -- the player is read when an action runs, after render
     ...magicTools({
@@ -299,7 +298,11 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       seek,
     }),
     // the Assistant's Stop offers to stop its runs on this board too
-    runs: { going: byAssistant.length, stop: () => board.stop(byAssistant) },
+    // (read again: a run the Assistant started may not have reached the board yet)
+    runs: async () => {
+      const mine = (await board.fresh()).filter((g) => g.by === "assistant").map((g) => g.run);
+      return { going: mine.length, stop: () => board.stop(mine) };
+    },
   });
 
   const act: Act = useMemo(

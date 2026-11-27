@@ -37,6 +37,15 @@ import { studioSends, type SendApi } from "@/components/magic/send";
 /** A run still queued or running. */
 export type Going = { run: string; block: string; by: "user" | "assistant" };
 const isGoing = (s: string) => s === "queued" || s === "running";
+/** a studio board's runs still going, Make views' too */
+const goingOf = (w: S<"MagicBoard">): Going[] => [
+  ...(w.runs ?? [])
+    .filter((r) => isGoing(r.status))
+    .map((r) => ({ run: r.run_id, block: r.block, by: r.by })),
+  ...(w.asset_runs ?? [])
+    .filter((r) => isGoing(r.status))
+    .map((r) => ({ run: r.run_id, block: r.asset, by: "user" as const })),
+];
 
 export type BoardRow = { id: string; name: string; lanes?: number; updated_at?: string };
 export type Snapshot = { id: string; name: string; at: string; rev?: number; doc?: Doc };
@@ -71,6 +80,8 @@ export type Board = {
   going: Going[];
   /** stops runs: a queued one drops at once, a running one at its next safe point; the takes made stay */
   stop: (runs: string[]) => void;
+  /** the board read again now (runs started elsewhere, the Assistant's, show) and its runs still going */
+  fresh: () => Promise<Going[]>;
   /** Make views: one image per view of an asset, onto its sheet, on an image model (absent: the first); null while
    * runs can't go */
   makeViews: ((asset: string, views: string[], model?: string) => void) | null;
@@ -446,14 +457,12 @@ export function useApiBoard():
     kinds,
     runs: wire.runs ?? [],
     assetRuns: wire.asset_runs ?? [],
-    going: [
-      ...(wire.runs ?? [])
-        .filter((r) => isGoing(r.status))
-        .map((r) => ({ run: r.run_id, block: r.block, by: r.by })),
-      ...(wire.asset_runs ?? [])
-        .filter((r) => isGoing(r.status))
-        .map((r) => ({ run: r.run_id, block: r.asset, by: "user" as const })),
-    ],
+    going: goingOf(wire),
+    fresh: async () => {
+      const w = (await ok(api.GET("/v1/studio/magic/boards/{board_id}", board(id)))) as Wire;
+      if (current.current === id && !pending.current) show(w);
+      return goingOf(w);
+    },
     // each run's own cancel (409: it ended meanwhile); the board is read again after
     stop: (runs) =>
       queue(async () => {
@@ -674,6 +683,10 @@ export function useLocalBoard(initial?: Store): Board {
     going: Object.values(takes)
       .filter((t) => t.status === "running")
       .map((t) => ({ run: t.id, block: t.block, by: "user" as const })),
+    fresh: async () =>
+      Object.values(takes)
+        .filter((t) => t.status === "running")
+        .map((t) => ({ run: t.id, block: t.block, by: "user" as const })),
     /** a fake run stopped: its take goes (it made nothing yet), from every document in the history */
     stop: (runs) => {
       setTakes((t) => Object.fromEntries(Object.entries(t).filter(([id]) => !runs.includes(id))));

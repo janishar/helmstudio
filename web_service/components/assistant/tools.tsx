@@ -34,7 +34,7 @@ export type ScreenSpec = {
   examples?: { text: string; sub: string }[];
   /** the Assistant's runs still going on this screen (Magic: its runs on the board) and how to stop them: its Stop
    * offers "Stop its runs too" */
-  runs?: { going: number; stop: () => void };
+  runs?: () => Promise<{ going: number; stop: () => void }>;
 };
 
 type Entry = { key: number; get: () => ScreenSpec };
