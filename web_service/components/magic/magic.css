@@ -239,6 +239,8 @@
   background: var(--t1);
   z-index: 8;
   pointer-events: none;
+  /* scrolled under the lane names: clipped from its left (--sl, the scroll, set on scroll; --x, its own left) */
+  clip-path: inset(-40px -40px -40px calc(var(--lh) + var(--sl, 0px) - var(--x, 0px)));
 }
 :is(.mg, .mg-side) .ph > span {
   position: absolute;

@@ -392,6 +392,8 @@ export function Lanes({
     <div
       ref={scroller}
       className={`scroller ${used ? "dimb" : ""}`}
+      // the scroll as --sl: the playhead clips itself under the lane names (no re-render)
+      onScroll={(e) => e.currentTarget.style.setProperty("--sl", `${e.currentTarget.scrollLeft}px`)}
       style={{ "--lh": `${head}px` } as React.CSSProperties}
     >
       <div className="relative" style={{ width: head + trackW }}>
@@ -535,7 +537,17 @@ export function Lanes({
               </div>
             );
           })}
-          <span className="ph" style={{ left: head + frame * pf, top: -26 }} aria-hidden>
+          <span
+            className="ph"
+            style={
+              {
+                left: head + frame * pf,
+                top: -26,
+                "--x": `${head + frame * pf}px`,
+              } as React.CSSProperties
+            }
+            aria-hidden
+          >
             <span>{clock(frame, fps)}</span>
           </span>
           {pv?.snapped && (

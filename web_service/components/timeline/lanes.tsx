@@ -320,6 +320,8 @@ export function Lanes({
   const onScroll = () => {
     const el = scroller.current;
     if (el) scrolled.current = el.scrollLeft;
+    // the scroll as --sl: the playhead clips itself under the track names (no re-render)
+    if (el) el.style.setProperty("--sl", `${el.scrollLeft}px`);
     if (!el || !view) return;
     const w = virtualWindow(el.scrollLeft, view);
     if (w[0] !== win[0] || w[1] !== win[1]) setWin(w);
@@ -1107,7 +1109,16 @@ export function Lanes({
               </span>
             </span>
           )}
-          <span aria-hidden className="tl-ph" style={{ left: HEAD + g.s(frame) * pps - 1 }} />
+          <span
+            aria-hidden
+            className="tl-ph"
+            style={
+              {
+                left: HEAD + g.s(frame) * pps - 1,
+                "--x": `${HEAD + g.s(frame) * pps - 1}px`,
+              } as React.CSSProperties
+            }
+          />
           {overlay}
           {snapLine && (
             <>

@@ -808,6 +808,8 @@
     width: 2px;
     background: var(--t1);
     pointer-events: none;
+    /* scrolled under the 72px track names: clipped from its left (--sl, the scroll, set on scroll) */
+    clip-path: inset(-40px -40px -40px calc(72px + var(--sl, 0px) - var(--x, 0px)));
   }
   .tl-ph::before {
     content: "";
