@@ -285,3 +285,37 @@ undo, redo and snapshots are studio's. Decisions taken on the owner's behalf:
 - **First visit**: a user with no boards gets an "Untitled board" (frame 11's empty state); the sample board is in the
   boards menu, its blocks as drafts (its takes are pictures in the browser). The browser fake mode stays for the tests
   (`<MagicBoard local />`).
+
+**Phase D (2026-11-27, API 1.81.0; contract steps 3 and 4 in one version, as the owner's run asked).** The standard
+request and runs: a workflow's `standard` block (registry.schema.json; the runner and contracts-check refuse one that
+does not fit) on Qwen Image, MiniMax H3 Image, LTX 2.5, MiniMax H3, Qwen3-TTS and ZONOS3 (and the fake host's Echo,
+Echo video, Echo keyframes, Echo voice); studio's resolver (`api/studio/magic_runs.go`) turns a block's request into a
+normal run in the board's own session; `GET /magic/kinds`, `GET/PUT /magic/settings`, `POST …/run` and `…/plan`;
+`00060_magic_runs.sql` (`magic_boards.session_id`, `magic_runs`, `magic_settings`); the projector adds each take to its
+block as a studio revision; every board answer carries its runs, takes and derived statuses. The web: Add's step 2
+(frames 2c-2h) and the block dialog (frame 3, `components/magic/block-dialog.tsx`, `request.tsx`). Decisions taken on
+the owner's behalf:
+
+- **One workflow per model and kind.** LTX 2.5 is `ltx-image-to-video` (the frames are keyframe rows at 0 s and the
+  clip's last frame; with none its keyframes node is bypassed: text to video); MiniMax H3 is
+  `minimax-h3-image-to-video` (first and last image params; empty ones go). MiniMax H3 really takes a last frame, so
+  it is not greyed in studio: greying follows what each pack declares; the fake mode keeps the board's 2d example.
+- **Not shared fields:** Look ("LTX only" on 2d: looks are not params) and Emotion ("ZONOS3 only" on 2e: it is under
+  ZONOS3's Advanced). Both left for later.
+- **Added to `MagicRequest`:** `first`, `last`, `width`, `height`, `seed`, `count` (1-4 runs, seeds seed, seed + 1:
+  "Seeds 1 / 4") and `voice_id` (a saved voice, since board assets and their voices come with phase E).
+- **The default model** is the kind's fastest declared one (`standard.seconds`), then by id: Qwen Image, LTX 2.5 and
+  Qwen3-TTS, as the boards show.
+- **The estimate:** units are an image's megapixels, a video's seconds × pixels / 720p, a voice's seconds; yours is the
+  median over your last 5 takes of that workflow on the planned host (the variant is not separated); else the pack's
+  declared seconds per unit; else unknown. The ask rule lives in `…/plan` (`ask`, `ask_text`); the page's Generate is
+  the user's click; Run board asks with it above the limit, which is set in the board panel (Ask before runs over N GPU
+  min).
+- **Statuses** are studio's (inputs hash on `magic_runs`); the page also marks a block out of date at once when its
+  request changes, and studio's answer confirms it. Undo, redo and restore keep every take a run made (a studio write
+  must never be undone away); an edit, undo, redo or run made on a revision a run's take moved past is sent again once.
+- **Board events** are the board's session events (status, progress, outputs): the page reads the board again on them;
+  no new event type. The board's session is titled `Magic · <board>` and left out of GET /sessions.
+- **Fix found:** Unpin sent no `pinned` (an absent key is no change in studio); it sends `null`.
+- **Not built yet (their phases):** board frames running (E), dialogue blocks running, Music and Sound (H), Compare
+  takes, the dialog's Run on host pick, the Assistant's tools and ask card (F).
