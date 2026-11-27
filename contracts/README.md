@@ -945,7 +945,7 @@ One rule for every list that can grow, the Gallery's `q` (GET /v1/studio/takes) 
 - **Pages.** Each page answers `next_cursor` (null on the last page); pass it back as `cursor` with the same `q` (and
   `state`) for the next page. It is opaque (base64 of the last row's time and id, as batches' always was); a malformed
   one is 422 `cursor is not a next_cursor`. Lists by `updated_at`: an item edited while you page moves to the first
-  page (it may be seen twice or skipped once); reload from the first page to be exact.
+  page (one you have not reached yet is skipped); reload from the first page to be exact.
 - **Capped lists.** A user has at most 100 boards, 100 sequences, 100 pipelines and 200 chats (409 on create), so their
   default page is the whole list; the cursor matters only with a smaller `limit`. Sessions and runs have no cap: past
   the first page they are reached only by `cursor` or `q`.
@@ -954,7 +954,7 @@ One rule for every list that can grow, the Gallery's `q` (GET /v1/studio/takes) 
   order. Own items are capped at 200 and the list answers up to 1000, so it has no cursor.
 - **Batches' `state`.** Repeat it for several: `state=queued&state=running`; each a `BatchStatus` (else 422 `state must
   be one of queued, running, waiting, paused, done, failed, stopped`). It and `q` combine with AND, and the cursor pages
-  the matches, so `next_cursor` is true for every batch, not one page.
+  the matches.
 - **Indexes.** None added: every search runs inside one owner's rows, reached by the existing owner indexes
   (`(owner_id, created_at|updated_at DESC)`, a session's runs, a batch's rows), and these lists are hundreds of rows
   per user (the capped ones at most 200). A `pg_trgm` GIN index (Postgres 18 ships it) is the step if one grows to tens

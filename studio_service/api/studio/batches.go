@@ -267,7 +267,7 @@ func (s *Service) ListBatches(ctx context.Context, caller common.Caller, page Pa
 	args := sqlArgs{}
 	where := `WHERE true` + matchSQL(page.Words, &args, `b.title`, `b.pipeline_title`, `b.workflow_title`)
 	if len(states) > 0 {
-		where += ` AND b.status = ANY(` + args.add(states) + `::text[])`
+		where += ` AND (` + model.BatchShown + `) = ANY(` + args.add(states) + `::text[])` // waiting is computed
 	}
 	tail, err := keysetSQL(page, &args, `b.created_at`, `b.id`)
 	if err != nil {

@@ -146,7 +146,12 @@ const BatchFrom = `SELECT b.id::text, b.owner_id::text, b.session_id::text, b.ti
 	SELECT count(*)::int, count(*) FILTER (WHERE s = 'queued')::int, count(*) FILTER (WHERE s = 'running')::int,
 	count(*) FILTER (WHERE s = 'waiting')::int, count(*) FILTER (WHERE s = 'succeeded')::int, count(*) FILTER (WHERE s = 'failed')::int,
 	count(*) FILTER (WHERE s = 'cancelled')::int
-	FROM (SELECT ` + RowShown + ` AS s FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id WHERE br.batch_id = b.id) x) c `
+	FROM (SELECT ` + RowShown + ` AS s FROM batch_rows br LEFT JOIN runs r ON r.id = br.run_id WHERE br.batch_id = b.id) x)
+	c(total, queued, running, waiting, succeeded, failed, cancelled) `
+
+// BatchShown is a batch's status as the API shows it, over BatchFrom's b and c: running is waiting once every unended
+// row waits on a gate (batchDTO's rule, for GET /batches?state=, API 1.92).
+const BatchShown = `CASE WHEN b.status = 'running' AND c.waiting > 0 AND c.queued + c.running = 0 THEN 'waiting' ELSE b.status END`
 
 // BatchRow is a batch_rows row as shown: status, the takes not deleted (ids and keys, in order), the run's start.
 type BatchRow struct {

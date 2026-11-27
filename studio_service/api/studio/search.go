@@ -70,9 +70,10 @@ func matchSQL(words []string, args *sqlArgs, texts ...string) string {
 	return out.String()
 }
 
-// jsonTexts is the text of every string value anywhere in the jsonb column col (keys left out), for matchSQL.
+// jsonTexts is every string value anywhere in the jsonb column col (keys left out), unquoted and one per line, for
+// matchSQL: a word never matches JSON's quotes, commas or escapes.
 func jsonTexts(col string) string {
-	return `jsonb_path_query_array(` + col + `, 'strict $.** ? (@.type() == "string")')::text`
+	return `(SELECT string_agg(v #>> '{}', E'\n') FROM jsonb_path_query(` + col + `, 'strict $.** ? (@.type() == "string")') v)`
 }
 
 // keysetSQL is " AND … ORDER BY at DESC, id DESC LIMIT …": the rows after page.After (base64 "<RFC3339Nano>|<id>" of

@@ -96,11 +96,26 @@ func TestSearchInLists(t *testing.T) {
 		t.Fatalf("threads q = %v", got)
 	}
 
-	// jsonTexts: only string values, at any depth, never keys
-	var text string
-	err := e.pool.QueryRow(context.Background(), `SELECT jsonb_path_query_array('{"prompt.text": "Fox den", "n": 3,
-		"refs": [{"take": "Snow"}]}'::jsonb, 'strict $.** ? (@.type() == "string")')::text`).Scan(&text)
-	if err != nil || (text != `["Fox den", "Snow"]` && text != `["Snow", "Fox den"]`) { // jsonb's own key order
-		t.Fatalf("json texts = %q, %v", text, err)
+	// state=waiting is the shown status: a running batch whose every unended row waits on a gate (review fix)
+	waiting := utility.NewID()
+	e.exec(`INSERT INTO batches (id, owner_id, title, workflow_id, workflow_title, snapshot, inputs, status)
+		VALUES ($1, $2, 'Gate pick', 'wf', 'WF', '{}', '{}', 'running')`, waiting, userA)
+	e.exec(`INSERT INTO batch_rows (batch_id, n, owner_id, inputs, status) VALUES ($1, 1, $2, '{}', 'waiting'),
+		($1, 2, $2, '{}', 'succeeded')`, waiting, userA)
+	if got := titles(e.call(userA, "GET", "/v1/studio/batches?state=waiting", nil, 200), "batches", "title"); len(got) != 1 || got[0] != "Gate pick" {
+		t.Fatalf("state=waiting = %v", got)
+	}
+	if got := e.call(userA, "GET", "/v1/studio/batches?state=running", nil, 200)["batches"].([]any); len(got) != 0 {
+		t.Fatalf("a waiting batch listed as running: %v", got)
+	}
+
+	// jsonTexts (search.go's expression): only string values, at any depth, never keys, quotes or commas
+	var fox, comma bool
+	err := e.pool.QueryRow(context.Background(), `WITH t AS (SELECT (SELECT string_agg(v #>> '{}', E'\n')
+		FROM jsonb_path_query('{"prompt.text": "Fox \"den\"", "n": 3, "refs": [{"take": "Snow"}]}'::jsonb,
+		'strict $.** ? (@.type() == "string")') v) AS x) SELECT x ILIKE '%fox "den"%' AND x ILIKE '%snow%'
+		AND x NOT ILIKE '%prompt%', x ILIKE '%,%' OR x ILIKE '%\\%' FROM t`).Scan(&fox, &comma)
+	if err != nil || !fox || comma {
+		t.Fatalf("json texts: words %v, punctuation %v, %v", fox, comma, err)
 	}
 }
