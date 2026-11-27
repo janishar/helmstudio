@@ -202,5 +202,19 @@
       "first": "first.image",
       "last": "last.image"
     }
+  },
+  "standard": {
+    "kind": "video",
+    "model": "MiniMax H3",
+    "fields": {
+      "prompt": "prompt.text",
+      "first": "first.image",
+      "last": "last.image",
+      "length": "duration.frames",
+      "width": "canvas.width",
+      "height": "canvas.height",
+      "seed": "seed.seed"
+    },
+    "seconds": 30
   }
 }

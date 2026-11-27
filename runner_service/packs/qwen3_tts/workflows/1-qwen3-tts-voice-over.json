@@ -81,5 +81,15 @@
         "speak.temperature": 0.9
       }
     }
+  },
+  "standard": {
+    "kind": "voice",
+    "model": "Qwen3-TTS",
+    "fields": {
+      "line": "prompt.text",
+      "voice": "speak.voice",
+      "seed": "seed.seed"
+    },
+    "seconds": 1.5
   }
 }

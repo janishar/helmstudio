@@ -78,6 +78,8 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
             )
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
+        if errs := standard_errors(w, node_schemas):
+            raise ValueError(f"workflow {w['id']}: {'; '.join(errs[:3])}")
     values["guides"] = (
         {"schema_version": 1}
         | meta
@@ -92,6 +94,69 @@ def card(text: str) -> str | None:
     """A guide's `## Card` section without its heading (API 1.71), or None."""
     m = re.search(r"^## Card\n(.*?)(?=^## |\Z)", text, re.DOTALL | re.MULTILINE)
     return m.group(1).strip() if m else None
+
+
+# API 1.81: a workflow's `standard` block (Magic's standard request; contracts/README.md, Magic: the standard request)
+STANDARD_MEDIA = {
+    "image": "image",
+    "video": "video",
+    "voice": "audio",
+    "music": "audio",
+    "sound": "audio",
+}
+STANDARD_TYPES = {
+    "prompt": {"text", "string"},
+    "line": {"text", "string"},
+    "length": {"frames"},
+    "width": {"int"},
+    "height": {"int"},
+    "seed": {"seed"},
+    "voice": {"voice"},
+}
+
+
+def standard_errors(workflow: dict, node_schemas: dict) -> list[str]:
+    """Why a workflow's standard block does not fit it: the kind against its media, each field's param (unwired, of a
+    type the field fills), each `set` key a param."""
+    st = workflow.get("standard")
+    if not st:
+        return []
+    errs = []
+    if STANDARD_MEDIA[st["kind"]] != workflow.get("media", "image"):
+        errs.append(
+            f"standard: kind {st['kind']} does not make {workflow.get('media', 'image')} takes"
+        )
+
+    def param(path: str) -> tuple[dict | None, str | None]:
+        nid, name = path.split(".", 1)
+        node = workflow["nodes"].get(nid)
+        if node is None:
+            return None, f"no node {nid}"
+        if name in (node.get("in") or {}):
+            return None, f"{path} is wired"
+        p = next((x for x in node_schemas[node["kind"]]["params"] if x["name"] == name), None)
+        return p, None if p else f"{node['kind']} has no param {name}"
+
+    for field, path in st["fields"].items():
+        p, why = param(path)
+        if why:
+            errs.append(f"standard.fields.{field}: {why}")
+            continue
+        item = p.get("item") or {}
+        image_rows = p["type"] == "rows" and "Image" in item.values()
+        timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in item.values())
+        if field in STANDARD_TYPES:
+            ok = p["type"] in STANDARD_TYPES[field]
+        elif field == "refs":
+            ok = image_rows
+        else:  # first, last
+            ok = p["type"] == "image" or (image_rows and timed)
+        if not ok:
+            errs.append(f"standard.fields.{field}: {path} is a {p['type']} param")
+    for path in st.get("set") or {}:
+        if why := param(path)[1]:
+            errs.append(f"standard.set.{path}: {why}")
+    return errs
 
 
 def recipe_errors(recipe: dict, workflow: dict, node_schemas: dict) -> list[str]:

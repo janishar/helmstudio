@@ -1674,6 +1674,10 @@
           "minLength": 1,
           "maxLength": 40,
           "description": "API 1.19: the take action's label when this workflow is offered for a take (\"Use in…\", a Timeline clip's actions): Animate, Edit, Extend, Retake a section; absent = the title"
+        },
+        "standard": {
+          "$ref": "#/$defs/standard",
+          "description": "API 1.81 (plan 39 phase D): this workflow serves Magic's standard request for one kind (contracts/README.md, Magic: the standard request)"
         }
       }
     },
@@ -4157,6 +4161,104 @@
         "note": {
           "type": "string",
           "maxLength": 300
+        }
+      }
+    },
+    "standard": {
+      "type": "object",
+      "required": [
+        "kind",
+        "model",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "API 1.81: what Magic's standard request (MagicRequest) fills in this workflow. `fields` maps each shared field the workflow supports to the param it fills; a field it leaves out is greyed in Magic for this model; every other param is its Advanced. The fields: prompt and line (a text or string param), refs (a rows param whose items have an Image field: the @ picks' pictures, in order), first and last (an image param, or a rows param whose items have an Image field and a `position: seconds` field: a row at the clip's first or last frame; such a rows param left empty bypasses its node), length (a frames param: the block's length on the param's grid), width and height (int params: the board's size, or the request's), seed (a seed param), voice (a voice param). The kind must fit the workflow's media (image: image; video: video; voice: audio). Checked by the runner at start and by contracts-check.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "image",
+            "video",
+            "voice",
+            "music",
+            "sound"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "the model's name in Magic's model picker (\"LTX 2.5\")"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "line": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "refs": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "first": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "last": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "length": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "width": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "height": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "seed": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "voice": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            }
+          }
+        },
+        "set": {
+          "type": "object",
+          "maxProperties": 20,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          },
+          "description": "inputs every standard run of it carries (`canvas.mode: fixed`, so the size is used); the request's own fields and Advanced win"
+        },
+        "seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "the pack's declared GPU seconds per unit, the estimate when the caller has no runs of it yet: an image at 1 megapixel (image), a second of video at 1280 × 720 (video), a second of speech (voice), a second of audio (music, sound)"
         }
       }
     }

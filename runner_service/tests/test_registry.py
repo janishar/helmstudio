@@ -25,6 +25,35 @@ def test_every_published_node_kind_has_an_implementation():
     assert registry.node_schemas(VALUES).keys() == IMPLS.keys()
 
 
+def test_standard_blocks_fit_their_workflows():
+    """API 1.81: the fake host serves Magic's image, video and voice kinds; a standard field that names a param of the
+    wrong type, a wired one or a node that is not there stops the runner."""
+    workflows = {w["id"]: w for w in VALUES["workflows"]["workflows"]}
+    schemas_ = registry.node_schemas(VALUES)
+    kinds = {w["standard"]["kind"] for w in workflows.values() if "standard" in w}
+    assert kinds == {"image", "video", "voice"}
+    assert all(registry.standard_errors(w, schemas_) == [] for w in workflows.values())
+    w = json.loads(json.dumps(workflows["echo-image-to-video"]))
+    w["standard"]["fields"] |= {
+        "seed": "prompt.text",
+        "refs": "keyframes.images",
+        "voice": "nope.voice",
+    }
+    w["standard"]["set"] = {"canvas.colour": 1}
+    assert registry.standard_errors(w, schemas_) == [
+        "standard.fields.seed: prompt.text is a text param",
+        "standard.fields.voice: no node nope",
+        "standard.set.canvas.colour: echo/canvas has no param colour",
+    ]
+    w["standard"]["fields"] = {"prompt": "keyframes.text"}
+    w["standard"]["kind"] = "voice"
+    assert registry.standard_errors(w, schemas_) == [
+        "standard: kind voice does not make video takes",
+        "standard.fields.prompt: keyframes.text is wired",
+        "standard.set.canvas.colour: echo/canvas has no param colour",
+    ]
+
+
 SOUND = {
     "ace-step": "music",
     "minimax-music3": "music",

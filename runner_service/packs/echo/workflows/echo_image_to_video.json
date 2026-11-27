@@ -54,5 +54,18 @@
         "media": "sample.video"
       }
     }
+  },
+  "standard": {
+    "kind": "video",
+    "model": "Echo keyframes",
+    "fields": {
+      "prompt": "prompt.text",
+      "first": "keyframes.images",
+      "last": "keyframes.images",
+      "length": "duration.frames",
+      "width": "canvas.width",
+      "height": "canvas.height"
+    },
+    "seconds": 0.5
   }
 }
