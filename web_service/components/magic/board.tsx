@@ -27,6 +27,7 @@ import { ImportDialog } from "@/components/magic/import";
 import { RoughCut } from "@/components/magic/rough-cut";
 import {
   MorphDialog,
+  ExportButton,
   SendButton,
   SendToast,
   SendsChip,
@@ -585,6 +586,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               sendsList.reload();
             }}
           />
+          <ExportButton sends={board.sends} onSent={sendsList.reload} />
         </div>
 
         {!doc.lanes.length ? (

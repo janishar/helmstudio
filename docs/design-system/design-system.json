@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T04:00:00Z",
+  "at": "2026-11-28T05:00:00Z",
   "via": "Claude Code",
-  "note": "MagicBlockDialog New board: the Timeline's New sequence form (Name, a Size preset select, Width, Height, Frame rate, Cancel, Create) (owner, 2026-11-28: \"the design of magic not good borrow from the sequence\")"
+  "note": "Button: Magic\u2019s header key is Export; Send to Timeline an icon button beside it (owner, 2026-11-28: \"export the main button sent to timeline as icon button, tooltips\")"
  }
 }

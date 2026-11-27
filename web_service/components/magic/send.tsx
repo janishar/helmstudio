@@ -4,7 +4,7 @@
 // toast while a send bakes and once it is sent, and the morph (frame 4b): its block over its join and its dialog.
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { Clapperboard, Clock } from "lucide-react";
+import { Clapperboard, Clock, Download } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
 import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
@@ -32,7 +32,8 @@ export type SendApi = {
   key: string;
   /** the dry run: what a send would make, nothing stored */
   plan: () => Promise<SendPlan>;
-  send: (name: string) => Promise<Send>;
+  /** name absent: studio's `<board> · send <n>` */
+  send: (name?: string) => Promise<Send>;
   list: () => Promise<Send[]>;
   remove: (id: string) => Promise<void>;
 };
@@ -183,7 +184,8 @@ function cutsOf(d: Doc): number {
   return shots ? joins(d, shots.id).filter((j) => j.kind === "cut" && j.between).length : 0;
 }
 
-/** Send to Timeline: the key button and its dialog. `onSent` gets the send it made. */
+/** Send to Timeline: the icon button beside Export (the Timeline rail's icon) and its dialog. `onSent` gets the send
+ * it made. */
 export function SendButton({
   doc,
   sends,
@@ -198,16 +200,13 @@ export function SendButton({
     <>
       <button
         type="button"
-        className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-5 text-sm"
+        className="chip bevel h-12 w-12 justify-center rounded-xl bg-s4 px-0"
         disabled={!sends}
-        title={sends ? "Make a new sequence from the board" : "Sends need a board in studio"}
+        aria-label="Send to Timeline"
+        title={sends ? "Send to Timeline (a new sequence)" : "Sends need a board in studio"}
         onClick={() => setOpen(true)}
       >
-        <span className="max-md:hidden">Send to Timeline</span>
-        <span className="md:hidden">Send</span>
-        <small className="mono text-[11px] font-medium tracking-normal max-md:hidden">
-          new sequence
-        </small>
+        <Clapperboard size={18} aria-hidden />
       </button>
       {sends && (
         <SendDialog
@@ -220,6 +219,140 @@ export function SendButton({
             onSent(s);
           }}
         />
+      )}
+    </>
+  );
+}
+
+type Job = S<"MediaJob">;
+const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Export in one step: a send with studio's name (a new sequence), its bakes waited for, then the Timeline's export
+ * with its defaults (the current revision, the automatic host, stream copy or re-encode as its plan decides).
+ * `say` gets each step's line; it ends with the job ended (succeeded, failed or cancelled). */
+export async function exportBoard(
+  sends: SendApi,
+  say: (line: string) => void,
+  onSent: (s: Send) => void = () => undefined,
+): Promise<{ send: Send; job: Job }> {
+  say("sending");
+  let s = await sends.send();
+  onSent(s);
+  while (s.status === "baking") {
+    say(`baking ${s.baked}/${s.bakes}`);
+    await wait(1500);
+    const id = s.id;
+    const now = (await sends.list()).find((x) => x.id === id);
+    if (!now) throw new Error("The send was taken off the list");
+    s = now;
+  }
+  if (s.status === "failed" || !s.timeline_id)
+    throw new Error(`Not sent${s.failure ? `: ${s.failure}` : ""}`);
+  onSent(s);
+  const path = { params: { path: { timeline_id: s.timeline_id } } };
+  say("planning");
+  const plan = await ok(
+    api.POST("/v1/studio/timelines/{timeline_id}/export/plan", { ...path, body: {} }),
+  );
+  // a blocked plan: the export's 409 says why (the plan's first reason)
+  let job = await ok(
+    api.POST("/v1/studio/timelines/{timeline_id}/export", {
+      ...path,
+      body: { revision: plan.revision },
+    }),
+  );
+  while (job.status === "queued" || job.status === "running") {
+    say(job.progress ? `frame ${job.progress.frames} / ${job.progress.total}` : job.status);
+    await wait(1000);
+    const jid = job.id;
+    job = await ok(
+      api.GET("/v1/studio/media-jobs/{job_id}", { params: { path: { job_id: jid } } }),
+    );
+  }
+  return { send: s, job };
+}
+
+/** Export (the header's key): send, then export; its line follows the steps, a toast says how it ended. */
+export function ExportButton({
+  sends,
+  onSent,
+}: {
+  sends: SendApi | null;
+  onSent: (s: Send) => void;
+}) {
+  const [line, setLine] = useState<string | null>(null);
+  const [end, setEnd] = useState<{ text: string; timeline?: string; bad?: boolean } | null>(null);
+  const go = async () => {
+    if (!sends) return;
+    setEnd(null);
+    setLine("sending");
+    try {
+      const { send, job } = await exportBoard(sends, setLine, onSent);
+      setEnd(
+        job.status === "succeeded"
+          ? { text: `Exported · ${send.name}`, timeline: send.timeline_id! }
+          : {
+              text:
+                job.status === "cancelled"
+                  ? `Export cancelled · ${send.name}`
+                  : `Export failed: ${job.failure?.detail ?? "the runner gave no reason"}`,
+              timeline: send.timeline_id!,
+              bad: true,
+            },
+      );
+    } catch (e) {
+      setEnd({ text: message(e), bad: true });
+    } finally {
+      setLine(null);
+    }
+  };
+  return (
+    <>
+      <button
+        type="button"
+        className="key flex h-12 flex-col items-center justify-center gap-px rounded-xl px-5 text-sm"
+        disabled={!sends || line !== null}
+        title={
+          sends
+            ? "Export an MP4 (sends to a new sequence, then exports)"
+            : "Exports need a board in studio"
+        }
+        onClick={() => void go()}
+      >
+        <span className="flex items-center gap-1.5">
+          <Download size={14} aria-hidden className="max-md:hidden" />
+          {line === null ? "Export" : "Exporting…"}
+        </span>
+        <small
+          className="mono text-[11px] font-medium tracking-normal max-md:hidden"
+          aria-live="polite"
+        >
+          {line ?? "MP4 · new sequence"}
+        </small>
+      </button>
+      {end && (
+        <div
+          role={end.bad ? "alert" : "status"}
+          className="fixed bottom-5 left-1/2 z-50 flex w-[min(92vw,420px)] -translate-x-1/2 items-center gap-2.5 rounded-xl bg-s3 px-3 py-2.5 text-[13px] shadow-lg"
+        >
+          <span className={`min-w-0 grow ${end.bad ? "text-bad" : ""}`}>{end.text}</span>
+          {end.timeline && (
+            <Link
+              className="chip bevel h-7 rounded-[9px] text-[12px]"
+              href={timelineHref(end.timeline)}
+            >
+              Open in Timeline
+            </Link>
+          )}
+          <button
+            type="button"
+            className="chip h-7 rounded-[9px] text-[12px]"
+            aria-label="Close"
+            onClick={() => setEnd(null)}
+          >
+            ×
+          </button>
+        </div>
       )}
     </>
   );

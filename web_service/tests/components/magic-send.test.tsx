@@ -12,9 +12,12 @@ import {
   morphStatus,
   morphTake,
   when,
+  exportBoard,
+  type SendApi,
   type Send,
   type SendPlan,
 } from "@/components/magic/send";
+import { api } from "@/lib/api";
 import { joins, type Doc } from "@/lib/magic";
 import { sampleBoard } from "@/lib/magic-fixture";
 
@@ -189,4 +192,41 @@ describe("a morph", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Morph 1 s, Done/ }));
     expect(a.openMorph).toHaveBeenCalledWith("tm");
   });
+});
+
+describe("Export (one step)", () => {
+  it("sends with studio's name, waits out the bakes, exports the plan's revision and follows the job", async () => {
+    const base = { id: "s1", name: "Board · send 1", revision: 3, bakes: 1, failure: null };
+    const sent: (string | undefined)[] = [];
+    const sends = {
+      key: "b1",
+      send: async (name?: string) => (
+        sent.push(name),
+        { ...base, status: "baking", baked: 0, timeline_id: null }
+      ),
+      list: async () => [{ ...base, status: "done", baked: 1, timeline_id: T1 }],
+    } as unknown as SendApi;
+    const reply = (data: unknown) =>
+      Promise.resolve({ data, error: undefined, response: new Response(null, { status: 200 }) });
+    const posts: [string, unknown][] = [];
+    vi.spyOn(api, "POST").mockImplementation(((path: string, init: { body: unknown }) => {
+      posts.push([path, init.body]);
+      return path.endsWith("/plan")
+        ? reply({ revision: 7, blocked: [] })
+        : reply({ id: "j1", status: "queued" });
+    }) as never);
+    vi.spyOn(api, "GET").mockImplementation((() =>
+      reply({ id: "j1", status: "succeeded", take_id: T2 })) as never);
+    const lines: string[] = [];
+    const { send, job } = await exportBoard(sends, (l) => lines.push(l));
+    expect(sent).toEqual([undefined]);
+    expect(send.timeline_id).toBe(T1);
+    expect(posts).toEqual([
+      ["/v1/studio/timelines/{timeline_id}/export/plan", {}],
+      ["/v1/studio/timelines/{timeline_id}/export", { revision: 7 }],
+    ]);
+    expect(job.status).toBe("succeeded");
+    expect(lines).toEqual(["sending", "baking 0/1", "planning", "queued"]);
+    vi.restoreAllMocks();
+  }, 10_000);
 });
