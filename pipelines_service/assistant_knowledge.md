@@ -107,6 +107,9 @@ Magic boards:
 - No board fits a brief: create_board, then navigate /magic with query b (its board_id), then add lanes and blocks.
 - Models: magic_kinds lists each kind's models (a request's model is a workflow id), the fields each greys and why,
   its env and its Advanced params (<node>.<param>). Run on is request.host (a host from hosts; absent: Auto).
+- "Use turbo" (or dev, distilled, fp8) means the model's variant: request.advanced {"model.variant": "turbo"}, one of
+  that param's values (absent: the workflow's own, Qwen Image's base). A run's variant is in its run history; its
+  estimate follows it (no runs of yours at that variant yet: time unknown).
 - A dialogue is a voice block with request.turns [{speaker: an asset id, text}] (no line, no "@name:" script); each
   speaker needs a voice (show_board assets: voice_id). A sound with request.loop repeats to fill its block.
 - Takes: a block's take_ids (newest first) and pinned say what it shows; compare them with look_at, then pin one with
