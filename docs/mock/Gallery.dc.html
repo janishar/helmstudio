@@ -157,8 +157,7 @@ main button,aside button{box-shadow:inset 0 1px 0 rgba(255,255,255,.1),inset 0 -
 
 <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 12px">
 <h1 style="margin: 0; font-family: 'Bricolage Grotesque', Inter, sans-serif; font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em">Gallery</h1>
-<label for="q" style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Search prompts</label>
-<input id="q" type="search" placeholder="Search prompts, elements, models" style="flex: 1 1 260px; height: 40px; box-sizing: border-box; border-radius: 12px; border: 1px solid var(--s5); background: var(--s1); color: var(--t1); font: inherit; padding: 0 14px">
+<div role="search" style="display: flex; align-items: center; gap: 8px; height: 38px; box-sizing: border-box; padding: 0 8px 0 12px; border-radius: 10px; background: var(--s4); color: var(--t1); font-size: 13px; flex: 0 0 auto; flex: 1 1 260px; height: 40px"><svg aria-hidden="true" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--t2); flex: 0 0 auto"><path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle></svg><input type="search" aria-label="Search prompts, elements, models" placeholder="Search prompts, elements, models" style="flex: 1 1 auto; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--t1); font: inherit; padding: 0"><kbd title="Press / to search" style="min-width: 18px; box-sizing: border-box; padding: 0 5px; border-radius: 5px; background: var(--s5); color: var(--t1); font: 500 11px/18px 'JetBrains Mono', monospace; text-align: center">/</kbd></div>
 <button class="chip" style="border-radius: 12px; height: 40px">Upload</button>
 <button class="chip" style="border-radius: 12px; height: 40px">Select several</button>
 </div>
