@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T03:00:00Z",
+  "at": "2026-11-28T03:20:00Z",
   "via": "Claude Code",
-  "note": "StatusBanner: the gateway's own page (Kong, while web restarts): helmstudio is starting, a Retry that counts down 3 s and reloads, Kong's message small (owner, 2026-11-28: \"error screen not comver these\")"
+  "note": "Scrollbars show only while their area scrolls and go 0.8 s after (owner, 2026-11-28: \"now scrollbar is always visible can we not bring while scroling\")"
  }
 }

@@ -38,9 +38,13 @@
   ::-webkit-scrollbar-corner {
     background: transparent;
   }
+  /* clear until its area scrolls (components/scrollbars.tsx marks it data-scrolling for 0.8 s) */
   ::-webkit-scrollbar-thumb {
-    background: var(--a1);
+    background: transparent;
     border-radius: 0;
+  }
+  [data-scrolling]::-webkit-scrollbar-thumb {
+    background: var(--a1);
   }
   @supports not selector(::-webkit-scrollbar) {
     * {
