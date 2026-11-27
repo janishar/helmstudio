@@ -412,7 +412,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
       const t = e.target instanceof Element ? e.target : null;
-      if (t?.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
+      if (t?.closest("input, textarea, select, [contenteditable], dialog[open], [popover]")) return;
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
       if (k === "escape" && openPopover()) return; // Esc closes the boards popover, not the selection
@@ -1547,6 +1547,7 @@ function BoardPanel({
       {search.shown.map((s) => (
         <div
           key={s.id}
+          id={search.rowId(s)}
           className={`nr ${search.rows[search.active] === s ? "sf-on" : ""}`}
           onContextMenu={(e) =>
             openMenu(

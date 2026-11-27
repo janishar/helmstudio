@@ -1386,6 +1386,7 @@ function ChatsList({
       aria-label="Chats"
       className="chats"
       onKeyDown={(e) => {
+        if (e.target instanceof HTMLInputElement && e.key !== "Escape") return; // the field's own keys (Home, End)
         const all = [...(ref.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
         const at = all.indexOf(document.activeElement as HTMLElement);
         const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
@@ -1420,6 +1421,7 @@ function ChatsList({
           key={t.id}
           type="button"
           role="menuitemradio"
+          id={search.rowId(t)}
           aria-checked={t.id === cur}
           className={search.rows[search.active] === t ? "sf-on" : undefined}
           onClick={() => pick(t.id)}

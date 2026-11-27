@@ -171,7 +171,7 @@ export function VisualPicker<A extends string, B extends string>({
           onKeyDown={gridKeys}
           className={`m-0 grid list-none p-0 ${grid}`}
         >
-          <Words.Provider value={search?.value ?? ""}>{children}</Words.Provider>
+          <Words.Provider value={pickerWords(search?.value ?? "")}>{children}</Words.Provider>
         </ul>
       </div>
       {footer}

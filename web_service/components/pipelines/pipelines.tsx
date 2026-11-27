@@ -369,6 +369,7 @@ export function Pipelines({
           ? `/gallery?batch=${encodeURIComponent(b.id)}`
           : `/pipelines/batches/${b.id}`,
       ),
+    onError: setError,
     min: -1,
   });
   const narrowed = !!bSearch.q.trim() || state !== "all";
@@ -467,6 +468,7 @@ export function Pipelines({
                 key={p.id}
                 role="button"
                 tabIndex={0}
+                id={plSearch.rowId(p)}
                 aria-pressed={sel}
                 aria-label={`${p.title}, version ${p.version}`}
                 className={`panel flex min-w-0 cursor-pointer flex-col gap-2.5 px-4 py-3.5 ${sel ? "bg-s2 outline-2 outline-offset-3 outline-a1" : ""} ${plSearch.rows[plSearch.active] === p ? "sf-on" : ""}`}
@@ -567,7 +569,11 @@ export function Pipelines({
             </thead>
             <tbody>
               {(all ? bSearch.rows : batches?.slice(0, RECENT))?.map((b) => (
-                <tr key={b.id} className={all && bSearch.rows[bSearch.active] === b ? "sf-on" : ""}>
+                <tr
+                  key={b.id}
+                  id={all ? bSearch.rowId(b) : undefined}
+                  className={all && bSearch.rows[bSearch.active] === b ? "sf-on" : ""}
+                >
                   <td className="m max-w-[200px] truncate" title={b.title}>
                     <Marked text={b.title} q={bSearch.q} />
                   </td>

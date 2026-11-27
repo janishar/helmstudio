@@ -97,6 +97,7 @@ function SequenceList({
           <li key={t.id}>
             <button
               type="button"
+              id={search.rowId(t)}
               aria-current={t.id === current?.id}
               onClick={() => pick(t)}
               className={`h-9 w-full rounded-[10px] px-3 text-left text-[13px] aria-current:bg-s4 aria-current:font-semibold ${search.rows[search.active] === t ? "sf-on" : ""}`}

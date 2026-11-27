@@ -33,7 +33,13 @@ export function BoardSwitcher({ board }: { board: Board }) {
     el?.addEventListener("toggle", onToggle);
     return () => el?.removeEventListener("toggle", onToggle);
   }, [setQ]);
-  useSlashOpens(() => pop.current?.showPopover?.());
+  useSlashOpens(() => {
+    try {
+      pop.current?.showPopover?.();
+    } catch {
+      /* already open (its field hidden: 8 boards or fewer) */
+    }
+  });
 
   const rename = (b: BoardRow) => {
     const name = prompt("Board name", b.name)?.trim();
@@ -61,6 +67,7 @@ export function BoardSwitcher({ board }: { board: Board }) {
   const row = (b: BoardRow) => (
     <button
       key={b.id}
+      id={search.rowId(b)}
       type="button"
       aria-current={b.id === board.id || undefined}
       className={`flex flex-col items-start gap-0.5 rounded-[10px] px-3 py-1.5 text-left hover:bg-s3 aria-[current]:bg-s3 ${search.rows[search.active] === b ? "sf-on" : ""}`}

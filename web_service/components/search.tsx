@@ -3,7 +3,16 @@
 // The Field look with a search glyph, the match count, a spinner while the server is asked, a clear ×, and the / hint.
 // useSearch filters the loaded rows at once (every word, any order, case-insensitive: contracts/README.md "Search in
 // lists") and, with a `server`, asks it 300 ms after the last key; matches not loaded come back as `older`.
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { LoaderCircle, Search, X } from "lucide-react";
 import { message } from "@/lib/api";
 
@@ -41,10 +50,14 @@ function onSlash(e: KeyboardEvent) {
   const t = e.target as HTMLElement | null;
   if (t?.closest?.("input, textarea, select, [contenteditable]:not([contenteditable=false])"))
     return; // typing in a field
-  // the open popover's or dialog's field first, then the screen's closed list (its opener), then a list in view
-  const shown = [...fields].filter(visible);
-  const f = shown.filter((x) => x.closest("dialog[open], [popover]")).at(-1);
-  const opener = openers.at(-1);
+  // the open popover's, dialog's or menu's field first, then the screen's closed list (its opener), then a list in
+  // view; with a modal dialog open only its own fields (a / on its buttons opens nothing behind it)
+  const modal = [...document.querySelectorAll("dialog[open]")].at(-1);
+  const shown = [...fields].filter((x) => visible(x) && (!modal || modal.contains(x)));
+  const f = shown
+    .filter((x) => x.closest("dialog[open], [popover], [role=dialog], [role=menu]"))
+    .at(-1);
+  const opener = modal ? undefined : openers.at(-1);
   if (!f && opener) {
     e.preventDefault();
     return opener();
@@ -96,6 +109,8 @@ export type FieldProps = {
   onMove?: (by: 1 | -1) => void;
   /** Esc on an empty field: close the popover or dialog (a native one closes itself when this is left out) */
   onClose?: () => void;
+  /** the ringed row's DOM id: announced (aria-activedescendant) while that row is drawn */
+  activeId?: string;
   autoFocus?: boolean;
   className?: string;
   id?: string;
@@ -114,12 +129,20 @@ export function SearchField({
   autoFocus,
   className = "",
   id,
+  activeId,
 }: FieldProps) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     const el = ref.current!;
     return followSlash(fields, el, () => fields.delete(el));
   }, []);
+  // only a row that is drawn (a list may not draw the ring): focus stays here, the row is read out
+  useEffect(() => {
+    const el = ref.current!;
+    if (activeId && document.getElementById(activeId))
+      el.setAttribute("aria-activedescendant", activeId);
+    else el.removeAttribute("aria-activedescendant");
+  });
   // after the dialog it sits in has opened (showModal focuses its first button)
   useEffect(() => {
     if (!autoFocus) return;
@@ -162,8 +185,15 @@ export function SearchField({
           }
         }}
       />
-      {value && count !== undefined && <span className="sfh">{count}</span>}
-      {busy && <LoaderCircle size={14} aria-label="Searching" className="spin text-t2" />}
+      {value && count !== undefined && (
+        <span className="sfh" role="status">
+          {count}
+          <span className="sr-only">{count === 1 ? " match" : " matches"}</span>
+        </span>
+      )}
+      {busy && (
+        <LoaderCircle size={14} role="img" aria-label="Searching" className="spin text-t2" />
+      )}
       {value ? (
         <button
           type="button"
@@ -250,6 +280,7 @@ export function useSearch<T>({
   scope = "",
   more = false,
   onPick,
+  onError,
   min = 8,
 }: {
   /** the rows loaded (null: still loading), already narrowed by any chip the list has */
@@ -265,6 +296,8 @@ export function useSearch<T>({
   more?: boolean;
   /** Enter on the ringed row */
   onPick?: (t: T) => void;
+  /** the server's search failed (the screen's own error line) */
+  onError?: (detail: string) => void;
   /** the field shows past this many rows */
   min?: number;
 }) {
@@ -272,13 +305,15 @@ export function useSearch<T>({
   const [found, setFound] = useState<{ key: string; items: T[]; next: string | null } | null>(null);
   // what the server is being asked for (a newer query makes it stale)
   const [asking, setAsking] = useState<string | null>(null);
-  const [error, setError] = useState("");
   const [active, setActive] = useState(-1);
   const seq = useRef(0);
   const serverRef = useRef(server);
+  const errorRef = useRef(onError);
   useEffect(() => {
     serverRef.current = server;
+    errorRef.current = onError;
   });
+  const uid = useId();
   const query = q.trim();
   const key = `${scope}\n${query}`;
   const asked = !!(query || scope);
@@ -300,22 +335,33 @@ export function useSearch<T>({
     const n = ++seq.current;
     const k = key;
     setAsking(k);
-    setError("");
     serverRef.current!(query, cursor)
       .then((p) => {
         if (n !== seq.current) return; // an answer for an older query
-        setFound((f) => ({
-          key: k,
-          items: cursor && f?.key === k ? [...f.items, ...p.items] : p.items,
-          next: p.next,
-        }));
+        setFound((f) => {
+          if (!(cursor && f?.key === k)) return { key: k, items: p.items, next: p.next };
+          const had = new Set(f.items.map(id)); // a page never repeats a row already found
+          return {
+            key: k,
+            items: [...f.items, ...p.items.filter((t) => !had.has(id(t)))],
+            next: p.next,
+          };
+        });
       })
-      .catch((e) => n === seq.current && setError(message(e)))
+      .catch((e) => {
+        if (n !== seq.current) return;
+        errorRef.current?.(message(e));
+        // answered (with nothing more): the spinner stops; a failed next page keeps the pages found
+        setFound((f) =>
+          cursor && f?.key === k ? { ...f, next: null } : { key: k, items: [], next: null },
+        );
+      })
       .finally(() => n === seq.current && setAsking(null));
   };
 
-  // the server 300 ms after the last key; a new query drops the answer in flight (a blank one asks nothing)
-  const searching = asked && asking === key;
+  // the server 300 ms after the last key; a new query drops the answer in flight (a blank one asks nothing). Until
+  // this query's answer is in it counts as searching, so "No … match" never shows before the server has looked.
+  const searching = asked && (asking === key || (!!server && found?.key !== key));
   useEffect(() => {
     seq.current++;
     if (!asked || !serverRef.current) return;
@@ -330,6 +376,8 @@ export function useSearch<T>({
   }, []);
   const count = rows.length;
   const show = !!q || (items?.length ?? 0) > min || more;
+  const ring = Math.min(active, count - 1); // the rows can shrink under the ring (a chip, a row deleted)
+  const rowId = (t: T) => `${uid}-${id(t)}`;
   return {
     q,
     setQ,
@@ -337,11 +385,12 @@ export function useSearch<T>({
     shown,
     older,
     rows,
-    active,
+    active: ring,
     setActive,
     count,
     searching,
-    error,
+    /** the row's DOM id, for the field's aria-activedescendant */
+    rowId,
     /** the server's matches have a next page */
     olderNext: !!found?.next && found.key === key,
     moreOlder: () => found?.next && found.key === key && ask(found.next),
@@ -351,11 +400,15 @@ export function useSearch<T>({
       onChange: setQ,
       count,
       busy: searching,
+      activeId: ring >= 0 ? rowId(rows[ring]) : undefined,
       onMove: (by: 1 | -1) =>
-        count && setActive((a) => (a < 0 ? 0 : Math.min(count - 1, Math.max(0, a + by)))),
+        count &&
+        setActive((a) =>
+          a < 0 ? 0 : Math.min(count - 1, Math.max(0, Math.min(a, count - 1) + by)),
+        ),
       onEnter: () => {
-        const t = rows[Math.max(active, 0)];
-        if (t && onPick && (query || active >= 0)) onPick(t);
+        const t = rows[Math.max(ring, 0)];
+        if (t && onPick && (query || ring >= 0)) onPick(t);
       },
     },
   };

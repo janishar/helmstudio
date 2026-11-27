@@ -141,6 +141,7 @@ export function SessionMenu({
         }),
       ).then((p) => ({ items: p.sessions, next: p.next_cursor })),
     onPick: pick,
+    onError,
   });
   const [older, setOlder] = useState(false);
   async function loadOlder() {
@@ -179,7 +180,11 @@ export function SessionMenu({
   // / on Create opens the menu with the field focused
   useSlashOpens(() => {
     void readBusy();
-    pop.current?.showPopover?.();
+    try {
+      pop.current?.showPopover?.();
+    } catch {
+      /* already open (its field hidden: 8 sessions or fewer) */
+    }
   });
   async function rename(s: Session) {
     const title = draft.trim().slice(0, 200);
@@ -282,6 +287,7 @@ export function SessionMenu({
       >
         <button
           type="button"
+          id={search.rowId(s)}
           aria-current={here || undefined}
           className={`min-w-0 flex-1 truncate rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-[current]:bg-s3 aria-[current]:font-semibold ${search.rows[search.active] === s ? "sf-on" : ""}`}
           onClick={() => pick(s)}

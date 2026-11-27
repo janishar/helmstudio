@@ -11,6 +11,7 @@ import {
   SearchField,
   matches,
   useSearch,
+  useSlashOpens,
   type Found,
 } from "@/components/search";
 
@@ -27,18 +28,20 @@ function List({
   server,
   onPick = () => {},
   onClose,
+  onError,
 }: {
   items: Row[];
   server?: (q: string, c: string | null) => Promise<Found<Row>>;
   onPick?: (r: Row) => void;
   onClose?: () => void;
+  onError?: (d: string) => void;
 }) {
-  const s = useSearch({ items, text: (r) => [r.title], id: (r) => r.id, server, onPick });
+  const s = useSearch({ items, text: (r) => [r.title], id: (r) => r.id, server, onPick, onError });
   return (
     <div>
       {s.show && <SearchField {...s.field} label="Search sessions" onClose={onClose} />}
       {s.shown.map((r) => (
-        <div key={r.id} data-row className={s.rows[s.active] === r ? "sf-on" : ""}>
+        <div key={r.id} id={s.rowId(r)} data-row className={s.rows[s.active] === r ? "sf-on" : ""}>
           <Marked text={r.title} q={s.q} />
         </div>
       ))}
@@ -191,5 +194,71 @@ describe("the server", () => {
     );
     expect(document.querySelectorAll("[data-older]")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: "Load more matches" })).toBeNull();
+  });
+});
+
+// review fixes (alpha.6 search review)
+describe("review fixes", () => {
+  it("the ringed row is the field's active descendant", () => {
+    render(<List items={nine} />);
+    expect(box().hasAttribute("aria-activedescendant")).toBe(false);
+    fireEvent.change(box(), { target: { value: "fox" } });
+    fireEvent.keyDown(box(), { key: "ArrowDown" });
+    const on = document.querySelector(".sf-on")!;
+    expect(on.textContent).toBe("Arctic fox run");
+    expect(box().getAttribute("aria-activedescendant")).toBe(on.id);
+  });
+
+  it("No match waits for the server; a failed search says so and stops the spinner", async () => {
+    vi.useFakeTimers();
+    let fail: (e: unknown) => void = () => {};
+    const server = vi.fn(() => new Promise<Found<Row>>((_, rej) => (fail = rej)));
+    const onError = vi.fn();
+    render(<List items={nine} server={server} onError={onError} />);
+    fireEvent.change(box(), { target: { value: "zebra" } });
+    // before the server is asked (the 300 ms) and while it looks: no "No sessions match."
+    expect(screen.queryByText("No sessions match.")).toBeNull();
+    expect(screen.getByLabelText("Searching")).toBeTruthy();
+    act(() => void vi.advanceTimersByTime(300));
+    expect(screen.queryByText("No sessions match.")).toBeNull();
+    await act(async () => fail(new Error("down")));
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText("Searching")).toBeNull();
+    expect(screen.getByText("No sessions match.")).toBeTruthy();
+  });
+
+  it("a next page never repeats a row already found", async () => {
+    vi.useFakeTimers();
+    const answers: ((v: Found<Row>) => void)[] = [];
+    const server = vi.fn(() => new Promise<Found<Row>>((res) => answers.push(res)));
+    render(<List items={nine} server={server} />);
+    fireEvent.change(box(), { target: { value: "cub" } });
+    act(() => void vi.advanceTimersByTime(300));
+    const a = { id: "o1", title: "Fox cub" };
+    await act(async () => answers[0]({ items: [a], next: "c1" }));
+    fireEvent.click(screen.getByRole("button", { name: "Load more matches" }));
+    await act(async () => answers[1]({ items: [a, { id: "o2", title: "Cub den" }], next: null }));
+    expect([...document.querySelectorAll("[data-older]")].map((e) => e.textContent)).toEqual([
+      "Fox cub",
+      "Cub den",
+    ]);
+  });
+
+  it("/ under a modal dialog opens nothing behind it", () => {
+    const opened = vi.fn();
+    function Screen({ modal }: { modal: boolean }) {
+      useSlashOpens(opened);
+      return modal ? (
+        <dialog open>
+          <button type="button">Delete</button>
+        </dialog>
+      ) : null;
+    }
+    const { rerender } = render(<Screen modal />);
+    fireEvent.keyDown(screen.getByText("Delete"), { key: "/" });
+    expect(opened).not.toHaveBeenCalled();
+    rerender(<Screen modal={false} />);
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(opened).toHaveBeenCalledTimes(1);
   });
 });

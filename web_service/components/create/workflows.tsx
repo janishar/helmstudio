@@ -70,8 +70,12 @@ export function WorkflowPicker({
   const [busy, setBusy] = useState(false);
   const hide = () => document.getElementById("workflows")?.hidePopover();
   // past 8 workflows, the browser searches their titles (all loaded)
+  // templates first, as drawn: ↑ ↓ and Enter follow the rows on screen
   const search = useSearch({
-    items: workflows,
+    items: [
+      ...workflows.filter((w) => w.source !== "mine"),
+      ...workflows.filter((w) => w.source === "mine"),
+    ],
     text: (w) => [w.title],
     id: (w) => w.id,
     onPick: (w) => (hide(), onPick(w.id)),
@@ -93,6 +97,7 @@ export function WorkflowPicker({
       <button
         type="button"
         role="menuitemradio"
+        id={search.rowId(w)}
         aria-checked={w.id === current?.id}
         className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"} ${search.rows[search.active] === w ? "sf-on" : ""}`}
         onClick={() => {

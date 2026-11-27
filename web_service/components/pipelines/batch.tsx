@@ -72,6 +72,7 @@ export function BatchRun({
           params: { path: { batch_id: id }, query: { q, cursor: c ?? undefined, limit: ROWS } },
         }),
       ).then((p) => ({ items: p.rows, next: p.next_cursor })),
+    onError: setError,
   });
   const router = useRouter();
   // a pipeline batch: the pipeline now, for its node and workflow titles (cells name nodes the snapshot had)
