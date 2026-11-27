@@ -356,7 +356,7 @@ function Body({
           {x.kind === "character" && (
             <div className="flex flex-col gap-1.5">
               <h3 className="m-0 text-[13px]">Voice</h3>
-              <div className="nr">
+              <div className="flex min-w-0 items-center gap-2 rounded-xl bg-s3 px-2.5 py-1.5 text-[12px]">
                 <span className="mo k8v" aria-hidden>
                   <Mic size={12} />
                 </span>

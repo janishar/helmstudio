@@ -790,7 +790,6 @@ export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
       {
         label: "Make views",
         icon: Images,
-        keys: a.views ? missingViews(x).join(", ") : undefined,
         off: a.views ? undefined : (a.runOff ?? RUNS_OFF),
         onPick: () => a.views?.(x.id, missingViews(x)),
       },

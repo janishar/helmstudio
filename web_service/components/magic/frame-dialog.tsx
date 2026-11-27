@@ -256,8 +256,8 @@ function Body({
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <section className="flex min-w-0 flex-col gap-2.5" aria-label="The frame">
           <div
-            className="flex aspect-video items-end rounded-xl bg-cover bg-center p-2"
-            style={{ backgroundColor: "var(--s2)", backgroundImage: stage?.art }}
+            className="flex aspect-video items-center justify-center rounded-xl bg-cover bg-center p-2 text-center"
+            style={{ backgroundColor: "var(--s3)", backgroundImage: stage?.art }}
             role="img"
             aria-label={stage ? `Take ${n(picked)}` : "No picture yet"}
             onDragOver={(e) => gallery && e.preventDefault()}

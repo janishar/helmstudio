@@ -369,7 +369,7 @@ describe("phase E: assets, views and the Gallery", () => {
     ]);
     item(mara.items, "Open").onPick!();
     expect(openAsset).toHaveBeenCalledWith("mara");
-    expect(item(mara.items, "Make views").keys).toBe("Front, Side, Back, Full figure");
+    expect(item(mara.items, "Make views").keys).toBeUndefined();
     item(mara.items, "Make views").onPick!();
     expect(views).toHaveBeenCalledWith("mara", ["Front", "Side", "Back", "Full figure"]);
     item(mara.items, "Import a view").onPick!();

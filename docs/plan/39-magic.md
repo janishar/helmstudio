@@ -454,3 +454,14 @@ them, and blocks draw covers and orbs (`components/magic/sound-mark.tsx`). Decis
   block could never run); a request's `model` may name a model's video workflow (`mmaudio-video`) and runs the model,
   its prompt workflow when it has no `from` (it was "on no host"). Left: a shot whose shown take is a picture (its own
   picture) passes the check and the run's take input refuses it at run time.
+
+**Browser check, phases E and H (2026-11-27, test stack, echo mode).** Walked the Assets row, the asset dialog (Make
+views, import, sheet), frame dialog (Redraw, Generate from board), rough cut, the music and sound dialogs, Add step 2
+for music, and the asset, view, frame, shot, music, sound, lane and empty-lane menus. Fixed: the asset menu's Make
+views hint ran over its label (hint dropped); the asset dialog's voice row stacked its orb above the name (`.nr` is
+styled only in the side panel); the frame and block dialogs' picture boxes were the dialog's own colour, so an empty or
+drawing box was invisible (now a shade lighter, text centred); the block dialog showed "No take yet" for a take that
+arrived while it was open; `.nr` rows in the block dialog (Tied, running takes) had no spacing. Left vs the board:
+Compare takes, Loop, the music form's tie row and section markers, dialogue runs, Another view's model pick, renaming
+a handle, the Sound form's "From Shot 2 video" sits as a select (not the board's two-chip row), and the menus show
+Ctrl where the board shows the Mac key.

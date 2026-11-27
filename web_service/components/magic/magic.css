@@ -953,7 +953,8 @@
   font-weight: 600;
   font-size: 13px;
 }
-.mg-side .nr {
+.mg-side .nr,
+.mg-add .nr {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -963,7 +964,8 @@
   font-size: 12px;
   min-width: 0;
 }
-.mg-side .nr .mono {
+.mg-side .nr .mono,
+.mg-add .nr .mono {
   margin-left: auto;
   font-size: 10px;
   color: var(--t2);

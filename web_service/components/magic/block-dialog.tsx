@@ -81,7 +81,9 @@ function Body({
   const lane = d.lanes.find((l) => l.id === b.lane);
   const takes = b.takes.filter((id) => a.takes[id]?.status === "done");
   const running = Object.values(a.takes).filter((t) => t.block === b.id && t.status === "running");
-  const [picked, setPicked] = useState<string | undefined>(shown(b, a.takes)?.id);
+  const [chosen, setPicked] = useState<string | undefined>(shown(b, a.takes)?.id);
+  // a take that arrives while the dialog is open shows too
+  const picked = chosen ?? shown(b, a.takes)?.id;
   const stage = picked ? a.takes[picked] : undefined;
   const n = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
   const model = modelOf(kinds, req);
@@ -239,7 +241,7 @@ function Body({
         <section className="flex min-w-0 flex-col gap-2.5" aria-label="Takes">
           <div
             className="flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center p-2"
-            style={{ backgroundColor: "var(--s2)", backgroundImage: look ? undefined : stage?.art }}
+            style={{ backgroundColor: "var(--s3)", backgroundImage: look ? undefined : stage?.art }}
           >
             {stage?.kind === "video" && stage.url ? (
               <video
