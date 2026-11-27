@@ -62,7 +62,7 @@ The app speaks in short, plain words. It is a tool, not a host: no greetings, no
 
 The components here are static renditions of the app's own classes in `components/bundle.css`; there is no JavaScript bundle. Load `tokens.css`, then `bundle.css`, and use the class names each component's guideline gives. Parts marked "board only, not built" (Magic) come from the approved boards and are not in the app yet.
 
-- **Navigation**: Rail (Create, Pipelines, Gallery, Timeline, Magic, Models; Magic board only), KindTabs and ContextMenu.
+- **Navigation**: Rail (Create, Magic, Gallery, Timeline, Pipelines, Models), KindTabs and ContextMenu.
 - **Timeline**: TimelineLanes (ruler, lane heads, playhead `tl-ph`), TimelineClip (`tl-clip` and its looks: `a1` image, `a2` video, sky audio, dashed empty or offline), TimelineTools (`tl-bar`, the five tools, Snapping, Zoom, the shortcuts sheet) and TimelineOverlays (`tl-tag`, snap, blade, trim and slip). Overlays never take the pointer.
 - **Assistant**: AssistantDrawer (`ast drw`; `ast sheet` on a phone), AssistantCard (`cf`, Pick one `opts`), AssistantChats, AssistantMinBar (`ast-min`) and MentionsPicker (the @ lists). Anything that uses the GPU waits for a card.
 - **Pipelines**: Chain (`chain`, `pl`), GraphNode (`gn`, ports and wire colours) and RunStrip (the Graph's buttons, legend and live preview).
