@@ -1,6 +1,6 @@
 # TransitionMarker
 
-Board only, not built (Magic, owner picked B, the bowtie set): how a join between two blocks on a lane shows its transition.
+Built in Magic (alpha.6; owner picked B, the bowtie set): how a join between two blocks on a lane shows its transition.
 
 - **Dissolve**: a 26px chip with a bowtie (two triangles meeting) in `transition` on `s2`, a 1.5px `transition` border, corners 7px, ringed in `s1`. The length shows in the Inspector ("Dissolve 0.5 s").
 - **Cut**: the same chip with a single vertical line in `t2` and a `t2` border.

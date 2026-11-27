@@ -9,6 +9,7 @@ Our own right-click menu (context-menu.tsx, docs/mock/ContextMenus.dc.html): one
 - Greyed row (`aria-disabled`): 0.55 opacity, the reason in its `title` on hover ("Reading what it fits").
 - Danger row (Delete): `bad` text and icon, always last after a separator.
 - Section heading inside the menu (`hd`, `heading: true`): names the rows under it, after a separator; not an item, the keys skip it (the model card's "Copies on mac" with Mac `used` and T9 `spare`, ModelFolders 5c).
+- Magic menus (built): a dialogue line's row (Move up, Move down, danger Remove line), a section marker (Play from here, Playhead here), a sound block (Loop, a tick row) and a shot (Compare takes, greyed "Only one take yet").
 - Submenu (`cm sub`): `size-submenu` wide, beside its row, 4px off; flips left near the edge.
 - Keys: ↑ ↓, → ← for submenus, Enter, Esc, a typed letter jumps to the next row starting with it. Shift + right-click is the browser's own menu. Text fields get Cut, Copy, Paste, Select all, Insert @… (and the Mac app's spelling); empty space gets none.
 
