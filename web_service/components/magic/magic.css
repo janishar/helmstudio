@@ -1102,6 +1102,15 @@
     background-position: -300% 0;
   }
 }
+/* a quick open shows no bars: they wait 0.4 s, then fade in (MagicBoard frame 11) */
+.mg-wait {
+  animation: mg-wait 0.2s ease-out 0.4s both;
+}
+@keyframes mg-wait {
+  from {
+    opacity: 0;
+  }
+}
 
 /* a phone: the player sits on top, the lanes scroll sideways */
 @media (max-width: 47.99rem) {

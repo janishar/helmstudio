@@ -4,7 +4,7 @@ import "./magic.css";
 /** The board's loading state (frame 11): the bars of lanes to come. */
 export function LoadingBoard() {
   return (
-    <main id="main" className="mg flex min-w-0 flex-1 flex-col gap-3.5 px-5 pt-4 pb-5">
+    <main id="main" className="mg mg-wait flex min-w-0 flex-1 flex-col gap-3.5 px-5 pt-4 pb-5">
       <p className="m-0 text-[13px] text-t2" role="status">
         Loading the board…
       </p>
