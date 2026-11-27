@@ -571,6 +571,16 @@
       "x": 1520,
       "y": 0,
       "page": "mac-app"
+    },
+    "Search.dc.html": {
+      "expand": "fill",
+      "h": 9047,
+      "is_interactive": true,
+      "title": "Search (proposed) \u00b7 one search field for long lists: sessions, Magic boards, sequences, chats, pipelines and batches, pickers, admin tables, the 8-row rule",
+      "w": 1440,
+      "x": 0,
+      "y": 7020,
+      "page": "create-image"
     }
   },
   "createdOnFiles": {
@@ -674,6 +684,7 @@
     "Looks.dc.html",
     "LoraPicker.dc.html",
     "GalleryPicker.dc.html",
+    "Search.dc.html",
     "TextToVideo.dc.html",
     "ImageToVideo.dc.html",
     "VideoSource.dc.html",
