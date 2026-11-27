@@ -18,6 +18,7 @@ import {
   statusOf,
   turnBlock,
   turnStatuses,
+  turnTakes,
   undo,
   type Block,
   type Doc,
@@ -354,6 +355,12 @@ describe("dialogue, Loop and sections", () => {
     expect(statusOf(d, b, { t0, t1 }).s).toBe("done");
     b.request.turns![1].text = "Yo, later.";
     expect(turnStatuses(d, b, { t0, t1 }).map((s) => s.s)).toEqual(["done", "old"]);
+    // API 1.90: a moved line keeps its take (made from its inputs now), wherever it went
+    b.request.turns![1].text = "Yo.";
+    b.request.turns!.reverse();
+    expect(turnTakes(b, { t0, t1 }, d).map((t) => t?.id)).toEqual(["t1", "t0"]);
+    expect(statusOf(d, b, { t0, t1 }).s).toBe("done");
+    b.request.turns!.reverse();
     // Run on and Loop are not inputs
     expect(inputsOf(d, { ...b, request: { ...b.request, host: "gcp", loop: true } }, {})).toBe(
       inputsOf(d, b, {}),
@@ -372,6 +379,8 @@ describe("dialogue, Loop and sections", () => {
     ]);
     const rain: Block = { ...b, request: { kind: "sound", loop: true }, kind: "sound", takes: ["t0"] };
     expect(soundClips(rain, takes, S).map((c) => c.out)).toEqual([1.5, 1.5, 1]);
+    // API 1.90: no Loop on a sound made from a shot's video
+    expect(soundClips({ ...rain, request: { ...rain.request, from: "s1" } }, takes, S)).toHaveLength(1);
   });
   it("a song's sections: its take's, else its lyrics' tags by their lines", () => {
     const b = { ...dialogue(), kind: "music" as const, request: { kind: "music" as const, lyrics: "[verse]\na\nb\nc\n[chorus]\nd" } };

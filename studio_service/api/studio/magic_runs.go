@@ -366,6 +366,31 @@ func turnBlock(b *magic.Block, i int) *magic.Block {
 	return &tb
 }
 
+// turnHashes are dialogue b's turns' inputs hashed now, each as its line block.
+func turnHashes(d magic.Doc, b *magic.Block) []string {
+	turns := dialogueTurns(b)
+	out := make([]string, len(turns))
+	for i := range turns {
+		out[i] = inputsHash(d, turnBlock(b, i))
+	}
+	return out
+}
+
+// runTurn is the dialogue turn run r is for now (API 1.90): the turn it ran for while its inputs match that turn's,
+// else the turn they match now (a line moved, or one before it removed), else the turn it ran for; -1 for no turn.
+func runTurn(hashes []string, r magicRunRow) int {
+	if r.Turn == nil {
+		return -1
+	}
+	if i := *r.Turn; i < len(hashes) && hashes[i] == r.InputsHash {
+		return i
+	}
+	if j := slices.Index(hashes, r.InputsHash); j >= 0 {
+		return j
+	}
+	return *r.Turn
+}
+
 // hostOf is block b's Run on host (API 1.89), nil for Auto.
 func hostOf(b *magic.Block) *string {
 	if h := reqString(b.Request, "host"); h != "" {
@@ -906,22 +931,27 @@ func runStatus(mine []magicRunRow, take, hash string) dto.MagicStatus {
 // out of date or has no take yet, else done.
 func dialogueStatus(d magic.Doc, b *magic.Block, mine []magicRunRow) dto.MagicStatus {
 	out := dto.MagicStatus{Status: "done", Turns: []dto.MagicTurnStatus{}}
-	turns := dialogueTurns(b)
+	hashes := turnHashes(d, b)
 	takes, drafts := 0, 0
-	for i := range turns {
+	for i := range hashes {
 		var runs []magicRunRow
-		take := ""
+		take, now := "", "" // its newest take, its newest made from its inputs now (API 1.90)
 		for _, r := range mine {
-			if r.Turn != nil && *r.Turn == i {
-				runs = append(runs, r)
-				for _, t := range r.Takes {
-					if slices.Contains(b.Takes, t) {
-						take = t
+			if runTurn(hashes, r) != i {
+				continue
+			}
+			runs = append(runs, r)
+			for _, t := range r.Takes {
+				if slices.Contains(b.Takes, t) {
+					take = t
+					if r.InputsHash == hashes[i] {
+						now = t
 					}
 				}
 			}
 		}
-		st := runStatus(runs, take, inputsHash(d, turnBlock(b, i)))
+		take = cmp.Or(now, take)
+		st := runStatus(runs, take, hashes[i])
 		ts := dto.MagicTurnStatus{Status: st.Status, Progress: st.Progress, Error: st.Error}
 		if take != "" {
 			ts.Take = &take
@@ -961,6 +991,7 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 	d := out.Doc
 	out.Runs, out.Takes = []dto.MagicBlockRun{}, map[string]dto.MagicTake{}
 	byTake := map[string]string{}
+	hashes := map[string][]string{} // a dialogue's turn hashes, once a block
 	for _, r := range runs {
 		by := "user"
 		if deref(r.Via) == "assistant" {
@@ -969,8 +1000,13 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		current := false
 		b := runBlockOf(d, r.Block)
 		switch {
-		case b != nil && isDialogue(b) && r.Turn != nil && *r.Turn < len(dialogueTurns(b)): // API 1.89
-			current = r.InputsHash == inputsHash(d, turnBlock(b, *r.Turn))
+		case b != nil && isDialogue(b) && r.Turn != nil: // API 1.89; 1.90: the turn it is for now
+			if _, ok := hashes[b.ID]; !ok {
+				hashes[b.ID] = turnHashes(d, b)
+			}
+			turn := runTurn(hashes[b.ID], r)
+			current = turn < len(hashes[b.ID]) && r.InputsHash == hashes[b.ID][turn]
+			r.Turn = &turn
 		case b != nil && r.Turn == nil:
 			current = r.InputsHash == inputsHash(d, b)
 		}

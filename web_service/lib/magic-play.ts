@@ -5,9 +5,10 @@ import { end, inLane, shown, turnTakes, type Block, type Doc, type Takes } from 
 
 /** A sound block's clips: its take over the block; a dialogue's turns one after another, a Loop's take again and
  * again, each its own length, the last cut at the block's end (API 1.89, as studio's Send). */
-export function soundClips(b: Block, takes: Takes, fps: number) {
-  const pieces = b.request.turns ? turnTakes(b, takes) : [shown(b, takes)];
-  const loop = !!b.request.loop && !b.request.turns;
+export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
+  const pieces = b.request.turns ? turnTakes(b, takes, d) : [shown(b, takes)];
+  // a sound made from a shot's video follows the shot: no Loop (API 1.90)
+  const loop = !!b.request.loop && !b.request.turns && !b.request.from;
   const out: { id: string; take_id: string; in: number; out: number; at: number }[] = [];
   let at = b.at;
   const stop = end(b);
@@ -50,13 +51,13 @@ export function toSequence(d: Doc, takes: Takes, dissolves = true) {
     .slice(0, 8)
     .map((l) => ({
       kind: "audio" as const,
-      clips: inLane(d, l.id).flatMap((b) => soundClips(b, takes, fps)),
+      clips: inLane(d, l.id).flatMap((b) => soundClips(b, takes, fps, d)),
     }));
   const facts = Object.fromEntries(
     d.blocks.flatMap((b) => {
       const kind =
         b.kind === "video" ? "video" : b.kind === "frame" || b.kind === "image" ? "image" : "audio";
-      const all = b.request.turns ? turnTakes(b, takes) : [shown(b, takes)];
+      const all = b.request.turns ? turnTakes(b, takes, d) : [shown(b, takes)];
       return all.flatMap((take) =>
         take
           ? [[take.id, { kind, duration_s: Math.max(s(b.length), take.duration ?? 0), has_audio: false }]]

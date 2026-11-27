@@ -414,6 +414,32 @@ func TestDialogueTurns(t *testing.T) {
 	if st := blockStatuses(d, runs)["b1"]; st.Status != "out_of_date" || st.Turns[2].Status != "draft" {
 		t.Fatal(st) // a new line with no take yet: out of date
 	}
+	// API 1.90: a run's turn follows its line: moved up, then the line before it removed, it keeps its take current,
+	// even past a newer run of the turn it was put in for a line now gone
+	b.Request["turns"] = []any{map[string]any{"speaker": "a2", "text": "Hi."}, map[string]any{"speaker": "a1", "text": "Yo."}}
+	h0, h1 := inputsHash(d, turnBlock(b, 0)), inputsHash(d, turnBlock(b, 1))
+	t3 := "66666666-6666-4666-8666-666666666666"
+	runs = []magicRunRow{{Block: "b1", Turn: &zero, Status: "succeeded", Takes: []string{t1}, InputsHash: h0},
+		{Block: "b1", Turn: &one, Status: "succeeded", Takes: []string{t2}, InputsHash: h1}}
+	b.Takes = []string{t1, t2}
+	b.Request["turns"] = []any{b.Request["turns"].([]any)[1], b.Request["turns"].([]any)[0]} // Move up
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "done" || *st.Turns[0].Take != t2 || *st.Turns[1].Take != t1 {
+		t.Fatal(st)
+	}
+	if runTurn(turnHashes(d, b), runs[0]) != 1 || runTurn(turnHashes(d, b), runs[1]) != 0 {
+		t.Fatal("a moved line's runs follow it")
+	}
+	b.Request["turns"] = []any{map[string]any{"speaker": "a2", "text": "Hi."}, map[string]any{"speaker": "a1", "text": "Yo."}}
+	runs = append(runs, magicRunRow{Block: "b1", Turn: &zero, Status: "succeeded", Takes: []string{t3}, InputsHash: h0})
+	b.Takes = append(b.Takes, t3)
+	b.Request["turns"] = b.Request["turns"].([]any)[1:] // Remove line 1: "Yo." is line 1 now
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "done" || len(st.Turns) != 1 || *st.Turns[0].Take != t2 {
+		t.Fatal(st)
+	}
+	b.Request["turns"].([]any)[0].(map[string]any)["text"] = "Yo, later." // changed: its old take, out of date
+	if st := blockStatuses(d, runs)["b1"]; st.Status != "out_of_date" || *st.Turns[0].Take != t3 {
+		t.Fatal(st) // no run matches now: the newest run of the turn it ran for
+	}
 	// Run on and Loop change no take
 	shot := block("sound", 96, `{"prompt":"rain"}`)
 	h := inputsHash(d, shot)

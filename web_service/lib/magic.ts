@@ -835,19 +835,22 @@ export function turnBlock(b: Block, i: number): Block {
   return { ...b, request };
 }
 
-/** Each turn's take: its newest run's done take still on the block (undefined: none yet). */
-export function turnTakes(b: Block, takes: Takes): (TakeInfo | undefined)[] {
-  return (b.request.turns ?? []).map((_, i) =>
-    [...b.takes]
-      .reverse()
-      .map((id) => takes[id])
-      .find((t) => t?.turn === i && t.status === "done"),
-  );
+/** Each turn's take: the newest done take still on the block made from its inputs now (with the board `d`: a line
+ * moved, or one before it removed, keeps its take; API 1.90), else its turn's newest (undefined: none yet). */
+export function turnTakes(b: Block, takes: Takes, d?: Doc): (TakeInfo | undefined)[] {
+  const done = [...b.takes]
+    .reverse()
+    .map((id) => takes[id])
+    .filter((t): t is TakeInfo => t?.turn != null && t.status === "done");
+  return (b.request.turns ?? []).map((_, i) => {
+    const now = d ? inputsOf(d, turnBlock(b, i), takes) : undefined;
+    return done.find((t) => now != null && t.inputs === now) ?? done.find((t) => t.turn === i);
+  });
 }
 
 /** Each turn's status, as a line block's (its runs are the takes made for that turn). */
 export function turnStatuses(d: Doc, b: Block, takes: Takes): Status[] {
-  const shownOf = turnTakes(b, takes);
+  const shownOf = turnTakes(b, takes, d);
   return (b.request.turns ?? []).map((_, i) => {
     const mine = Object.values(takes).filter((t) => t.block === b.id && t.turn === i);
     const run = mine.findLast((t) => t.status === "running");

@@ -442,6 +442,8 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 				pieces = []string{shown(b.Takes, b.Pinned)}
 			}
 			loop, _ := b.Request["loop"].(bool)
+			from, _ := b.Request["from"].(string)
+			loop = loop && from == "" // API 1.90: a sound made from a shot's video follows the shot
 			at, stop, made := b.At, b.At+b.Length, 0
 		piece:
 			for i := 0; i < len(pieces) && at < stop; i++ {

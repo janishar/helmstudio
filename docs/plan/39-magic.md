@@ -584,3 +584,9 @@ and Loop in Send); web: `request.tsx` (lines, Loop, Run on, the tie row), `block
 - **e2e journey kept up**: Add's lengths are 5 s and 10 s now and Music is on (phase H); the journey says so.
 - **Not built**: a turn's own pin; per-turn Run from a line's menu (a Run runs every line not done); Compare's two
   players in step; the dialogue's turn segments drawn on its block; the rough cut does not play a dialogue's turns.
+- **Review fixes (API 1.90)**: a run's turn follows its line, so Move up, Move down and removing a line before it keep
+  each line's take current and playing in its place (before, a turn was its index only: moved lines swapped sounds and
+  went out of date, and removing line 1 put every later line out of date). A run is for the turn it ran for while its
+  inputs match, else for the turn they match now, else for the turn it ran for (`runTurn`); a turn plays its newest take
+  made from its inputs now, else its newest. Loop is off while a sound is made from a shot's video (played and sent):
+  the greyed toggle could leave it stuck on.

@@ -201,6 +201,12 @@ func TestBuildSendTurnsAndLoop(t *testing.T) {
 	if !strings.Contains(strings.Join(out.Warnings, "; "), "Line 1: line 2 has no take") || out.Goes[2].Blocks != 1 {
 		t.Fatal(out.Warnings, out.Goes)
 	}
+	// API 1.90: Loop is off on a sound made from a shot's video
+	d.Blocks[len(d.Blocks)-1].Request["from"] = "s1"
+	out = BuildSend(d, takes, nil, nil, true)
+	if got := strings.Join(at(2), " "); got != "0+2" {
+		t.Fatal(got)
+	}
 }
 
 func ftoa(f float64) string {
