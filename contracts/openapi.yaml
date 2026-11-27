@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.79.0
+  version: 1.80.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -3234,6 +3234,224 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  # ------------------------------------------------------------------ studio: Magic boards (API 1.80; plan 39 phase C)
+  /v1/studio/magic/boards:
+    get:
+      tags: [studio]
+      operationId: studioListMagicBoards
+      summary: 'From 1.80: the caller''s Magic boards, newest `updated_at` first (at most 100, not paginated)'
+      responses:
+        '200': {description: the boards, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateMagicBoard
+      summary: 'From 1.80: a new board (revision 1), empty or from a document'
+      description: |
+        contracts/README.md, Magic. An empty body is "Untitled board" with no lanes at 1280 × 720, 24 fps, 48000 Hz.
+        `doc` starts it from a whole document (the board rules must hold; every take it names must be the caller's);
+        `target` alone sets the size and rate. 409 at 100 boards (`You have 100 boards; delete some first.`). 422
+        `name must be 1-80 characters`, `doc and target are not allowed together`, a board rule
+        (`blocks[2]: it overlaps the block before it on its lane`) or `take <id> not found`.
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardCreate'}}}
+      responses:
+        '201': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetMagicBoard
+      description: 'The board at its current revision. `view=agent` answers the agent view instead (`MagicAgentView`: lanes, blocks flat with their times in seconds and frames and their status, links, transitions, assets; contracts/README.md, Magic: the agent view).'
+      parameters:
+        - {$ref: '#/components/parameters/MagicBoardId'}
+        - {name: view, in: query, required: false, schema: {type: string, enum: [agent]}, description: '`agent` = MagicAgentView'}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/MagicBoard'}, {$ref: '#/components/schemas/MagicAgentView'}]}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioPatchMagicBoard
+      summary: 'Rename (no revision; not undone)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardPatch'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMagicBoard
+      summary: 'Delete a board (soft): gone from every answer at once, with its revisions and snapshots'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/edits:
+    post:
+      tags: [studio]
+      operationId: studioEditMagicBoard
+      summary: 'Named ops applied in order, all or nothing (or tried: dry_run)'
+      description: |
+        contracts/README.md, Magic: edits by ops. Applies `ops` (at most 200) in order with the board rules to the
+        current document, which must be `base_revision`, and stores the result as one revision (one undo undoes the
+        call). `dry_run: true` answers the same and stores nothing (`revision` = `base_revision`). An op that makes a
+        block, lane or transition and leaves out its id gets one from studio (answered in `diff`). `X-Helm-Client`
+        labels the revision's `via`. 409 `board changed since you opened it (now revision <n>)` when `base_revision`
+        is not the current one (a dry run too). 422 `MagicEditError` when an op cannot apply (`op_index` and the
+        reason, `That lane is gone.`), `take <id> not found`, or `{detail}` for a body that does not fit (`ops[1]:
+        unknown field x`; `too_many_ops` past 200). Nothing is stored on any error.
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicEdits'}}}
+      responses:
+        '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/MagicEditResult'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/MagicEditUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/revisions:
+    get:
+      tags: [studio]
+      operationId: studioListMagicRevisions
+      summary: 'The kept revisions (the last 100, and every snapshot''s), newest first'
+      parameters:
+        - {$ref: '#/components/parameters/MagicBoardId'}
+        - {name: before, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'only revisions below this one (paging)'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: the history, content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevisionList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/restore:
+    post:
+      tags: [studio]
+      operationId: studioRestoreMagicBoard
+      summary: 'Write a kept revision''s document forward as a new revision (a snapshot''s Restore)'
+      description: 'The document of `to` stored as revision + 1 (`undo` goes back to the current one, redo is cleared); history is never rewritten. 409 when `revision` is not the current one; 422 `revision <n> is not kept`.'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRestore'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/undo:
+    post:
+      tags: [studio]
+      operationId: studioUndoMagicBoard
+      summary: Undo the latest edit (written forward as a new revision)
+      description: '409 when `revision` is not the current one, or `nothing to undo` (none, or older than the kept revisions).'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevision'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/redo:
+    post:
+      tags: [studio]
+      operationId: studioRedoMagicBoard
+      summary: Redo the latest undo (written forward as a new revision)
+      description: '409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevision'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/snapshots:
+    get:
+      tags: [studio]
+      operationId: studioListMagicSnapshots
+      summary: 'The board''s named snapshots, newest first (unlimited; not paginated)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      responses:
+        '200': {description: the snapshots, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateMagicSnapshot
+      summary: 'A named pointer to a kept revision (absent: the current one); its revision is never pruned'
+      description: 'Restore it with `POST …/restore` `{revision, to: <its revision>}`. A missing name is `Snapshot <n>` (n = how many the board has, plus one). 422 `name must be 1-80 characters`, `revision <n> is not kept`.'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotCreate'}}}
+      responses:
+        '201': {description: the snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/snapshots/{snapshot_id}:
+    patch:
+      tags: [studio]
+      operationId: studioPatchMagicSnapshot
+      summary: Rename a snapshot
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {$ref: '#/components/parameters/MagicSnapshotId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotPatch'}}}
+      responses:
+        '200': {description: the snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMagicSnapshot
+      summary: 'Delete a snapshot (its revision is pruned with the others from then on)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {$ref: '#/components/parameters/MagicSnapshotId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -3580,6 +3798,8 @@ components:
     TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
     MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
     ThreadId: {name: thread_id, in: path, required: true, schema: {type: string}, description: 'from 1.44: an assistant chat''s UUID (another user''s or malformed = 404)'}
+    MagicBoardId: {name: board_id, in: path, required: true, schema: {type: string}, description: 'from 1.80: a Magic board''s UUID (another user''s or malformed = 404)'}
+    MagicSnapshotId: {name: snapshot_id, in: path, required: true, schema: {type: string}, description: 'from 1.80: a board snapshot''s UUID (malformed = 404)'}
 
   responses:
     Unauthorized: {description: 'missing or invalid x-api-key (Kong), or missing/invalid/expired/revoked bearer token', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -3613,6 +3833,9 @@ components:
     TimelineEditUnprocessable:
       description: 'the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`, `code`, `problems`)'
       content: {application/json: {schema: {$ref: '#/components/schemas/TimelineEditError'}}}
+    MagicEditUnprocessable:
+      description: 'the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/MagicEditError'}}}
 
   schemas:
     # ---------------------------------------------------------- errors
@@ -8318,6 +8541,400 @@ components:
         first: {$ref: '#/components/schemas/StudioPath'}
         last: {oneOf: [{$ref: '#/components/schemas/StudioPath'}, {type: 'null'}]}
       examples: [{first: first.image, last: last.image}]
+
+    # ---------------------------------------------------------- studio: Magic boards (API 1.80; contracts/README.md, Magic)
+    MagicId: {type: string, pattern: '^[A-Za-z0-9_-]{1,40}$', description: 'a lane''s, block''s, transition''s or asset''s id, unique on the board (lanes, blocks and transitions share one namespace); studio makes `b<n>`, `l<n>`, `t<n>`'}
+    MagicFrames: {type: integer, minimum: 0, maximum: 10368000, description: 'a time or length in frames at the board''s fps'}
+    MagicKind: {type: string, enum: [frame, image, video, voice, music, sound]}
+    MagicRole: {type: string, enum: [storyboard, shots, voice, music, sound, free], description: 'what a lane is for; it only picks the kind Add offers first (any kind goes on any lane)'}
+    MagicTransitionKind: {type: string, enum: [cut, dissolve, fade, wipe, morph]}
+    MagicMode: {type: string, enum: [insert, overwrite], description: 'insert pushes what is after the point along (a move closes the gap it leaves); overwrite covers it'}
+    MagicTarget:
+      type: object
+      required: [width, height, fps, sample_rate]
+      additionalProperties: false
+      properties:
+        width: {type: integer, minimum: 16, maximum: 8192}
+        height: {type: integer, minimum: 16, maximum: 8192}
+        fps: {type: integer, minimum: 1, maximum: 120}
+        sample_rate: {type: integer, minimum: 8000, maximum: 192000}
+    MagicLane:
+      type: object
+      required: [id, name, role]
+      additionalProperties: false
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        role: {$ref: '#/components/schemas/MagicRole'}
+        hidden: {type: boolean}
+        kind: {$ref: '#/components/schemas/MagicKind', description: 'the kind Add picks first'}
+    MagicRef:
+      description: 'an @ pick inside a request: an asset, or another block''s first frame, last frame or take'
+      oneOf:
+        - {type: object, required: [asset], additionalProperties: false, properties: {asset: {$ref: '#/components/schemas/MagicId'}}}
+        - type: object
+          required: [block, part]
+          additionalProperties: false
+          properties: {block: {$ref: '#/components/schemas/MagicId'}, part: {type: string, enum: [first, last, take]}}
+    MagicRequest:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      description: 'a block''s generation request as the board keeps it; the standard request per kind (models, what each fills) comes with plan 39 phase D'
+      properties:
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        model: {type: string, maxLength: 80}
+        prompt: {type: string, maxLength: 4000}
+        line: {type: string, maxLength: 4000, description: 'a voice block''s line'}
+        turns:
+          type: array
+          maxItems: 100
+          description: 'a dialogue''s turns (a Voice block with turns, owner 2026-11-27)'
+          items:
+            type: object
+            required: [speaker, text]
+            additionalProperties: false
+            properties: {speaker: {$ref: '#/components/schemas/MagicId'}, text: {type: string, maxLength: 4000}}
+        voice: {$ref: '#/components/schemas/MagicId', description: 'a voice block''s voice: an asset id'}
+        style: {type: string, enum: [sketch, rough, full], description: 'a storyboard frame''s style'}
+        from: {$ref: '#/components/schemas/MagicId', description: 'a sound made from this shot''s video'}
+        refs: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/MagicRef'}}
+        advanced: {type: object, description: 'the model''s own params'}
+    MagicEffect:
+      type: object
+      required: [name]
+      additionalProperties: false
+      description: 'an effect badge (baked when sent)'
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        params: {type: object, additionalProperties: {type: [number, string]}}
+        'off': {type: boolean, description: 'kept on the block but not applied'}
+    MagicBlockNew:
+      type: object
+      required: [lane, at, length, kind, name, request, takes, effects]
+      additionalProperties: false
+      description: 'a block as an add op gives it: `id` optional (studio makes `b<n>`)'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        at: {$ref: '#/components/schemas/MagicFrames'}
+        length: {type: integer, minimum: 1, maximum: 10368000}
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        name: {type: string, maxLength: 120}
+        request: {$ref: '#/components/schemas/MagicRequest'}
+        takes: {type: array, maxItems: 200, items: {type: string, format: uuid}, description: 'take ids from its runs, oldest first (the caller''s own)'}
+        pinned: {type: string, format: uuid, description: 'the take it shows (absent: its latest)'}
+        note: {type: string, maxLength: 4000}
+        effects: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/MagicEffect'}}
+        from_frame: {$ref: '#/components/schemas/MagicId', description: 'a shot made from this storyboard frame'}
+    MagicBlock:
+      allOf: [{$ref: '#/components/schemas/MagicBlockNew'}]
+      type: object
+      required: [id]
+      description: 'a block on a lane (MagicBlockNew with its id)'
+    MagicLink:
+      type: object
+      required: [block, to]
+      additionalProperties: false
+      description: 'a voice or music block tied to a shot, or to a run of shots; moving the shot moves the block (fitted to the run when it was)'
+      properties:
+        block: {$ref: '#/components/schemas/MagicId'}
+        to: {type: array, minItems: 1, maxItems: 50, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicTransition:
+      type: object
+      required: [id, kind, length]
+      additionalProperties: false
+      description: 'between two blocks that meet on a lane, or at a lane''s start or end (exactly one of between, start, end); a cut between blocks is no transition'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}
+        start: {$ref: '#/components/schemas/MagicId', description: 'a lane: the fade in at its first block'}
+        end: {$ref: '#/components/schemas/MagicId', description: 'a lane: the fade out at its last block'}
+        kind: {$ref: '#/components/schemas/MagicTransitionKind'}
+        length: {$ref: '#/components/schemas/MagicFrames'}
+    MagicAsset:
+      type: object
+      required: [id, kind, handle, name, sheet]
+      additionalProperties: false
+      description: 'the board''s own character, prop or place (Import copies a take or an Element in; never a link)'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        kind: {type: string, enum: [character, prop, place]}
+        handle: {type: string, minLength: 1, maxLength: 40, description: 'its @ name'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}, description: 'take ids: views, expressions'}
+        voice_id: {type: string, maxLength: 80}
+        note: {type: string, maxLength: 4000}
+        imported_from: {type: string, maxLength: 80, description: 'the take or Element it was copied from, for the record only'}
+    MagicDoc:
+      type: object
+      required: [target, lanes, blocks, links, transitions, assets, notes]
+      additionalProperties: false
+      description: 'one board: lanes in order, blocks (in lane, then time order), links, transitions, assets and notes (contracts/README.md, Magic: the board rules)'
+      properties:
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        lanes: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/MagicLane'}}
+        blocks: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicBlock'}}
+        links: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicLink'}}
+        transitions: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicTransition'}}
+        assets: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/MagicAsset'}}
+        notes: {type: array, maxItems: 100, items: {type: string, maxLength: 4000}}
+    MagicBoard:
+      type: object
+      required: [id, name, revision, doc, can_undo, can_redo, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        doc: {$ref: '#/components/schemas/MagicDoc'}
+        can_undo: {type: boolean}
+        can_redo: {type: boolean}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+    MagicBoardSummary:
+      type: object
+      required: [id, name, revision, lanes, blocks, frames, fps, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        lanes: {type: integer, minimum: 0}
+        blocks: {type: integer, minimum: 0}
+        frames: {type: integer, minimum: 0, description: 'its length: the last block''s end'}
+        fps: {type: integer, minimum: 1}
+        updated_at: {type: string, format: date-time}
+    MagicBoardList:
+      type: object
+      required: [boards]
+      properties: {boards: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/MagicBoardSummary'}}}
+    MagicBoardCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80, description: 'absent: Untitled board'}
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        doc: {$ref: '#/components/schemas/MagicDoc'}
+    MagicBoardPatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties: {name: {type: string, minLength: 1, maxLength: 80}}
+    MagicOp:
+      description: 'one named edit (contracts/README.md, Magic: edits by ops); every op''s fields are closed'
+      oneOf:
+        - {type: object, required: [op, block, mode], additionalProperties: false, properties: {op: {const: add}, block: {$ref: '#/components/schemas/MagicBlockNew'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, ids, dt, mode], additionalProperties: false, properties: {op: {const: move}, ids: {$ref: '#/components/schemas/MagicIds'}, dt: {type: integer, minimum: -10368000, maximum: 10368000}, lane: {$ref: '#/components/schemas/MagicId', description: 'to another lane (blocks from one lane)'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: trim}, id: {$ref: '#/components/schemas/MagicId'}, at: {$ref: '#/components/schemas/MagicFrames'}, length: {type: integer, minimum: 1, maximum: 10368000}}}
+        - {type: object, required: [op, ids, mode], additionalProperties: false, properties: {op: {const: delete}, ids: {$ref: '#/components/schemas/MagicIds'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, ids], additionalProperties: false, properties: {op: {const: duplicate}, ids: {$ref: '#/components/schemas/MagicIds'}}}
+        - {type: object, required: [op, id, at], additionalProperties: false, properties: {op: {const: split}, id: {$ref: '#/components/schemas/MagicId'}, at: {$ref: '#/components/schemas/MagicFrames'}}}
+        - {type: object, required: [op, block, to], additionalProperties: false, properties: {op: {const: link}, block: {$ref: '#/components/schemas/MagicId'}, to: {$ref: '#/components/schemas/MagicIds'}}}
+        - {type: object, required: [op, block], additionalProperties: false, properties: {op: {const: unlink}, block: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, kind], additionalProperties: false, description: 'exactly one of between, start, end; kind cut takes the transition away', properties: {op: {const: transition}, between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}, start: {$ref: '#/components/schemas/MagicId'}, end: {$ref: '#/components/schemas/MagicId'}, kind: {$ref: '#/components/schemas/MagicTransitionKind'}, length: {$ref: '#/components/schemas/MagicFrames'}}}
+        - {type: object, required: [op, ids, effect], additionalProperties: false, properties: {op: {const: effect}, ids: {$ref: '#/components/schemas/MagicIds'}, effect: {$ref: '#/components/schemas/MagicEffect'}}}
+        - {type: object, required: [op, id, index, effect], additionalProperties: false, properties: {op: {const: effect_set}, id: {$ref: '#/components/schemas/MagicId'}, index: {type: integer, minimum: 0, maximum: 19}, effect: {oneOf: [{$ref: '#/components/schemas/MagicEffect'}, {type: 'null'}], description: 'null takes it off'}}}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          properties:
+            op: {const: block}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, maxLength: 120}
+                note: {type: string, maxLength: 4000}
+                request: {$ref: '#/components/schemas/MagicRequest'}
+                pinned: {oneOf: [{type: string, format: uuid}, {type: 'null'}], description: 'null unpins'}
+        - type: object
+          required: [op, lane]
+          additionalProperties: false
+          properties:
+            op: {const: lane_add}
+            lane:
+              type: object
+              required: [name, role]
+              additionalProperties: false
+              properties: {id: {$ref: '#/components/schemas/MagicId'}, name: {type: string, minLength: 1, maxLength: 80}, role: {$ref: '#/components/schemas/MagicRole'}, hidden: {type: boolean}, kind: {$ref: '#/components/schemas/MagicKind'}}
+            after: {$ref: '#/components/schemas/MagicId', description: 'absent: last'}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          properties:
+            op: {const: lane}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties: {name: {type: string, maxLength: 80}, role: {$ref: '#/components/schemas/MagicRole'}, hidden: {type: boolean}, kind: {$ref: '#/components/schemas/MagicKind'}}
+        - {type: object, required: [op, id, by], additionalProperties: false, properties: {op: {const: lane_move}, id: {$ref: '#/components/schemas/MagicId'}, by: {type: integer, enum: [-1, 1]}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: lane_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: asset_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
+    MagicIds: {type: array, minItems: 1, maxItems: 2000, uniqueItems: true, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicEdits:
+      type: object
+      required: [base_revision, ops]
+      additionalProperties: false
+      properties:
+        base_revision: {type: integer, minimum: 1, description: 'the revision the ops were planned on (409 when it is not the current one)'}
+        ops: {type: array, minItems: 1, maxItems: 200, items: {$ref: '#/components/schemas/MagicOp'}}
+        dry_run: {type: boolean, default: false, description: 'try it: the same answer, nothing stored'}
+    MagicIdDiff:
+      type: object
+      required: [added, removed, changed]
+      additionalProperties: false
+      properties:
+        added: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        removed: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        changed: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicDiff:
+      type: object
+      required: [blocks, lanes, transitions, assets, links]
+      additionalProperties: false
+      description: 'what changed, by id, in document order (studio-made ids in `added`); `links` by the tied block'
+      properties:
+        blocks: {$ref: '#/components/schemas/MagicIdDiff'}
+        lanes: {$ref: '#/components/schemas/MagicIdDiff'}
+        transitions: {$ref: '#/components/schemas/MagicIdDiff'}
+        assets: {$ref: '#/components/schemas/MagicIdDiff'}
+        links: {$ref: '#/components/schemas/MagicIdDiff'}
+    MagicEditResult:
+      type: object
+      required: [revision, dry_run, board, diff, warnings]
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the stored revision; a dry run: base_revision'}
+        dry_run: {type: boolean}
+        board: {$ref: '#/components/schemas/MagicBoard', description: 'as GET answers it (a dry run: what it would be)'}
+        diff: {$ref: '#/components/schemas/MagicDiff'}
+        warnings: {type: array, items: {type: string}, description: 'what the board shows after it, never a refusal: `Line 1 runs 3 s past Shot 1`'}
+    MagicEditError:
+      type: object
+      required: [detail]
+      description: 'the failing op: `detail` the reason as the board says it (`That lane is gone.`), `op_index` which; `{detail}` only when the body does not fit'
+      properties:
+        detail: {type: string}
+        op_index: {type: integer, minimum: 0}
+    MagicRevision:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties: {revision: {type: integer, minimum: 1, description: 'the current revision, as the caller has it'}}
+    MagicRestore:
+      type: object
+      required: [revision, to]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the current revision, as the caller has it'}
+        to: {type: integer, minimum: 1, description: 'the kept revision to bring back'}
+    MagicRevisionItem:
+      type: object
+      required: [revision, by, via, saved_at, ops_summary, blocks]
+      properties:
+        revision: {type: integer, minimum: 1}
+        by: {type: string, enum: [user, studio]}
+        via: {type: [string, 'null'], enum: [web, api, mcp, assistant, null], description: 'a user write: where it came from (X-Helm-Client); studio''s: null'}
+        saved_at: {type: string, format: date-time}
+        ops_summary: {type: string, description: 'the op names of an /edits call (`move, link`), else the write''s kind (create, undo, redo, restore)'}
+        blocks: {type: integer, minimum: 0}
+    MagicRevisionList:
+      type: object
+      required: [revisions]
+      properties: {revisions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/MagicRevisionItem'}}}
+    MagicSnapshot:
+      type: object
+      required: [id, name, revision, made_at, blocks]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        made_at: {type: string, format: date-time}
+        blocks: {type: integer, minimum: 0}
+    MagicSnapshotList:
+      type: object
+      required: [snapshots]
+      properties: {snapshots: {type: array, items: {$ref: '#/components/schemas/MagicSnapshot'}}}
+    MagicSnapshotCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        revision: {type: integer, minimum: 1, description: 'a kept revision; absent: the current one'}
+    MagicSnapshotPatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties: {name: {type: string, minLength: 1, maxLength: 80}}
+    MagicAgentBlock:
+      type: object
+      required: [id, lane, kind, name, at, length, at_s, end_s, status, take_id, takes, tied_to, effects]
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        name: {type: string}
+        at: {$ref: '#/components/schemas/MagicFrames'}
+        length: {type: integer, minimum: 1}
+        at_s: {type: number, minimum: 0}
+        end_s: {type: number, minimum: 0}
+        status: {type: string, enum: [draft, done], description: 'derived: draft with no take; running and out of date come with runs (phase D)'}
+        take_id: {type: [string, 'null'], description: 'the take it shows: pinned, else its latest'}
+        takes: {type: integer, minimum: 0}
+        prompt: {type: string}
+        line: {type: string}
+        note: {type: string}
+        tied_to: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        effects: {type: array, items: {type: string}, description: 'the badges'' names (off ones left out)'}
+        from_frame: {$ref: '#/components/schemas/MagicId'}
+    MagicAgentView:
+      type: object
+      required: [id, name, revision, target, frames, duration_s, lanes, blocks, transitions, assets, notes]
+      description: 'GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links'
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        frames: {type: integer, minimum: 0}
+        duration_s: {type: number, minimum: 0}
+        lanes:
+          type: array
+          items:
+            type: object
+            required: [id, name, role, hidden, blocks]
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              name: {type: string}
+              role: {$ref: '#/components/schemas/MagicRole'}
+              hidden: {type: boolean}
+              blocks: {type: integer, minimum: 0}
+        blocks: {type: array, items: {$ref: '#/components/schemas/MagicAgentBlock'}}
+        transitions:
+          type: array
+          items:
+            type: object
+            required: [id, kind, length, at_s]
+            description: 'a MagicTransition and where its join is'
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}
+              start: {$ref: '#/components/schemas/MagicId'}
+              end: {$ref: '#/components/schemas/MagicId'}
+              kind: {$ref: '#/components/schemas/MagicTransitionKind'}
+              length: {$ref: '#/components/schemas/MagicFrames'}
+              at_s: {type: number, minimum: 0}
+        assets:
+          type: array
+          items:
+            type: object
+            required: [id, kind, handle, name, used_in]
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              kind: {type: string, enum: [character, prop, place]}
+              handle: {type: string}
+              name: {type: string}
+              used_in: {type: array, items: {$ref: '#/components/schemas/MagicId'}, description: 'the blocks that @-pick it or speak in its voice'}
+        notes: {type: array, items: {type: string}}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

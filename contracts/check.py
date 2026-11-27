@@ -16,7 +16,8 @@ through the reference host admission (`admit`), dispatch order (`simulate`) (REA
 among several hosts (`place`) (README, Several hosts);
 fixtures/timelines/ through the reference timeline rules (`t_normalize`, `t_edit`, `snap_point`, `frame_at`,
 `export_plan`, `shot_keyframes`, `rerender_steps`; from 1.49 `t_diff`, `t_agent_view`, `frame_at_time`) (README, Timeline rules), and
-edits.json replayed through studio's edit.go and the web's lib/timeline.ts (needs go and node on PATH); fixtures/voices/ through the reference voice rules (README, Voices; from
+edits.json replayed through studio's edit.go and the web's lib/timeline.ts (needs go and node on PATH); from API 1.80
+fixtures/magic/edits.json through studio's api/magic and the web's lib/magic.ts (README, Magic); fixtures/voices/ through the reference voice rules (README, Voices; from
 API 1.32 Dialogue and Timeline audio: `expand_script`, `echo_dialogue`, `script_check`, `make_shot`); providers/presets.json
 against its schema and the preset rules (README, Model sources: presets; API 1.51).
 Exit code 1 on any failure."""
@@ -104,6 +105,8 @@ HTTP_SCHEMAS = [
     "AssistantSettings", "AssistantSettingsPut", "AssistantCacheStats", *TWINS,
     "PluginList", "PluginRescan", "PluginPut", "PluginProviderCreate",  # 1.61
     "Skill", "SkillList", "SkillFile",  # 1.64
+    "MagicDoc", "MagicBoard", "MagicBoardList", "MagicBoardCreate", "MagicEdits", "MagicEditResult", "MagicAgentView",
+    "MagicRevisionList", "MagicSnapshot", "MagicSnapshotList",  # 1.80
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}
@@ -4028,6 +4031,45 @@ def check_edit_replay() -> None:
     print(f"ok   {name} replayed through check.py, edit.go and lib/timeline.ts")
 
 
+def check_magic_replay(registry: Registry) -> None:
+    """Magic edits by ops (README, Magic: edits by ops; API 1.80): every fixtures/magic/edits.json case through studio's
+    api/magic Apply (go test TestMagicReplay) and the web's lib/magic.ts apply (node, its types stripped), each
+    compared with the case's `expect` as canonical JSON."""
+    root, name = HERE.parent, "fixtures/magic/edits.json"
+    fx = json.loads((HERE / name).read_text())
+    want = [canon(c["expect"]) for c in fx["cases"]]
+    with tempfile.TemporaryDirectory() as tmp:
+        runs = {
+            "studio_service (api/magic)": (["go", "test", "-count=1", "-run", "^TestMagicReplay$", "./api/magic/"],
+                                           root / "studio_service", f"{tmp}/go.json"),
+            "web_service (lib/magic.ts)": (["node", "--no-warnings", str(HERE / "replay_magic.mjs"),
+                                            str(root / "web_service" / "lib" / "magic.ts"), str(HERE / name)],
+                                           root, f"{tmp}/ts.json"),
+        }
+        for who, (cmd, cwd, out) in runs.items():
+            if not shutil.which(cmd[0]):
+                fail(f"{name} replay: {cmd[0]} is not on PATH ({who})")
+                continue
+            r = subprocess.run(cmd, cwd=cwd, env=os.environ | {"MAGIC_REPLAY_OUT": out}, capture_output=True,
+                               text=True, timeout=600)
+            if r.returncode != 0 or not Path(out).exists():
+                fail(f"{name} replay: {who} failed: {(r.stdout + r.stderr).strip()[-800:]}")
+                continue
+            got = json.loads(Path(out).read_text())
+            if len(got) != len(want):
+                fail(f"{name} replay: {who} answered {len(got)} cases, not {len(want)}")
+                continue
+            for c, g, w in zip(fx["cases"], got, want):
+                if json.dumps(canon(g), sort_keys=True) != json.dumps(w, sort_keys=True):
+                    fail(f"{name} replay {c['description']!r}: {who} differs from expect: {json.dumps(canon(g))[:600]}")
+    magic_doc = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/MagicDoc"}, registry=registry,
+                                     format_checker=FormatChecker())
+    for c in [{"description": "documents." + k, "expect": v} for k, v in fx["documents"].items()] + fx["cases"]:
+        if "error" not in c["expect"] and (errs := list(magic_doc.iter_errors(c["expect"]))):
+            fail(f"{name} {c['description']!r}: not a MagicDoc: {errs[0].json_path}: {errs[0].message}")
+    print(f"ok   {name} replayed through api/magic and lib/magic.ts")
+
+
 # ---------------------------------------------------------------- the dispatcher's hand-over (README, "The hand-over")
 SWAP_SKIPS, SWAP_WAIT_S = 4, 180  # the fairness bound: studio_service dispatcher.go SwapSkips, SwapWait
 WINDOW = 16  # rows of one batch in flight (the pipelines engine)
@@ -4801,6 +4843,7 @@ def main() -> int:
     check_voices(registry, palette)
     check_timelines(registry, palette)
     check_edit_replay()
+    check_magic_replay(registry)
     check_dispatch(registry)
     check_tools(schemas, registry)
     check_presets(schemas, registry)

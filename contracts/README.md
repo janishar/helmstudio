@@ -44,6 +44,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
+| `fixtures/magic/edits.json` | (API 1.80) Magic edits by ops: each case's ops applied to a document, with the document after or the refusal (`expect`); replayed through studio's `api/magic` and the web's `lib/magic.ts` (Magic: edits by ops) |
 | `fixtures/registry/{nodes,workflows,models,looks,voices}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` (API 1.30: `echo/speak`, workflow `echo-voice-over`, starter voices `echo/ada` and `echo/bo`; the qwen3-tts pack's canonical `qwen3-tts.{nodes,workflows,models,voices}.valid.json`, M8 step 3, pinned by runner_service tests/test_packs.py and test_qwen3_tts.py) |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
@@ -3958,6 +3959,75 @@ Numbers in fixtures compare by value (1 = 1.0).
   fade}` for V1 video clips with sound and every audio-track clip, not muted (clip or track), with a dissolve's fades
   (incoming = its opacity, outgoing = 1 − that). The old preview's bug (V1's track gain left out) is fixed here and the
   export applies the same gains. Gain above 0 dB needs Web Audio (a GainNode); `<video>.volume` stops at 1.
+
+## Magic (API 1.80; alpha.6 item 5, plan 39 phase C, board docs/mock/MagicBoard.dc.html; normative)
+
+A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
+tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
+studio; the standard request per kind, runs and takes on blocks, Send to Timeline and the Assistant's tools come with
+later phases (plan 39 §45.11), and so do their routes.
+
+- **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
+  "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
+  document, its blocks put in lane then time order), `GET/PATCH/DELETE …/boards/{board_id}` (PATCH renames, no
+  revision; DELETE is soft and takes its revisions and snapshots with it). **100 boards** per user: the 101st is the
+  409 `You have 100 boards; delete some first.` Every table is owner-scoped by `app_can_see`, so another user's
+  board (and its snapshots) is 404 on every route. A board's name is 1-80 characters.
+- **The document** (`MagicDoc`): `target`; `lanes[]` in order (`role` storyboard, shots, voice, music, sound or free:
+  it only picks the kind Add offers first; any kind goes on any lane); `blocks[]` (`at`, `length` in frames at the
+  board's fps; `kind` frame, image, video, voice, music or sound; `request` = `MagicRequest`; `takes[]` and `pinned`,
+  the caller's take ids; `note`; `effects[]` badges; `from_frame`); `links[]` (a block tied to one shot or a run of
+  shots); `transitions[]` (dissolve, fade, wipe or morph `between` two blocks that meet, or at a lane's `start` or
+  `end`; a cut is no transition); `assets[]` (the board's own characters, props and places; their `sheet` take ids);
+  `notes[]`. Status (draft, running, done, out of date) is derived, never stored (plan 39 §45.7).
+- **The board rules** (a whole document given to studio, and every edit's result): ids `[A-Za-z0-9_-]{1,40}`, unique
+  among lanes, blocks and transitions together (assets among themselves); every block on a lane of the board, from
+  frame 0, at least one frame long, not over the block before it on its lane; `pinned` one of its `takes`; links and
+  transitions naming what is there (a `between` pair on one lane, meeting); at most 64 lanes, 2000 blocks, 200 assets.
+  Every take id a document names that the stored one did not must be the caller's (unknown, deleted or another
+  user's: 422 `take <id> not found`). A broken rule is a 422 `{detail}` (`blocks[2]: it overlaps the block before it
+  on its lane`).
+
+### Magic: edits by ops (API 1.80; normative)
+
+- **`POST …/boards/{board_id}/edits {base_revision, ops, dry_run?}`**: `ops` (`MagicOp`, 1 to **200**; more =
+  `too_many_ops`) applied in order under the board's row lock to the current document, which must be
+  `base_revision` (else the 409 `board changed since you opened it (now revision <n>)`, a dry run too). **All or
+  nothing**: one revision for the call (`by` user, `undo_to` the one before), so one undo undoes it. 200
+  `MagicEditResult {revision, dry_run, board, diff, warnings}`: `diff` by id per list (blocks, lanes, transitions,
+  assets; links by their block), `warnings` what the board shows after it (`Line 1 runs 3 s past Shot 1`), never a
+  refusal. `dry_run: true`: the same answer, `revision` = `base_revision`, nothing stored. `X-Helm-Client` labels the
+  revision's `via` as the Timeline's does.
+- **The ops** (`web_service/lib/magic.ts` `apply` and `studio_service/api/magic` `Apply`, held equal by
+  `fixtures/magic/edits.json` and its replay in `make contracts-check`): `add` (a block at a point; `mode` insert
+  pushes what starts there or later along, a point inside a block goes to its end; overwrite covers the span,
+  trimming or splitting what is there), `move` (`ids` by `dt` frames, on their lanes or onto `lane`; insert closes the
+  gap they leave, a drop point counting in the lane without them), `trim` (`at`, `length`; never over the next
+  block), `delete` (insert closes the gap), `duplicate` (copies after the group, unpinned, `<name> copy`), `split`
+  (the join after it follows the second part), `link` / `unlink`, `transition` (exactly one of `between`, `start`,
+  `end`; `cut` takes it away; a new one's length is 0.5 s for a dissolve or wipe and 1 s for a fade or morph, in whole
+  frames), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins),
+  `lane_add` (after `after`, else last), `lane` (`set` name, role, hidden, kind), `lane_move` (`by` -1 or 1),
+  `lane_delete` (its blocks go), `asset_delete` (its @ picks go). After an op: a block tied to shots that moved
+  moves with the first of them, or keeps fitting the run when it fitted it; ties and transitions naming what is gone,
+  and joins that no longer meet, go; blocks are in lane, then time order.
+- **Refusals** are a 422 `MagicEditError {detail, op_index}`, `detail` the board's own words (`That lane is gone.`,
+  `Those blocks don't meet.`, `It would cover the block next to it.`, `The playhead isn't on it.`, `Pick a join.`,
+  `That id is taken.`, …). A body that does not fit is the usual `{detail}` (`ops[1]: unknown field at`).
+  Nothing is stored on any error.
+- **Ids**: an op that makes a block, lane or transition may give its id (unused); absent ones studio makes: the
+  first unused `b<n>`, `l<n>`, `t<n>`, the same in the web, so a dry run and the editor agree.
+- **History**: `GET …/revisions` (the last 100 and every snapshot's, newest first, `before`, `limit` ≤ 100),
+  `POST …/undo` and `…/redo` `{revision}` (written forward; 409 `nothing to undo` / `nothing to redo`; an edit after
+  an undo clears redo), `POST …/restore {revision, to}` (the kept revision `to` written forward; 422 `revision <n> is
+  not kept`). `can_undo` and `can_redo` on every `MagicBoard` say whether the buttons go.
+- **Snapshots**: `GET/POST …/snapshots`, `PATCH/DELETE …/snapshots/{snapshot_id}`: a named pointer to a kept
+  revision (absent: the current one; a missing name is `Snapshot <n>`). Unlimited (owner, 2026-11-27). A snapshot's
+  revision is never pruned while it exists; Restore is `…/restore` with its `revision`.
+- **The agent view**: `GET …/boards/{board_id}?view=agent` (`MagicAgentView`): lanes with their block counts, every
+  block flat with `at`/`length` in frames and `at_s`/`end_s`, its status (draft or done until runs come), the take it
+  shows, its prompt or line, what it is tied to and its badges; transitions with where their join is; assets with
+  the blocks they are used in; no signed links.
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 

@@ -10,18 +10,17 @@ import {
   inLane,
   joins,
   overruns,
-  playable,
   redo,
   snap,
   snapGroup,
   statusOf,
-  toSequence,
   undo,
   type Block,
   type Doc,
   type Op,
 } from "@/lib/magic";
 import { emptyDoc, sampleBoard } from "@/lib/magic-fixture";
+import { playable, toSequence } from "@/lib/magic-play";
 
 const S = 24; // frames a second
 const ok = (d: Doc, op: Op) => {

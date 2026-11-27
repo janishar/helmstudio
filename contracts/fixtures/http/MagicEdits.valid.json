@@ -1,0 +1,419 @@
+{
+ "base_revision": 3,
+ "dry_run": true,
+ "ops": [
+  {
+   "op": "add",
+   "block": {
+    "lane": "shots",
+    "at": 96,
+    "length": 48,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": []
+   },
+   "mode": "insert"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "shots",
+    "at": 120,
+    "length": 24,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": []
+   },
+   "mode": "insert"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "shots",
+    "at": 120,
+    "length": 24,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": []
+   },
+   "mode": "overwrite"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "shots",
+    "at": 72,
+    "length": 48,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": [],
+    "id": "x9"
+   },
+   "mode": "overwrite"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "l5",
+    "at": 48,
+    "length": 24,
+    "kind": "sound",
+    "name": "Rain",
+    "request": {
+     "kind": "sound"
+    },
+    "takes": [],
+    "effects": []
+   },
+   "mode": "insert"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "l5",
+    "at": 0,
+    "length": 24,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": [],
+    "id": "s1"
+   },
+   "mode": "insert"
+  },
+  {
+   "op": "add",
+   "block": {
+    "lane": "nope",
+    "at": 0,
+    "length": 24,
+    "kind": "video",
+    "name": "New",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": []
+   },
+   "mode": "insert"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s3"
+   ],
+   "dt": -192,
+   "mode": "insert"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s1"
+   ],
+   "dt": 120,
+   "mode": "overwrite"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s3"
+   ],
+   "dt": -162,
+   "mode": "overwrite"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s2"
+   ],
+   "dt": 400,
+   "mode": "insert"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s1",
+    "s2"
+   ],
+   "dt": 0,
+   "lane": "l5",
+   "mode": "insert"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s1",
+    "v1"
+   ],
+   "dt": 0,
+   "lane": "l5",
+   "mode": "insert"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s2",
+    "v1"
+   ],
+   "dt": 24,
+   "mode": "overwrite"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "zz"
+   ],
+   "dt": 5,
+   "mode": "insert"
+  },
+  {
+   "op": "trim",
+   "id": "s1",
+   "length": 72
+  },
+  {
+   "op": "trim",
+   "id": "s3",
+   "at": 216
+  },
+  {
+   "op": "trim",
+   "id": "s1",
+   "length": 120
+  },
+  {
+   "op": "delete",
+   "ids": [
+    "s2"
+   ],
+   "mode": "insert"
+  },
+  {
+   "op": "delete",
+   "ids": [
+    "s2"
+   ],
+   "mode": "overwrite"
+  },
+  {
+   "op": "delete",
+   "ids": [
+    "s1"
+   ],
+   "mode": "insert"
+  },
+  {
+   "op": "duplicate",
+   "ids": [
+    "s1",
+    "s2"
+   ]
+  },
+  {
+   "op": "split",
+   "id": "s2",
+   "at": 144
+  },
+  {
+   "op": "split",
+   "id": "s2",
+   "at": 10
+  },
+  {
+   "op": "link",
+   "block": "v1",
+   "to": [
+    "s2"
+   ]
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s2"
+   ],
+   "dt": 120,
+   "mode": "insert"
+  },
+  {
+   "op": "unlink",
+   "block": "v1"
+  },
+  {
+   "op": "move",
+   "ids": [
+    "s1"
+   ],
+   "dt": 120,
+   "mode": "insert"
+  },
+  {
+   "op": "link",
+   "block": "v1",
+   "to": [
+    "v1"
+   ]
+  },
+  {
+   "op": "transition",
+   "end": "shots",
+   "kind": "fade"
+  },
+  {
+   "op": "transition",
+   "between": [
+    "s1",
+    "s2"
+   ],
+   "kind": "dissolve",
+   "length": 6
+  },
+  {
+   "op": "transition",
+   "between": [
+    "s2",
+    "s3"
+   ],
+   "kind": "cut"
+  },
+  {
+   "op": "transition",
+   "between": [
+    "s1",
+    "s3"
+   ],
+   "kind": "dissolve"
+  },
+  {
+   "op": "transition",
+   "start": "shots",
+   "end": "shots",
+   "kind": "fade"
+  },
+  {
+   "op": "trim",
+   "id": "s1",
+   "length": 48
+  },
+  {
+   "op": "trim",
+   "id": "zz",
+   "length": 4
+  },
+  {
+   "op": "effect",
+   "ids": [
+    "s1",
+    "s3"
+   ],
+   "effect": {
+    "name": "Speed · 1.5×",
+    "params": {
+     "rate": 1.5
+    }
+   }
+  },
+  {
+   "op": "effect_set",
+   "id": "s3",
+   "index": 0,
+   "effect": {
+    "name": "Grade",
+    "params": {
+     "look": "warm"
+    },
+    "off": true
+   }
+  },
+  {
+   "op": "effect_set",
+   "id": "s1",
+   "index": 0,
+   "effect": null
+  },
+  {
+   "op": "effect_set",
+   "id": "s2",
+   "index": 0,
+   "effect": null
+  },
+  {
+   "op": "block",
+   "id": "s1",
+   "set": {
+    "name": "Shot 1 · dock",
+    "note": "wider",
+    "request": {
+     "kind": "video",
+     "prompt": "the dock",
+     "model": "ltx-2.5"
+    },
+    "pinned": null
+   }
+  },
+  {
+   "op": "lane_add",
+   "lane": {
+    "name": "Rain",
+    "role": "sound",
+    "kind": "sound"
+   },
+   "after": "shots"
+  },
+  {
+   "op": "lane",
+   "id": "l1",
+   "set": {
+    "name": "Rain bed",
+    "hidden": true
+   }
+  },
+  {
+   "op": "lane_move",
+   "id": "l1",
+   "by": -1
+  },
+  {
+   "op": "lane",
+   "id": "l5",
+   "set": {
+    "name": "  "
+   }
+  },
+  {
+   "op": "lane_move",
+   "id": "story",
+   "by": -1
+  },
+  {
+   "op": "lane_delete",
+   "id": "lines"
+  },
+  {
+   "op": "lane_delete",
+   "id": "shots"
+  },
+  {
+   "op": "asset_delete",
+   "id": "mara"
+  }
+ ]
+}

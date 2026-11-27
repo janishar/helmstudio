@@ -1,0 +1,14 @@
+{
+ "base_revision": 3,
+ "ops": [
+  {
+   "op": "move",
+   "ids": [
+    "s1"
+   ],
+   "dt": 24,
+   "mode": "insert",
+   "at": 3
+  }
+ ]
+}

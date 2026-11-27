@@ -4,7 +4,8 @@
 // toSequence); phase B's fake takes have no files, so the stage shows the shot's picture under the playhead.
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import { clock, duration, inLane, playable, shown, type Doc, type Takes } from "@/lib/magic";
+import { clock, duration, inLane, shown, type Doc, type Takes } from "@/lib/magic";
+import { playable } from "@/lib/magic-play";
 import { Preview } from "@/lib/timeline-preview";
 
 export type PlayerApi = {

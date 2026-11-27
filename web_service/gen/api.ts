@@ -3198,6 +3198,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/magic/boards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** From 1.80: the caller's Magic boards, newest `updated_at` first (at most 100, not paginated) */
+        get: operations["studioListMagicBoards"];
+        put?: never;
+        /**
+         * From 1.80: a new board (revision 1), empty or from a document
+         * @description contracts/README.md, Magic. An empty body is "Untitled board" with no lanes at 1280 × 720, 24 fps, 48000 Hz.
+         *     `doc` starts it from a whole document (the board rules must hold; every take it names must be the caller's);
+         *     `target` alone sets the size and rate. 409 at 100 boards (`You have 100 boards; delete some first.`). 422
+         *     `name must be 1-80 characters`, `doc and target are not allowed together`, a board rule
+         *     (`blocks[2]: it overlaps the block before it on its lane`) or `take <id> not found`.
+         */
+        post: operations["studioCreateMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** @description The board at its current revision. `view=agent` answers the agent view instead (`MagicAgentView`: lanes, blocks flat with their times in seconds and frames and their status, links, transitions, assets; contracts/README.md, Magic: the agent view). */
+        get: operations["studioGetMagicBoard"];
+        put?: never;
+        post?: never;
+        /** Delete a board (soft): gone from every answer at once, with its revisions and snapshots */
+        delete: operations["studioDeleteMagicBoard"];
+        options?: never;
+        head?: never;
+        /** Rename (no revision; not undone) */
+        patch: operations["studioPatchMagicBoard"];
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/edits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Named ops applied in order, all or nothing (or tried: dry_run)
+         * @description contracts/README.md, Magic: edits by ops. Applies `ops` (at most 200) in order with the board rules to the
+         *     current document, which must be `base_revision`, and stores the result as one revision (one undo undoes the
+         *     call). `dry_run: true` answers the same and stores nothing (`revision` = `base_revision`). An op that makes a
+         *     block, lane or transition and leaves out its id gets one from studio (answered in `diff`). `X-Helm-Client`
+         *     labels the revision's `via`. 409 `board changed since you opened it (now revision <n>)` when `base_revision`
+         *     is not the current one (a dry run too). 422 `MagicEditError` when an op cannot apply (`op_index` and the
+         *     reason, `That lane is gone.`), `take <id> not found`, or `{detail}` for a body that does not fit (`ops[1]:
+         *     unknown field x`; `too_many_ops` past 200). Nothing is stored on any error.
+         */
+        post: operations["studioEditMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/revisions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The kept revisions (the last 100, and every snapshot's), newest first */
+        get: operations["studioListMagicRevisions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write a kept revision's document forward as a new revision (a snapshot's Restore)
+         * @description The document of `to` stored as revision + 1 (`undo` goes back to the current one, redo is cleared); history is never rewritten. 409 when `revision` is not the current one; 422 `revision <n> is not kept`.
+         */
+        post: operations["studioRestoreMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Undo the latest edit (written forward as a new revision)
+         * @description 409 when `revision` is not the current one, or `nothing to undo` (none, or older than the kept revisions).
+         */
+        post: operations["studioUndoMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/redo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redo the latest undo (written forward as a new revision)
+         * @description 409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).
+         */
+        post: operations["studioRedoMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/snapshots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The board's named snapshots, newest first (unlimited; not paginated) */
+        get: operations["studioListMagicSnapshots"];
+        put?: never;
+        /**
+         * A named pointer to a kept revision (absent: the current one); its revision is never pruned
+         * @description Restore it with `POST …/restore` `{revision, to: <its revision>}`. A missing name is `Snapshot <n>` (n = how many the board has, plus one). 422 `name must be 1-80 characters`, `revision <n> is not kept`.
+         */
+        post: operations["studioCreateMagicSnapshot"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/snapshots/{snapshot_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a snapshot (its revision is pruned with the others from then on) */
+        delete: operations["studioDeleteMagicSnapshot"];
+        options?: never;
+        head?: never;
+        /** Rename a snapshot */
+        patch: operations["studioPatchMagicSnapshot"];
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -8682,6 +8869,442 @@ export interface components {
             first: components["schemas"]["StudioPath"];
             last: components["schemas"]["StudioPath"] | null;
         };
+        /** @description a lane's, block's, transition's or asset's id, unique on the board (lanes, blocks and transitions share one namespace); studio makes `b<n>`, `l<n>`, `t<n>` */
+        MagicId: string;
+        /** @description a time or length in frames at the board's fps */
+        MagicFrames: number;
+        /** @enum {string} */
+        MagicKind: "frame" | "image" | "video" | "voice" | "music" | "sound";
+        /**
+         * @description what a lane is for; it only picks the kind Add offers first (any kind goes on any lane)
+         * @enum {string}
+         */
+        MagicRole: "storyboard" | "shots" | "voice" | "music" | "sound" | "free";
+        /** @enum {string} */
+        MagicTransitionKind: "cut" | "dissolve" | "fade" | "wipe" | "morph";
+        /**
+         * @description insert pushes what is after the point along (a move closes the gap it leaves); overwrite covers it
+         * @enum {string}
+         */
+        MagicMode: "insert" | "overwrite";
+        MagicTarget: {
+            width: number;
+            height: number;
+            fps: number;
+            sample_rate: number;
+        };
+        MagicLane: {
+            id: components["schemas"]["MagicId"];
+            name: string;
+            role: components["schemas"]["MagicRole"];
+            hidden?: boolean;
+            /** @description the kind Add picks first */
+            kind?: components["schemas"]["MagicKind"];
+        };
+        /** @description an @ pick inside a request: an asset, or another block's first frame, last frame or take */
+        MagicRef: {
+            asset: components["schemas"]["MagicId"];
+        } | {
+            block: components["schemas"]["MagicId"];
+            /** @enum {string} */
+            part: "first" | "last" | "take";
+        };
+        /** @description a block's generation request as the board keeps it; the standard request per kind (models, what each fills) comes with plan 39 phase D */
+        MagicRequest: {
+            kind: components["schemas"]["MagicKind"];
+            model?: string;
+            prompt?: string;
+            /** @description a voice block's line */
+            line?: string;
+            /** @description a dialogue's turns (a Voice block with turns, owner 2026-11-27) */
+            turns?: {
+                speaker: components["schemas"]["MagicId"];
+                text: string;
+            }[];
+            /** @description a voice block's voice: an asset id */
+            voice?: components["schemas"]["MagicId"];
+            /**
+             * @description a storyboard frame's style
+             * @enum {string}
+             */
+            style?: "sketch" | "rough" | "full";
+            /** @description a sound made from this shot's video */
+            from?: components["schemas"]["MagicId"];
+            refs?: components["schemas"]["MagicRef"][];
+            /** @description the model's own params */
+            advanced?: Record<string, never>;
+        };
+        /** @description an effect badge (baked when sent) */
+        MagicEffect: {
+            name: string;
+            params?: {
+                [key: string]: number | string;
+            };
+            /** @description kept on the block but not applied */
+            off?: boolean;
+        };
+        /** @description a block as an add op gives it: `id` optional (studio makes `b<n>`) */
+        MagicBlockNew: {
+            id?: components["schemas"]["MagicId"];
+            lane: components["schemas"]["MagicId"];
+            at: components["schemas"]["MagicFrames"];
+            length: number;
+            kind: components["schemas"]["MagicKind"];
+            name: string;
+            request: components["schemas"]["MagicRequest"];
+            /** @description take ids from its runs, oldest first (the caller's own) */
+            takes: string[];
+            /**
+             * Format: uuid
+             * @description the take it shows (absent: its latest)
+             */
+            pinned?: string;
+            note?: string;
+            effects: components["schemas"]["MagicEffect"][];
+            /** @description a shot made from this storyboard frame */
+            from_frame?: components["schemas"]["MagicId"];
+        };
+        /** @description a block on a lane (MagicBlockNew with its id) */
+        MagicBlock: WithRequired<components["schemas"]["MagicBlockNew"], "id">;
+        /** @description a voice or music block tied to a shot, or to a run of shots; moving the shot moves the block (fitted to the run when it was) */
+        MagicLink: {
+            block: components["schemas"]["MagicId"];
+            to: components["schemas"]["MagicId"][];
+        };
+        /** @description between two blocks that meet on a lane, or at a lane's start or end (exactly one of between, start, end); a cut between blocks is no transition */
+        MagicTransition: {
+            id: components["schemas"]["MagicId"];
+            between?: components["schemas"]["MagicId"][];
+            /** @description a lane: the fade in at its first block */
+            start?: components["schemas"]["MagicId"];
+            /** @description a lane: the fade out at its last block */
+            end?: components["schemas"]["MagicId"];
+            kind: components["schemas"]["MagicTransitionKind"];
+            length: components["schemas"]["MagicFrames"];
+        };
+        /** @description the board's own character, prop or place (Import copies a take or an Element in; never a link) */
+        MagicAsset: {
+            id: components["schemas"]["MagicId"];
+            /** @enum {string} */
+            kind: "character" | "prop" | "place";
+            /** @description its @ name */
+            handle: string;
+            name: string;
+            /** @description take ids: views, expressions */
+            sheet: string[];
+            voice_id?: string;
+            note?: string;
+            /** @description the take or Element it was copied from, for the record only */
+            imported_from?: string;
+        };
+        /** @description one board: lanes in order, blocks (in lane, then time order), links, transitions, assets and notes (contracts/README.md, Magic: the board rules) */
+        MagicDoc: {
+            target: components["schemas"]["MagicTarget"];
+            lanes: components["schemas"]["MagicLane"][];
+            blocks: components["schemas"]["MagicBlock"][];
+            links: components["schemas"]["MagicLink"][];
+            transitions: components["schemas"]["MagicTransition"][];
+            assets: components["schemas"]["MagicAsset"][];
+            notes: string[];
+        };
+        MagicBoard: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            revision: number;
+            doc: components["schemas"]["MagicDoc"];
+            can_undo: boolean;
+            can_redo: boolean;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MagicBoardSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            revision: number;
+            lanes: number;
+            blocks: number;
+            /** @description its length: the last block's end */
+            frames: number;
+            fps: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        MagicBoardList: {
+            boards: components["schemas"]["MagicBoardSummary"][];
+        };
+        MagicBoardCreate: {
+            /** @description absent: Untitled board */
+            name?: string;
+            target?: components["schemas"]["MagicTarget"];
+            doc?: components["schemas"]["MagicDoc"];
+        };
+        MagicBoardPatch: {
+            name: string;
+        };
+        /** @description one named edit (contracts/README.md, Magic: edits by ops); every op's fields are closed */
+        MagicOp: {
+            /** @constant */
+            op: "add";
+            block: components["schemas"]["MagicBlockNew"];
+            mode: components["schemas"]["MagicMode"];
+        } | {
+            /** @constant */
+            op: "move";
+            ids: components["schemas"]["MagicIds"];
+            dt: number;
+            /** @description to another lane (blocks from one lane) */
+            lane?: components["schemas"]["MagicId"];
+            mode: components["schemas"]["MagicMode"];
+        } | {
+            /** @constant */
+            op: "trim";
+            id: components["schemas"]["MagicId"];
+            at?: components["schemas"]["MagicFrames"];
+            length?: number;
+        } | {
+            /** @constant */
+            op: "delete";
+            ids: components["schemas"]["MagicIds"];
+            mode: components["schemas"]["MagicMode"];
+        } | {
+            /** @constant */
+            op: "duplicate";
+            ids: components["schemas"]["MagicIds"];
+        } | {
+            /** @constant */
+            op: "split";
+            id: components["schemas"]["MagicId"];
+            at: components["schemas"]["MagicFrames"];
+        } | {
+            /** @constant */
+            op: "link";
+            block: components["schemas"]["MagicId"];
+            to: components["schemas"]["MagicIds"];
+        } | {
+            /** @constant */
+            op: "unlink";
+            block: components["schemas"]["MagicId"];
+        } | {
+            /** @constant */
+            op: "transition";
+            between?: components["schemas"]["MagicId"][];
+            start?: components["schemas"]["MagicId"];
+            end?: components["schemas"]["MagicId"];
+            kind: components["schemas"]["MagicTransitionKind"];
+            length?: components["schemas"]["MagicFrames"];
+        } | {
+            /** @constant */
+            op: "effect";
+            ids: components["schemas"]["MagicIds"];
+            effect: components["schemas"]["MagicEffect"];
+        } | {
+            /** @constant */
+            op: "effect_set";
+            id: components["schemas"]["MagicId"];
+            index: number;
+            /** @description null takes it off */
+            effect: components["schemas"]["MagicEffect"] | null;
+        } | {
+            /** @constant */
+            op: "block";
+            id: components["schemas"]["MagicId"];
+            set: {
+                name?: string;
+                note?: string;
+                request?: components["schemas"]["MagicRequest"];
+                /** @description null unpins */
+                pinned?: string | null;
+            };
+        } | {
+            /** @constant */
+            op: "lane_add";
+            lane: {
+                id?: components["schemas"]["MagicId"];
+                name: string;
+                role: components["schemas"]["MagicRole"];
+                hidden?: boolean;
+                kind?: components["schemas"]["MagicKind"];
+            };
+            /** @description absent: last */
+            after?: components["schemas"]["MagicId"];
+        } | {
+            /** @constant */
+            op: "lane";
+            id: components["schemas"]["MagicId"];
+            set: {
+                name?: string;
+                role?: components["schemas"]["MagicRole"];
+                hidden?: boolean;
+                kind?: components["schemas"]["MagicKind"];
+            };
+        } | {
+            /** @constant */
+            op: "lane_move";
+            id: components["schemas"]["MagicId"];
+            /** @enum {integer} */
+            by: -1 | 1;
+        } | {
+            /** @constant */
+            op: "lane_delete";
+            id: components["schemas"]["MagicId"];
+        } | {
+            /** @constant */
+            op: "asset_delete";
+            id: components["schemas"]["MagicId"];
+        };
+        MagicIds: components["schemas"]["MagicId"][];
+        MagicEdits: {
+            /** @description the revision the ops were planned on (409 when it is not the current one) */
+            base_revision: number;
+            ops: components["schemas"]["MagicOp"][];
+            /**
+             * @description try it: the same answer, nothing stored
+             * @default false
+             */
+            dry_run?: boolean;
+        };
+        MagicIdDiff: {
+            added: components["schemas"]["MagicId"][];
+            removed: components["schemas"]["MagicId"][];
+            changed: components["schemas"]["MagicId"][];
+        };
+        /** @description what changed, by id, in document order (studio-made ids in `added`); `links` by the tied block */
+        MagicDiff: {
+            blocks: components["schemas"]["MagicIdDiff"];
+            lanes: components["schemas"]["MagicIdDiff"];
+            transitions: components["schemas"]["MagicIdDiff"];
+            assets: components["schemas"]["MagicIdDiff"];
+            links: components["schemas"]["MagicIdDiff"];
+        };
+        MagicEditResult: {
+            /** @description the stored revision; a dry run: base_revision */
+            revision: number;
+            dry_run: boolean;
+            /** @description as GET answers it (a dry run: what it would be) */
+            board: components["schemas"]["MagicBoard"];
+            diff: components["schemas"]["MagicDiff"];
+            /** @description what the board shows after it, never a refusal: `Line 1 runs 3 s past Shot 1` */
+            warnings: string[];
+        };
+        /** @description the failing op: `detail` the reason as the board says it (`That lane is gone.`), `op_index` which; `{detail}` only when the body does not fit */
+        MagicEditError: {
+            detail: string;
+            op_index?: number;
+        };
+        MagicRevision: {
+            /** @description the current revision, as the caller has it */
+            revision: number;
+        };
+        MagicRestore: {
+            /** @description the current revision, as the caller has it */
+            revision: number;
+            /** @description the kept revision to bring back */
+            to: number;
+        };
+        MagicRevisionItem: {
+            revision: number;
+            /** @enum {string} */
+            by: "user" | "studio";
+            /**
+             * @description a user write: where it came from (X-Helm-Client); studio's: null
+             * @enum {string|null}
+             */
+            via: "web" | "api" | "mcp" | "assistant" | null;
+            /** Format: date-time */
+            saved_at: string;
+            /** @description the op names of an /edits call (`move, link`), else the write's kind (create, undo, redo, restore) */
+            ops_summary: string;
+            blocks: number;
+        };
+        MagicRevisionList: {
+            revisions: components["schemas"]["MagicRevisionItem"][];
+        };
+        MagicSnapshot: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            revision: number;
+            /** Format: date-time */
+            made_at: string;
+            blocks: number;
+        };
+        MagicSnapshotList: {
+            snapshots: components["schemas"]["MagicSnapshot"][];
+        };
+        MagicSnapshotCreate: {
+            name?: string;
+            /** @description a kept revision; absent: the current one */
+            revision?: number;
+        };
+        MagicSnapshotPatch: {
+            name: string;
+        };
+        MagicAgentBlock: {
+            id: components["schemas"]["MagicId"];
+            lane: components["schemas"]["MagicId"];
+            kind: components["schemas"]["MagicKind"];
+            name: string;
+            at: components["schemas"]["MagicFrames"];
+            length: number;
+            at_s: number;
+            end_s: number;
+            /**
+             * @description derived: draft with no take; running and out of date come with runs (phase D)
+             * @enum {string}
+             */
+            status: "draft" | "done";
+            /** @description the take it shows: pinned, else its latest */
+            take_id: string | null;
+            takes: number;
+            prompt?: string;
+            line?: string;
+            note?: string;
+            tied_to: components["schemas"]["MagicId"][];
+            /** @description the badges' names (off ones left out) */
+            effects: string[];
+            from_frame?: components["schemas"]["MagicId"];
+        };
+        /** @description GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links */
+        MagicAgentView: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            revision: number;
+            target: components["schemas"]["MagicTarget"];
+            frames: number;
+            duration_s: number;
+            lanes: {
+                id: components["schemas"]["MagicId"];
+                name: string;
+                role: components["schemas"]["MagicRole"];
+                hidden: boolean;
+                blocks: number;
+            }[];
+            blocks: components["schemas"]["MagicAgentBlock"][];
+            transitions: {
+                id: components["schemas"]["MagicId"];
+                between?: components["schemas"]["MagicId"][];
+                start?: components["schemas"]["MagicId"];
+                end?: components["schemas"]["MagicId"];
+                kind: components["schemas"]["MagicTransitionKind"];
+                length: components["schemas"]["MagicFrames"];
+                at_s: number;
+            }[];
+            assets: {
+                id: components["schemas"]["MagicId"];
+                /** @enum {string} */
+                kind: "character" | "prop" | "place";
+                handle: string;
+                name: string;
+                /** @description the blocks that @-pick it or speak in its voice */
+                used_in: components["schemas"]["MagicId"][];
+            }[];
+            notes: string[];
+        };
         SigninRequest: {
             /** @description normalised like sign-up; a malformed one is just a failed sign-in (401) */
             email: string;
@@ -8990,6 +9613,15 @@ export interface components {
                 "application/json": components["schemas"]["TimelineEditError"];
             };
         };
+        /** @description the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`) */
+        MagicEditUnprocessable: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["MagicEditError"];
+            };
+        };
     };
     parameters: {
         /** @description session UUID (malformed = 404) */
@@ -9035,6 +9667,10 @@ export interface components {
         MediaJobId: string;
         /** @description from 1.44: an assistant chat's UUID (another user's or malformed = 404) */
         ThreadId: string;
+        /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+        MagicBoardId: string;
+        /** @description from 1.80: a board snapshot's UUID (malformed = 404) */
+        MagicSnapshotId: string;
     };
     requestBodies: never;
     headers: never;
@@ -13596,6 +14232,416 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListMagicBoards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the boards */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoardList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MagicBoardCreate"];
+            };
+        };
+        responses: {
+            /** @description the board */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetMagicBoard: {
+        parameters: {
+            query?: {
+                /** @description `agent` = MagicAgentView */
+                view?: "agent";
+            };
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"] | components["schemas"]["MagicAgentView"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPatchMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicBoardPatch"];
+            };
+        };
+        responses: {
+            /** @description the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioEditMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicEdits"];
+            };
+        };
+        responses: {
+            /** @description the result */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicEditResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["MagicEditUnprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListMagicRevisions: {
+        parameters: {
+            query?: {
+                /** @description only revisions below this one (paging) */
+                before?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the history */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicRevisionList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRestoreMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicRestore"];
+            };
+        };
+        responses: {
+            /** @description the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioUndoMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicRevision"];
+            };
+        };
+        responses: {
+            /** @description the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRedoMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicRevision"];
+            };
+        };
+        responses: {
+            /** @description the board */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicBoard"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListMagicSnapshots: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the snapshots */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSnapshotList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioCreateMagicSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["MagicSnapshotCreate"];
+            };
+        };
+        responses: {
+            /** @description the snapshot */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteMagicSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description from 1.80: a board snapshot's UUID (malformed = 404) */
+                snapshot_id: components["parameters"]["MagicSnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description deleted */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPatchMagicSnapshot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description from 1.80: a board snapshot's UUID (malformed = 404) */
+                snapshot_id: components["parameters"]["MagicSnapshotId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicSnapshotPatch"];
+            };
+        };
+        responses: {
+            /** @description the snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };

@@ -1,0 +1,85 @@
+{
+ "id": "7d1e0000-0000-4000-8000-000000000001",
+ "name": "The Last Tide",
+ "revision": 3,
+ "target": {
+  "width": 1280,
+  "height": 720,
+  "fps": 24,
+  "sample_rate": 48000
+ },
+ "frames": 288,
+ "duration_s": 12,
+ "lanes": [
+  {
+   "id": "shots",
+   "name": "Shots",
+   "role": "shots",
+   "hidden": false,
+   "blocks": 3
+  }
+ ],
+ "blocks": [
+  {
+   "id": "s1",
+   "lane": "shots",
+   "kind": "video",
+   "name": "Shot 1 · pier",
+   "at": 0,
+   "length": 96,
+   "at_s": 0,
+   "end_s": 4,
+   "status": "done",
+   "take_id": "11111111-1111-4111-8111-111111111111",
+   "takes": 2,
+   "prompt": "the pier",
+   "tied_to": [],
+   "effects": []
+  },
+  {
+   "id": "v1",
+   "lane": "lines",
+   "kind": "voice",
+   "name": "Line 1",
+   "at": 10,
+   "length": 60,
+   "at_s": 0.417,
+   "end_s": 2.917,
+   "status": "draft",
+   "take_id": null,
+   "takes": 0,
+   "line": "Not again.",
+   "tied_to": [
+    "s1"
+   ],
+   "effects": []
+  }
+ ],
+ "transitions": [
+  {
+   "id": "t1",
+   "between": [
+    "s1",
+    "s2"
+   ],
+   "kind": "dissolve",
+   "length": 12,
+   "at_s": 4
+  }
+ ],
+ "assets": [
+  {
+   "id": "mara",
+   "kind": "character",
+   "handle": "mara",
+   "name": "Mara",
+   "used_in": [
+    "s2",
+    "v1"
+   ]
+  }
+ ],
+ "notes": [
+  "keep it grey"
+ ]
+}
