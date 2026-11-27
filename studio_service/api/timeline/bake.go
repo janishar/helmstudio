@@ -79,11 +79,10 @@ func BuildBake(target Target, kind string, sides []BakeSide, frames int) (BakeJo
 		}
 		steps = append(steps, sd.Filters...)
 		steps = append(steps, pictureSteps(target, rate, sd.Stream)...)
-		if sd.Pre > 0 || sd.Post > 0 {
-			steps = append(steps, fmt.Sprintf("tpad=start_mode=clone:start_duration=%s:stop_mode=clone:stop_duration=%s",
-				secs(g.S(sd.Pre)), secs(g.S(sd.Post))))
-		}
-		steps = append(steps, "trim=duration="+dur, "setpts=PTS-STARTPTS")
+		// its held frames, and one more at the end so a source a frame short still fills it; then exactly frames of it,
+		// fps again (tpad leaves the frame rate unset, and xfade in ffmpeg 7 needs a constant one)
+		steps = append(steps, fmt.Sprintf("tpad=start_mode=clone:start_duration=%s:stop_mode=clone:stop_duration=%s",
+			secs(g.S(sd.Pre)), secs(g.S(sd.Post+1))), fmt.Sprintf("trim=end_frame=%d", frames), "setpts=PTS-STARTPTS", "fps="+rate)
 		chains = append(chains, strings.Join(steps, ",")+"["+v+"]")
 		vlabels = append(vlabels, v)
 		// its sound: the same span, held silent where the picture is held, faded with the picture
@@ -115,8 +114,8 @@ func BuildBake(target Target, kind string, sides []BakeSide, frames int) (BakeJo
 	}
 	switch {
 	case two:
-		chains = append(chains, fmt.Sprintf("[v0][v1]xfade=transition=%s:duration=%s:offset=0,trim=duration=%s,setpts=PTS-STARTPTS[vout]",
-			BakeKinds[kind], dur, dur))
+		chains = append(chains, fmt.Sprintf("[v0][v1]xfade=transition=%s:duration=%s:offset=0,%s[vout]", BakeKinds[kind], dur,
+			exact(g, frames, rate)))
 		chains = append(chains, fmt.Sprintf("[a0][a1]amix=inputs=2:normalize=0:duration=longest,atrim=duration=%s,asetpts=N/SR/TB[aout]", dur))
 	default:
 		fade := "null"
@@ -126,7 +125,7 @@ func BuildBake(target Target, kind string, sides []BakeSide, frames int) (BakeJo
 		case "fade_out":
 			fade = "fade=t=out:st=0:d=" + dur
 		}
-		chains = append(chains, "[v0]"+fade+"[vout]", "[a0]anull[aout]")
+		chains = append(chains, "[v0]"+fade+","+exact(g, frames, rate)+"[vout]", "[a0]anull[aout]")
 	}
 	args = append(args, "-filter_complex", strings.Join(chains, ";"),
 		"-map", "[vout]", "{venc}", "-r", rate, "-pix_fmt", "yuv420p", "-fps_mode", "cfr",
@@ -135,6 +134,11 @@ func BuildBake(target Target, kind string, sides []BakeSide, frames int) (BakeJo
 		"-ar", strconv.Itoa(target.SampleRate), "-ac", "2", "-movflags", "+faststart", "-f", "mp4", "{out}")
 	job.Args = args
 	return job, nil
+}
+
+// exact is the steps that make a picture exactly frames long: its last frame held once more, then cut there.
+func exact(g Grid, frames int, rate string) string {
+	return fmt.Sprintf("tpad=stop_mode=clone:stop_duration=%s,trim=end_frame=%d,setpts=PTS-STARTPTS,fps=%s", secs(g.S(1)), frames, rate)
 }
 
 // EffectFilters is an effect badge's picture filters (its name before " · ": Grade, Slow, Stabilize) and its rate

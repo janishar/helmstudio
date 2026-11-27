@@ -377,11 +377,15 @@ func bakeDone(ctx context.Context, tx pgx.Tx, job mediaRow) error {
 		if i < 0 || !ok || v1[i].Hold == nil {
 			return fail("a baked clip is missing")
 		}
-		take := *b.TakeID
-		out := min(*v1[i].Hold, tk.DurationS)
+		take, hold := *b.TakeID, *v1[i].Hold
+		out := min(hold, tk.DurationS)
 		zero := 0.0
 		v1[i].TakeID, v1[i].In, v1[i].Out, v1[i].Hold = &take, &zero, &out, nil
+		if rest := hold - out; rest > 1e-6 { // a bake a frame short (the runner allows one): the time stays
+			v1 = slices.Insert(v1, i+1, timeline.Clip{ID: clip + "p", Hold: &rest, Alternatives: []string{}})
+		}
 	}
+	doc.Tracks[0].Clips = v1
 	n, probs := timeline.Normalize(doc, rules, nil)
 	if probs != nil {
 		log.Printf("magic send %s: %v", sr.ID, probs)
