@@ -148,6 +148,8 @@ export function useApiBoard():
   const pending = useRef(0);
   const current = useRef("");
   const chain = useRef<Promise<void>>(Promise.resolve());
+  /** a call waits for the studio to answer (it is made again then) */
+  const holding = useRef(false);
 
   /** studio's board: the revision always, the document once no edit of ours is still on its way */
   const show = useCallback((w: Wire) => {
@@ -188,7 +190,8 @@ export function useApiBoard():
         } catch (e) {
           if (!isOutage(e) || n >= 5) throw e;
           if (!current.current) setError(OUTAGE_TEXT);
-          await whenUp();
+          holding.current = true;
+          await whenUp().finally(() => (holding.current = false));
           return held(n + 1);
         }
       };
@@ -326,7 +329,8 @@ export function useApiBoard():
     () => (wire ? takesOf(wire.doc as Doc, wire.runs ?? [], wire.takes ?? {}) : {}),
     [wire],
   );
-  if (!wire || !doc) return { ready: false, error, retry: start };
+  // Retry (ErrorStates a3): a load already waiting for the studio goes on by itself once it answers, no second one
+  if (!wire || !doc) return { ready: false, error, retry: () => !holding.current && start() };
   const id = wire.id;
   /** a call made on a revision studio has written past since (a run's take joined its block): made again, once, on
    * the revision as it is now */

@@ -15,7 +15,7 @@ import {
   useHealth,
   whenUp,
 } from "@/lib/health";
-import { ApiError, errorText, message } from "@/lib/api";
+import { ApiError, api, errorText, message } from "@/lib/api";
 import { failDetails, failWords, followSession, waitText } from "@/lib/runs";
 import {
   drivesOf,
@@ -116,6 +116,55 @@ describe("a · the studio isn't answering", () => {
     reportOutage();
     await flush();
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("a call the page stopped asks no check; a TypeError of the code is no outage", async () => {
+    const off = arm();
+    const probe = vi.fn(async () => new Response("{}", { status: 503 }));
+    vi.stubGlobal("fetch", probe);
+    const fails = (e: Error) =>
+      api
+        .GET("/v1/studio/hosts", {
+          baseUrl: "http://web.test/api", // (node's Request needs a whole URL)
+          fetch: async () => {
+            throw e;
+          },
+        })
+        .catch(() => undefined);
+    await fails(new DOMException("stopped", "AbortError"));
+    await flush();
+    expect(probe).not.toHaveBeenCalled();
+    await fails(new TypeError("Failed to fetch"));
+    await flush();
+    expect(probe).toHaveBeenCalledTimes(1);
+    expect(isDown()).toBe(true);
+    expect(isOutage(new TypeError("Cannot read properties of undefined (reading 'id')"))).toBe(
+      false,
+    );
+    off();
+  });
+
+  it("a check still out when a call answers says nothing when it ends", async () => {
+    vi.useFakeTimers();
+    const off = arm();
+    const ends: ((r: Response) => void)[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise<Response>((r) => ends.push(r))),
+    );
+    reportOutage();
+    await flush();
+    ends[0](new Response("{}", { status: 503 }));
+    await flush();
+    expect(isDown()).toBe(true);
+    retryNow(); // a second check, still out
+    await flush();
+    reportAnswer(); // a call answered meanwhile: back
+    expect(isDown()).toBe(false);
+    ends[1](new Response("{}", { status: 504 }));
+    await flush();
+    expect(isDown()).toBe(false);
+    off();
   });
 
   it("raises on 502, 503, 504 and a network failure, never on a 4xx; their words are the banner's", () => {

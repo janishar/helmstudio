@@ -12,6 +12,7 @@ import { Create } from "@/components/create/create";
 import { Banner, StatusTile } from "@/components/status";
 import { ErrorNote } from "@/components/kit";
 import { ShotComposer } from "@/components/timeline/shot";
+import { useHosts } from "@/components/create/memory-chip";
 import { closeMenu } from "@/components/context-menu";
 import { reportOutage } from "@/lib/health";
 import type { S } from "@/lib/api";
@@ -199,8 +200,11 @@ describe("c · runner lost mid-run", () => {
         .map((m) => m.textContent),
     ).toEqual(["Retry", "Show details", "Copy error", "Delete"]);
     act(closeMenu);
+    // a double click makes one run
+    fireEvent.click(within(panel).getByRole("button", { name: "Retry" }));
     fireEvent.click(within(panel).getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(deletes).toEqual([failed.id]));
+    expect(posts).toHaveLength(1);
     expect(posts[0].body).toMatchObject({ workflow_id: wf.id, inputs: { "sample.seed": 44 } });
     expect(screen.queryByText("This run stopped")).toBeNull();
   });
@@ -299,6 +303,26 @@ describe("g · the status tile", () => {
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((m) => m.textContent)).toEqual([
       "Open in Hosts",
     ]);
+  });
+});
+
+describe("g · one hosts poll", () => {
+  it("every reader on the page shares the 10 s poll (the tile adds no call)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const get = answer("GET", {
+      "/v1/studio/hosts": () => ({ data: { hosts: [host("mac", "idle")] } }),
+    });
+    function Two() {
+      const a = useHosts();
+      const b = useHosts();
+      return <p>{`${a?.length ?? "-"} ${b?.length ?? "-"}`}</p>;
+    }
+    render(<Two />);
+    await act(() => vi.advanceTimersByTimeAsync(100));
+    expect(screen.getByText("1 1")).toBeTruthy();
+    const first = get.mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(10_000));
+    expect(get.mock.calls.length - first).toBe(1);
   });
 });
 

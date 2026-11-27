@@ -1,7 +1,7 @@
 // Browser-side typed client: every call goes to the BFF (/api/*), which adds the API key and the user's token.
 import createClient from "openapi-fetch";
 import type { components, paths } from "@/gen/api";
-import { OUTAGE, OUTAGE_TEXT, reportAnswer, reportOutage } from "@/lib/health";
+import { OUTAGE, OUTAGE_TEXT, netFail, reportAnswer, reportOutage } from "@/lib/health";
 
 /** Shorthand for a contract schema: S<"Run"> is components["schemas"]["Run"]. */
 export type S<K extends keyof components["schemas"]> = components["schemas"][K];
@@ -15,8 +15,9 @@ api.use({
     if (OUTAGE.has(response.status)) reportOutage();
     else reportAnswer();
   },
-  onError: () => {
-    reportOutage();
+  // a call the page stopped itself (AbortError) says nothing about the studio: no check
+  onError: ({ error }) => {
+    if ((error as { name?: unknown } | null)?.name !== "AbortError") reportOutage();
   },
 });
 
@@ -103,8 +104,4 @@ export async function okOr<T>(
 /** Any caught value as text for a toast or error note. */
 export const message = (e: unknown) =>
   // the browser reached nothing ("Failed to fetch", "Load failed", "NetworkError…"): the banner's cause in plain words
-  e instanceof TypeError && /fetch|network|load failed/i.test(e.message)
-    ? OUTAGE_TEXT
-    : e instanceof Error
-      ? e.message
-      : String(e);
+  netFail(e) ? OUTAGE_TEXT : e instanceof Error ? e.message : String(e);

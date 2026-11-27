@@ -9,6 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { apply, type Doc } from "@/lib/magic";
 import { emptyDoc } from "@/lib/magic-fixture";
+import { arm, isDown, reportOutage } from "@/lib/health";
 
 /** The Model select (MagicBoard 2c: a select, the other models its hint): its picked name, and a pick by name. */
 const modelName = (dlg: HTMLElement) => {
@@ -368,6 +369,36 @@ describe("error states (docs/mock/ErrorStates.dc.html)", () => {
     outage = false;
     fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "A new board" })).toBeTruthy();
+  });
+
+  it("a3: Retry while the load waits for the studio makes no second load; it goes on once the studio answers", async () => {
+    const off = arm();
+    let up = false;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("{}", { status: up ? 200 : 503 })),
+    );
+    reportOutage(); // the banner's check fails: down
+    await waitFor(() => expect(isDown()).toBe(true));
+    outage = true;
+    render(<MagicBoard />);
+    const note = await screen.findByRole("alert");
+    const lists = () =>
+      calls.filter((c) => c.method === "GET" && c.path === "/v1/studio/magic/boards").length;
+    expect(lists()).toBe(1);
+    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    await act(async () => {
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+    });
+    expect(lists()).toBe(1);
+    outage = false;
+    up = true;
+    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "A new board" })).toBeTruthy();
+    expect(lists()).toBe(2);
+    off();
+    vi.unstubAllGlobals();
   });
 
   it("b2: no runner for the block's model greys Generate, with the line under it (not hover-only)", async () => {

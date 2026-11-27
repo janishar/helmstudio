@@ -165,7 +165,7 @@ import {
   waitText,
   type RunTrack,
 } from "@/lib/runs";
-import { onBack, OUTAGE_TEXT, useHealth } from "@/lib/health";
+import { isDown, onBack, OUTAGE_TEXT, useHealth } from "@/lib/health";
 import { rememberProject, soundOf, soundTakeOf, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
@@ -1552,10 +1552,16 @@ export function Create({
   const hostLabel = (h: string) => machineList.find((x) => x.host === h)?.label ?? h;
   /** Retry a failed run (docs/mock/ErrorStates.dc.html c2): a new run with the same request and seed (Run on as
    * the chip is now), whose tile takes the failed one's place; the failed run is deleted. */
+  // the failed runs a Retry is on its way for: a second click (card, menu) makes no second run
+  const retrying = useRef(new Set<string>());
   async function retryRun(r: Run) {
+    if (retrying.current.has(r.id)) return;
+    retrying.current.add(r.id);
     const w = workflows?.find((x) => x.id === r.workflow_id);
     const key = seedKeyOf(w);
     const seed = r.resolved?.seed;
+    // Run on as the chip is now, when that machine has a runner of this run's env (the chip may be another workflow's)
+    const pin = runOn && hosts?.some((h) => h.host === runOn.host && h.env === w?.env);
     try {
       const n = await ok(
         api.POST("/v1/studio/sessions/{session_id}/runs", {
@@ -1564,17 +1570,27 @@ export function Create({
             workflow_id: r.workflow_id,
             inputs: { ...r.inputs, ...(key && seed != null && { [key]: seed }) },
             ...(r.looks?.length && { looks: r.looks }),
-            ...(runOn && { host: runOn.host }),
+            ...(pin && { host: runOn.host }),
           },
         }),
       );
-      if (r.session_id === sessionRef.current)
-        put(runsRef.current.map((x) => (x.id === r.id ? n : x)));
+      // in the failed one's place (once: the session's events may have brought it already)
+      if (r.session_id === sessionRef.current) {
+        const list = runsRef.current.filter((x) => x.id !== n.id);
+        put(
+          list.some((x) => x.id === r.id)
+            ? list.map((x) => (x.id === r.id ? n : x))
+            : mergeRuns(list, [n]),
+        );
+      }
       setSelected(n.id);
       setLastRun(n.id);
-      await deleteRuns([r.id], () => undefined);
+      // a list read meanwhile may bring the failed run back: it goes as its delete lands
+      await deleteRuns([r.id], () => put(runsRef.current.filter((x) => x.id !== r.id)));
     } catch (err) {
       setError(message(err));
+    } finally {
+      retrying.current.delete(r.id);
     }
   }
   /** A failed run's right-click menu (ErrorStates c2): Retry, Show details, Copy error, then Delete. */
@@ -1665,7 +1681,8 @@ export function Create({
   const queuedId = shown?.status === "queued" ? shown.id : null;
   useEffect(() => {
     if (!queuedId) return;
-    const t = setInterval(() => void refetchRun(queuedId), 5000);
+    // while the banner shows, the studio's checks say when it is back (no read every 5 s into nothing)
+    const t = setInterval(() => !isDown() && void refetchRun(queuedId), 5000);
     return () => clearInterval(t);
   }, [queuedId, refetchRun]);
   // music and sound takes (docs/mock/CreateMusicSound.dc.html): the strip's Repaint, Cover or Vary, Extend from the

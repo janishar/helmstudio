@@ -26,6 +26,8 @@ let armed = 0;
 let checking = false;
 let step = 0;
 let paused = false;
+/** bumped when the studio answers: a check started before then says nothing when it ends */
+let gen = 0;
 let timer: ReturnType<typeof setTimeout> | undefined;
 let backTimer: ReturnType<typeof setTimeout> | undefined;
 
@@ -49,8 +51,11 @@ async function check() {
   if (checking) return;
   checking = true;
   clearTimeout(timer);
+  const g = gen;
   const up = await probe();
   checking = false;
+  // the banner went (disarmed) or a call answered meanwhile: this check's answer is stale
+  if (!armed || g !== gen) return;
   if (up) return recovered();
   set({ down: true, back: false });
   const s = BACKOFF[Math.min(step++, BACKOFF.length - 1)] * 1000;
@@ -63,6 +68,7 @@ async function check() {
 
 function recovered() {
   const was = state.down;
+  gen++;
   clearTimeout(timer);
   step = 0;
   paused = false;
@@ -135,9 +141,13 @@ export function whenUp(): Promise<void> {
   return new Promise((r) => waiters.push(r));
 }
 
+/** The browser reached nothing ("Failed to fetch", "Load failed", "NetworkError…"), not a TypeError of the code. */
+export const netFail = (e: unknown) =>
+  e instanceof TypeError && /fetch|network|load failed/i.test(e.message);
+
 /** The caught value is the studio not answering: an ApiError of 502/503/504 or a network failure. */
 export function isOutage(e: unknown): boolean {
-  if (e instanceof TypeError) return true;
+  if (netFail(e)) return true;
   const s = (e as { status?: unknown } | null)?.status;
   return typeof s === "number" && OUTAGE.has(s);
 }
