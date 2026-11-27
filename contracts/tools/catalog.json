@@ -5899,8 +5899,8 @@
       }
     },
     "make_views": {
-      "description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. Within the user's limit it starts at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs and read the sheet in show_board.",
-      "mcp_description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. No card over MCP: they start at once. Then read the sheet in show_board.",
+      "description": "Make views of a board's asset, one image run each (\"Front\" or any name: \"smiling\"; up to 6), joining its sheet, at 1K: a character 3:4, a prop 1:1, a place the board's shape. Above the user's limit or unestimated, the user's Yes on the card first. Then await the runs; show_board has the sheet.",
+      "mcp_description": "Make views of a board's asset: one image run per view (\"Front\", or any name: \"smiling\"; up to 6), at 1K (a character 3:4, a prop 1:1, a place the board's shape); each take joins its sheet under its name. No card over MCP: they start at once. Then read the sheet in show_board.",
       "surfaces": [
         "assistant",
         "mcp"
@@ -5945,7 +5945,7 @@
           "model": {
             "type": "string",
             "maxLength": 80,
-            "description": "an image model's workflow id (magic_kinds); absent: the image kind's first"
+            "description": "an image model's workflow id (magic_kinds); absent: the image kind's first real one (Echo only when nothing else is on a host)"
           }
         },
         "required": [

@@ -9307,7 +9307,7 @@ components:
       properties:
         revision: {type: integer, minimum: 1, description: 'the board''s current revision (409 when stale)'}
         views: {type: array, minItems: 1, maxItems: 6, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 40}, description: 'the views to make, one run each ("Front", "Side", "Back")'}
-        model: {type: string, maxLength: 80, description: 'an image model''s workflow id; absent: the image kind''s first'}
+        model: {type: string, maxLength: 80, description: 'an image model''s workflow id; absent: the image kind''s first real one (Echo, env fake, only when nothing else is on a host); the size is studio''s: 1K, a character 3:4, a prop 1:1, a place the board''s shape'}
     MagicViewsStarted:
       type: object
       required: [board, started]

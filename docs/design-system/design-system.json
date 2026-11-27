@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T05:00:00Z",
+  "at": "2026-11-28T06:00:00Z",
   "via": "Claude Code",
-  "note": "Button: Magic\u2019s header key is Export; Send to Timeline an icon button beside it (owner, 2026-11-28: \"export the main button sent to timeline as icon button, tooltips\")"
+  "note": "MagicBlockDialog: Make views picks its views (toggle chips, the missing on), Add a view for a custom name (max 6), then Make n; a real model first"
  }
 }

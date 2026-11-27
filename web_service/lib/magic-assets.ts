@@ -25,6 +25,14 @@ export const VIEWS: Record<AssetKind, string[]> = {
   place: ["Wide", "Reverse angle"],
 };
 
+/** A view's size as studio makes it: 1K, a character 3:4, a prop square, a place the board's shape (studio then fits it
+ * to the model's grid and max). */
+export function viewSize(kind: AssetKind, t: { width: number; height: number }) {
+  const [w, h] = kind === "character" ? [3, 4] : kind === "prop" ? [1, 1] : [t.width, t.height];
+  const k = 1024 / Math.max(w, h);
+  return { width: Math.round(w * k), height: Math.round(h * k) };
+}
+
 /** The views of its kind not on the sheet yet (by name); all of them when every one is; never one still being made
  * (`making`: studio refuses those, 409). */
 export function missingViews(a: Asset, making: string[] = []): string[] {

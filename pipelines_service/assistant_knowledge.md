@@ -121,5 +121,8 @@ Magic boards:
 - Effects: only Grade (temperature, contrast), Slow (rate) and Stabilize bake into the shot on Send; others are
   badges on the board only.
 - Make views: make_views {asset, views ["Front", "Side"]} runs one image each onto the asset's sheet, under the same
-  ask rule as run_blocks.
+  ask rule as run_blocks. Views may be any names ("3/4 view", "smiling"), up to 6 a call. With no model it runs a real
+  image model, never Echo (the test model) while another is on a host.
+- Still sizes (studio sets them): views at 1K (long side 1024), a character 3:4, a prop 1:1, a place the board's
+  shape; frames the board's shape at 1K; shots the board's size. A block's own request width/height wins.
   Characters, props and places never get a lane or blocks of their own: their pictures are always make_views.

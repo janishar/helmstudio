@@ -40,8 +40,9 @@ func TestStandardInputsPerPack(t *testing.T) {
 		{"qwen-image.", "mac.torch", "qwen-image", "image", `{"prompt":"a title card","width":1920,"height":1080}`, pics, "",
 			`canvas.height=1088 canvas.mode=fixed canvas.width=1920 encode.refs=[map[image:map[take_id:` + take +
 				`]]] prompt.text=a title card seed.seed=42`},
+		// a still with no size of its own: the board's shape at 1K (1280 × 720 → 1024 × 576), not its video size
 		{"minimax-h3-image.", "mac.torch", "minimax-h3-image", "image", `{"prompt":"wet glass"}`, magicPics{}, "",
-			`canvas.height=736 canvas.mode=fixed canvas.width=1280 encode.refs=[] prompt.text=wet glass seed.seed=42`},
+			`canvas.height=576 canvas.mode=fixed canvas.width=1024 encode.refs=[] prompt.text=wet glass seed.seed=42`},
 		// LTX: 8 s at 24 fps is 193 frames on its 8k + 1 grid; the frames are keyframe rows at 0 s and the last frame
 		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain"}`, pics, "",
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=false keyframes.images=[map[image:map[take_id:` +
@@ -52,7 +53,7 @@ func TestStandardInputsPerPack(t *testing.T) {
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=true prompt.text=rain sample1.steps=8 seed.seed=42`},
 		// API 1.94: the variant goes as Advanced model.variant; one this model lacks (Qwen's turbo on LTX) is dropped
 		{"qwen-image.", "mac.torch", "qwen-image", "image", `{"prompt":"fox","advanced":{"model.variant":"turbo"}}`, magicPics{}, "",
-			`canvas.height=736 canvas.mode=fixed canvas.width=1280 encode.refs=[] model.variant=turbo prompt.text=fox seed.seed=42`},
+			`canvas.height=576 canvas.mode=fixed canvas.width=1024 encode.refs=[] model.variant=turbo prompt.text=fox seed.seed=42`},
 		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain","advanced":{"model.variant":"turbo"}}`, magicPics{}, "",
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=true prompt.text=rain seed.seed=42`},
 		{"minimax-h3.", "mac.native", "minimax-h3-image-to-video", "video", `{"prompt":"bus"}`, magicPics{First: take}, "",
@@ -256,6 +257,21 @@ func TestEstimateParts(t *testing.T) {
 	p := registry.Param{Min: &step, Max: &max, Step: &step}
 	if w, h := fitSize(1920, 1080, p, p); w != 1024 || h != 576 {
 		t.Fatal(w, h)
+	} // stills at 1K whatever the board's size: a 480p frame is 1024 × 576; views 3:4, 1:1, a place the board's shape
+	if w, h := stillSize(854, 480); w != 1024 || h != 576 {
+		t.Fatal(w, h)
+	}
+	sd := magic.Doc{Target: magic.Target{Width: 854, Height: 480, FPS: 24}}
+	for kind, want := range map[string][2]float64{"character": {768, 1024}, "prop": {1024, 1024}, "place": {1024, 576}} {
+		b := viewBlocks(sd, &magic.Asset{ID: "a1", Handle: "x", Kind: kind}, []string{"Front"}, "")[0]
+		if b.Request["width"] != want[0] || b.Request["height"] != want[1] {
+			t.Error(kind, b.Request)
+		}
+	}
+	ws := []registry.Workflow{{ID: "echo", Env: "fake", Standard: &registry.Standard{Kind: "image", Model: "Echo"}},
+		{ID: "qwen", Env: "qwen-image", Standard: &registry.Standard{Kind: "image", Model: "Qwen"}}}
+	if viewModel(ws, "") != "qwen" || viewModel(ws, "echo") != "echo" || viewModel(ws[:1], "") != "" {
+		t.Fatal("views' model")
 	}
 }
 

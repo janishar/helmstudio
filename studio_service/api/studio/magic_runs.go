@@ -531,6 +531,12 @@ func magicPrompt(d magic.Doc, b *magic.Block, mention string, refAssets []string
 	return text
 }
 
+// stillSize is a still's size in shape w:h at 1K (its long side 1024); fitSize then caps it and puts it on the grid.
+func stillSize(w, h float64) (float64, float64) {
+	k := 1024 / max(w, h)
+	return math.Round(w * k), math.Round(h * k)
+}
+
 // fitSize is w × h scaled down to fit the int params' maxes, each side then on its step and in its bounds.
 func fitSize(w, h float64, pw, ph registry.Param) (float64, float64) {
 	scale := 1.0
@@ -639,6 +645,9 @@ func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magic
 	if pw, w1, ok := param("width"); ok {
 		if ph, h1, ok := param("height"); ok {
 			wd, hd := float64(target.Width), float64(target.Height)
+			if magicServes(b.Kind) == "image" { // a frame or a still: the board's shape at 1K, not its video size
+				wd, hd = stillSize(wd, hd)
+			}
 			if v, ok := reqNumber(req, "width"); ok {
 				wd = v
 			}

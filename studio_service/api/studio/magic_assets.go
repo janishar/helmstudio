@@ -14,6 +14,7 @@ import (
 	"github.com/helmstudio/studio_service/api/magic"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/common"
+	"github.com/helmstudio/studio_service/registry"
 )
 
 // Magic's assets (API 1.83, plan 39 phase E; contracts/README.md "Magic: assets and the storyboard"): Make views
@@ -83,13 +84,32 @@ func viewBlocks(d magic.Doc, a *magic.Asset, views []string, model string) []*ma
 		if model != "" {
 			b.Request["model"] = model
 		}
-		if a.Kind == "character" || a.Kind == "prop" { // a sheet view is square
-			side := float64(min(d.Target.Width, d.Target.Height, 1024))
-			b.Request["width"], b.Request["height"] = side, side
+		// a sheet view at 1K whatever the board's size: a character 3:4, a prop square, a place the board's shape
+		switch a.Kind {
+		case "character":
+			b.Request["width"], b.Request["height"] = stillSize(3, 4)
+		case "prop":
+			b.Request["width"], b.Request["height"] = stillSize(1, 1)
+		default:
+			b.Request["width"], b.Request["height"] = stillSize(float64(d.Target.Width), float64(d.Target.Height))
 		}
 		out = append(out, b)
 	}
 	return out
+}
+
+// viewModel is the model Make views runs: the caller's pick, else the image kind's first real one (Echo, env fake,
+// only when nothing else is on a host).
+func viewModel(ws []registry.Workflow, pick string) string {
+	if pick != "" {
+		return pick
+	}
+	for _, w := range standardModels(ws, "image") {
+		if w.Env != "fake" {
+			return w.ID
+		}
+	}
+	return ""
 }
 
 // PlanMagicViews is the plan of Make views (API 1.93, the Assistant's make_views under the ask rule): each view an
@@ -109,13 +129,13 @@ func (s *Service) PlanMagicViews(ctx context.Context, caller common.Caller, id, 
 		if a == nil {
 			return nil
 		}
-		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, viewBlocks(d, a, views, model), &out)
+		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, viewBlocks(d, a, views, viewModel(s.registry.Workflows(), model)), &out)
 	})
 	return out, err
 }
 
 // MakeMagicViews answers POST …/assets/{asset_id}/views: one run of the image model (the request's, else the kind's
-// first) per view, in the board's session.
+// first real one) per view, in the board's session.
 func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, assetID string, body *dto.MagicViewsCreate) (dto.MagicViewsStarted, error) {
 	if !s.registry.Ready() {
 		return dto.MagicViewsStarted{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
@@ -148,7 +168,7 @@ func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, 
 		if busy != "" {
 			return network.NewConflictError(busy+" is already being made", nil)
 		}
-		w, why := magicModel(s.registry.Workflows(), "image", map[string]any{"model": body.Model})
+		w, why := magicModel(s.registry.Workflows(), "image", map[string]any{"model": viewModel(s.registry.Workflows(), body.Model)})
 		if why != "" {
 			return network.NewUnprocessableError(why, nil)
 		}

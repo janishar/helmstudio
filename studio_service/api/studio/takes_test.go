@@ -41,7 +41,7 @@ func TestMadeWith(t *testing.T) {
 	got := madeWith(workflows, run, &seed, nil)
 	if got.WorkflowTitle != workflow.Title || got.Prompt == nil || *got.Prompt != "Fox at dusk" || *got.Seed != 43 ||
 		got.Inputs["seed.seed"] != int64(43) || got.Inputs["prompt.text"] != "Fox at dusk" || got.Inputs["sample.steps"] == nil ||
-		got.Model == nil || got.Model.ID == nil || *got.Model.ID != "qwen-image-2.1" || *got.Model.Variant != "base" {
+		got.Model == nil || got.Model.ID == nil || *got.Model.ID != "qwen-image-2.1" || *got.Model.Variant != "turbo" {
 		t.Fatalf("%+v %+v", got, got.Model)
 	}
 	run.Nodes = nil // a run stored before it kept its graph: resolved again

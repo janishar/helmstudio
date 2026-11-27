@@ -52,14 +52,20 @@ describe("assets", () => {
     fireEvent.click(within(dlg).getByRole("button", { name: "Make asset" }));
     dlg = screen.getByRole("dialog", { name: /Character · @mara-2/ });
     expect(within(dlg).getByText(/Not used yet/)).toBeTruthy();
-    fireEvent.click(within(dlg).getByRole("button", { name: /Make views/ }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Make all 4/, hidden: true }));
+    // the kind's views, the missing ones on; Back off, "Smiling" added
+    const pick = within(dlg).getByRole("group", { name: "Views to make" });
+    fireEvent.click(within(pick).getByRole("button", { name: "Back" }));
+    const add = within(dlg).getByRole("textbox", { name: "Add a view" });
+    fireEvent.change(add, { target: { value: "Smiling" } });
+    fireEvent.keyDown(add, { key: "Enter" });
+    expect(within(pick).getByRole("button", { name: "Smiling" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(dlg).getByRole("button", { name: /^Make 4/ }));
     const views = within(dlg).getByRole("list", { name: "Views" });
     expect(within(views).getAllByRole("listitem").map((x) => x.getAttribute("aria-label"))).toEqual([
       "Front",
       "Side",
-      "Back",
       "Full figure",
+      "Smiling",
     ]);
     // the Assets row has it, and Import is the studio's (no Gallery in the fake mode)
     expect(screen.getByRole("button", { name: "Asset @mara-2, Character" })).toBeTruthy();

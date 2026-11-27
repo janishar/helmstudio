@@ -9782,7 +9782,7 @@ export interface components {
             revision: number;
             /** @description the views to make, one run each ("Front", "Side", "Back") */
             views: string[];
-            /** @description an image model's workflow id; absent: the image kind's first */
+            /** @description an image model's workflow id; absent: the image kind's first real one (Echo, env fake, only when nothing else is on a host); the size is studio's: 1K, a character 3:4, a prop 1:1, a place the board's shape */
             model?: string;
         };
         MagicViewsStarted: {

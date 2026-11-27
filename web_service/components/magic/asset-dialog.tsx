@@ -16,6 +16,7 @@ import {
   freeHandle,
   missingViews,
   viewName,
+  viewSize,
 } from "@/lib/magic-assets";
 import { ASSET_KINDS, HANDLE, duration, end, freshAssetId, usedIn, type Asset, type AssetKind } from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
@@ -189,16 +190,16 @@ function Body({
   const running = runs.filter((r) => (r.status === "queued" || r.status === "running") && !r.takes.length);
   const failed = runs.findLast((r) => r.status === "failed" && !r.takes.length);
   const want = missingViews(x, running.map((r) => r.view));
-  // Make views' model (API 1.89: a pick; the image kind's first by default)
+  // Make views' model (API 1.89)
   const images = kindOf(kinds, "image")?.models ?? [];
   const [pick, setPick] = useState("");
-  const image = images.find((m) => m.workflow_id === pick) ?? images[0];
-  const side = Math.min(d.target.width, d.target.height, 1024);
-  const est = packSeconds(
-    image,
-    { kind: "image", length: 1, request: { kind: "image", width: side, height: side } },
-    d,
-  );
+  // the user's pick, else a real model (Echo, env fake, only when it is the only one)
+  const image = images.find((m) => m.workflow_id === pick) ?? images.find((m) => m.env !== "fake") ?? images[0];
+  const est = packSeconds(image, { kind: "image", length: 1, request: { kind: "image", ...viewSize(x.kind, d.target) } }, d);
+  // the views to make: the missing ones until the user picks (at most 6, the API's), and their own names added
+  const [chosen, setChosen] = useState<string[] | null>(null);
+  const [extra, setExtra] = useState<string[]>([]);
+  const sel = (chosen ?? want).filter((v) => !running.some((r) => r.view === v)).slice(0, 6);
   const set = (s: { voice_id?: string | null; note?: string; name?: string }) =>
     a.edit({ op: "asset", id: x.id, set: s });
   async function addFile(f: File) {
@@ -285,45 +286,52 @@ function Body({
             <p className="m-0 text-[12px] text-t2">No views yet: make them here, import a take or an Element, or add a file.</p>
           )}
           {failed && <span className="text-[12px] text-bad">{failed.view} failed: {failed.error ?? "failed"}</span>}
+          <div className="seg flex-wrap" role="group" aria-label="Views to make">
+            {[...VIEWS[x.kind], ...extra].map((v) => {
+              const busy = running.some((r) => r.view === v);
+              const on = sel.includes(v);
+              return (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={on}
+                  disabled={busy || (!on && sel.length >= 6)}
+                  title={busy ? "Being made" : undefined}
+                  onClick={() => setChosen(on ? sel.filter((y) => y !== v) : [...sel, v])}
+                >
+                  {v}
+                </button>
+              );
+            })}
+          </div>
           <div className="flex flex-wrap items-center gap-2">
+            <input
+              aria-label="Add a view"
+              placeholder="Add a view"
+              maxLength={40}
+              className="in h-8 w-32 px-2 text-[12px]"
+              onKeyDown={(e) => {
+                const v = e.currentTarget.value.trim();
+                if (e.key !== "Enter" || !v || sel.length >= 6) return;
+                e.preventDefault();
+                if (![...VIEWS[x.kind], ...extra].includes(v)) setExtra([...extra, v]);
+                if (!sel.includes(v)) setChosen([...sel, v]);
+                e.currentTarget.value = "";
+              }}
+            />
             <button
               type="button"
               className="chip bevel rounded-[10px] bg-s4"
-              disabled={!a.views || !image}
-              title={!a.views ? (a.runOff ?? "Runs come with the standard request") : !image ? "No image model on any host" : `Makes ${want.join(", ")}`}
-              onClick={(e) =>
-                openMenu(e, {
-                  title: "Make views",
-                  items: [
-                    ...VIEWS[x.kind].map((v) => ({
-                      label: v,
-                      keys: est == null ? undefined : estText(est, true),
-                      off: running.some((r) => r.view === v) ? "Being made" : undefined,
-                      onPick: () => a.views?.(x.id, [v], image?.workflow_id),
-                    })),
-                    {
-                      label: "Another view…",
-                      keys: est == null ? undefined : estText(est, true),
-                      onPick: () => {
-                        const v = prompt("A view or an expression", x.kind === "character" ? "Smile" : "Top")
-                          ?.trim()
-                          .slice(0, 40);
-                        if (v) a.views?.(x.id, [v], image?.workflow_id);
-                      },
-                    },
-                    "-",
-                    {
-                      label: `Make ${want.length === VIEWS[x.kind].length ? "all" : "the missing"} ${want.length}`,
-                      keys: est == null ? undefined : estText(est * want.length, true),
-                      off: want.length ? undefined : "Being made",
-                      onPick: () => a.views?.(x.id, want, image?.workflow_id),
-                    },
-                  ],
-                })
-              }
+              disabled={!a.views || !image || !sel.length}
+              title={!a.views ? (a.runOff ?? "Runs come with the standard request") : !image ? "No image model on any host" : `Makes ${sel.join(", ")}`}
+              onClick={() => {
+                a.views?.(x.id, sel, image?.workflow_id);
+                setChosen(null);
+                setExtra([]);
+              }}
             >
               <Images size={13} aria-hidden />
-              Make views{est != null ? ` · ${estText(est * want.length)}` : ""}
+              Make {sel.length}{est != null && sel.length ? ` · ${estText(est * sel.length)}` : ""}
             </button>
             {images.length > 1 && (
               <select

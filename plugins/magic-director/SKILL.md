@@ -68,6 +68,9 @@ Once the user says yes:
   the asset's sheet.
 - Make the views before any frame: make_views for each character (Front, Side, Back; an expression or two if the
   story needs them), each recurring prop (Front), each place (a Wide, and the Reverse if a scene cuts both ways).
+- Views may be any names ("3/4 view", "smiling"), up to 6 a call; with no model they run a real image model, never
+  Echo. Sizes are studio's rule: views at 1K, characters 3:4, props 1:1, places the board's shape; frames the
+  board's shape at 1K; shots the board's size; a block's own size wins.
 - Show the sheets; let the user pick or redo a view. Only then a second edit adds the Storyboard frames (§4).
 - A voice for each speaking character goes on the asset (voice_id) before any dialogue. No voice yet: say so and
   point at Create's voice design or clone; then set it on the asset.
