@@ -11,6 +11,7 @@ import {
   Blend,
   Brush,
   Check,
+  CircleStop,
   Clapperboard,
   ClipboardPaste,
   Columns2,
@@ -109,6 +110,8 @@ export type Act = {
   sel: string[];
   edit: (op: Op | Op[]) => unknown;
   run: (ids: string[]) => void;
+  /** stops these blocks' runs still going (absent: nothing can stop them) */
+  stop?: (ids: string[]) => void;
   /** a morph opened (its dialog, API 1.82) */
   openMorph?: (id: string) => void;
   /** why runs can't go yet; estimates hide with it */
@@ -217,12 +220,22 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
   const tiedTo = link && blockById(d, link.to[0]);
   const lane = laneOf(d, b.lane);
   const open: MenuItem = { label: "Open", icon: Maximize2, keys: "↵", onPick: () => a.open(b.id) };
-  const run: MenuItem = gate(a, {
-    label: "Run",
-    icon: WandSparkles,
-    keys: a.estimate ? a.estimate(b.id) : est(b.kind),
-    onPick: () => a.run([b.id]),
-  });
+  // a block running has Stop where Run was, its progress on the right
+  const going = Object.values(a.takes).find((t) => t.block === b.id && t.status === "running");
+  const run: MenuItem =
+    going && a.stop
+      ? {
+          label: "Stop",
+          icon: CircleStop,
+          keys: `${Math.round(going.progress ?? 0)}%`,
+          onPick: () => a.stop!([b.id]),
+        }
+      : gate(a, {
+          label: "Run",
+          icon: WandSparkles,
+          keys: a.estimate ? a.estimate(b.id) : est(b.kind),
+          onPick: () => a.run([b.id]),
+        });
   const play: MenuItem = { label: "Play", icon: Play, keys: "Space", onPick: () => a.play(b.at) };
   const dup: MenuItem = {
     label: "Duplicate",
@@ -393,12 +406,14 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
       title,
       items: [
         open,
-        gate(a, {
-          label: "Redraw",
-          icon: RefreshCw,
-          keys: est("frame"),
-          onPick: () => a.run([b.id]),
-        }),
+        going && a.stop
+          ? run
+          : gate(a, {
+              label: "Redraw",
+              icon: RefreshCw,
+              keys: est("frame"),
+              onPick: () => a.run([b.id]),
+            }),
         {
           label: "Style",
           icon: Brush,

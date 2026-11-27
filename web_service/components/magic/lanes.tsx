@@ -4,7 +4,7 @@
 // Drag a block to move it (snapping to edges, the playhead and the ruler; Alt is Overwrite), its right edge to trim;
 // the board draws the op's result while dragging, with dashed outlines where things were.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Pin } from "lucide-react";
+import { CircleStop, Pin } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { sectionColor } from "@/components/create/audio";
 import { JOIN_ICON, KIND_NAME, Wave } from "@/components/magic/icons";
@@ -122,9 +122,36 @@ export const STATUS = {
 } as const;
 
 /** A block's status chip: Done, 62%, Out of date, Draft, Failed. */
-export function StatusChip({ d, b, takes }: { d: Doc; b: Block; takes: Takes }) {
+/** A block's status; running, with Stop after it when `onStop` stops its runs (its dialog). */
+export function StatusChip({
+  d,
+  b,
+  takes,
+  onStop,
+}: {
+  d: Doc;
+  b: Block;
+  takes: Takes;
+  onStop?: () => void;
+}) {
   const st = statusOf(d, b, takes);
-  if (st.s === "running") return <span className="mst run">{Math.round(st.progress)}%</span>;
+  if (st.s === "running")
+    return (
+      <>
+        <span className="mst run">{Math.round(st.progress)}%</span>
+        {onStop && (
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4"
+            title="Stops its runs: a queued one at once, a running one at its next safe point"
+            onClick={onStop}
+          >
+            <CircleStop size={13} aria-hidden />
+            Stop
+          </button>
+        )}
+      </>
+    );
   const [cls, text] = STATUS[st.s];
   return <span className={`mst ${cls}`}>{text}</span>;
 }
@@ -732,7 +759,11 @@ function BlockView({
       {look && audioRow(<SoundMark look={look} art={art} />, WAVE[look])}
       {/* API 1.89: a song's sections as markers (a click puts the playhead there) */}
       {b.kind === "music" && (
-        <div className="pointer-events-none absolute inset-x-0 top-[22px] z-[1] h-3.5" role="group" aria-label="Sections">
+        <div
+          className="pointer-events-none absolute inset-x-0 top-[22px] z-[1] h-3.5"
+          role="group"
+          aria-label="Sections"
+        >
           {sectionsOf(b, take, b.length / fps)
             .filter((c) => c.start_s * fps < b.length)
             .map((c, i) => {

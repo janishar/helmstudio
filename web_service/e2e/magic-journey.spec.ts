@@ -127,3 +127,25 @@ test("tie Line 2 to Shot 3, then undo back to Shot 2", async () => {
   await expect(page.getByRole("button", { name: "The Last Tide" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Snapshots · 1" })).toBeVisible();
 });
+
+test("Run board, then Stop runs (N): a running block's menu has Stop; the toolbar's asks first, then all stop", async () => {
+  // owner, 2026-11-27: "yes build it" (Stop on a running block, Stop runs (N) with a confirm); MagicBoard frame 10
+  await page.getByRole("button", { name: "Run board" }).click();
+  const ask = page.getByRole("alert").filter({ hasText: "Run the board?" });
+  if (await ask.isVisible().catch(() => false))
+    await ask.getByRole("button", { name: "Run" }).click();
+  const stopAll = page.getByRole("button", { name: /^Stop runs \(\d+\)$/ });
+  await expect(stopAll).toBeVisible();
+  const going = page.getByRole("button", { name: /block/ }).filter({ hasText: /\d+%/ }).first();
+  await going.click({ button: "right", position: { x: 40, y: 12 } });
+  await expect(page.getByRole("menuitem", { name: /^Stop/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await stopAll.click();
+  const confirm = page.getByRole("alert").filter({ hasText: /Stop \d+ runs?\?/ });
+  await expect(confirm).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/4-stop-runs.png` });
+  await confirm.getByRole("button", { name: "Stop runs" }).click();
+  await expect(status()).toHaveText(/^Stopping \d+ runs?$/);
+  // queued ones drop at once, the running one at its next safe point
+  await expect(stopAll).toBeHidden({ timeout: 60_000 });
+});

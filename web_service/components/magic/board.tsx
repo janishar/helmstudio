@@ -3,7 +3,7 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Camera, CircleStop, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { mod, openMenu } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -163,6 +163,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const toRun = useRef<string | null>(null);
   /** the ask card: a run of the board above the limit (plan 39 §45.8) */
   const [asking, setAsking] = useState<string | null>(null);
+  /** Stop runs (N) asks first */
+  const [stopAsk, setStopAsk] = useState(false);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [usedAsset, setUsedAsset] = useState<string | null>(null);
   // phase E: an asset opened ("new" makes one), Import (into an asset, or a new one), the rough cut (from a frame;
@@ -248,6 +250,16 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       run([id]);
     }
   }, [doc, run]);
+  /** Stops runs still going: of these blocks, or all the board's */
+  const stop = useCallback(
+    (ids?: string[]) => {
+      const runs = board.going.filter((g) => !ids || ids.includes(g.block)).map((g) => g.run);
+      if (!runs.length) return;
+      board.stop(runs);
+      setSaid(`Stopping ${runs.length} run${runs.length > 1 ? "s" : ""}`);
+    },
+    [board],
+  );
   /** a block's estimate: studio's plan, else (the fake mode) the kind's guess */
   const estOf = useCallback(
     (b: Block): Estimate | undefined =>
@@ -265,9 +277,10 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     setOpened(id);
   }, []);
   // the Assistant's screen actions and summary (tools/actions.json `magic`)
-  useScreenTools(
+  const byAssistant = board.going.filter((g) => g.by === "assistant").map((g) => g.run);
+  useScreenTools({
     // eslint-disable-next-line react-hooks/refs -- the player is read when an action runs, after render
-    magicTools({
+    ...magicTools({
       id: board.id,
       name: board.name,
       revision: board.revision,
@@ -285,7 +298,9 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       pause: () => player.current?.pause(),
       seek,
     }),
-  );
+    // the Assistant's Stop offers to stop its runs on this board too
+    runs: { going: byAssistant.length, stop: () => board.stop(byAssistant) },
+  });
 
   const act: Act = useMemo(
     () => ({
@@ -296,6 +311,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       sel,
       edit,
       run,
+      stop,
       runOff: board.run ? undefined : RUNS_LATER,
       runWhenAdded: (id) => (toRun.current = id),
       // API 1.85: studio's models per kind (Music's Model ›, a sound from a shot's video) and their names
@@ -396,7 +412,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           }
         : undefined,
     }),
-    [doc, takes, mode, frame, sel, edit, run, board, open, seek, clip],
+    [doc, takes, mode, frame, sel, edit, run, stop, board, open, seek, clip],
   );
 
   // zoom: fit (the whole board across) up to 240 px a second, ×1.25 a step
@@ -637,6 +653,17 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                   {boardHost && ` · ${boardHost}`}
                 </span>
               )}
+              {board.going.length > 0 && (
+                <button
+                  type="button"
+                  className="chip bevel"
+                  title="Stops the board's queued and running runs (asks first)"
+                  onClick={() => setStopAsk(true)}
+                >
+                  <CircleStop size={13} aria-hidden />
+                  Stop runs ({board.going.length})
+                </button>
+              )}
               <span className="grow" />
               <div
                 role="group"
@@ -791,6 +818,31 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 </button>
                 <button type="button" className="chip" onClick={() => setAsking(null)}>
                   Cancel
+                </button>
+              </div>
+            )}
+            {stopAsk && board.going.length > 0 && (
+              <div className="warn" role="alert">
+                <b>
+                  Stop {board.going.length} run{board.going.length > 1 ? "s" : ""}?
+                </b>
+                <span>
+                  Queued ones drop at once; running ones stop at their next safe point. Takes
+                  already made stay.
+                </span>
+                <span className="grow" />
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => {
+                    setStopAsk(false);
+                    stop();
+                  }}
+                >
+                  Stop runs
+                </button>
+                <button type="button" className="chip" onClick={() => setStopAsk(false)}>
+                  Not now
                 </button>
               </div>
             )}

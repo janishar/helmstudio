@@ -185,6 +185,8 @@ export function useAssistant(me: S<"User"> | null) {
   const [running, setRunning] = useState<{ n: number; of: number; text: string } | null>(null);
   // Stop pressed while a turn works: "Stopping…" until the chat is idle (board frame 15; item 27)
   const [stopFor, setStopFor] = useState<string | null>(null); // the thread it stops
+  // the runs it started on this screen still going when Stop was pressed (Magic): "Stop its runs too"
+  const [runsLeft, setRunsLeft] = useState(0);
   const [error, setError] = useState("");
   const undoFns = useRef<Record<string, NonNullable<Outcome["undo"]>>>({});
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
@@ -454,6 +456,7 @@ export function useAssistant(me: S<"User"> | null) {
     async (text: string, takes: string[] = []) => {
       const t = text.trim();
       if (!t) return false;
+      setRunsLeft(0); // a new message: the offer goes
       let id = view?.thread.id;
       if (!id) {
         try {
@@ -582,6 +585,7 @@ export function useAssistant(me: S<"User"> | null) {
   /** Stop: this tab's actions stop, a screen card is cancelled, and the turn ends at its next step. */
   const stopAll = () => {
     stop.current = true;
+    setRunsLeft(reg.current()?.spec.runs?.going ?? 0);
     answerRef.current?.("no");
     if (threadId && steering) {
       setStopFor(threadId);
@@ -724,6 +728,12 @@ export function useAssistant(me: S<"User"> | null) {
     continueHere,
     stopAll,
     stopping: !!stopFor,
+    runsLeft,
+    /** Stop its runs too, or leave them going */
+    stopRuns: (yes: boolean) => {
+      if (yes) reg.current()?.spec.runs?.stop();
+      setRunsLeft(0);
+    },
     steering,
     toggleUndo,
     readOnly,
@@ -2898,6 +2908,17 @@ function Drawer({ a }: { a: AssistantApi }) {
                 </div>
               ) : (
                 since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
+              )}
+              {a.runsLeft > 0 && (
+                <div className="msg think flex-wrap" role="status">
+                  Its {a.runsLeft} run{a.runsLeft > 1 ? "s are" : " is"} still going.
+                  <button type="button" className="chip" onClick={() => a.stopRuns(true)}>
+                    Stop its runs too
+                  </button>
+                  <button type="button" className="chip" onClick={() => a.stopRuns(false)}>
+                    Leave them
+                  </button>
+                </div>
               )}
               <div ref={end} />
             </div>

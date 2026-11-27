@@ -94,7 +94,12 @@ function Stage({ b, t, n }: { b: Block; t?: TakeInfo; n: number }) {
       style={{ backgroundColor: "var(--s3)", backgroundImage: look ? undefined : t?.art }}
     >
       {t?.kind === "video" && t.url ? (
-        <video src={t.url} controls className="h-full w-full object-contain" aria-label={`Take ${n}`} />
+        <video
+          src={t.url}
+          controls
+          className="h-full w-full object-contain"
+          aria-label={`Take ${n}`}
+        />
       ) : t?.kind === "audio" && t.url ? (
         // plan 39 phase H: the take's cover or orb over its player
         <span className="flex w-full flex-col items-center gap-2">
@@ -143,7 +148,11 @@ function CompareBody({ a, b }: { a: Act; b: Block }) {
   return (
     <div className="mg-add grid gap-4 md:grid-cols-2">
       {pair.map((id, side) => (
-        <section key={side} className="flex min-w-0 flex-col gap-2" aria-label={side ? "Right" : "Left"}>
+        <section
+          key={side}
+          className="flex min-w-0 flex-col gap-2"
+          aria-label={side ? "Right" : "Left"}
+        >
           <select
             aria-label={side ? "Right take" : "Left take"}
             className="in h-8 px-2 text-[13px]"
@@ -163,7 +172,14 @@ function CompareBody({ a, b }: { a: Act; b: Block }) {
               );
             })}
           </select>
-          <div onContextMenu={(e) => openMenu(e, takeMenu(a, b, id, n(id), () => undefined))}>
+          <div
+            onContextMenu={(e) =>
+              openMenu(
+                e,
+                takeMenu(a, b, id, n(id), () => undefined),
+              )
+            }
+          >
             <Stage b={b} t={a.takes[id]} n={n(id)} />
           </div>
           <button
@@ -245,7 +261,7 @@ function Body({
             {clock(b.at, fps)} – {clock(end(b), fps)}
           </span>
         </span>
-        <StatusChip d={d} b={b} takes={a.takes} />
+        <StatusChip d={d} b={b} takes={a.takes} onStop={a.stop && (() => a.stop!([b.id]))} />
         <span className="grow" />
         {takes.length > 1 && a.compare && !b.request.turns && (
           <button
@@ -335,7 +351,11 @@ function Body({
                       role="group"
                       aria-label={line.title}
                       // ErrorStates c2: a failed run's plain words (the raw text in its menu's details)
-                      title={r.status === "failed" ? `${failWords(r.error)} ${r.error ?? ""}`.trim() : undefined}
+                      title={
+                        r.status === "failed"
+                          ? `${failWords(r.error)} ${r.error ?? ""}`.trim()
+                          : undefined
+                      }
                       onContextMenu={(e) => openMenu(e, runMenu(a, b, r, i + 1))}
                     >
                       <b className="text-t1">{line.title}</b>
@@ -359,7 +379,9 @@ function Body({
                 onChange={setReq}
                 advancedOpen
                 runOn={!!a.gallery} // in studio: the fake mode has no hosts
-                turnStatuses={req.turns ? turnStatuses(d, { ...b, request: req }, a.takes) : undefined}
+                turnStatuses={
+                  req.turns ? turnStatuses(d, { ...b, request: req }, a.takes) : undefined
+                }
                 tie={
                   link && (b.kind === "voice" || b.kind === "music")
                     ? { to: link.to, onUnlink: () => a.edit({ op: "unlink", block: b.id }) }
@@ -383,10 +405,16 @@ function Body({
                 >
                   Generate
                   {down || (why && model) ? (
-                    <small className="ml-1.5 font-normal opacity-75">{down ? DOWN_KEY : why!.key}</small>
+                    <small className="ml-1.5 font-normal opacity-75">
+                      {down ? DOWN_KEY : why!.key}
+                    </small>
                   ) : (
                     /* "≈ 1:50" from your own recent runs (MagicBoard frame 3) */
-                    seconds != null && <small className="ml-1.5 font-normal opacity-75">{estText(seconds, true)}</small>
+                    seconds != null && (
+                      <small className="ml-1.5 font-normal opacity-75">
+                        {estText(seconds, true)}
+                      </small>
+                    )
                   )}
                 </button>
               </div>

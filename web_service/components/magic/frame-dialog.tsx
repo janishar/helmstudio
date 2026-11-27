@@ -145,15 +145,16 @@ function Body({
   const done = b.takes.filter((id) => a.takes[id]?.status === "done");
   const running = Object.values(a.takes).filter((t) => t.block === b.id && t.status === "running");
   // each take by the style it was drawn in; a picture of your own is yours
-  const styleOf = new Map(runs.flatMap((r) => r.takes.map((t) => [t, r.style ?? "sketch"] as const)));
+  const styleOf = new Map(
+    runs.flatMap((r) => r.takes.map((t) => [t, r.style ?? "sketch"] as const)),
+  );
   const groups = [...STYLES, ["yours", "Yours"] as const]
     .map(([k, label]) => ({ k, label, ids: done.filter((t) => (styleOf.get(t) ?? "yours") === k) }))
     .filter((g) => g.ids.length);
   const models = kindOf(kinds, "frame")?.models ?? [];
   const model = modelOf(kinds, req);
   const shotModels = kindOf(kinds, "video")?.models ?? [];
-  const shotModel =
-    shotModels.find((m) => m.workflow_id === req.shot_model) ?? shotModels[0];
+  const shotModel = shotModels.find((m) => m.workflow_id === req.shot_model) ?? shotModels[0];
   const made = d.blocks.find((x) => x.from_frame === b.id);
   const shots = d.lanes.find((l) => l.role === "shots");
   const who = (req.refs ?? []).flatMap((r) =>
@@ -227,7 +228,7 @@ function Body({
             {clock(b.at, fps)} – {clock(end(b), fps)}
           </span>
         </span>
-        <StatusChip d={d} b={b} takes={a.takes} />
+        <StatusChip d={d} b={b} takes={a.takes} onStop={a.stop && (() => a.stop!([b.id]))} />
         <span className="grow" />
         {picked && b.pinned !== picked && (
           <button
@@ -267,17 +268,31 @@ function Body({
               if (gallery && f) void own(f);
             }}
           >
-            {!stage && <span className="text-[12px] text-t2">{upload || "No picture yet: Redraw, or drop your own"}</span>}
+            {!stage && (
+              <span className="text-[12px] text-t2">
+                {upload || "No picture yet: Redraw, or drop your own"}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <div className="seg" role="group" aria-label="Style">
               {STYLES.map(([v, text]) => (
-                <button key={v} type="button" aria-pressed={(req.style ?? "sketch") === v} onClick={() => set({ style: v })}>
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={(req.style ?? "sketch") === v}
+                  onClick={() => set({ style: v })}
+                >
                   {text}
                 </button>
               ))}
             </div>
-            <EstimateLine est={changed ? undefined : estimate} model={model} block={{ ...b, request: req }} doc={d} />
+            <EstimateLine
+              est={changed ? undefined : estimate}
+              model={model}
+              block={{ ...b, request: req }}
+              doc={d}
+            />
           </div>
           {running.map((t) => (
             <span key={t.id} className="mst run self-start">
@@ -300,9 +315,16 @@ function Body({
                     className={`relative h-12 w-20 rounded-lg bg-s3 bg-cover bg-center ${picked === id ? "shadow-[inset_0_0_0_2px_var(--a1)]" : ""}`}
                     style={{ backgroundImage: a.takes[id]?.art }}
                     onClick={() => setPicked(id)}
-                    onContextMenu={(e) => openMenu(e, takeMenu(a, b, id, n(id), () => setPicked(id)))}
+                    onContextMenu={(e) =>
+                      openMenu(
+                        e,
+                        takeMenu(a, b, id, n(id), () => setPicked(id)),
+                      )
+                    }
                   >
-                    {b.pinned === id && <Pin size={11} className="absolute top-1 right-1" aria-hidden />}
+                    {b.pinned === id && (
+                      <Pin size={11} className="absolute top-1 right-1" aria-hidden />
+                    )}
                   </button>
                 ))}
               </div>
@@ -370,20 +392,29 @@ function Body({
             <span className="lb">Who and where</span>
             <div className="flex flex-wrap items-center gap-1.5">
               {who.map((x) => (
-                <span key={x.id} className={`rc big ${x.kind === "character" ? "ch" : ""} inline-flex items-center gap-1`}>
+                <span
+                  key={x.id}
+                  className={`rc big ${x.kind === "character" ? "ch" : ""} inline-flex items-center gap-1`}
+                >
                   @{x.handle}
                   <button
                     type="button"
                     aria-label={`Take @${x.handle} off`}
                     onClick={() =>
-                      set({ refs: (req.refs ?? []).filter((r) => !("asset" in r) || r.asset !== x.id) })
+                      set({
+                        refs: (req.refs ?? []).filter((r) => !("asset" in r) || r.asset !== x.id),
+                      })
                     }
                   >
                     <X size={11} aria-hidden />
                   </button>
                 </span>
               ))}
-              <button type="button" className="chip h-7 rounded-[9px] bg-s4 px-2.5 text-[12px]" onClick={addWho}>
+              <button
+                type="button"
+                className="chip h-7 rounded-[9px] bg-s4 px-2.5 text-[12px]"
+                onClick={addWho}
+              >
                 <Plus size={12} aria-hidden />
                 Add
               </button>
@@ -478,7 +509,9 @@ function Body({
               </div>
             ) : (
               <span className="text-[12px] text-t2">
-                {shots ? "No shot from it yet: Generate from board makes one under it." : "Add a Shots lane to make a shot from it."}
+                {shots
+                  ? "No shot from it yet: Generate from board makes one under it."
+                  : "Add a Shots lane to make a shot from it."}
               </span>
             )}
             <div className="flex items-center gap-2">
@@ -506,7 +539,8 @@ function Body({
               </button>
             </div>
             <span className="text-[11px] text-t2">
-              The shot stays tied to the frame: it goes out of date when the frame changes ({secs(len, fps)}).
+              The shot stays tied to the frame: it goes out of date when the frame changes (
+              {secs(len, fps)}).
             </span>
           </div>
         </section>

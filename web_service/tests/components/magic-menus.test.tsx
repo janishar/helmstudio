@@ -472,3 +472,28 @@ describe("the gaps' menus", () => {
     expect(a.seek).toHaveBeenCalledWith(48);
   });
 });
+
+describe('Stop runs (owner, 2026-11-27: "yes build it")', () => {
+  it("a running block has Stop where Run was, its progress on the right; it stops that block", () => {
+    const stop = vi.fn();
+    const a = actOn({ stop });
+    const m = blockMenu(a, block(a.doc, "s2"));
+    expect(labels(m.items).slice(0, 3)).toEqual(["Open", "Stop", "Run up to here"]);
+    expect(item(m.items, "Stop").keys).toBe("62%");
+    item(m.items, "Stop").onPick!();
+    expect(stop).toHaveBeenCalledWith(["s2"]);
+    // not running: Run as before
+    expect(labels(blockMenu(a, block(a.doc, "s1")).items)[1]).toBe("Run");
+  });
+  it("a running frame has Stop where Redraw was; with no way to stop, Run stays", () => {
+    const a = actOn({ stop: vi.fn() });
+    const f = a.doc.blocks.find((b) => b.kind === "frame")!;
+    a.takes = {
+      ...a.takes,
+      fr: { id: "fr", block: f.id, status: "running", progress: 10, inputs: "" },
+    };
+    expect(labels(blockMenu(a, f).items)[1]).toBe("Stop");
+    expect(labels(blockMenu({ ...a, stop: undefined }, f).items)[1]).toBe("Redraw");
+    expect(labels(blockMenu(actOn(), block(a.doc, "s2")).items)[1]).toBe("Run");
+  });
+});

@@ -5,7 +5,7 @@
 // on, one call after another, so the board never waits for the network and never runs ahead of studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { api, ApiError, message, ok, type S } from "@/lib/api";
+import { api, ApiError, message, ok, okOr, type S } from "@/lib/api";
 import { followSession } from "@/lib/runs";
 import { isOutage, onBack, OUTAGE_TEXT, whenUp } from "@/lib/health";
 import { firstHint } from "@/components/create/sessions";
@@ -33,6 +33,10 @@ import {
 } from "@/lib/magic";
 import { artFor, emptyDoc, sampleBoard } from "@/lib/magic-fixture";
 import { studioSends, type SendApi } from "@/components/magic/send";
+
+/** A run still queued or running. */
+export type Going = { run: string; block: string; by: "user" | "assistant" };
+const isGoing = (s: string) => s === "queued" || s === "running";
 
 export type BoardRow = { id: string; name: string; lanes?: number; updated_at?: string };
 export type Snapshot = { id: string; name: string; at: string; rev?: number; doc?: Doc };
@@ -62,6 +66,11 @@ export type Board = {
   runs: BlockRun[];
   /** the Make views runs, oldest first (phase E) */
   assetRuns: AssetRun[];
+  /** the board's runs still queued or running (Stop, Stop runs (N)): each one's block (an asset's id for Make views)
+   * and who ran it */
+  going: Going[];
+  /** stops runs: a queued one drops at once, a running one at its next safe point; the takes made stay */
+  stop: (runs: string[]) => void;
   /** Make views: one image per view of an asset, onto its sheet, on an image model (absent: the first); null while
    * runs can't go */
   makeViews: ((asset: string, views: string[], model?: string) => void) | null;
@@ -437,6 +446,27 @@ export function useApiBoard():
     kinds,
     runs: wire.runs ?? [],
     assetRuns: wire.asset_runs ?? [],
+    going: [
+      ...(wire.runs ?? [])
+        .filter((r) => isGoing(r.status))
+        .map((r) => ({ run: r.run_id, block: r.block, by: r.by })),
+      ...(wire.asset_runs ?? [])
+        .filter((r) => isGoing(r.status))
+        .map((r) => ({ run: r.run_id, block: r.asset, by: "user" as const })),
+    ],
+    // each run's own cancel (409: it ended meanwhile); the board is read again after
+    stop: (runs) =>
+      queue(async () => {
+        await Promise.all(
+          runs.map((run_id) =>
+            okOr(
+              api.POST("/v1/studio/runs/{run_id}/cancel", { params: { path: { run_id } } }),
+              409,
+            ),
+          ),
+        );
+        await refresh();
+      }),
     gallery: true,
     makeViews: (asset, views, model) =>
       queue(async () => {
@@ -641,6 +671,23 @@ export function useLocalBoard(initial?: Store): Board {
     kinds: FAKE_KINDS,
     runs: [],
     assetRuns: [],
+    going: Object.values(takes)
+      .filter((t) => t.status === "running")
+      .map((t) => ({ run: t.id, block: t.block, by: "user" as const })),
+    /** a fake run stopped: its take goes (it made nothing yet), from every document in the history */
+    stop: (runs) => {
+      setTakes((t) => Object.fromEntries(Object.entries(t).filter(([id]) => !runs.includes(id))));
+      setH((x) =>
+        everywhere(x, (d) => ({
+          ...d,
+          blocks: d.blocks.map((b) =>
+            b.takes.some((id) => runs.includes(id))
+              ? { ...b, takes: b.takes.filter((id) => !runs.includes(id)) }
+              : b,
+          ),
+        })),
+      );
+    },
     gallery: false,
     /** fake views: a take per view at once, on the asset's sheet (a studio write: every document in the history) */
     makeViews: (asset, views) => {
