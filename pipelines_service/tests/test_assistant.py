@@ -1756,10 +1756,16 @@ MAGIC_TOOLS = TOOLS + [
     "send_to_timeline",
     "create_board",
     "make_views",
+    "design_voice",
+    "save_voice",
 ]
 ADD = [{"op": "add", "mode": "insert", "block": {"lane": "shots", "at": 96, "length": 48, "kind": "video",
                                                  "name": "Shot 3", "request": {"kind": "video"}, "takes": [],
                                                  "effects": []}}]  # fmt: skip
+
+
+VOICE = str(uuid.uuid4())
+VOICE_OPS = [{"op": "asset", "id": "mara", "set": {"voice_id": VOICE}}]
 
 
 class MagicTools(Tools):
@@ -1794,6 +1800,22 @@ class MagicTools(Tools):
                 "revision": 2, "plan": {"ask": True, "limit_minutes": 5, "ask_text": "2 views, about 20 s"}, "frames": [],
                 "rest": {"blocks": [], "names": ["Front", "Side"], "seconds": 20, "host": "mac-studio",
                          "ask_text": "2 views, about 20 s"}}}  # fmt: skip
+        if req["tool"] == "design_voice":  # alpha.6: make_views' preview shape, one line
+            if req.get("confirmed") or not (self.ask_rule or req.get("ask")):
+                return {"tool": "design_voice", "result": {"revision": 2, "voice_id": str(uuid.uuid4()), "seconds": None,
+                                                           "started": [{"run_id": str(uuid.uuid4())}]}}  # fmt: skip
+            return {"tool": "design_voice", "preview": {
+                "revision": 2, "plan": {"ask": True, "limit_minutes": 5, "ask_text": "1 line, no estimate yet"},
+                "frames": [], "rest": {"blocks": [], "names": ["Mara's voice"], "seconds": None, "host": None,
+                                       "ask_text": "1 line, no estimate yet"}}}  # fmt: skip
+        if req["tool"] == "save_voice":
+            if not req.get("confirmed"):
+                return {"tool": "save_voice", "preview": {"revision": 2, "diff": {}, "warnings": [], "summary": "Changed Mara",
+                                                         "ops": VOICE_OPS, "voice_id": VOICE, "name": "Mara"}}  # fmt: skip
+            return {
+                "tool": "save_voice",
+                "result": {"voice_id": VOICE, "revision": 3, "summary": "Changed Mara"},
+            }
         if req["tool"] == "run_blocks":
             started = [{"block": "s2", "run_id": str(uuid.uuid4())}]
             if req.get("confirmed") or not (self.ask_rule or req.get("ask")):
@@ -1919,6 +1941,30 @@ async def test_make_views_asks_above_the_limit_and_create_board_needs_no_card(po
     c.script(calls(("create_board", {"name": "Brief"})), {"content": "Made it."})
     step = await c.say("start a board for the brief")
     assert step["done"] and not step["cards"] and step["lines"][0]["text"] == "Made board Brief"
+
+
+async def test_a_characters_voice_asks_to_hear_it_then_to_save_it(pool, fake):
+    # alpha.6 (owner, 2026-11-28: "Yes, build it"): design_voice under the ask rule, save_voice on a board_edit card
+    c = magic_chat(pool, fake)
+    design = {
+        "board_id": BOARD,
+        "revision": 2,
+        "asset": "mara",
+        "design": "Female, about 60, warm",
+        "line": "Hello there.",
+    }
+    c.script(calls(("design_voice", design)), {"content": "Listen."})
+    (card,) = (await c.say("give mara a voice"))["cards"]
+    assert card["kind"] == "magic_run" and card["title"] == "Hear 1 line, no estimate yet?"
+    step = await c.answer(card["id"])
+    assert step["lines"][0]["text"] == "Started 1 run"
+    save = {"board_id": BOARD, "revision": 2, "asset": "mara", "take_id": str(uuid.uuid4())}
+    c.script(calls(("save_voice", save)), {"content": "Saved."})
+    (card,) = (await c.say("keep that one"))["cards"]
+    assert card["kind"] == "board_edit" and card["title"] == "Save the voice?"
+    assert card["board"] == {"board_id": BOARD, "base_revision": 2, "ops": VOICE_OPS}
+    step = await c.answer(card["id"])
+    assert step["lines"][0]["text"] == "Saved the voice · Changed Mara"
 
 
 async def test_auto_counts_magic_runs_and_asks_once_past_the_caps(pool, fake):

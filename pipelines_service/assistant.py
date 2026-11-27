@@ -73,9 +73,18 @@ CHAT_KEEP = 400  # transcript entries kept in the thread; past half of it the ch
 CARDS = ("look_at", "web_search", "forget")
 # API 1.87 (contracts/README.md "Magic: the Assistant"): studio answers these with a preview first; the card is built
 # from it, and the Yes asks studio again with `confirmed` (run_blocks within the limit answers at once: no card)
-MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "make_views", "send_to_timeline")
+MAGIC_CARDS = (
+    "edit_board",
+    "restore_board",
+    "run_blocks",
+    "make_views",
+    "send_to_timeline",
+    "design_voice",
+    "save_voice",
+)
 # API 1.93: Magic runs that start without a card count under Auto mode's hourly caps; past them they ask once
-MAGIC_RUNS = ("run_blocks", "make_views")
+# alpha.6: design_voice too (one voice design run)
+MAGIC_RUNS = ("run_blocks", "make_views", "design_voice")
 # API 1.96: the built-in skill read on every Magic board, once per chat, without the model asking
 MAGIC_SKILL = "magic-director"
 # API 1.97: a call's line while it runs (short, present tense); done, the same words without the dots
@@ -653,6 +662,15 @@ def magic_card(c: dict, p: dict) -> dict:
     """The card of a Magic card tool's preview, and the lines of what already started: {card, lines}."""
     a, base = c["args"], {"id": c["id"], "state": "waiting"}
     lines = []
+    # alpha.6: save_voice keeps the picked take as the voice's clip and sets the voice on the asset
+    if c["name"] == "save_voice":
+        card = base | {"kind": "board_edit", "title": "Save the voice?",
+                       "rows": [{"label": "Voice", "value": _short(p["name"])},
+                                {"label": "Change", "value": _short(p["summary"])}],
+                       "note": "Keeps this take as the voice's clip. Yes means you have the right to use this voice.",
+                       "tags": ["changes the board"],
+                       "board": {"board_id": a["board_id"], "base_revision": a["revision"], "ops": p["ops"]}}  # fmt: skip
+        return {"card": card, "lines": lines}
     if c["name"] == "edit_board":
         est = p.get("estimate") or {}
         rows = [{"label": "Change", "value": _short(p["summary"])}]
@@ -714,7 +732,7 @@ def magic_card(c: dict, p: dict) -> dict:
             ran = f"{names} started without asking (storyboard frames never ask)"
         run = and_list(rest["names"]) + " · " + secs_text(rest.get("seconds")) + (
             f" · {rest['host']}" if rest.get("host") else "")  # fmt: skip
-        verb = "Make" if c["name"] == "make_views" else "Run"
+        verb = {"make_views": "Make", "design_voice": "Hear"}.get(c["name"], "Run")
         return {"card": base | {"kind": "magic_run", "title": _short(f"{verb} {rest['ask_text']}?", 120),
                                 "rows": [{"label": "Runs", "value": _short(run)}], "note": _short(why),
                                 "tags": ["uses the GPU"]}, "lines": lines, "ran": ran}  # fmt: skip
@@ -747,13 +765,16 @@ def magic_done(c: dict, reply: dict) -> dict:
     line = {"id": c["id"], "undo": False}
     labels = {"edit_board": "Could not change the board", "restore_board": "Could not restore the board",
               "run_blocks": "Could not run", "make_views": "Could not make views",
-              "send_to_timeline": "Could not send"}  # fmt: skip
+              "send_to_timeline": "Could not send", "design_voice": "Could not design the voice",
+              "save_voice": "Could not save the voice"}  # fmt: skip
     if "error" in reply:
         return {"status": "failed", "error": reply["error"],
                 "line": line | {"status": "failed", "text": _short(f"{labels[c['name']]} · {reply['error']}")}}  # fmt: skip
     r = reply["result"]
     if c["name"] == "edit_board":
         text, status = f"Changed the board · {r['summary']}", "done"
+    elif c["name"] == "save_voice":
+        text, status = f"Saved the voice · {r['summary']}", "done"
     elif c["name"] == "restore_board":
         text, status = f"Restored rev {c['args']['to']} · now rev {r['revision']}", "done"
     elif c["name"] in MAGIC_RUNS:
@@ -1227,6 +1248,8 @@ class Assistant:
         return True
 
     def _park(self, s: State, up: dict) -> State:
+        if up["pending"]["cards"]:  # the card's Apply / Yes is the answer: a picked option would cancel it
+            up = up | {"text": answer.OPTIONS.sub("", up.get("text", s.get("text", ""))).strip()}
         step = self._step(s | up, done=False, pending=up["pending"])
         return up | {"step": step, "seq": step["seq"], "text": "", "lines": [], "to": "wait"}
 

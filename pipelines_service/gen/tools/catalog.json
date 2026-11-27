@@ -5998,6 +5998,189 @@
       },
       "card": "magic_run"
     },
+    "design_voice": {
+      "description": "Design a character's voice from words: saves a designed voice named after the asset, then one voice design run says the line (await the run; get_take plays it). Above the user's limit or unestimated, the user's Yes on the card first. Keep it with save_voice.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/boards/{board_id}",
+        "POST /v1/studio/library",
+        "PUT /v1/studio/library/{item_id}",
+        "POST /v1/studio/sessions/{session_id}/runs"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the board's current revision"
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "the character's asset id (show_board assets)"
+          },
+          "design": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2000,
+            "description": "the voice in words, from the asset's note: sex, age, tone, accent, pace (\"Male, about 60, low and warm, slow, a slight rasp\")"
+          },
+          "line": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "description": "what it says: a sentence or two in character (3 s or more, so save_voice can keep it)"
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$",
+            "description": "the voice's BCP 47 language (en, en-GB); absent: none"
+          },
+          "voice_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "a voice design_voice made before: try again with these words (no new voice)"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision",
+          "asset",
+          "design",
+          "line"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "voice_id",
+          "started",
+          "seconds"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "voice_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the designed voice (the library)"
+          },
+          "started": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "run_id"
+              ],
+              "properties": {
+                "run_id": {
+                  "type": "string",
+                  "format": "uuid"
+                }
+              }
+            }
+          },
+          "seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the estimate, GPU seconds (null: unknown)"
+          }
+        }
+      },
+      "card": "magic_run"
+    },
+    "save_voice": {
+      "description": "Keep the take of design_voice the user picked: it becomes its voice's clip (Yes on the card is the right to use it) and the voice goes on the asset (voice_id), one board revision. Then dialogue can use it.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/takes/{take_id}",
+        "GET /v1/studio/library/{item_id}",
+        "PUT /v1/studio/library/{item_id}",
+        "POST /v1/studio/magic/boards/{board_id}/edits"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the board's current revision"
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "the character's asset id (show_board assets)"
+          },
+          "take_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the take design_voice made that the user picked"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision",
+          "asset",
+          "take_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "voice_id",
+          "revision",
+          "summary"
+        ],
+        "properties": {
+          "voice_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "summary": {
+            "type": "string",
+            "description": "what it changes, in the board's words"
+          }
+        }
+      },
+      "card": "board_edit"
+    },
     "board_frame": {
       "description": "Look at a board at a time: what each picture lane shows there (the block, the take it shows and the second into it, its status), and the sound under it. Look at a take with look_at.",
       "mcp_description": "Look at a board at a time: what each visible lane shows there (the block, the take it shows and the second into it, its status), the sound under it too. See a take with get_take.",

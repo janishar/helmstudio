@@ -40,6 +40,8 @@ var magicTools = map[string][2][]string{
 	"plan_board":       {{"board_id", "blocks", "lane", "stale"}, {"board_id"}},
 	"run_blocks":       {{"board_id", "revision", "blocks", "lane", "stale"}, {"board_id", "revision"}},
 	"make_views":       {{"board_id", "revision", "asset", "views", "model", "width", "height", "advanced"}, {"board_id", "revision", "asset", "views"}},
+	"design_voice":     {{"board_id", "revision", "asset", "design", "line", "language", "voice_id"}, {"board_id", "revision", "asset", "design", "line"}},
+	"save_voice":       {{"board_id", "revision", "asset", "take_id"}, {"board_id", "revision", "asset", "take_id"}},
 	"board_frame":      {{"board_id", "at"}, {"board_id", "at"}},
 	"send_to_timeline": {{"board_id", "revision", "name"}, {"board_id", "revision"}},
 }
@@ -69,6 +71,12 @@ type magicArgs struct {
 	Width    *int           `json:"width"`
 	Height   *int           `json:"height"`
 	Advanced map[string]any `json:"advanced"`
+	// alpha.6: design_voice and save_voice
+	Design   *string `json:"design"`
+	Line     *string `json:"line"`
+	Language *string `json:"language"`
+	VoiceID  *string `json:"voice_id"`
+	TakeID   *string `json:"take_id"`
 }
 
 // magicFramePreview is a board frame run_blocks started before asking.
@@ -222,6 +230,10 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 		return s.magicRun(call, base, a, pick, req.Confirmed, req.Ask, asked)
 	case "make_views":
 		return s.magicViews(ctx, caller, call, base, a, req.Confirmed, req.Ask)
+	case "design_voice":
+		return s.designVoice(ctx, caller, call, base, a, req.Confirmed, req.Ask)
+	case "save_voice":
+		return s.saveVoice(ctx, caller, call, base, a, req.Confirmed)
 	case "send_to_timeline":
 		body := map[string]any{"revision": a.Revision, "dry_run": !req.Confirmed}
 		if a.Name != nil {

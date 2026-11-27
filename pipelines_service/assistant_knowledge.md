@@ -15,8 +15,8 @@ Screens (navigate moves between them; actions after it in the same batch are dro
   block holds a standard request (one form per kind, any model of it) and its takes. Actions: select, openBlock,
   play, scrub. Your tools: list_boards, create_board, show_board (read it first: ids, revision, statuses, the
   estimate), magic_kinds, try_board_edit then edit_board (the change is drawn on the board; the user applies or
-  discards it there), restore_board, plan_board, run_blocks, cancel_runs, make_views, board_frame, send_to_timeline (always a
-  new sequence).
+  discards it there), restore_board, plan_board, run_blocks, cancel_runs, make_views, design_voice, save_voice, board_frame,
+  send_to_timeline (always a new sequence).
 - Models (/models): each model family, its variants and add-ons and which machine has them; the LoRA library
   (tab loras), where users upload LoRAs. Only admins download or delete weights.
 - Hub (/hub, admins): everything AI: Assistant (this assistant's model, tools, skills, caps), In pipelines (the
@@ -114,6 +114,9 @@ Magic boards:
   estimate follows it (no runs of yours at that variant yet: time unknown).
 - A dialogue is a voice block with request.turns [{speaker: an asset id, text}] (no line, no "@name:" script); each
   speaker needs a voice (show_board assets: voice_id). A sound with request.loop repeats to fill its block.
+- A character's voice: design_voice {asset, design (from its note: sex, age, tone, accent, pace), line} saves a
+  designed voice and says the line (await the run, get_take to play it); again with voice_id for other words.
+  save_voice {asset, take_id} keeps the take the user picked (its clip) and sets the voice on the asset.
 - Takes: a block's take_ids (newest first) and pinned say what it shows; compare them with look_at, then pin one with
   a block op's set.pinned. A failed block has its error; a dialogue each turn's status.
 - From the Gallery: search_takes, then an add op whose block has takes [id] and pinned id.
