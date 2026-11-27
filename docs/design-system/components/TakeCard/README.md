@@ -6,7 +6,7 @@ Built:
 - The card is a button with `shadow-bevel`, `radius-field`, `space-card` between parts; disabled at 0.5 opacity.
 - Picture: 16:10, `radius-field`, on `s1`, cover-fit. Image: its thumbnail. Video: its poster with a length badge (`hs-len`: play mark + mono 10px on 90% `s2`, top left). Audio: the `wave` tile with its length. Other kinds: a dashed `dash` box with a file icon and the kind.
 - Selected (`aria-pressed`): a 2px `a1` outline inside the picture. Starred: a 14px `a1` star top right. While selecting, a ticked `a1` disc top left.
-- Title: `take-title`, one line. Sub-line: `mono-sub` in `t2`.
+- Title: `take-title`, one line. Sub-line: `mono-sub` in `t2`. Both sit 8px in from the card's sides, with 8px under the sub-line, so the text never touches the bevel (owner, 2026-11-27: "the card text is merging with the left-right borders").
 
 Audio looks (CreateMusicSound frame 7, picked 2026-11-27; built in alpha.6):
 - Music: an album cover. The gradient comes from the prompt's mood; a vinyl disc peeks from the right; the title in `wordmark` white top left; a Music badge (`kind-music`) and the length bottom left.

@@ -221,8 +221,8 @@ button { font: inherit; color: inherit; }
 .hs-thumb { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; box-sizing: border-box; width: 100%; aspect-ratio: 16 / 10; border-radius: var(--radius-field); background: var(--s1); color: var(--t2); font-size: 11px; font-style: normal; overflow: hidden; }
 .hs-thumb.empty { border: 1px dashed var(--dash); }
 .hs-card[aria-pressed="true"] .hs-thumb { outline: 2px solid var(--a1); outline-offset: -2px; }
-.hs-card b { font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.hs-card small { font-family: var(--font-mono); font-size: 10px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-card b { padding: 0 8px; font-size: 12px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hs-card small { padding: 0 8px 8px; font-family: var(--font-mono); font-size: 10px; color: var(--t2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hs-star { position: absolute; top: 8px; right: 8px; width: 14px; height: 14px; color: var(--a1); fill: var(--a1); }
 .hs-len { position: absolute; top: 4px; left: 4px; display: flex; align-items: center; gap: 2px; border-radius: var(--radius-label); background: color-mix(in srgb, var(--s2) 90%, transparent); padding: 0 4px; font-family: var(--font-mono); font-size: 10px; line-height: 16px; color: var(--t1); }
 /* a picture stand-in for previews: a two-tone fill in the theme's surfaces, no image */

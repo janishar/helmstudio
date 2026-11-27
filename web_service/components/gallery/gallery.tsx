@@ -268,8 +268,8 @@ export function TakeCard({
           />
         )}
       </span>
-      <b className="truncate text-[12px] font-semibold">{t.title}</b>
-      <small className="mono truncate text-[10px] text-t2">{sub ?? subLine(t)}</small>
+      <b className="truncate px-2 text-[12px] font-semibold">{t.title}</b>
+      <small className="mono truncate px-2 pb-2 text-[10px] text-t2">{sub ?? subLine(t)}</small>
     </button>
   );
 }
