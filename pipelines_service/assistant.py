@@ -1060,7 +1060,7 @@ class Assistant:
                 lines.append(got["line"])
                 continue
             if c["name"] in MAGIC_CARDS:
-                got = await self.magic_ask(s, c)
+                got = await self.magic_ask(s, c, caps)
                 if "card" not in got:
                     chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
                     lines.append(got["line"])
@@ -1333,9 +1333,9 @@ class Assistant:
             "line": line | {"status": "done", "text": text},
         }
 
-    async def magic_ask(self, s: State, c: dict) -> dict:
+    async def magic_ask(self, s: State, c: dict, caps: dict) -> dict:
         """A Magic card tool asked for its preview (API 1.87): {card, lines} to ask the user, or (studio refused, or
-        run_blocks ran within the limit) {status, result?, error?, line}."""
+        run_blocks ran within the limit) {status, result?, error?, line}. With Auto on, sets caps' auto_takes_hour."""
         req = {"owner_id": s["owner_id"], "thread_id": s["thread_id"], "call_id": c["id"], "tool": c["name"],
                "args": c["args"]}  # fmt: skip
         auto = c["name"] in MAGIC_RUNS and s["data"]["settings"].get("auto")
@@ -1343,18 +1343,21 @@ class Assistant:
         if paused:  # API 1.93: past Auto's hour's caps a Magic run asks once, whatever its size
             req["ask"] = True
         reply = await self.tool(req)
-        if "preview" not in reply:
-            if auto and "result" in reply:
-                r = reply["result"]
-                await self.auto_spend(s, c["id"], len(r["started"]), r.get("seconds"))
-            return magic_done(c, reply)
-        got = magic_card(c, reply["preview"])
-        frames = reply["preview"].get("frames") or []
-        if auto and frames:  # board frames started without asking: they count too
+        got = magic_card(c, reply["preview"]) if "preview" in reply else magic_done(c, reply)
+        if not auto:
+            return got
+        if "result" in reply:
+            r = reply["result"]
+            await self.auto_spend(s, c["id"], len(r["started"]), r.get("seconds"))
+        # board frames started without asking: they count too
+        if frames := (reply.get("preview") or {}).get("frames"):
             secs = [f["seconds"] for f in frames if f.get("seconds") is not None]
             await self.auto_spend(s, c["id"], len(frames), sum(secs))
-        if paused:
+        if paused and "card" in got:
             got["card"]["note"] = paused
+        # the chip's "N of M takes this hour" follows Magic runs too
+        async with self.pool.connection() as conn:
+            caps["auto_takes_hour"] = (await _auto_hour(conn, s["owner_id"]))[0]
         return got
 
     async def auto_paused(self, s: State) -> str | None:

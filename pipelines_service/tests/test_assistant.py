@@ -1860,6 +1860,7 @@ async def test_auto_counts_magic_runs_and_asks_once_past_the_caps(pool, fake):
         c.script(calls(("run_blocks", pick)), {"content": "Running."})
         step = await c.say(f"run shot 2 ({i})")
         assert step["done"] and not step["cards"]
+        assert step["caps"]["auto_takes_hour"] == i + 1  # the chip follows Magic runs too
     async with pool.connection() as conn:
         cur = await conn.execute("SELECT sum(takes) AS t, sum(gpu_s) AS g FROM assistant_spend WHERE kind = 'auto' "
                                  "AND owner_id = %s", (c.owner,))  # fmt: skip
@@ -1882,6 +1883,7 @@ async def test_auto_counts_magic_runs_and_asks_once_past_the_caps(pool, fake):
     c.script(calls(("run_blocks", pick)), {"content": "Running."})
     step = await c.say("run it again")
     assert step["done"] and not step["cards"] and "ask" not in c.tools.asked[-1]
+    assert "auto_takes_hour" not in step["caps"]
 
 
 async def test_restore_and_send_ask_first(pool, fake):

@@ -287,6 +287,12 @@ func TestAssistantMagic(t *testing.T) {
 		Tool: "show_board", Args: raw}); r.Code != "not_found" {
 		t.Fatal(r)
 	}
+	// API 1.93: make_views on another user's board is not found, and nothing runs
+	raw, _ = json.Marshal(map[string]any{"board_id": id, "revision": revision(), "asset": "mara", "views": []string{"Back"}})
+	if r := e.service.Tool(context.Background(), &message.ToolsRequest{OwnerID: userB, ThreadID: other, CallID: other + ":1:1",
+		Tool: "make_views", Args: raw, Confirmed: true}); r.Code != "not_found" {
+		t.Fatal(r)
+	}
 	for _, args := range []map[string]any{{"board_id": "x"}, {"board_id": id, "lane": "shots"}, {}} {
 		if r := ask(userA, fresh(), "show_board", false, args); r.Code != "invalid" {
 			t.Fatal(args, r)
