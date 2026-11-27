@@ -105,8 +105,8 @@ func TestMagicAssetsAndFrames(t *testing.T) {
 	// a view still being made is not made twice
 	e.call(userA, "POST", views, map[string]any{"revision": rev, "views": []string{"Front", "Back"}}, 409)
 	sideRun := e.call(userA, "GET", "/v1/studio/runs/"+started[0].(map[string]any)["run_id"].(string), nil, 200)
-	if p := sideRun["inputs"].(map[string]any)["prompt.text"]; p != "A character sheet view of Mara (yellow raincoat): side. "+
-		"Full colour, plain light background, the same person in every view" {
+	if p := sideRun["inputs"].(map[string]any)["prompt.text"]; p != "Mara (yellow raincoat). Side view, in profile. "+
+		"A single full-body figure, one pose only, centred, full colour, plain light background. Not a character sheet, no other figures" {
 		t.Fatal(p)
 	}
 	e.relay()

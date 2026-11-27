@@ -24,11 +24,23 @@ import (
 // maxSheet is the takes an asset's sheet keeps (MagicAsset.sheet).
 const maxSheet = 50
 
-// viewWords is how a view of each kind of asset is asked for.
+// viewWords is how a view of each kind of asset is asked for: one figure (or object) in one pose a picture, never a
+// turnaround sheet ("character sheet", "in every view" made the models draw a grid of poses in each view; the
+// reference then copied that grid into the others).
 var viewWords = map[string]string{
-	"character": "A character sheet view of %s: %s. Full colour, plain light background, the same person in every view",
-	"prop":      "A product sheet view of %s: %s. Plain light background, the same object in every view",
-	"place":     "%s, %s. An establishing view of the place, no people",
+	"character": "%s. %s. A single full-body figure, one pose only, centred, full colour, plain light background. Not a character sheet, no other figures",
+	"prop":      "%s. %s. The single object alone, centred, plain light background. No other objects",
+	"place":     "%s. %s. An establishing view of the place, no people",
+}
+
+// angleWords says the usual views plainly; any other name ("3/4 view", "smiling") is passed as it is.
+var angleWords = map[string]string{
+	"front":         "Front view, facing the camera",
+	"side":          "Side view, in profile",
+	"back":          "Back view, seen from behind",
+	"full figure":   "Full-body view, standing, head to feet",
+	"wide":          "Wide view",
+	"reverse angle": "Reverse-angle view",
 }
 
 // viewPrompt is the prompt of one view of asset a ("Front", "Side").
@@ -37,7 +49,11 @@ func viewPrompt(a *magic.Asset, view string) string {
 	if note := strings.TrimSpace(deref(a.Note)); note != "" {
 		who += " (" + note + ")"
 	}
-	return fmt.Sprintf(viewWords[a.Kind], who, strings.ToLower(view))
+	angle, ok := angleWords[strings.ToLower(strings.TrimSpace(view))]
+	if !ok {
+		angle = view
+	}
+	return fmt.Sprintf(viewWords[a.Kind], who, angle)
 }
 
 // addView puts take on asset id's sheet named view; false when the asset is gone, has it or its sheet is full.
