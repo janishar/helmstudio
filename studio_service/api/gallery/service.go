@@ -691,12 +691,18 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 		return dto.TakeReuse{}, err
 	}
 	take := FactsOf(row)
+	class := registry.WorkflowSound(workflow.Nodes, workflow.NodeSchemas)
 	var keys []string
 	params := map[string]registry.Param{}
+	unclassed := map[string]bool{} // API 1.79: media params it would fit but for its class (offers by class)
 	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
 		for _, p := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
 			if Counts(workflow, nodeID, p) && p.Type == "media" && (slices.Contains(p.Accepts, take.Kind) ||
 				(take.Kind == "video" && slices.Contains(p.Accepts, "audio"))) {
+				if !ByClass(class, take, p) {
+					unclassed[nodeID+"."+p.Name] = true
+					continue
+				}
 				keys = append(keys, nodeID+"."+p.Name)
 				params[nodeID+"."+p.Name] = p
 			}
@@ -715,6 +721,9 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 		return dto.TakeReuse{}, network.NewUnprocessableError(detail, nil)
 	}
 	switch _, ok := params[deref(body.Param)]; {
+	case !ok && len(unclassed) > 0 && (body.Param == nil && len(keys) == 0 || unclassed[deref(body.Param)]):
+		return unprocessable(fmt.Sprintf("take %s is %s; workflow %s takes %s only", take.ID,
+			cmp.Or(take.Sound, "a video"), workflow.ID, class))
 	case body.Param != nil && !ok:
 		return unprocessable(*body.Param + ": not a " + take.Kind + " input of workflow " + workflow.ID)
 	case body.Param != nil:

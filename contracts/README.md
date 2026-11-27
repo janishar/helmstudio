@@ -1747,7 +1747,9 @@ kinds of their own: `TakeKind` stays `image | video | audio`. `check.py` holds t
 - **Offers by class** (Media inputs: offers). A workflow with a `sound` takes an audio take into a `media` param only
   when the take is of that class, and never a video's sound (Repaint · ACE-Step only on music takes, Vary · Stable
   Audio only on sound takes; a voice take gets neither). A video into a param that accepts video is no sound
-  (MMAudio's video workflow is offered on videos). Rows params (references) take any class.
+  (MMAudio's video workflow is offered on videos). Rows params (references) take any class. `POST …/use` holds the
+  same rule, a `param` named too: a take of another class is 422 `take <id> is <class>; workflow <id> takes <class>
+  only` (`a video` for a video's sound).
 - **Span on audio.** A `span` may sit on a node whose workflow's media source accepts audio: offers fill it with the
   whole take (a Timeline range: the range), studio snaps it to whole milliseconds. ltx's extend room (`extend_room`)
   is a video source's rule only: an audio extend is capped by the 600 s take limit.

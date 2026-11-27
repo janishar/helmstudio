@@ -118,6 +118,12 @@ func ExtendRoom(t MediaTake, rng *[2]float64) (map[string]any, bool) {
 	return out, true
 }
 
+// ByClass is the class rule of a media param (API 1.79, contracts/README.md, Music and sound: offers by class): a
+// workflow with a sound class takes a take into it only as an audio take of that class, unless it accepts video.
+func ByClass(class string, t MediaTake, p registry.Param) bool {
+	return class == "" || slices.Contains(p.Accepts, "video") || t.Sound == class
+}
+
 // Offers is "Use in…" (take_uses): every workflow, in the order given, with exactly one input of the take's sort that
 // counts (Counts) (an image: an image param or Image rows; a video or audio take: a media param
 // whose accepts names its kind, or audio for a video with sound) that the take fits, with the inputs pre-filled. rng:
@@ -140,8 +146,7 @@ func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.T
 				}
 				_, image := p.ImageInput()
 				_, field, rows := registry.MediaRowsField(p)
-				byClass := class == "" || slices.Contains(p.Accepts, "video") || t.Sound == class // API 1.79
-				if (t.Kind == "image" && image) || (t.Kind != "image" && p.Type == "media" && byClass &&
+				if (t.Kind == "image" && image) || (t.Kind != "image" && p.Type == "media" && ByClass(class, t, p) &&
 					(slices.Contains(p.Accepts, t.Kind) || (t.Kind == "video" && slices.Contains(p.Accepts, "audio")))) ||
 					// API 1.32: rows of one media field, by the take's own kind only
 					(t.Kind != "image" && rows && slices.Contains(field.Accepts, t.Kind)) {

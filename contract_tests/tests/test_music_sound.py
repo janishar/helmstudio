@@ -2,8 +2,8 @@
 `?media=music|sound|voice`, a song's take (class music, stereo 48 kHz, sections from the lyrics' tags, the plan as
 resolved.texts), a sound take, one run giving a sound and the video with it, uploads with a class (422 on an image or
 a bad class), `?kind=` by class, offers by class (Repaint and Extend on music, Vary on sound, neither on voice; a span
-over the whole audio take), a Repaint run with a span on audio, mentions expanded in a music prompt (the voice rule is
-class voice only), and isolation. Skipped when the fake runner has no echo-music (before API 1.79).
+over the whole audio take; POST …/use by the same rule), a Repaint run with a span on audio, mentions expanded in a
+music prompt (the voice rule is class voice only), and isolation. Skipped when the fake runner has no echo-music (before API 1.79).
 
 Not covered: the mux endpoint and job (phase M, test_mux.py), the real packs (their CPU tests and goldens), the
 backfill of audio takes made before 1.79 (migration 00056; an audio upload without a class is voice here)."""
@@ -206,6 +206,25 @@ def test_offers_go_by_class(um, anon, song, sid):
     assert fx["sound"] == "sound" and fx["audio"]["duration_s"] == 1
     sound = offered(um, fx["id"])
     assert VARY in sound and not {REPAINT, EXTEND} & set(sound)
+
+
+def test_use_goes_by_class_as_offers_do(um, anon, song):
+    """POST …/use applies the offers' class rule: a voice take is not sent to a music-only edit, even by name."""
+    use = lambda take_id, body, status: ok(
+        um.post(f"{STUDIO}/takes/{take_id}/use", json=body), status
+    )
+    assert (
+        use(song["id"], {"workflow_id": REPAINT}, 200)["inputs"]
+        == offered(um, song["id"])[REPAINT]["inputs"]
+    )
+    voice = upload_audio(um, anon)["id"]
+    why = f"take {voice} is voice; workflow {REPAINT} takes music only"
+    assert use(voice, {"workflow_id": REPAINT}, 422)["detail"] == why
+    assert use(voice, {"workflow_id": REPAINT, "param": "repaint.source"}, 422)["detail"] == why
+    assert (
+        use(voice, {"workflow_id": VARY}, 422)["detail"]
+        == f"take {voice} is voice; workflow {VARY} takes sound only"
+    )
 
 
 def test_a_repaint_takes_a_span_on_the_song(um, sid, song):

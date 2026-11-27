@@ -156,3 +156,24 @@ func TestUploadLimits(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+// The class rule offers and Use share (API 1.79): a classed workflow takes an audio take of its class only into a media
+// param, never a video's sound; a param that accepts video takes the video; an unclassed workflow takes any.
+func TestByClass(t *testing.T) {
+	audio := registry.Param{Type: "media", Accepts: []string{"audio"}}
+	video := registry.Param{Type: "media", Accepts: []string{"video", "audio"}}
+	voice, music, clip := MediaTake{Kind: "audio", Sound: "voice"}, MediaTake{Kind: "audio", Sound: "music"}, MediaTake{Kind: "video"}
+	for _, c := range []struct {
+		class string
+		take  MediaTake
+		p     registry.Param
+		want  bool
+	}{
+		{"music", music, audio, true}, {"music", voice, audio, false}, {"music", clip, audio, false},
+		{"sound", clip, video, true}, {"", voice, audio, true}, {"", clip, audio, true},
+	} {
+		if got := ByClass(c.class, c.take, c.p); got != c.want {
+			t.Errorf("ByClass(%q, %+v, %v) = %v", c.class, c.take, c.p.Accepts, got)
+		}
+	}
+}
