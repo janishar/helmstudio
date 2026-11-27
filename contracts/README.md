@@ -4250,8 +4250,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   From 1.98: `width`, `height` and `advanced` (as a block request's: `model.variant`, `model.precision`) apply to
   every view of the batch; the size goes on the model's grid under its max, a key or value the model lacks is dropped.
 - **Board frames run** (`kind` frame) on the image kind's models: GET /magic/kinds lists them with the image fields.
-  The prompt is the frame's style (`sketch` absent: `A storyboard sketch: loose pencil lines, black and white`; rough;
-  full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset
+  The prompt is the frame's style (from 1.99 `film`, also absent: the film's own style, no style sentence; `sketch`:
+  `A storyboard sketch: loose pencil lines, black and white`; rough; full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset
   it picks that its words don't name. `magic_runs.label` keeps the style it ran in (`MagicBlockRun.style`). Frames
   never go to the Timeline.
 - **A shot made from a frame** (`from_frame`): its first frame is the frame's take unless it picks one; with no prompt
