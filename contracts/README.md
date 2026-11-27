@@ -4210,9 +4210,10 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `restore_board` (card `board_edit`), `plan_board` (`…/plan`), `run_blocks` (card `magic_run`, asked only above the
   limit), `board_frame` (what each visible lane shows at a board time: block, take, seconds into it, status; nothing
   is rendered: look at a take with look_at) and `send_to_timeline` (card `send`). They are not on helm mcp yet.
-- **The summary** of an edit names what changed by block name: `Added Shot 2, Shot 3 and Frame 4; moved Line 2;
-  removed Shot 5` (more than three of one action: counts by kind, `Added 3 shots and Frame 4`), else lanes, assets and
-  transitions (`Changed Shot 2`, `Added a dissolve`); an assistant edit's revision keeps it as its `ops_summary`.
+- **The summary** of an edit names what changed by block name: `Added Shot 2 and Frame 4; moved Line 2; removed
+  Shot 5` (more than two blocks in one action: a kind with several is counted, one alone named, `Added 3 shots and
+  Frame 4`, the board's frame 8), then lanes, assets, transitions and ties (`Added lane Music`, `Added a dissolve`);
+  an assistant edit's revision keeps it as its `ops_summary`.
 - **Asking first.** studio.tools (req.studio.tools) asks a card tool without `confirmed` first: studio answers a
   `preview` and does nothing else: `edit_board` the dry run (diff, warnings, summary) and `estimate` {seconds, host,
   blocks} for the blocks it adds or changes that can run (null seconds: unknown); `restore_board` the revision it
