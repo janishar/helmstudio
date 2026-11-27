@@ -524,9 +524,9 @@
     },
     "Desktop.dc.html": {
       "expand": "fill",
-      "h": 6325,
+      "h": 10917,
       "is_interactive": true,
-      "title": "Mac app \u00b7 first open, start screen, menu bar, studio window (plan 31)",
+      "title": "Mac app \u00b7 first open, start screen, menu bar, studio window (plan 31); error states (proposed)",
       "w": 1440,
       "x": 0,
       "y": 0,
@@ -561,6 +561,16 @@
       "x": 1520,
       "y": 7440,
       "page": "timeline"
+    },
+    "ErrorStates.dc.html": {
+      "expand": "fill",
+      "h": 11921,
+      "is_interactive": true,
+      "title": "Error states (proposed) \u00b7 studio not answering, no runner, runner lost, live updates, queue, unplugged drive, status tile",
+      "w": 1440,
+      "x": 1520,
+      "y": 0,
+      "page": "mac-app"
     }
   },
   "createdOnFiles": {
@@ -650,7 +660,7 @@
       "text": "Mac app",
       "x": 0,
       "y": -300,
-      "maxW": 1440,
+      "maxW": 2960,
       "page": "mac-app"
     }
   },
@@ -710,6 +720,7 @@
     "Logo.dc.html",
     "CatsEasterEgg.dc.html",
     "Desktop.dc.html",
+    "ErrorStates.dc.html",
     "Plugins.dc.html"
   ],
   "pages": [
