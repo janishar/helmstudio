@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T08:30:00Z",
+  "at": "2026-11-27T08:50:00Z",
   "via": "Claude Code",
-  "note": "LyricsBox: the words scroll after 10 lines and Expand opens them big, as the prompt (owner, 2026-11-27)"
+  "note": "LyricsBox keeps a fixed 6 lines and scrolls, as the prompt (owner, 2026-11-27: the box still growing)"
  }
 }

@@ -578,16 +578,14 @@ export function LyricsBox({
             ref={ta}
             id={id}
             aria-label={label}
-            // as tall as its text (field-sizing) up to 10 lines, then it scrolls and the layer follows
-            rows={4}
+            // a fixed 6 lines, as the prompt: more scrolls (the layer follows) and Expand opens it big
+            rows={6}
             value={value}
             placeholder="[verse] the words, a line each"
             aria-invalid={!!error || undefined}
             style={
               {
-                fieldSizing: "content",
-                minHeight: 84,
-                maxHeight: 210,
+                height: 126,
                 scrollbarGutter: "stable",
               } as React.CSSProperties
             }

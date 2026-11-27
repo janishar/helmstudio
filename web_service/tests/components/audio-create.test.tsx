@@ -679,8 +679,8 @@ describe("Create's Music and Sound (frames 1-5)", () => {
     lyrics.setSelectionRange(10, 10);
     fireEvent.click(within(composer).getByRole("button", { name: "[chorus]" }));
     expect(lyrics.value).toBe("first line\n[chorus]\n");
-    // the lyrics scroll after 10 lines, and Expand opens them big, as the prompt (owner, 2026-11-27)
-    expect(lyrics.style.maxHeight).toBe("210px");
+    // the lyrics keep a fixed 6 lines and scroll, and Expand opens them big, as the prompt (owner, 2026-11-27)
+    expect(lyrics.style.height).toBe("126px");
     fireEvent.click(within(lyrics.parentElement!).getByRole("button", { name: "Expand" }));
     const big = await screen.findByRole("dialog", { name: "Lyrics" });
     const bigText = within(big).getByRole("textbox", { name: "Lyrics" }) as HTMLTextAreaElement;
