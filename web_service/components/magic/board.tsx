@@ -493,15 +493,17 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         className="mg relative flex min-w-0 flex-[999_1_560px] flex-col gap-3.5 px-3.5 pt-4 pb-5 md:px-5"
       >
         <h1 className="sr-only">Magic: {board.name}</h1>
-        <div className="flex flex-wrap items-center gap-3">
+        {/* a long name (a board named from its prompt is up to 5 words) cuts short before the bar wraps (walk) */}
+        <div className="flex flex-wrap items-center gap-3 md:flex-nowrap md:[&>*:not(:first-child)]:shrink-0">
           <button
             type="button"
             aria-haspopup="menu"
             onClick={boardsMenu}
-            className="flex h-10 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
+            title={board.name}
+            className="flex h-10 min-w-0 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
           >
-            {board.name}
-            <ChevronDown size={16} aria-hidden />
+            <span className="truncate">{board.name}</span>
+            <ChevronDown size={16} className="shrink-0" aria-hidden />
           </button>
           {board.namedBy && (
             <span

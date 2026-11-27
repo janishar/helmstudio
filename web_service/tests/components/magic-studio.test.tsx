@@ -351,6 +351,13 @@ async function withShots() {
 }
 
 describe("runs in studio (plan 39 phase D)", () => {
+  it("the board's name cuts short (a name from a prompt is up to 5 words) instead of wrapping the bar", async () => {
+    await withShots();
+    const name = screen.getByRole("button", { name: "Untitled board" });
+    expect(name.getAttribute("title")).toBe("Untitled board");
+    expect(name.querySelector(".truncate")?.textContent).toBe("Untitled board");
+  });
+
   it("Add's step 2: the standard request with greyed fields; Generate adds the block, then runs it", async () => {
     const b = await withShots();
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
@@ -361,6 +368,10 @@ describe("runs in studio (plan 39 phase D)", () => {
     expect(modelName(dlg)).toBe("Echo keyframes");
     expect(within(dlg).getByText("Echo keyframes can't take a seed")).toBeTruthy();
     expect(within(dlg).getByRole("spinbutton", { name: "Seed" }).matches(":disabled")).toBe(true);
+    // the Seed + "N seeds" pair is wider than one column: it takes two (walk: it ran under Loop's box)
+    expect(within(dlg).getByRole("spinbutton", { name: "Seed" }).closest(".fld")?.className).toContain(
+      "sm:col-span-2",
+    );
     // the other model greys the frames, each with why
     pickModel(dlg, "Echo video");
     expect(within(dlg).getByText("Echo video can't take a last frame")).toBeTruthy();

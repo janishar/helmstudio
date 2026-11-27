@@ -253,7 +253,7 @@ export function RequestForm({
     return (
       <div
         key={f}
-        className={`fld ${f === "prompt" || f === "line" || f === "refs" || f === "lyrics" ? "col-span-full" : ""} ${why ? "opacity-50" : ""}`}
+        className={`fld ${f === "seed" && !req.turns ? "sm:col-span-2" : ""} ${f === "prompt" || f === "line" || f === "refs" || f === "lyrics" ? "col-span-full" : ""} ${why ? "opacity-50" : ""}`}
       >
         <span className="lb">{label(f)}</span>
         <fieldset disabled={!!why} className="m-0 contents border-0 p-0">
@@ -466,7 +466,7 @@ export function RequestForm({
               <span className="text-t2">·</span>
               <select
                 aria-label="Seeds"
-                className="in h-8 shrink-0 px-1.5 text-[13px]"
+                className="in h-8 w-auto shrink-0 px-1.5 text-[13px]"
                 value={req.count ?? 1}
                 onChange={(e) => set({ count: +e.target.value === 1 ? undefined : +e.target.value })}
               >
