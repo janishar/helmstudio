@@ -405,3 +405,44 @@ graph `studio_service/api/timeline/bake.go` (`BuildBake`, the export's picture s
   (a slot after it).
 - **Not built (left for later):** the Assistant's `send_to_timeline` tool (phase F); sound fades; a morph's own prompt
   field in its dialog (its request keeps one when set through the op).
+
+**Phase H (2026-11-27, API 1.85; 1.86 a README wording fix).** Music and Sound kinds: `standard` blocks on MiniMax
+Music 3 (`minimax-music3`), ACE-Step 1.5 (`ace-step-music`), Stable Audio 3 Small-SFX (`sa3-sound`) and MMAudio
+(`mmaudio-sound`, `mmaudio-video`), and the fake host's Echo music, Echo sound and Echo sound from a video; the shared
+fields lyrics, instrumental, key, bpm and from, length also on a float (seconds) param, `standard.default`
+(registry.schema.json, check.py, the runner's check); `MagicRequest` lyrics, key and bpm; `MagicModel.video`;
+`MagicTake.sound`. Studio runs them (`magic_runs.go`); the web's Add and block dialog take their fields, the menus run
+them, and blocks draw covers and orbs (`components/magic/sound-mark.tsx`). Decisions taken on the owner's behalf:
+
+- **The default model** is a pack's `standard.default` (MiniMax Music 3, the owner's pick in plan 38), then the
+  fastest declared one. Sound has no default: Stable Audio 3 Small-SFX is first (fastest); a sound made from a shot's
+  video with no model picked runs the first model that takes a video (MMAudio), as frame 2g shows.
+- **MMAudio is one model with two workflows**: workflows of one kind and one `standard.model` are one model; the one
+  without `from` is its id, the one with `from` its `video` (its fields are both's, its Advanced its own). A request
+  with `from` runs the video workflow. Stable Audio is greyed `can't take a shot's video`.
+- **ACE-Step 1.5 is one model** (XL or 2B is its `model.variant` under Advanced), where frame 2f lists "ACE-Step 1.5
+  XL or 2B, MiniMax Music 3": one workflow serves both variants.
+- **The fields**: music's prompt is labelled Style; empty lyrics are an instrumental (`instrumental` true; the
+  placeholder says Instrumental); Key is Auto or one of ACE-Step's 24 keys, sent only to a key param that has it;
+  BPM 30-300 (absent Auto); Key and BPM are two fields (the board's "Key · BPM" row), greyed on MiniMax Music 3 and
+  on Echo music's key. The length is the block's seconds on the param's grid and bounds, so a block under 10 s gets a
+  10 s song from MiniMax and ACE-Step (their least).
+- **The estimate** is seconds of audio × the pack's GPU seconds per second (plan 38 44.4: MiniMax 4.9, ACE-Step 0.55,
+  Stable Audio 0.1, MMAudio 0.5 from text and 1.1 from a video; Echo 0.3 and 0.2); "2 cues", "1 sound" on the ask card.
+- **The block keeps the audio take**: a voice, music or sound block takes only its runs' audio takes, so MMAudio's
+  video with the sound stays in the Gallery (and in the run's outputs); other kinds keep every take a run makes, as
+  before (a stricter rule broke the fake runs that answer a video run with a picture).
+- **A sound follows its shot**: its inputs include the shot's shown take, so a new take of the shot puts it out of
+  date; why it can't run: `Shot 2 has no take yet`, `its shot is not on the board`.
+- **Covers and orbs** follow the shown take's class (`MagicTake.sound`): a sound placed on the Music lane draws an orb;
+  a music take's cover is the Gallery's gradient (`coverFor`) of the block's style; the side panel and the dialog's
+  stage show them large over the player (an audio take's thumb_url, its WAV, is never drawn as a picture).
+- **Menus**: Run on music and sound blocks, lanes and several blocks; Music's Model › lists studio's models; Sound's
+  Make from Shot n video sets `from` and a model that takes a video, then runs; a shot's Make sound from video adds a
+  sound under it on the Sound lane (Overwrite), tied to it, and runs it (greyed without a Sound lane, a model that takes
+  a video, or a take). A sound added from Add under a shot starts from that shot's video.
+- **Not built:** Loop (frame 2g, "Stable Audio only": Stable Audio 3's sound workflow has no loop param); the music
+  form's "Tied to Shots 1-3 · stretches with them" row (the dialog's Tied section and the side panel show the tie); a
+  song's sections as markers on its block; Sound's Model › (not on the board's menu); dialogue blocks running; the
+  Assistant's music and sound wording (phase F). The sample board keeps its model names (the fake mode). No browser
+  walk on the dev stack (the owner uses it live; covered by the vitest journeys in fake mode).
