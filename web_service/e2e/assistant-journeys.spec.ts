@@ -951,7 +951,7 @@ test("J16 I write while it works: it reads me at the next step, or takes it as t
   await say("make a rainy London still");
   // a · the box stays open while it works
   await expect(box()).toHaveAttribute("placeholder", "Steer the answer…");
-  await expect(drawer().getByText("steers", { exact: true })).toBeVisible();
+  await expect(drawer().getByText("Enter steers", { exact: true })).toBeVisible();
   await expect(drawer().getByRole("button", { name: "Stop" })).toBeVisible();
   await shot("j16-steer-working");
   // b · sent: at the bottom, dimmed, at the next step (the first model call runs by now)
