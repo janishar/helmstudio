@@ -536,3 +536,51 @@ Send taking music and sound lanes to audio tracks. Two fixes: the agent view's b
 (a `block` op replaces it, so the Assistant sending back only a prompt lost a shot's picks or a cue's lyrics and key),
 and the ask rule's total leaves board frames out (they never ask, so a pick of frames alone or frames plus shots under
 the limit no longer asks).
+
+### Gaps (owner, 2026-11-27: build them in alpha.6)
+
+**Built (API 1.89; contracts/README.md "Magic: dialogue, Run on and Loop").** Dialogue blocks running, Compare takes,
+Loop, a song's sections as markers, the Morph dialog's prompt, Make views' model, the block dialog's Run on, and phase D's
+browser-check differences (the Model select with its "or …" hint, the kind badge beside a dialog's title, Generate's
+"≈ m:ss", Seed "42 · 2 seeds", the Image form's Length on board, the voice and music forms' "Tied to Shot N · Unlink").
+Studio: `00063_magic_turns.sql` (`magic_runs.turn`), `magic_runs.go` (turns, statuses, Run on), `magic/send.go` (turns
+and Loop in Send); web: `request.tsx` (lines, Loop, Run on, the tie row), `block-dialog.tsx` (`CompareDialog`,
+`KindTitle`), `lanes.tsx` (section markers), `menus.ts` (`compareItem`, `turnMenu`, `sectionMenu`, Loop), `lib/magic.ts`
+(`turnBlock`, `turnStatuses`, `sectionsOf`), `lib/magic-play.ts` (`soundClips`). Decisions taken on the owner's behalf:
+
+- **A dialogue's turn is a line block** (`turnBlock`): the turn's text is its line, the speaker asset's voice its voice,
+  the rest of the block's request (model, seed, Advanced) as for a line; one run per turn (no count). Its hash is that
+  line block's, so changing one line puts only its turn out of date. A turn plays its newest run's take still on the
+  block (no pin per turn; the block's pin is not used for a dialogue).
+- **The block's status from its turns'**: running when one is, failed when one failed with no take, draft when none has
+  a take, out of date when one is out of date or has no take yet, else done. Run of a dialogue runs the turns not done
+  (every one when all are), so a line changed runs again alone. The run history says which line each run was.
+- **Why a dialogue can't run**: no lines (`A dialogue needs a line`), `Line 2 has no words`, `Line 2 has no speaker`,
+  `Line 2's @mara has no voice`, or its model can't take a line. A speaker is a board asset with a voice; "Used in"
+  counts a speaker.
+- **Playing and Send**: the turns one after another from the block's start, each its take's own length
+  (`MagicTake.duration_s`), cut at the block's end, the first linked to the block's shot. Add's Dialogue goes on to step
+  2 with two lines (the board's first two voices). The lane shows "N turns".
+- **Loop** (the board's "Loop · Stable Audio only" on the Sound form): no sound workflow has a loop param, so Loop is a
+  playback setting, not a model field: the take repeats to fill the block on the board's player and in Send (at most 100
+  clips a block). It is offered for a sound made from a prompt on any model, greyed "Not with a shot's video" (such a
+  sound follows its shot). Also a toggle in the sound block's menu. Not an input (a take stays current).
+- **Run on** is the request's `host` (RunRequest.host, Create's chip, greyed by the model's `env`, Auto by default), in
+  the block dialog only (frame 3); it is not an input. Variant and add-on greying of Create's Run on are left out (the
+  standard request has no version pick).
+- **Compare takes**: a dialog of two takes side by side (the shown one and the newest other), each picked from the
+  block's takes, with Pin; from the block dialog's Compare (two takes or more, not a dialogue) and the shot menu's Compare
+  takes (greyed `Only one take yet`).
+- **Sections**: the shown take's own (`MagicTake.sections`, from Take.audio.sections: ACE-Step and the echo fake), else
+  the lyrics' `[tags]` spread over the block by their lines (titled "about here"). A click seeks; the marker's menu has
+  Play from here and Playhead here.
+- **Morph prompt**: a Prompt field (optional) in the Morph dialog, saved on leaving it; the morph's run already used a
+  request prompt.
+- **Make views' model**: a select beside Make views when there is more than one image model; every Make views pick runs
+  on it.
+- **The Model field is a select** with the other models as its hint ("or MiniMax H3"); the tests and the e2e journey
+  pick by name. A line or cue added from Add under a shot is tied to it (Unlink in step 2 drops the tie). The kind badge
+  is the Modal's new `heading` (its name stays the title).
+- **e2e journey kept up**: Add's lengths are 5 s and 10 s now and Music is on (phase H); the journey says so.
+- **Not built**: a turn's own pin; per-turn Run from a line's menu (a Run runs every line not done); Compare's two
+  players in step; the dialogue's turn segments drawn on its block; the rough cut does not play a dialogue's turns.
