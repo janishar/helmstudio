@@ -367,3 +367,41 @@ frame dialog and rough cut (`components/magic/asset-dialog.tsx`, `import.tsx`, `
   Make the missing never makes a view twice; a frame's "With @x" names every asset it picks, also one with no picture
   yet (before, only those with a sheet take); studio's document check holds an asset's bounds (name 1-80, sheet at
   most 50, note at most 4000, voice_id and imported_from at most 80), which `asset_add` and `asset` alone did not.
+
+**Phase G (2026-11-27, API 1.82; contract step 5).** Send to Timeline: `POST …/boards/{board_id}/send` (dry run 200,
+201 the new sequence at once, 202 baking), `GET …/sends`, `DELETE …/sends/{send_id}`; `00062_magic_sends.sql`
+(`magic_sends`, `media_jobs.send_id`); the doc builder `studio_service/api/magic/send.go` (`BuildSend`); the bake
+graph `studio_service/api/timeline/bake.go` (`BuildBake`, the export's picture steps); the runner's `bake` media job
+(the export's conform path, `bake.mp4`); morphs with their own request, takes and pin, run as blocks
+(`api/studio/magic_morph.go`); the web's dialog, sends list, toast, morph block and dialog
+(`web_service/components/magic/send.tsx`). Decisions taken on the owner's behalf:
+
+- **Every board time stays.** A baked join or a morph takes the first shot's last half and the second's first half
+  (the clip centred on the cut), so the voice and music land where they were. A side whose take has nothing past its
+  block holds its end frame (`tpad`); a take shorter than its block leaves the rest an empty slot (a warning).
+- **Dissolve "as it is"** is the Timeline's own `transition_in` only when both takes have the media past the cut (the
+  second clip then starts half the dissolve into its take); generated takes usually are exactly their block, so most
+  dissolves are baked (xfade `fade`) like a fade. If the Timeline's rules refuse a kept one, the send bakes them all.
+- **Fade is through black** (`fadeblack`), **wipe is left to right** (`wipeleft`); the Shots lane's fade in and out
+  bake its first block's head and its last block's tail. A voice, music or sound lane's fade is not sent (`skipped`,
+  a warning): the Timeline has no sound fades.
+- **Effects bake**: Grade (`temperature`, `contrast` ±100: colorbalance and eq), Slow (`rate` 0.5-2, the take slowed
+  to fill the block, its sound with atempo) and Stabilize (`deshake`), in the shot's own clip and in the joins that
+  read it; another effect is skipped with a warning.
+- **Tracks are the Timeline's names**: V1, then A2, A3 … (frame 9 drew A1; the Timeline calls the first sound track
+  A2). Only the first Shots lane goes on V1; other picture lanes stay (a warning); up to 8 sound lanes.
+- **Bakes run outside the four open media jobs** a user may have (a send can need many); at most 100 per send; one
+  send of a board bakes at a time (409 `This board is still sending; wait for it.`). Their takes are a new
+  `TakeSource` `bake` (in the gallery like exports), titled `<board> · <join>`. The estimate is your recent bakes'
+  seconds per frame, else 0.25 s a frame, plus 4 s each.
+- **The 100 sequences 409** is checked on the dry run too (the dialog shows frame 9's "100 sequences is the most"),
+  and again when the last bake is in (the send fails with the Timeline's text).
+- **A listed send's revision is kept** (never pruned), so its menu's Restore board to rev N always works; Remove from
+  list soft-removes it (the sequence stays; a baking one's jobs are cancelled).
+- **Morph**: the `transition` op takes `request` and `pinned` (kept while it stays a morph); its runs use the fastest
+  video model whose standard block fills both `first` and `last`; `…/run` and `…/plan` take its id as a block's.
+- **Bakes are frame-exact**: each side and the output are cut at exactly their frames, fps set again after `tpad`
+  (ffmpeg 7.1's xfade refused the unset rate; found on the test stack); a bake a frame short still keeps the times
+  (a slot after it).
+- **Not built (left for later):** the Assistant's `send_to_timeline` tool (phase F); sound fades; a morph's own prompt
+  field in its dialog (its request keeps one when set through the op).
