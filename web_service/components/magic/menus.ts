@@ -76,15 +76,17 @@ import {
   type TransitionKind,
 } from "@/lib/magic";
 import { EST_S, estText } from "@/lib/magic-fixture";
+import { missingViews, viewName } from "@/lib/magic-assets";
+
+const RUNS_OFF = "Runs come with the standard request";
 
 /** Why a kind can't run or be added yet (plan 39 §45.11 phase H). */
 export const NOT_YET = "Comes with Create's Music and Sound";
 export const SOON = {
   dialog: "Comes with the block dialog",
-  asset: "Comes with the asset dialog",
-  import: "Comes with Import",
-  rough: "Comes with the rough cut",
   compare: "Comes with saved boards",
+  /** the fake mode has no Gallery */
+  gallery: "The Gallery is in studio",
 };
 /** The effects a block can take as badges (MagicBoard frame 4c). */
 export const EFFECTS: Effect[] = [
@@ -120,6 +122,25 @@ export type Act = {
   used: (asset: string | null) => void;
   paste: ((lane: string, at: number) => void) | null;
   copyText: (s: string) => void;
+  /** phase E (absent: greyed with why): an asset opened (the asset dialog, frame 6), "new" makes one */
+  openAsset?: (id: string) => void;
+  /** Import from Gallery as a copy: into an asset, or (none) as a new one */
+  importTo?: (asset?: string) => void;
+  /** Generate from board: the shot under a frame, made from it, run (after `before`, the frame's own changes) */
+  fromBoard?: (frame: string, before?: Op[]) => void;
+  /** the rough cut, from a frame */
+  rough?: (from?: string) => void;
+  /** Gallery takes picked (null in the fake mode): of a kind (null: images and video), up to max */
+  gallery?:
+    | ((o: {
+        kind: "image" | "video" | "audio" | null;
+        max: number;
+        title: string;
+        onPick: (takes: { id: string; kind: string; duration?: number; title?: string }[]) => void;
+      }) => void)
+    | null;
+  /** Make views of an asset (null while runs can't go) */
+  views?: ((asset: string, views: string[]) => void) | null;
 };
 
 const icon = (C: (p: { className?: string }) => React.ReactNode) => C as unknown as LucideIcon;
@@ -332,32 +353,38 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
               a.edit({ op: "block", id: b.id, set: { request: { ...b.request, style: s } } }),
           })),
         },
-        { label: "Replace with an image", icon: ImageUp, off: SOON.import },
-        "-",
         {
+          label: "Replace with an image",
+          icon: ImageUp,
+          off: a.gallery ? undefined : SOON.gallery,
+          onPick: () =>
+            a.gallery?.({
+              kind: "image",
+              max: 1,
+              title: `Replace ${b.name}'s picture`,
+              onPick: ([t]) => t && a.edit({ op: "take_add", id: b.id, take: t.id }),
+            }),
+        },
+        "-",
+        gate(a, {
           label: "Generate from board",
           icon: Clapperboard,
           keys: a.runOff ? undefined : est("video"),
-          off: made ? `${made.name} is made from it` : shots ? undefined : "Add a Shots lane first",
-          onPick: () =>
-            shots &&
-            a.edit({
-              op: "add",
-              mode: "overwrite",
-              block: {
-                lane: shots.id,
-                at: b.at,
-                length: b.length,
-                kind: "video",
-                name: `Shot from ${b.name}`,
-                from_frame: b.id,
-                request: { kind: "video", prompt: b.request.prompt, refs: b.request.refs ?? [] },
-                takes: [],
-                effects: [],
-              },
-            }),
+          off: made
+            ? `${made.name} is made from it`
+            : shots
+              ? a.fromBoard
+                ? undefined
+                : (a.runOff ?? RUNS_OFF)
+              : "Add a Shots lane first",
+          onPick: () => a.fromBoard?.(b.id),
+        }),
+        {
+          label: "Rough cut from here",
+          icon: Film,
+          off: a.rough ? undefined : "Comes with the board",
+          onPick: () => a.rough?.(b.id),
         },
-        { label: "Rough cut from here", icon: Film, off: SOON.rough },
         "-",
         dup,
         "-",
@@ -645,7 +672,40 @@ export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; item
         off: a.paste ? undefined : "Copy a block first",
         onPick: () => a.paste?.(lane.id, at),
       },
-      { label: "From Gallery", icon: Images, off: SOON.import },
+      {
+        label: "From Gallery",
+        icon: Images,
+        off: a.gallery ? undefined : SOON.gallery,
+        onPick: () => {
+          const k = defaultKind(lane);
+          const kind = k === "voice" || k === "music" || k === "sound" ? "audio" : null;
+          a.gallery?.({
+            kind,
+            max: 1,
+            title: `From Gallery · ${lane.name} at ${clock(at, a.doc.target.fps, true)}`,
+            onPick: ([t]) => {
+              if (!t) return;
+              const bk: Kind = t.kind === "audio" ? (kind ? k : "voice") : t.kind === "video" ? "video" : "image";
+              const fps = a.doc.target.fps;
+              a.edit({
+                op: "add",
+                mode: a.mode,
+                block: {
+                  lane: lane.id,
+                  at,
+                  length: Math.max(1, Math.round((t.duration ?? 4) * fps)),
+                  kind: bk,
+                  name: (t.title ?? "").slice(0, 60) || `${KIND_LABEL[bk]} ${a.doc.blocks.filter((x) => x.kind === bk).length + 1}`,
+                  request: { kind: bk },
+                  takes: [t.id],
+                  pinned: t.id,
+                  effects: [],
+                },
+              });
+            },
+          });
+        },
+      },
       { label: "Playhead here", icon: LocateFixed, onPick: () => a.seek(at) },
     ],
   };
@@ -657,7 +717,13 @@ export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
   return {
     title: `@${x.handle}`,
     items: [
-      { label: "Open", icon: Maximize2, keys: "↵", off: SOON.asset },
+      {
+        label: "Open",
+        icon: Maximize2,
+        keys: "↵",
+        off: a.openAsset ? undefined : "Comes with the board",
+        onPick: () => a.openAsset?.(x.id),
+      },
       {
         label: "Show where used",
         icon: Eye,
@@ -666,10 +732,34 @@ export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
         onPick: () => a.used(x.id),
       },
       { label: `Copy @${x.handle}`, icon: AtSign, onPick: () => a.copyText(`@${x.handle}`) },
-      { label: "Make views", icon: Images, off: SOON.asset },
-      { label: "Voice", icon: Mic, off: SOON.asset },
-      { label: "Import a view", icon: ImageUp, off: SOON.import },
-      { label: "Rename", icon: PencilLine, off: SOON.asset },
+      {
+        label: "Make views",
+        icon: Images,
+        keys: a.views ? missingViews(x).join(", ") : undefined,
+        off: a.views ? undefined : (a.runOff ?? RUNS_OFF),
+        onPick: () => a.views?.(x.id, missingViews(x)),
+      },
+      {
+        label: "Voice",
+        icon: Mic,
+        keys: x.voice_id ? undefined : "none",
+        off: a.openAsset ? undefined : "Comes with the board",
+        onPick: () => a.openAsset?.(x.id),
+      },
+      {
+        label: "Import a view",
+        icon: ImageUp,
+        off: a.importTo ? undefined : SOON.gallery,
+        onPick: () => a.importTo?.(x.id),
+      },
+      {
+        label: "Rename",
+        icon: PencilLine,
+        onPick: () => {
+          const name = prompt("Asset name", x.name)?.trim();
+          if (name && name !== x.name) a.edit({ op: "asset", id: x.id, set: { name } });
+        },
+      },
       "-",
       {
         label: "Delete",
@@ -677,6 +767,41 @@ export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
         keys: n ? `used in ${n}` : undefined,
         danger: true,
         onPick: () => a.edit({ op: "asset_delete", id: x.id }),
+      },
+    ],
+  };
+}
+
+/** A view on an asset's sheet (the asset dialog, frame 6): rename it, make it the first (the picture @ picks send),
+ * take it off the sheet. */
+export function viewMenu(a: Act, x: Asset, take: string): { title: string; items: Item[] } {
+  const i = x.sheet.indexOf(take);
+  return {
+    title: `@${x.handle} · ${viewName(x, take)}`,
+    items: [
+      {
+        label: "Rename view",
+        icon: PencilLine,
+        onPick: () => {
+          const name = prompt("View name", viewName(x, take))?.trim().slice(0, 40);
+          if (name) a.edit({ op: "asset", id: x.id, set: { views: { ...x.views, [take]: name } } });
+        },
+      },
+      {
+        label: "Make it the first",
+        icon: ArrowUp,
+        keys: i === 0 ? undefined : "@ picks send it",
+        off: i === 0 ? "It's the first" : undefined,
+        onPick: () =>
+          a.edit({ op: "asset", id: x.id, set: { sheet: [take, ...x.sheet.filter((t) => t !== take)] } }),
+      },
+      "-",
+      {
+        label: "Take off the sheet",
+        icon: Trash2,
+        danger: true,
+        onPick: () =>
+          a.edit({ op: "asset", id: x.id, set: { sheet: x.sheet.filter((t) => t !== take) } }),
       },
     ],
   };

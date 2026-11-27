@@ -3,6 +3,7 @@
 // request"): the model, the kind's shared fields (the same few for every model), each one the picked model can't
 // fill greyed with the reason, the model's own params under Advanced, and the GPU-time estimate before Generate.
 import { Clock3 } from "lucide-react";
+import { AtText } from "@/components/magic/at-text";
 import { refText } from "@/components/magic/lanes";
 import { useVoices } from "@/lib/library";
 import { secs, type Block, type Doc, type MagicRequest, type Ref } from "@/lib/magic";
@@ -126,11 +127,14 @@ export function RequestForm({
     prompt: () =>
       field(
         "prompt",
-        <textarea
-          aria-label="Prompt"
-          className="in min-h-16 px-2.5 py-2 text-[13px]"
+        <AtText
+          doc={doc}
+          self={block.id}
+          label="Prompt"
           value={req.prompt ?? ""}
-          onChange={(e) => set({ prompt: e.target.value })}
+          refs={req.refs ?? []}
+          // a model that takes no refs keeps them out (its @ picks are then words only)
+          onChange={(prompt, refs) => set(greyed("refs") ? { prompt } : { prompt, refs })}
         />,
       ),
     line: () =>

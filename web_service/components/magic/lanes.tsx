@@ -750,12 +750,22 @@ export function AssetsRow({
   doc,
   act,
   usedAsset,
+  voiceName,
 }: {
   doc: Doc;
   act: Act;
   usedAsset: string | null;
+  /** a saved voice's name ("Warm") */
+  voiceName?: (id: string) => string | undefined;
 }) {
   const kindCls = { character: "k-char", prop: "k-prop", place: "k-place" } as const;
+  // its first view's picture, else a colour of its handle
+  const thumbOf = (x: Doc["assets"][number]): React.CSSProperties => {
+    const art = x.sheet.map((t) => act.takes[t]?.art).find(Boolean);
+    return art
+      ? { backgroundImage: art, backgroundSize: "cover", backgroundPosition: "center" }
+      : { background: artOf(x.handle) };
+  };
   const kindName = { character: "Character", prop: "Prop", place: "Place" } as const;
   return (
     <div className="shelf" role="group" aria-label="Assets, off the time ruler">
@@ -785,25 +795,48 @@ export function AssetsRow({
               className={`mast ${usedAsset === x.id ? "hov" : ""}`}
               aria-label={`Asset @${x.handle}, ${kindName[x.kind]}`}
               aria-pressed={usedAsset === x.id}
+              title="Click: where it's used · double-click or Enter: open"
               onClick={() => act.used(usedAsset === x.id ? null : x.id)}
+              onDoubleClick={() => act.openAsset?.(x.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && act.openAsset) {
+                  e.preventDefault();
+                  act.openAsset(x.id);
+                }
+              }}
               onContextMenu={(e) => openMenu(e, assetMenu(act, x))}
             >
-              <span className="ath" aria-hidden style={{ background: artOf(x.handle) }} />
+              <span className="ath" aria-hidden style={thumbOf(x)} />
               <span>
                 <span className="nm">
                   @{x.handle}
                   <span className={`kb ${kindCls[x.kind]}`}>{kindName[x.kind]}</span>
                 </span>
-                <small>{x.voice_id ? `voice · ${x.voice_id}` : `${x.sheet.length} views`}</small>
+                <small>
+                  {x.voice_id
+                    ? `voice · ${voiceName?.(x.voice_id) ?? x.voice_id}`
+                    : `${x.sheet.length} view${x.sheet.length === 1 ? "" : "s"}`}
+                </small>
                 <small className="u">{u || "not used yet"}</small>
               </span>
             </button>
           );
         })}
-        <button type="button" className="astb" disabled title="Comes with the asset dialog">
+        <button
+          type="button"
+          className="astb"
+          disabled={!act.openAsset}
+          onClick={() => act.openAsset?.("new")}
+        >
           + Asset
         </button>
-        <button type="button" className="astb" disabled title="Comes with Import">
+        <button
+          type="button"
+          className="astb"
+          disabled={!act.importTo}
+          title={act.importTo ? "Import from Gallery, as a copy" : "The Gallery is in studio"}
+          onClick={() => act.importTo?.()}
+        >
           Import
         </button>
       </div>

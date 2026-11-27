@@ -14,6 +14,7 @@ import {
   multiMenu,
   tieMenu,
   effectMenu,
+  viewMenu,
   type Act,
 } from "@/components/magic/menus";
 import { joins, type Doc } from "@/lib/magic";
@@ -154,12 +155,21 @@ describe("a block's menu, by kind", () => {
       "Delete",
     ]);
     expect(item(f1.items, "Generate from board").off).toBe("Shot 1 · bus stop is made from it");
-    const f3 = blockMenu(a, block(a.doc, "f3"));
+    // without the board's Generate from board (the fake mode's menus alone) it is greyed
+    expect(item(blockMenu(a, block(a.doc, "f3")).items, "Generate from board").off).toBeTruthy();
+    const fromBoard = vi.fn();
+    const rough = vi.fn();
+    const gallery = vi.fn();
+    const b = actOn({ fromBoard, rough, gallery });
+    const f3 = blockMenu(b, block(b.doc, "f3"));
     item(f3.items, "Generate from board").onPick!();
-    expect(a.edit.mock.calls[0][0]).toMatchObject({
-      op: "add",
-      block: { lane: "shots", kind: "video", from_frame: "f3" },
-    });
+    expect(fromBoard).toHaveBeenCalledWith("f3");
+    item(f3.items, "Rough cut from here").onPick!();
+    expect(rough).toHaveBeenCalledWith("f3");
+    // Replace with an image: a Gallery picture joins the frame's takes, pinned
+    item(f3.items, "Replace with an image").onPick!();
+    gallery.mock.calls[0][0].onPick([{ id: "t-own", kind: "image" }]);
+    expect(b.edit).toHaveBeenCalledWith({ op: "take_add", id: "f3", take: "t-own" });
   });
 
   it("several selected blocks get the several menu", () => {
@@ -289,5 +299,81 @@ describe("the other things on the board", () => {
     expect(run.getAttribute("aria-disabled")).toBe("true");
     expect(run.title).toBe(NOT_YET);
     expect(screen.getByRole("menuitem", { name: /Delete/ }).className).toContain("danger");
+  });
+});
+
+describe("phase E: assets, views and the Gallery", () => {
+  it("an asset: Open, Make views of the missing ones, Import a view, Rename", () => {
+    const openAsset = vi.fn();
+    const views = vi.fn();
+    const importTo = vi.fn();
+    const a = actOn({ openAsset, views, importTo });
+    const mara = assetMenu(a, a.doc.assets[0]);
+    expect(labels(mara.items)).toEqual([
+      "Open",
+      "Show where used",
+      "Copy @mara",
+      "Make views",
+      "Voice",
+      "Import a view",
+      "Rename",
+      "-",
+      "Delete",
+    ]);
+    item(mara.items, "Open").onPick!();
+    expect(openAsset).toHaveBeenCalledWith("mara");
+    expect(item(mara.items, "Make views").keys).toBe("Front, Side, Back, Full figure");
+    item(mara.items, "Make views").onPick!();
+    expect(views).toHaveBeenCalledWith("mara", ["Front", "Side", "Back", "Full figure"]);
+    item(mara.items, "Import a view").onPick!();
+    expect(importTo).toHaveBeenCalledWith("mara");
+    // without runs Make views is greyed with why
+    expect(item(assetMenu(actOn(), a.doc.assets[0]).items, "Make views").off).toBe(
+      "Runs come with the standard request",
+    );
+  });
+
+  it("a view on the sheet: Rename view, Make it the first, Take off the sheet", () => {
+    const a = actOn();
+    const x = { ...a.doc.assets[0], views: { "mara-2": "Side" } };
+    const m = viewMenu(a, x, "mara-2");
+    expect(m.title).toBe("@mara · Side");
+    expect(labels(m.items)).toEqual(["Rename view", "Make it the first", "-", "Take off the sheet"]);
+    item(m.items, "Make it the first").onPick!();
+    expect(a.edit).toHaveBeenLastCalledWith({
+      op: "asset",
+      id: "mara",
+      set: { sheet: ["mara-2", "mara-1", "mara-3", "mara-4", "mara-5", "mara-6"] },
+    });
+    expect(item(viewMenu(a, x, "mara-1").items, "Make it the first").off).toBe("It's the first");
+    item(m.items, "Take off the sheet").onPick!();
+    expect(a.edit.mock.lastCall![0].set.sheet).not.toContain("mara-2");
+  });
+
+  it("the empty lane's From Gallery adds the take as a block at the point, pinned", () => {
+    const gallery = vi.fn();
+    const a = actOn({ gallery });
+    const l7 = a.doc.lanes.find((l) => l.id === "l7")!;
+    item(emptyMenu(a, l7, 18 * 24).items, "From Gallery").onPick!();
+    expect(gallery.mock.calls[0][0]).toMatchObject({ kind: null, max: 1 });
+    gallery.mock.calls[0][0].onPick([{ id: "t-v", kind: "video", duration: 2, title: "Rain" }]);
+    expect(a.edit).toHaveBeenCalledWith({
+      op: "add",
+      mode: "insert",
+      block: expect.objectContaining({
+        lane: "l7",
+        at: 432,
+        length: 48,
+        kind: "video",
+        name: "Rain",
+        takes: ["t-v"],
+        pinned: "t-v",
+      }),
+    });
+    // a voice lane asks for audio
+    const lines = a.doc.lanes.find((l) => l.id === "lines")!;
+    item(emptyMenu(a, lines, 0).items, "From Gallery").onPick!();
+    expect(gallery.mock.calls[1][0].kind).toBe("audio");
+    expect(item(emptyMenu(actOn(), l7, 0).items, "From Gallery").off).toBe("The Gallery is in studio");
   });
 });

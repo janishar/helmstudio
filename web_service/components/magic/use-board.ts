@@ -9,6 +9,7 @@ import { followSession } from "@/lib/runs";
 import {
   FAKE_KINDS,
   takesOf,
+  type AssetRun,
   type BlockRun,
   type Estimate,
   type Kinds,
@@ -52,6 +53,12 @@ export type Board = {
   kinds: Kinds | null;
   /** every block's runs, oldest first (the run history) */
   runs: BlockRun[];
+  /** the Make views runs, oldest first (phase E) */
+  assetRuns: AssetRun[];
+  /** Make views: one image per view of an asset, onto its sheet; null while runs can't go */
+  makeViews: ((asset: string, views: string[]) => void) | null;
+  /** whether the Gallery and uploads are there (false in the fake mode) */
+  gallery: boolean;
   /** a block's GPU-time estimate (studio's plan), undefined while unknown here */
   estimate: (id: string) => Estimate | undefined;
   /** studio's plan of a pick (the ask rule); null in the fake mode */
@@ -99,7 +106,13 @@ function sampleDoc(): Doc {
   const d = sampleBoard().doc;
   return {
     ...d,
-    blocks: d.blocks.map((b) => ({ ...b, takes: [], pinned: undefined })),
+    // its models are names (the fake mode's); studio runs each kind's own first model
+    blocks: d.blocks.map((b) => ({
+      ...b,
+      takes: [],
+      pinned: undefined,
+      request: { ...b.request, model: undefined },
+    })),
     assets: d.assets.map((a) => ({ ...a, sheet: [] })),
   };
 }
@@ -336,6 +349,21 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     },
     kinds,
     runs: wire.runs ?? [],
+    assetRuns: wire.asset_runs ?? [],
+    gallery: true,
+    makeViews: (asset, views) =>
+      queue(async () => {
+        const r = await fresh(() =>
+          ok(
+            api.POST("/v1/studio/magic/boards/{board_id}/assets/{asset_id}/views", {
+              params: { path: { board_id: id, asset_id: asset } },
+              headers: web,
+              body: { revision: rev.current, views },
+            }),
+          ),
+        );
+        if (current.current === id) show(r.board);
+      }),
     estimate: (b) => estimates[b],
     plan: (pick) =>
       ok(api.POST("/v1/studio/magic/boards/{board_id}/plan", { ...board(id), body: pick })),
@@ -514,6 +542,35 @@ export function useLocalBoard(initial?: Store): Board {
     redo: () => setH(redo),
     kinds: FAKE_KINDS,
     runs: [],
+    assetRuns: [],
+    gallery: false,
+    /** fake views: a take per view at once, on the asset's sheet (a studio write: every document in the history) */
+    makeViews: (asset, views) => {
+      const made = views.map((v) => ({ v, id: `${asset}-v${newId()}` }));
+      setTakes((t) => ({
+        ...t,
+        ...Object.fromEntries(
+          made.map(({ v, id }) => [
+            id,
+            { id, block: "", status: "done", inputs: "", art: artFor(`${asset}${v}`, "image") },
+          ]),
+        ),
+      }));
+      setH((x) =>
+        everywhere(x, (d) => ({
+          ...d,
+          assets: d.assets.map((a) =>
+            a.id !== asset
+              ? a
+              : {
+                  ...a,
+                  sheet: [...a.sheet, ...made.map((m) => m.id)],
+                  views: { ...a.views, ...Object.fromEntries(made.map((m) => [m.id, m.v])) },
+                },
+          ),
+        })),
+      );
+    },
     estimate: () => undefined,
     plan: null,
     askAbove: 5,

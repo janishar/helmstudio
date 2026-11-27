@@ -15,6 +15,7 @@ export type Kinds = S<"MagicKinds">;
 export type Model = S<"MagicModel">;
 export type Field = S<"MagicField">;
 export type BlockRun = S<"MagicBlockRun">;
+export type AssetRun = S<"MagicAssetRun">;
 export type Plan = S<"MagicPlan">;
 /** a block's estimate as the page shows it */
 export type Estimate = { seconds: number | null; host: string | null; source: string };
@@ -192,6 +193,20 @@ export const FAKE_KINDS: Kinds = {
     },
     { kind: "music", fields: [], models: [], off: "Comes with Create's Music and Sound" },
     { kind: "sound", fields: [], models: [], off: "Comes with Create's Music and Sound" },
-    { kind: "frame", fields: [], models: [], off: "Board frames come with the storyboard" },
+    {
+      kind: "frame",
+      fields: ["prompt", "refs", "size", "seed"],
+      models: [
+        {
+          workflow_id: "qwen-image",
+          name: "Qwen Image 2.1",
+          title: "Qwen Image",
+          fields: ["prompt", "refs", "size", "seed"],
+          greyed: {},
+          seconds: 6,
+          advanced: [],
+        },
+      ],
+    },
   ],
 };

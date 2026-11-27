@@ -149,7 +149,8 @@ function AudioUpload({ onDone }: { onDone: (t: Take) => void }) {
 }
 
 /** The dialog's content, mounted while it is open (so each opening starts with nothing picked). */
-function Picker({
+/** The picker's grid, search and filters (no dialog): Magic's Import puts it in a tab. `action` names its button. */
+export function Picker({
   max,
   onClose,
   onPick,
@@ -159,7 +160,9 @@ function Picker({
   audioUpload,
   help,
   frames,
+  action = "Add",
 }: {
+  action?: string;
   max: number;
   onClose: () => void;
   onPick: (takes: Take[]) => void;
@@ -327,7 +330,7 @@ function Picker({
               onClose();
             }}
           >
-            Add {picked.length || ""}
+            {action} {picked.length || ""}
           </button>
         )}
       </div>

@@ -7,7 +7,13 @@ import { Camera, ChevronDown, Clock3, X, Plus, SlidersHorizontal, Trash2 } from 
 import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
+import { AssetDialog } from "@/components/magic/asset-dialog";
 import { BlockDialog } from "@/components/magic/block-dialog";
+import { FrameDialog } from "@/components/magic/frame-dialog";
+import { ImportDialog } from "@/components/magic/import";
+import { RoughCut } from "@/components/magic/rough-cut";
+import { GalleryPicker } from "@/components/gallery/picker";
+import { useVoices } from "@/lib/library";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
 import { AssetsRow, Lanes, StatusChip, refText } from "@/components/magic/lanes";
 import {
@@ -51,8 +57,11 @@ import "./magic.css";
 const PANEL = "magic-side-panel";
 /** Why runs can't go (a board with no way to run). */
 export const RUNS_LATER = "Runs come with the standard request";
-/** What runs in phase D: image, video and voice blocks that are not dialogues. */
-const runsHere = (b: Block) => FORM_KINDS.includes(b.kind) && !b.request.turns?.length;
+/** What runs: image, video and voice blocks that are not dialogues (phase D), board frames (phase E). */
+const runsHere = (b: Block) =>
+  (FORM_KINDS.includes(b.kind) || b.kind === "frame") && !b.request.turns?.length;
+/** a Gallery pick a menu asked for */
+type Pick = Parameters<NonNullable<Act["gallery"]>>[0];
 
 const noSub = () => () => undefined;
 const readPanel = () => {
@@ -117,6 +126,13 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const [asking, setAsking] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [usedAsset, setUsedAsset] = useState<string | null>(null);
+  // phase E: an asset opened ("new" makes one), Import (into an asset, or a new one), the rough cut (from a frame;
+  // null closed), a Gallery pick
+  const [assetOpen, setAssetOpen] = useState<string | null>(null);
+  const [importing, setImporting] = useState<{ asset?: string } | null>(null);
+  const [rough, setRough] = useState<string | null | undefined>(null);
+  const [picking, setPicking] = useState<Pick | null>(null);
+  const voices = useVoices();
   const [kept, setKept] = useState<string[]>([]);
   const [said, setSaid] = useState("");
   const [refused, setError] = useState("");
@@ -233,6 +249,58 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           }
         : null,
       copyText: (s) => void navigator.clipboard?.writeText(s).catch(() => undefined),
+      openAsset: setAssetOpen,
+      importTo: board.gallery ? (asset) => setImporting({ asset }) : undefined,
+      rough: setRough,
+      gallery: board.gallery ? setPicking : null,
+      views: board.run ? board.makeViews : null,
+      fromBoard: board.run
+        ? (fid, before = []) => {
+            // the frame's own changes, then its shot: made under it (the board's place mode) or run again
+            let d = doc;
+            for (const op of before) {
+              const r = apply(d, op);
+              if ("error" in r) return setError(r.error);
+              d = r.doc;
+            }
+            const f = d.blocks.find((b) => b.id === fid);
+            if (!f) return;
+            const model = f.request.shot_model;
+            const made = d.blocks.find((b) => b.from_frame === fid);
+            if (made) {
+              const ops = [
+                ...before,
+                ...(model && made.request.model !== model
+                  ? [{ op: "block" as const, id: made.id, set: { request: { ...made.request, model } } }]
+                  : []),
+              ];
+              if (ops.length && !edit(ops)) return;
+              return run([made.id]);
+            }
+            const shots = d.lanes.find((l) => l.role === "shots");
+            if (!shots) return setError("Add a Shots lane first.");
+            const add: Op = {
+              op: "add",
+              mode,
+              block: {
+                lane: shots.id,
+                at: f.at,
+                length: f.length,
+                kind: "video",
+                name: `Shot ${d.blocks.filter((b) => b.kind === "video").length + 1}`,
+                from_frame: f.id,
+                request: { kind: "video", ...(model ? { model } : {}) },
+                takes: [],
+                effects: [],
+              },
+            };
+            const r = apply(d, add);
+            if ("error" in r) return setError(r.error);
+            if (!edit([...before, add])) return;
+            const shot = r.doc.blocks.find((b) => b.from_frame === fid);
+            if (shot) toRun.current = shot.id;
+          }
+        : undefined,
     }),
     [doc, takes, mode, frame, sel, edit, run, board, open, seek, clip],
   );
@@ -424,7 +492,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         {!doc.lanes.length ? (
           <>
             {error && <ErrorNote>{error}</ErrorNote>}
-            <EmptyBoard onLane={addLane} />
+            <EmptyBoard onLane={addLane} onAsset={() => setAssetOpen("new")} />
           </>
         ) : (
           <div className="mb">
@@ -664,7 +732,12 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               </div>
             )}
             {error && <ErrorNote>{error}</ErrorNote>}
-            {doc.assets.length > 0 && <AssetsRow doc={doc} act={act} usedAsset={usedAsset} />}
+            <AssetsRow
+              doc={doc}
+              act={act}
+              usedAsset={usedAsset}
+              voiceName={(id) => voices?.find((v) => v.id === id)?.name}
+            />
             <Lanes
               doc={doc}
               takes={takes}
@@ -769,9 +842,57 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         <p role="status" className="m-0 -mt-2 min-h-4 px-1 text-[12px] text-t2">
           {said}
         </p>
+        <FrameDialog
+          act={act}
+          block={doc.blocks.find((b) => b.id === opened && b.kind === "frame") ?? null}
+          kinds={board.kinds}
+          runs={board.runs}
+          estimate={opened ? board.estimate(opened) : undefined}
+          shotEstimate={board.estimate}
+          gallery={board.gallery}
+          onClose={() => setOpened(null)}
+        />
+        <AssetDialog
+          act={act}
+          id={assetOpen}
+          kinds={board.kinds}
+          runs={board.assetRuns}
+          gallery={board.gallery}
+          onImport={(asset) => setImporting({ asset })}
+          onOpen={(id) => {
+            setSel([id]);
+            setUsedAsset(null);
+          }}
+          onClose={() => setAssetOpen(null)}
+        />
+        <ImportDialog
+          act={act}
+          into={importing?.asset}
+          open={!!importing}
+          onClose={() => setImporting(null)}
+          onMade={setAssetOpen}
+        />
+        <RoughCut doc={doc} takes={takes} from={rough} onClose={() => setRough(null)} />
+        <GalleryPicker
+          open={!!picking}
+          onClose={() => setPicking(null)}
+          max={picking?.max ?? 1}
+          kind={picking?.kind ?? null}
+          title={picking?.title}
+          onPick={(ts) =>
+            picking?.onPick(
+              ts.map((t) => ({
+                id: t.id,
+                kind: t.kind,
+                title: t.title,
+                duration: t.video?.duration_s ?? t.audio?.duration_s ?? undefined,
+              })),
+            )
+          }
+        />
         <BlockDialog
           act={act}
-          block={doc.blocks.find((b) => b.id === opened) ?? null}
+          block={doc.blocks.find((b) => b.id === opened && b.kind !== "frame") ?? null}
           kinds={board.kinds}
           runs={board.runs}
           estimate={opened ? board.estimate(opened) : undefined}
@@ -803,7 +924,9 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             const r = apply(doc, { op: "add", block, mode: m });
             if ("doc" in r) {
               edit({ op: "add", block, mode: m });
-              setSel(r.doc.blocks.filter((b) => !before.has(b.id)).map((b) => b.id));
+              const made = r.doc.blocks.filter((b) => !before.has(b.id)).map((b) => b.id);
+              setSel(made);
+              if (block.kind === "frame" && made.length === 1) setOpened(made[0]);
             } else setError(r.error);
             setAdding(null);
           }}
@@ -923,7 +1046,7 @@ const Play10 = () => (
 );
 
 /** A new board (frame 11): lanes in time; a brief (with the Assistant) or a lane. */
-function EmptyBoard({ onLane }: { onLane: () => void }) {
+function EmptyBoard({ onLane, onAsset }: { onLane: () => void; onAsset: () => void }) {
   return (
     <div className="mb items-center justify-center gap-3 py-16 text-center">
       <h2 className="m-0 font-display text-xl font-bold">A new board</h2>
@@ -941,12 +1064,7 @@ function EmptyBoard({ onLane }: { onLane: () => void }) {
           <Plus size={13} aria-hidden />
           Lane
         </button>
-        <button
-          type="button"
-          className="chip bevel rounded-[10px] bg-s4"
-          disabled
-          title="Comes with the asset dialog"
-        >
+        <button type="button" className="chip bevel rounded-[10px] bg-s4" onClick={onAsset}>
           <Plus size={13} aria-hidden />
           Asset
         </button>

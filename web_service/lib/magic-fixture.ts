@@ -77,14 +77,14 @@ export function sampleBoard(): { name: string; doc: Doc; takes: Takes } {
       {
         id: "umbrella",
         kind: "prop",
-        handle: "red umbrella",
+        handle: "red-umbrella",
         name: "Red umbrella",
         sheet: ["umb-1", "umb-2"],
       },
       {
         id: "stop",
         kind: "place",
-        handle: "bus stop",
+        handle: "bus-stop",
         name: "Bus stop",
         sheet: ["stop-1", "stop-2", "stop-3"],
       },
@@ -162,7 +162,7 @@ export function sampleBoard(): { name: string; doc: Doc; takes: Takes } {
     request: {
       kind: "video",
       model: "LTX 2.5",
-      prompt: "@mara opens a @red umbrella as the bus pulls away, rain on the glass",
+      prompt: "@mara opens a @red-umbrella as the bus pulls away, rain on the glass",
       refs: [mara, { block: "s1", part: "last" }, stop, { asset: "umbrella" }],
     },
   });
