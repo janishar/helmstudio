@@ -151,6 +151,13 @@ for the owner's OK before any GPU time. Also: cheap sketches first and finals on
 stage), the GPU limit, model fit (LTX vs MiniMax H3, first/last frames, joins), sound with picture (ties, music
 sections on beats, MMAudio from a shot), reviewing like a director (compare, pin, say why, flag out of date before
 Send), and sample plans (30 s ad, 1 min story, music video) with lanes, block counts and a GPU budget.
+Line it up with the Animator skill (owner, 2026-11-27: "will it complement anitor skill or contradict it"): the
+order everywhere is idea and the style line first (as the Animator says: a later style change redoes every keyframe),
+then characters, props, settings, then beats, frames, shots, sound; in Magic these are board assets (Character, Prop,
+Place; Elements import as a copy), not Create Elements; the board is the shot list and Send to Timeline assembles it.
+Roles: Animator = cartoon craft, Cinematic filmmaker = camera and framing, Magic director = planning and running a
+board; each refers to the others instead of repeating them. Add one line to the Animator's SKILL.md: on a Magic board,
+follow the Magic director skill for where things live.
 
 ## Multi-arch images (noted 2026-11-25)
 
