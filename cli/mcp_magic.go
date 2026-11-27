@@ -118,7 +118,7 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 				Started json.RawMessage `json:"started"`
 			}
 			if err := s.c.callCtx(ctx, http.MethodPost, "/v1/studio"+board(in)+"/assets/"+in.esc("asset")+"/views",
-				in.pick("revision", "views", "model"), http.StatusAccepted, &r); err != nil {
+				in.pick("revision", "views", "model", "width", "height", "advanced"), http.StatusAccepted, &r); err != nil {
 				return nil, err
 			}
 			// seconds null (unknown): studio plans views in process, no route answers that estimate

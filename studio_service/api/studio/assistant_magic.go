@@ -65,6 +65,10 @@ type magicArgs struct {
 	Asset  string          `json:"asset"`
 	Views  []string        `json:"views"`
 	Model  *string         `json:"model"`
+	// API 1.98: make_views' size and the model's own params
+	Width    *int           `json:"width"`
+	Height   *int           `json:"height"`
+	Advanced map[string]any `json:"advanced"`
 }
 
 // magicFramePreview is a board frame run_blocks started before asking.
@@ -501,11 +505,10 @@ func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[st
 // magicViews is make_views (API 1.93): Make views planned as image runs; within the limit (and not ask) they start at
 // once, else the preview is run_blocks' {revision, plan, frames: [], rest} and the Yes starts them.
 func (s *Service) magicViews(ctx context.Context, caller common.Caller, call magicCall, base string, a magicArgs, confirmed, ask bool) message.ToolsReply {
+	views := &dto.MagicViewsCreate{Revision: a.Revision, Views: a.Views, Model: deref(a.Model), Width: a.Width,
+		Height: a.Height, Advanced: a.Advanced}
 	start := func(seconds *float64) message.ToolsReply {
-		body := map[string]any{"revision": a.Revision, "views": a.Views}
-		if a.Model != nil {
-			body["model"] = *a.Model
-		}
+		body := views
 		var out struct {
 			dto.MagicViewsStarted
 			Board struct {
@@ -517,7 +520,7 @@ func (s *Service) magicViews(ctx context.Context, caller common.Caller, call mag
 		}
 		return message.ToolsReply{Result: map[string]any{"revision": out.Board.Revision, "started": out.Started, "seconds": seconds}}
 	}
-	plan, err := s.PlanMagicViews(ctx, caller, a.BoardID, a.Asset, a.Views, deref(a.Model))
+	plan, err := s.PlanMagicViews(ctx, caller, a.BoardID, a.Asset, views)
 	if err != nil {
 		var refused *network.APIError
 		if errors.As(err, &refused) && refused.Code == http.StatusNotFound {

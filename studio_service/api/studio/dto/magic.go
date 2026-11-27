@@ -53,6 +53,10 @@ type MagicViewsCreate struct {
 	Revision int      `json:"revision"`
 	Views    []string `json:"views"`
 	Model    string   `json:"model,omitempty"`
+	// API 1.98: every view's size and the model's own params, as a block request's
+	Width    *int           `json:"width,omitempty"`
+	Height   *int           `json:"height,omitempty"`
+	Advanced map[string]any `json:"advanced,omitempty"`
 }
 
 // Validate requires the revision and 1-6 named views, each once.
@@ -66,6 +70,11 @@ func (b *MagicViewsCreate) Validate() string {
 	for i, v := range b.Views {
 		if strings.TrimSpace(v) == "" || len([]rune(v)) > 40 || slices.Contains(b.Views[:i], v) {
 			return "views are names of 1-40 characters, each once"
+		}
+	}
+	for _, n := range []*int{b.Width, b.Height} {
+		if n != nil && (*n < 16 || *n > 8192) {
+			return "width and height must be 16 to 8192"
 		}
 	}
 	return ""

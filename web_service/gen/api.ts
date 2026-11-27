@@ -9784,6 +9784,14 @@ export interface components {
             views: string[];
             /** @description an image model's workflow id; absent: the image kind's first real one (Echo, env fake, only when nothing else is on a host); the size is studio's: 1K, a character 3:4, a prop 1:1, a place the board's shape */
             model?: string;
+            /** @description from 1.98: every view's width; absent: studio's size above; snapped to the model's grid and capped by its max, as a block's */
+            width?: number;
+            /** @description from 1.98: every view's height (as width) */
+            height?: number;
+            /** @description from 1.98: the model's own params for every view, as a block request's `advanced` (`{"model.variant": "base", "model.precision": "bf16"}`); a key or enum value the model lacks is dropped */
+            advanced?: {
+                [key: string]: unknown;
+            };
         };
         MagicViewsStarted: {
             board: components["schemas"]["MagicBoard"];

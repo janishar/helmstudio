@@ -262,16 +262,28 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       run([id]);
     }
   }, [doc, run]);
+  // the runs a Stop asked to stop, until none of them is going
+  const stopping = useRef<string[]>([]);
   /** Stops runs still going: of these blocks, or all the board's */
   const stop = useCallback(
     (ids?: string[]) => {
       const runs = board.going.filter((g) => !ids || ids.includes(g.block)).map((g) => g.run);
       if (!runs.length) return;
       board.stop(runs);
+      stopping.current = runs;
       setSaid(`Stopping ${runs.length} run${runs.length > 1 ? "s" : ""}`);
     },
     [board],
   );
+  // "Stopping n runs" turns "Stopped" once none of them is going (it stayed for good: nothing set the line again)
+  useEffect(() => {
+    const runs = stopping.current;
+    if (!runs.length || board.going.some((g) => runs.includes(g.run))) return;
+    stopping.current = [];
+    setSaid((s) =>
+      s.startsWith("Stopping") ? `Stopped ${runs.length} run${runs.length > 1 ? "s" : ""}` : s,
+    );
+  }, [board.going]);
   /** a block's estimate: studio's plan, else (the fake mode) the kind's guess */
   const estOf = useCallback(
     (b: Block): Estimate | undefined =>
@@ -373,6 +385,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       compare: setComparing,
       gallery: board.gallery ? setPicking : null,
       views: board.run ? board.makeViews : null,
+      board: board.id,
       fromBoard: board.run
         ? (fid, before = []) => {
             // the frame's own changes, then its shot: made under it (the board's place mode) or run again

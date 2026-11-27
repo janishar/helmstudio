@@ -47,8 +47,12 @@ describe("assets", () => {
     render(<MagicBoard local />);
     fireEvent.click(screen.getByRole("button", { name: "+ Asset" }));
     let dlg = screen.getByRole("dialog", { name: /New asset/ });
-    fireEvent.change(within(dlg).getByRole("textbox", { name: "Name" }), { target: { value: "Mara" } });
-    expect((within(dlg).getByRole("textbox", { name: /^Handle/ }) as HTMLInputElement).value).toBe("@mara-2");
+    fireEvent.change(within(dlg).getByRole("textbox", { name: "Name" }), {
+      target: { value: "Mara" },
+    });
+    expect((within(dlg).getByRole("textbox", { name: /^Handle/ }) as HTMLInputElement).value).toBe(
+      "@mara-2",
+    );
     fireEvent.click(within(dlg).getByRole("button", { name: "Make asset" }));
     dlg = screen.getByRole("dialog", { name: /Character · @mara-2/ });
     expect(within(dlg).getByText(/Not used yet/)).toBeTruthy();
@@ -58,18 +62,28 @@ describe("assets", () => {
     const add = within(dlg).getByRole("textbox", { name: "Add a view" });
     fireEvent.change(add, { target: { value: "Smiling" } });
     fireEvent.keyDown(add, { key: "Enter" });
-    expect(within(pick).getByRole("button", { name: "Smiling" }).getAttribute("aria-pressed")).toBe("true");
+    expect(within(pick).getByRole("button", { name: "Smiling" }).getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    // what it makes (API 1.98): studio's size, changed in the setup and kept for the board
+    const line = within(dlg).getByRole("button", { name: /^768 × 1024/ });
+    fireEvent.click(line);
+    const w = within(dlg).getByRole("spinbutton", { name: "Width" });
+    fireEvent.change(w, { target: { value: "640" } });
+    fireEvent.blur(w);
+    expect(within(dlg).getByRole("button", { name: /^640 × 1024/ })).toBeTruthy();
     fireEvent.click(within(dlg).getByRole("button", { name: /^Make 4/ }));
     const views = within(dlg).getByRole("list", { name: "Views" });
-    expect(within(views).getAllByRole("listitem").map((x) => x.getAttribute("aria-label"))).toEqual([
-      "Front",
-      "Side",
-      "Full figure",
-      "Smiling",
-    ]);
+    expect(
+      within(views)
+        .getAllByRole("listitem")
+        .map((x) => x.getAttribute("aria-label")),
+    ).toEqual(["Front", "Side", "Full figure", "Smiling"]);
     // the Assets row has it, and Import is the studio's (no Gallery in the fake mode)
     expect(screen.getByRole("button", { name: "Asset @mara-2, Character" })).toBeTruthy();
-    expect((screen.getByRole("button", { name: "Import" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Import" }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
   });
 
   it("an asset opened shows where it is used, lit on a small board", () => {
@@ -85,10 +99,16 @@ describe("assets", () => {
 describe("the storyboard", () => {
   it("a frame opened: style, framing; Generate from board makes the shot under it and runs it (frame 7)", () => {
     render(<MagicBoard local />);
-    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), {
+      key: "Enter",
+    });
     const dlg = screen.getByRole("dialog", { name: /Board · Frame 3/ });
     fireEvent.click(within(dlg).getByRole("button", { name: "Rough" }));
-    fireEvent.click(within(within(dlg).getByRole("group", { name: "Framing" })).getByRole("button", { name: "Close" }));
+    fireEvent.click(
+      within(within(dlg).getByRole("group", { name: "Framing" })).getByRole("button", {
+        name: "Close",
+      }),
+    );
     fireEvent.click(within(dlg).getByRole("button", { name: "Generate from board" }));
     // the frame's changes and the new shot, made from it, running
     const shot = screen.getByRole("button", { name: /Video block Shot 4/ });
@@ -98,8 +118,14 @@ describe("the storyboard", () => {
 
   it("the rough cut plays the frames in order with their lines", () => {
     render(<MagicBoard local />);
-    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 1/ }), { key: "Enter" });
-    fireEvent.click(within(screen.getByRole("dialog", { name: /Board · Frame 1/ })).getByRole("button", { name: "Rough cut" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 1/ }), {
+      key: "Enter",
+    });
+    fireEvent.click(
+      within(screen.getByRole("dialog", { name: /Board · Frame 1/ })).getByRole("button", {
+        name: "Rough cut",
+      }),
+    );
     const cut = screen.getByRole("dialog", { name: /Rough cut/ });
     expect(within(cut).getByText("Every night, the same bus.")).toBeTruthy();
     expect(within(cut).getAllByRole("listitem")).toHaveLength(3);
@@ -109,7 +135,9 @@ describe("the storyboard", () => {
 
   it("@ in a prompt offers the board's assets; a pick writes the handle and joins the refs", () => {
     render(<MagicBoard local />);
-    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), { key: "Enter" });
+    fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), {
+      key: "Enter",
+    });
     const dlg = screen.getByRole("dialog", { name: /Board · Frame 3/ });
     const box = within(dlg).getByRole("textbox", { name: "What happens" }) as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "then @um", selectionStart: 8 } });
@@ -118,5 +146,15 @@ describe("the storyboard", () => {
     fireEvent.click(within(dlg).getByRole("option", { name: /@red-umbrella/ }));
     expect(box.value).toBe("then @red-umbrella ");
     expect(within(dlg).getByText("@red-umbrella", { selector: ".rc.big" })).toBeTruthy();
+  });
+});
+
+describe("the board's Stop runs", () => {
+  it("says Stopping, then Stopped once none of them is going (it stayed on for good)", () => {
+    render(<MagicBoard local />);
+    fireEvent.click(screen.getByRole("button", { name: /^Stop runs/ }));
+    const ask = screen.getAllByRole("alert").find((x) => /^Stop \d/.test(x.textContent ?? ""))!;
+    fireEvent.click(within(ask).getByRole("button", { name: "Stop runs" }));
+    expect(screen.getAllByRole("status").map((s) => s.textContent)).toContain("Stopped 1 run");
   });
 });

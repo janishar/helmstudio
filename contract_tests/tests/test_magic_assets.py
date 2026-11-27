@@ -82,6 +82,9 @@ def test_frames_views_and_assets(api, api_b):
     r = api.post(f"{base}/assets/nobody/views", json={"revision": rev, "views": ["Front"]})
     assert r.status_code == 422 and r.json()["detail"] == "unknown asset nobody"
     assert api_b.post(views, json={"revision": rev, "views": ["Front"]}).status_code == 404
+    # API 1.98: a size out of bounds
+    r = api.post(views, json={"revision": rev, "views": ["Front"], "width": 8, "height": 1024})
+    assert r.status_code == 422
     v = ok(api.post(views, json={"revision": rev, "views": ["Front"]}), 202)
     assert [s["view"] for s in v["started"]] == ["Front"] and v["board"]["asset_runs"][0][
         "view"

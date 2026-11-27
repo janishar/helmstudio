@@ -4247,6 +4247,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   keeps them against the asset (`asset`, `label` the view) and the projector adds each take to its sheet named by the
   view, as a studio revision. `MagicBoard.asset_runs` lists them (the last 20 of each asset). From 1.84: a view of
   the asset still queued or running is not made again (409 `Front is already being made`).
+  From 1.98: `width`, `height` and `advanced` (as a block request's: `model.variant`, `model.precision`) apply to
+  every view of the batch; the size goes on the model's grid under its max, a key or value the model lacks is dropped.
 - **Board frames run** (`kind` frame) on the image kind's models: GET /magic/kinds lists them with the image fields.
   The prompt is the frame's style (`sketch` absent: `A storyboard sketch: loose pencil lines, black and white`; rough;
   full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset

@@ -74,11 +74,11 @@ func assetRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]dto.MagicAsset
 	return out, err
 }
 
-// viewBlocks are Make views' runs of asset a as image blocks (one per view, model "" the kind's first), as they run
-// and as they are planned.
-func viewBlocks(d magic.Doc, a *magic.Asset, views []string, model string) []*magic.Block {
+// viewBlocks are Make views' runs of asset a as image blocks (one per view of v, model "" the kind's first), as they
+// run and as they are planned; v's size and advanced (API 1.98) go on every one, as a block's own.
+func viewBlocks(d magic.Doc, a *magic.Asset, v *dto.MagicViewsCreate, model string) []*magic.Block {
 	var out []*magic.Block
-	for _, view := range views {
+	for _, view := range v.Views {
 		b := &magic.Block{ID: a.ID, Kind: "image", Length: 1, Name: "@" + a.Handle,
 			Request: map[string]any{"kind": "image", "prompt": viewPrompt(a, view)}}
 		if model != "" {
@@ -92,6 +92,15 @@ func viewBlocks(d magic.Doc, a *magic.Asset, views []string, model string) []*ma
 			b.Request["width"], b.Request["height"] = stillSize(1, 1)
 		default:
 			b.Request["width"], b.Request["height"] = stillSize(float64(d.Target.Width), float64(d.Target.Height))
+		}
+		if v.Width != nil {
+			b.Request["width"] = float64(*v.Width)
+		}
+		if v.Height != nil {
+			b.Request["height"] = float64(*v.Height)
+		}
+		if len(v.Advanced) > 0 { // standardInputs keeps only the model's own keys and values
+			b.Request["advanced"] = v.Advanced
 		}
 		out = append(out, b)
 	}
@@ -114,7 +123,7 @@ func viewModel(ws []registry.Workflow, pick string) string {
 
 // PlanMagicViews is the plan of Make views (API 1.93, the Assistant's make_views under the ask rule): each view an
 // image run of model on board id's asset, with the caller's rates. An unknown asset plans nothing (the route says why).
-func (s *Service) PlanMagicViews(ctx context.Context, caller common.Caller, id, assetID string, views []string, model string) (dto.MagicPlan, error) {
+func (s *Service) PlanMagicViews(ctx context.Context, caller common.Caller, id, assetID string, v *dto.MagicViewsCreate) (dto.MagicPlan, error) {
 	if !s.registry.Ready() {
 		return dto.MagicPlan{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
@@ -129,7 +138,7 @@ func (s *Service) PlanMagicViews(ctx context.Context, caller common.Caller, id, 
 		if a == nil {
 			return nil
 		}
-		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, viewBlocks(d, a, views, viewModel(s.registry.Workflows(), model)), &out)
+		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, viewBlocks(d, a, v, viewModel(s.registry.Workflows(), v.Model)), &out)
 	})
 	return out, err
 }
@@ -181,7 +190,7 @@ func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, 
 			pics.Refs, pics.RefAssets = []string{a.Sheet[0]}, []string{""}
 		}
 		via := common.ViaOf(caller.Via)
-		for i, b := range viewBlocks(d, a, body.Views, "") {
+		for i, b := range viewBlocks(d, a, body, "") {
 			view := body.Views[i]
 			run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
 				Inputs: standardInputs(w, d, b, pics, "", -1)})

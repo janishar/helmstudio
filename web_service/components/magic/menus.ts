@@ -101,6 +101,9 @@ export const EFFECTS: Effect[] = [
 export const LENGTHS = [0.5, 1, 2];
 const STYLES = ["sketch", "rough", "full"] as const;
 
+/** Make views' model, size and the model's own params for the batch (API 1.98). */
+export type ViewsMore = Omit<S<"MagicViewsCreate">, "revision" | "views">;
+
 /** What the menus act through: the board's own actions. */
 export type Act = {
   doc: Doc;
@@ -152,7 +155,9 @@ export type Act = {
       }) => void)
     | null;
   /** Make views of an asset (null while runs can't go), on an image model (absent: the kind's first) */
-  views?: ((asset: string, views: string[], model?: string) => void) | null;
+  views?: ((asset: string, views: string[], more?: ViewsMore) => void) | null;
+  /** the board's id (Make views remembers its size, variant and precision per board) */
+  board?: string;
   /** Compare takes of a block (API 1.89: its dialog's Compare) */
   compare?: (id: string) => void;
 };

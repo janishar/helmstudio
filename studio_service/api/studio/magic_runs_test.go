@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/helmstudio/studio_service/api/magic"
+	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -263,10 +264,18 @@ func TestEstimateParts(t *testing.T) {
 	}
 	sd := magic.Doc{Target: magic.Target{Width: 854, Height: 480, FPS: 24}}
 	for kind, want := range map[string][2]float64{"character": {768, 1024}, "prop": {1024, 1024}, "place": {1024, 576}} {
-		b := viewBlocks(sd, &magic.Asset{ID: "a1", Handle: "x", Kind: kind}, []string{"Front"}, "")[0]
+		b := viewBlocks(sd, &magic.Asset{ID: "a1", Handle: "x", Kind: kind}, &dto.MagicViewsCreate{Views: []string{"Front"}}, "")[0]
 		if b.Request["width"] != want[0] || b.Request["height"] != want[1] {
 			t.Error(kind, b.Request)
 		}
+	}
+	// API 1.98: the batch's own size and advanced win
+	w, h := 640, 960
+	adv := map[string]any{"model.variant": "base"}
+	b := viewBlocks(sd, &magic.Asset{ID: "a1", Handle: "x", Kind: "prop"}, &dto.MagicViewsCreate{Views: []string{"Front"},
+		Width: &w, Height: &h, Advanced: adv}, "")[0]
+	if b.Request["width"] != 640.0 || b.Request["height"] != 960.0 || b.Request["advanced"].(map[string]any)["model.variant"] != "base" {
+		t.Error(b.Request)
 	}
 	ws := []registry.Workflow{{ID: "echo", Env: "fake", Standard: &registry.Standard{Kind: "image", Model: "Echo"}},
 		{ID: "qwen", Env: "qwen-image", Standard: &registry.Standard{Kind: "image", Model: "Qwen"}}}

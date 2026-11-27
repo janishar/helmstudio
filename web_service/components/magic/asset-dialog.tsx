@@ -8,6 +8,7 @@ import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
 import { KIND_NAME } from "@/components/magic/icons";
 import { assetMenu, viewMenu, type Act } from "@/components/magic/menus";
+import { VariantField, useModelList, useVariant } from "@/components/magic/request";
 import { message } from "@/lib/api";
 import { useVoices } from "@/lib/library";
 import {
@@ -29,11 +30,35 @@ import {
   type AssetKind,
 } from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
-import { kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
+import { VARIANT, kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
 import { voiceLine } from "@/lib/voices";
 
 const KIND_CLS = { character: "k-char", prop: "k-prop", place: "k-place" } as const;
+
+// Make views' picks, remembered per board in this browser (API 1.98): a size per asset kind, the variant, the precision
+type ViewsPick = {
+  size?: Partial<Record<AssetKind, [number, number]>>;
+  variant?: string;
+  precision?: string;
+};
+const PRECISION = "model.precision";
+const pickKey = (board?: string) => `helm.magic.views.${board ?? "local"}`;
+function readPick(board?: string): ViewsPick {
+  try {
+    return JSON.parse(localStorage.getItem(pickKey(board)) ?? "{}") as ViewsPick;
+  } catch {
+    return {};
+  }
+}
+function savePick(board: string | undefined, p: ViewsPick) {
+  try {
+    localStorage.setItem(pickKey(board), JSON.stringify(p));
+  } catch {
+    // a private window: kept for this dialog only
+  }
+}
+const side = (v: string) => Math.min(8192, Math.max(16, Math.round(Number(v) || 16)));
 
 export function AssetDialog({
   act,
@@ -217,9 +242,39 @@ function Body({
   // the user's pick, else a real model (Echo, env fake, only when it is the only one)
   const image =
     images.find((m) => m.workflow_id === pick) ?? images.find((m) => m.env !== "fake") ?? images[0];
+  // the batch's size, variant and precision (API 1.98): the board's picks, else studio's size, the workflow's own
+  // variant and the precision the variant loads at (the workflow's default when it can)
+  const [vp, setVp] = useState(() => readPick(a.board));
+  const keep = (p: ViewsPick) => {
+    setVp(p);
+    savePick(a.board, p);
+  };
+  const [setup, setSetup] = useState(false);
+  const def = viewSize(x.kind, d.target);
+  const [w, h] = vp.size?.[x.kind] ?? [def.width, def.height];
+  const vreq = {
+    kind: "image" as const,
+    advanced: vp.variant ? { [VARIANT]: vp.variant } : undefined,
+  };
+  const variant = useVariant(image, vreq);
+  const list = useModelList();
+  const pp = image?.advanced.find((p) => p.path === PRECISION)?.param;
+  const loads = list?.models
+    .filter((m) => m.family === image?.family)
+    .flatMap((m) => m.variants)
+    .find((v) => v.id === variant.cur)?.precisions as string[] | undefined;
+  const precs = (pp?.enum ?? []).filter((p) => !loads || loads.includes(p));
+  const precision =
+    precs.find((p) => p === vp.precision) ??
+    precs.find((p) => p === String(pp?.default)) ??
+    precs[0];
+  const advanced = {
+    ...(variant.cur && { [VARIANT]: variant.cur }),
+    ...(precision && { [PRECISION]: precision }),
+  };
   const est = packSeconds(
     image,
-    { kind: "image", length: 1, request: { kind: "image", ...viewSize(x.kind, d.target) } },
+    { kind: "image", length: 1, request: { kind: "image", width: w, height: h, advanced } },
     d,
   );
   // the views to make: the missing ones until the user picks (at most 6, the API's), and their own names added
@@ -376,7 +431,12 @@ function Body({
                     : `Makes ${sel.join(", ")}`
               }
               onClick={() => {
-                a.views?.(x.id, sel, image?.workflow_id);
+                a.views?.(x.id, sel, {
+                  model: image?.workflow_id,
+                  width: w,
+                  height: h,
+                  ...(Object.keys(advanced).length && { advanced }),
+                });
                 setChosen(null);
                 setExtra([]);
               }}
@@ -431,6 +491,63 @@ function Body({
               }}
             />
           </div>
+          <button
+            type="button"
+            className="self-start text-[11px] text-t2 hover:text-t1"
+            aria-expanded={setup}
+            title="Size, variant and precision of every view"
+            onClick={() => setSetup(!setup)}
+          >
+            {w} × {h}
+            {variant.title ? ` · ${variant.title}` : ""}
+            {precision ? ` · ${precision}` : ""}
+          </button>
+          {setup && (
+            <div
+              className="flex flex-wrap items-start gap-3 rounded-xl bg-s2 p-2"
+              role="group"
+              aria-label="Views setup"
+            >
+              {(["Width", "Height"] as const).map((n, i) => (
+                <label key={`${n}${w}x${h}`} className="fld">
+                  <span className="lb">{n}</span>
+                  <input
+                    type="number"
+                    min={16}
+                    max={8192}
+                    className="in h-8 w-20 px-2 text-[12px]"
+                    defaultValue={i ? h : w}
+                    onBlur={(e) => {
+                      const v = side(e.target.value);
+                      keep({ ...vp, size: { ...vp.size, [x.kind]: i ? [w, v] : [v, h] } });
+                    }}
+                  />
+                </label>
+              ))}
+              <VariantField
+                model={image}
+                req={vreq}
+                set={(p) => keep({ ...vp, variant: p.advanced?.[VARIANT] as string | undefined })}
+              />
+              {precs.length > 1 && (
+                <div className="fld">
+                  <span className="lb">Precision</span>
+                  <div className="seg flex-wrap" role="group" aria-label="Precision">
+                    {precs.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        aria-pressed={precision === p}
+                        onClick={() => keep({ ...vp, precision: p })}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
           {x.kind === "character" && (
             <div className="flex flex-col gap-1.5">
               <h3 className="m-0 text-[13px]">Voice</h3>

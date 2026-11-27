@@ -93,7 +93,7 @@ export function EstimateLine({
 let models: { at: number; p: Promise<S<"ModelList"> | null> } | null = null;
 
 /** The models list (null before it comes and without studio). */
-function useModelList() {
+export function useModelList() {
   const [list, setList] = useState<S<"ModelList"> | null>(null);
   useEffect(() => {
     if (!models || Date.now() - models.at > 30_000)

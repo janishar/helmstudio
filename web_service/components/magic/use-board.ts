@@ -84,7 +84,13 @@ export type Board = {
   fresh: () => Promise<Going[]>;
   /** Make views: one image per view of an asset, onto its sheet, on an image model (absent: the first); null while
    * runs can't go */
-  makeViews: ((asset: string, views: string[], model?: string) => void) | null;
+  makeViews:
+    | ((
+        asset: string,
+        views: string[],
+        more?: Omit<S<"MagicViewsCreate">, "revision" | "views">,
+      ) => void)
+    | null;
   /** whether the Gallery and uploads are there (false in the fake mode) */
   gallery: boolean;
   /** a block's GPU-time estimate (studio's plan), undefined while unknown here */
@@ -478,14 +484,14 @@ export function useApiBoard():
         await refresh();
       }),
     gallery: true,
-    makeViews: (asset, views, model) =>
+    makeViews: (asset, views, more) =>
       queue(async () => {
         const r = await fresh(() =>
           ok(
             api.POST("/v1/studio/magic/boards/{board_id}/assets/{asset_id}/views", {
               params: { path: { board_id: id, asset_id: asset } },
               headers: web,
-              body: { revision: rev.current, views, ...(model ? { model } : {}) },
+              body: { revision: rev.current, views, ...more },
             }),
           ),
         );
