@@ -1488,6 +1488,95 @@
           }
         ]
       }
+    },
+    {
+      "description": "plan 38 P3: a sound take gets Stable Audio 3 Repaint (its span the whole take), Vary and Extend, and goes into the rows of ACE-Step Music and Stable Audio 3 Sound; no ACE-Step Repaint, Cover or Extend (class music)",
+      "take": "22222222-0000-4000-8000-000000000013",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "ace-step-music",
+            "title": "ACE-Step Music",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "compose.reference",
+            "inputs": {
+              "compose.reference": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000013"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "sa3-sound",
+            "title": "Stable Audio 3 Sound",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "sound.from_sound",
+            "inputs": {
+              "sound.from_sound": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000013"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "sa3-repaint",
+            "title": "Stable Audio 3 Repaint",
+            "action": "Repaint",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              },
+              "repaint.span": {
+                "start": 0,
+                "end": 2.0
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-vary",
+            "title": "Stable Audio 3 Vary",
+            "action": "Vary",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "vary.source",
+            "inputs": {
+              "vary.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-extend",
+            "title": "Stable Audio 3 Extend",
+            "action": "Extend",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "extend.source",
+            "inputs": {
+              "extend.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              }
+            }
+          }
+        ]
+      }
     }
   ]
 }

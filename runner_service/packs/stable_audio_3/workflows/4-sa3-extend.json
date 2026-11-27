@@ -47,7 +47,8 @@
   },
   "studio": {
     "composer": [
-      "prompt.text"
+      "prompt.text",
+      "extend.source"
     ],
     "quick": [
       "extend.seconds",

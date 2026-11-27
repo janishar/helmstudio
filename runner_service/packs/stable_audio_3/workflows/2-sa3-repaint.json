@@ -46,7 +46,9 @@
   },
   "studio": {
     "composer": [
-      "prompt.text"
+      "prompt.text",
+      "repaint.source",
+      "repaint.span"
     ],
     "quick": [
       "seed.seed"

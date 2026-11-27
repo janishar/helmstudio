@@ -122,7 +122,9 @@
       },
       "studio": {
         "composer": [
-          "prompt.text"
+          "prompt.text",
+          "repaint.source",
+          "repaint.span"
         ],
         "quick": [
           "seed.seed"
@@ -177,7 +179,8 @@
       },
       "studio": {
         "composer": [
-          "prompt.text"
+          "prompt.text",
+          "vary.source"
         ],
         "quick": [
           "vary.change",
@@ -234,7 +237,8 @@
       },
       "studio": {
         "composer": [
-          "prompt.text"
+          "prompt.text",
+          "extend.source"
         ],
         "quick": [
           "extend.seconds",

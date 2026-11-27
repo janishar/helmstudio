@@ -46,7 +46,8 @@
   },
   "studio": {
     "composer": [
-      "prompt.text"
+      "prompt.text",
+      "vary.source"
     ],
     "quick": [
       "vary.change",
