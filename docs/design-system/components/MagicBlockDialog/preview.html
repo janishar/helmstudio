@@ -1,4 +1,4 @@
-<!-- @dsCard group="Magic" height=420 -->
+<!-- @dsCard group="Magic" height=480 -->
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8"><title>MagicBlockDialog · preview</title></head>
@@ -14,6 +14,11 @@
     <select class="in" style="height:32px"><option>MiniMax Speech</option></select>
     <span style="font-size:11px;color:var(--t2)">or Kokoro</span>
   </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+    <span class="tag">Variant</span>
+    <div class="seg" role="group" aria-label="Variant"><button type="button" aria-pressed="false">Base</button><button type="button" aria-pressed="true">Turbo</button><button type="button" aria-pressed="false" disabled style="opacity:.45" title="Turbo fp8 not downloaded on gcp">Turbo fp8</button></div>
+  </div>
+  <span style="font-size:11px;color:var(--t2);margin-top:-6px">Turbo fp8 not downloaded on gcp</span>
   <div style="display:flex;flex-direction:column;gap:6px">
     <span style="font-size:12px;color:var(--t2)">Lines · 2</span>
     <div style="display:flex;gap:6px"><select class="in" style="height:32px;width:110px"><option>@mara</option></select><input class="in" style="height:32px;flex:1" value="Ready when you are."><span class="st st-ok">done</span></div>

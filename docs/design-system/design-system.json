@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T19:20:00Z",
+  "at": "2026-11-27T19:40:00Z",
   "via": "Claude Code",
-  "note": "Magic stop runs (docs/mock/MagicBoard.dc.html frames 1, 3, 8, 10; web app): MagicBlockDialog gains Stop (a chip after the running status in the block and frame dialogs, Stop in a running block's menu, Stop runs (N) in the board toolbar with its warn confirm; the lucide Square); AssistantDrawer gains the \"Stop its runs too\" row after Stop (owner, 2026-11-27: \"yes build it\")"
+  "note": "Magic variants (docs/mock/MagicBoard.dc.html frames 3 and 7; web app): MagicBlockDialog gains Variant, a Segmented beside Model (fp8 only where a host has the GPU; one that can't run greyed with why under it), the estimate naming it, and the variant on run rows, take rows and the take on stage's model line (owner, 2026-11-27: \"yes add them\")"
  }
 }
