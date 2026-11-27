@@ -217,6 +217,11 @@ describe("variants", () => {
     expect(variantChoices(qwen, { kind: "frame" }, list, both, both[1])[0].why).toBe(
       "Base not downloaded on gcp",
     );
+    // a CPU host (the fake runner) keeps Base and Turbo, each greyed by what it has on disk; fp8 stays out
+    expect(variantChoices(qwen, { kind: "frame" }, list, [mc("fake", "cpu")])).toEqual([
+      { id: "base", title: "Base", why: "Base not downloaded" },
+      { id: "turbo", title: "Turbo", why: "Turbo not downloaded" },
+    ]);
     // without the models list: the ids, nothing greyed
     expect(variantChoices(qwen, { kind: "frame" }, null, []).map((c) => c.title)).toEqual([
       "base",

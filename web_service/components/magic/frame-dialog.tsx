@@ -504,8 +504,11 @@ function Body({
                       type="button"
                       aria-pressed={model?.workflow_id === m.workflow_id}
                       title={m.title}
-                      // its variant is the model's own (API 1.94): another's Advanced goes
-                      onClick={() => set({ model: m.workflow_id, advanced: undefined })}
+                      // its variant is the model's own (API 1.94): another's Advanced goes (the picked one keeps it)
+                      onClick={() =>
+                        m.workflow_id !== model?.workflow_id &&
+                        set({ model: m.workflow_id, advanced: undefined })
+                      }
                     >
                       {m.name}
                     </button>

@@ -2,7 +2,6 @@
 // runs"): the kinds studio serves (GET /v1/studio/magic/kinds), a model's greyed fields, the pack's estimate before a
 // block has its own, and the board's takes and run placeholders made from studio's answer (MagicBoard runs, takes).
 import type { S } from "@/lib/api";
-import { variantDevices } from "@/lib/models";
 import { drivesOf, misfit, type Machine } from "@/lib/run-on";
 import { coverFor } from "@/lib/takes";
 import {
@@ -92,7 +91,8 @@ export function variantChoices(
     const fm = ms.find((x) => x.variants.some((v) => v.id === id));
     const v = fm?.variants.find((x) => x.id === id);
     if (!fm || !v) return [{ id, title: id }];
-    if (id !== cur && mcs.length && !variantDevices(fm, v).some((d) => devices.has(d))) return [];
+    // only a variant that names its own devices (fp8: cuda) is left out: a CPU host (the fake one) has every other
+    if (id !== cur && mcs.length && v.devices && !v.devices.some((d) => devices.has(d))) return [];
     const drives = drivesOf(list!, v);
     const miss = (mc: Machine) => misfit(mc, fm, v, drives);
     const off = pinned

@@ -440,8 +440,9 @@ function Body({
             <span className="text-[12px] text-t2">
               Take {n(picked)}
               {b.pinned === picked ? " · pinned" : ""}
-              {/* the model line (API 1.94): what made it, "LTX 2.5 · Distilled" */}
+              {/* the model line (API 1.94): what made it, "LTX 2.5 · Distilled · seed 43" (MagicBoard 3) */}
               {madeBy(kinds, runs, picked!) && ` · ${madeBy(kinds, runs, picked!)}`}
+              {stage.seed != null && stage.seed >= 0 ? ` · seed ${stage.seed}` : ""}
             </span>
           )}
           <h3 className="m-0 text-[13px]">

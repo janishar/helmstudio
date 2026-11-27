@@ -50,6 +50,11 @@ func TestStandardInputsPerPack(t *testing.T) {
 		// Advanced keeps only the model's own (generate.steps is MiniMax H3's, kept from a switch: dropped)
 		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain","advanced":{"sample1.steps":8,"generate.steps":6}}`, magicPics{}, "",
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=true prompt.text=rain sample1.steps=8 seed.seed=42`},
+		// API 1.94: the variant goes as Advanced model.variant; one this model lacks (Qwen's turbo on LTX) is dropped
+		{"qwen-image.", "mac.torch", "qwen-image", "image", `{"prompt":"fox","advanced":{"model.variant":"turbo"}}`, magicPics{}, "",
+			`canvas.height=736 canvas.mode=fixed canvas.width=1280 encode.refs=[] model.variant=turbo prompt.text=fox seed.seed=42`},
+		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain","advanced":{"model.variant":"turbo"}}`, magicPics{}, "",
+			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=true prompt.text=rain seed.seed=42`},
 		{"minimax-h3.", "mac.native", "minimax-h3-image-to-video", "video", `{"prompt":"bus"}`, magicPics{First: take}, "",
 			`canvas.height=736 canvas.width=1280 duration.frames=192 first.image=map[take_id:` + take + `] prompt.text=bus seed.seed=42`},
 		{"qwen3-tts.", "mac.torch", "qwen3-tts-voice-over", "voice", `{"line":"Tonight I let it go."}`, magicPics{}, voice,

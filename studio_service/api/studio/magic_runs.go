@@ -583,7 +583,13 @@ func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magic
 	inputs := map[string]any{}
 	if adv, ok := req["advanced"].(map[string]any); ok { // only this model's own: a key kept from another is dropped
 		for _, p := range advancedParams(w) {
-			if v, ok := adv[p.Path]; ok {
+			v, ok := adv[p.Path]
+			// API 1.94: an enum value this model lacks (a "turbo" kept from Qwen Image on LTX) is its own default, as
+			// runVariant and the estimate read it, never a refused run
+			if param, _ := findParam(w, p.Path); ok && param.Type == "enum" && !slices.Contains(param.Enum, fmt.Sprint(v)) {
+				continue
+			}
+			if ok {
 				inputs[p.Path] = v
 			}
 		}
