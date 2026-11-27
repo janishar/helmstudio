@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.95.0
+  version: 1.96.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -2005,7 +2005,7 @@ paths:
       tags: [studio]
       operationId: studioAdminPutPlugin
       summary: 'From 1.61: turn a plugin on or off'
-      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on.'
+      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on. From 1.96 409 `Magic director is built in and always on for Magic` for off (contracts/README.md, Skills).'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       requestBody:
         required: true
@@ -2021,7 +2021,7 @@ paths:
       tags: [studio]
       operationId: studioAdminRemovePlugin
       summary: 'From 1.61: remove a plugin (its providers go too; the folder stays)'
-      description: 'Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.'
+      description: 'Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`; from 1.96 409 `Magic director is built in and always on for Magic`.'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       responses:
         '204': {description: removed}

@@ -1912,13 +1912,13 @@ export interface paths {
         get?: never;
         /**
          * From 1.61: turn a plugin on or off
-         * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can't be read` (broken) for on.
+         * @description Admin only (403). Off at once: its assistant tools leave the next input's tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can't be read` (broken) for on. From 1.96 409 `Magic director is built in and always on for Magic` for off (contracts/README.md, Skills).
          */
         put: operations["studioAdminPutPlugin"];
         post?: never;
         /**
          * From 1.61: remove a plugin (its providers go too; the folder stays)
-         * @description Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.
+         * @description Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`; from 1.96 409 `Magic director is built in and always on for Magic`.
          */
         delete: operations["studioAdminRemovePlugin"];
         options?: never;

@@ -209,3 +209,50 @@ func TestBuiltInWinsForAPluginThatStartsItself(t *testing.T) {
 	}
 	t.Fatal("svc not listed")
 }
+
+// API 1.96: the built-in Magic director is on from its first scan, can't be turned off or removed (409), and a copy of
+// yours can't replace it; every user reads it.
+func TestMagicDirectorIsAlwaysOn(t *testing.T) {
+	e := setup(t)
+	user := t.TempDir()
+	mine := filepath.Join(user, "magic-director")
+	_ = os.MkdirAll(mine, 0o755)
+	for name, body := range map[string]string{"SKILL.md": "# Mine", "plugin.json": `{"name":"magic-director",
+		"title":"Mine","version":"9.0.0","kind":"skill","format":1,"description":"d","author":"a","may_do":["m"],"when":"w"}`} {
+		if err := os.WriteFile(filepath.Join(mine, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-time.Minute)
+	_ = filepath.WalkDir(user, func(p string, _ os.DirEntry, err error) error { return os.Chtimes(p, old, old) })
+	e.service.SetPluginDirs([]string{"../../plugins"})
+	e.service.SetUserPluginDir(user)
+	if _, err := e.service.ScanPlugins(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	row := func() map[string]any {
+		for _, p := range e.call(admin, "GET", "/v1/studio/admin/plugins", nil, 200)["plugins"].([]any) {
+			if p := p.(map[string]any); p["name"] == "magic-director" {
+				return p
+			}
+		}
+		t.Fatal("magic-director not listed")
+		return nil
+	}
+	if p := row(); p["status"] != "on" || p["origin"] != "built_in" || p["title"] != "Magic director" ||
+		!strings.Contains(fmt.Sprint(p["problem"]), "always on") {
+		t.Fatal(p)
+	}
+	got := e.call(userA, "GET", "/v1/studio/skills/magic-director", nil, 200)
+	if !strings.Contains(got["text"].(string), "# Magic director") || len(got["files"].([]any)) != 2 {
+		t.Fatal(got["files"])
+	}
+	e.call(admin, "PUT", "/v1/studio/admin/plugins/magic-director", map[string]any{"enabled": false}, 409)
+	e.call(admin, "DELETE", "/v1/studio/admin/plugins/magic-director", nil, 409)
+	if _, err := e.service.ScanPlugins(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if p := row(); p["status"] != "on" {
+		t.Fatal("off after a rescan:", p["status"])
+	}
+}

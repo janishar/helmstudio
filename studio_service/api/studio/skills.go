@@ -44,6 +44,10 @@ const (
 	zipUnpacked  = 2 << 20
 )
 
+// magicSkill is the built-in skill that is always on (API 1.96): the Assistant reads it on every Magic board. It can't be
+// turned off or removed, and a copy of yours can't replace it.
+const magicSkill = "magic-director"
+
 var skillFileRe = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}\.(md|txt|json)$`)
 
 // foundPlugin is one plugin a scan found.
@@ -293,6 +297,10 @@ func (s *Service) readManifests(ctx context.Context) (map[string]foundPlugin, []
 			switch mine, seen := out[found.M.Name]; {
 			case !seen:
 				out[found.M.Name] = found
+			case mine.Origin == "yours" && found.M.Name == magicSkill:
+				why := "Can't replace a built-in that is always on; using built in"
+				found.Problem = &why
+				out[found.M.Name] = found
 			case mine.Origin == "yours" && (found.M.Run != nil || mine.M.Run != nil):
 				// API 1.67: a plugin that starts itself runs the built-in's command (the runner takes the built-in
 				// folder first): your copy is never used, so a dropped folder can't swap the command under one that is on
@@ -331,14 +339,15 @@ func (s *Service) ScanPlugins(ctx context.Context) ([]string, error) {
 			f := found[name]
 			names = append(names, name)
 			var inserted bool
-			if err := tx.QueryRow(ctx, `INSERT INTO plugins (name, manifest, origin, dir, replaces, blocked, problem)
-				VALUES ($1, $2, $3, $4, $5, $6, $7)
+			always := name == magicSkill && f.Origin == "built_in" // API 1.96: on from the first scan, kept on
+			if err := tx.QueryRow(ctx, `INSERT INTO plugins (name, manifest, origin, dir, replaces, blocked, problem, enabled)
+				VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 				ON CONFLICT (name) DO UPDATE SET manifest = excluded.manifest, origin = excluded.origin, dir = excluded.dir,
 				replaces = excluded.replaces, blocked = excluded.blocked, problem = excluded.problem,
-				enabled = plugins.enabled,
+				enabled = plugins.enabled OR excluded.enabled,
 				updated_at = CASE WHEN plugins.manifest = excluded.manifest AND plugins.blocked = excluded.blocked
 					THEN plugins.updated_at ELSE clock_timestamp() END
-				RETURNING xmax = 0`, name, toJSON(f.M), f.Origin, f.Dir, f.Replaces, f.Blocked, f.Problem).Scan(&inserted); err != nil {
+				RETURNING xmax = 0`, name, toJSON(f.M), f.Origin, f.Dir, f.Replaces, f.Blocked, f.Problem, always).Scan(&inserted); err != nil {
 				return err
 			}
 			if inserted {

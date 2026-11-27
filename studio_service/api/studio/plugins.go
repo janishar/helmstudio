@@ -375,10 +375,16 @@ func (s *Service) RescanPlugins(ctx context.Context, caller common.Caller) (dto.
 	return dto.PluginRescan{Plugins: list.Plugins, New: added}, err
 }
 
+// errAlwaysOn: the built-in Magic director stays on (API 1.96).
+var errAlwaysOn = network.NewConflictError("Magic director is built in and always on for Magic", nil)
+
 // PutPlugin answers PUT /admin/plugins/{plugin}: on or off.
 func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name string, body *dto.PluginPut) (dto.Plugin, error) {
 	if !caller.IsAdmin() {
 		return dto.Plugin{}, errAdmin
+	}
+	if name == magicSkill && !*body.Enabled {
+		return dto.Plugin{}, errAlwaysOn
 	}
 	var rows []pluginRow
 	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
@@ -418,6 +424,9 @@ func (s *Service) PutPlugin(ctx context.Context, caller common.Caller, name stri
 func (s *Service) RemovePlugin(ctx context.Context, caller common.Caller, name string) error {
 	if !caller.IsAdmin() {
 		return errAdmin
+	}
+	if name == magicSkill {
+		return errAlwaysOn
 	}
 	defer s.publishRuns(ctx) // API 1.67: a removed plugin stops
 	return common.System(ctx, s.db, func(tx pgx.Tx) error {

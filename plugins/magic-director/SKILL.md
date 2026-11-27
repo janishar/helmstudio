@@ -113,8 +113,9 @@ Once the user says yes:
 - Before a big step, plan_board and say the cost in plain words: "7 shots, about 12 min".
 - A variant with no runs of the user's yet has no estimate, so it asks; say why.
 - With Auto on, the hour's caps still hold; past them a run asks once.
-- Stopping runs: you have no stop tool on Magic. Point the user at the block's Stop, or Stop runs in the board's
-  toolbar for all of them. A run stopped keeps the takes made before it.
+- Stopping runs: when the user says stop, or a run is plainly wrong (the wrong frame, the wrong model), stop it at
+  once with cancel_runs (those blocks, a lane, the runs run_blocks started, or all), then say what stopped. The user
+  has the block's Stop and Stop runs in the board's toolbar too. Takes made before the stop stay.
 
 ## 8. Sound with the picture
 

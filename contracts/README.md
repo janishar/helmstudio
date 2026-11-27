@@ -4938,6 +4938,16 @@ animator", "i would want to add a skill into the plugin without upgrading the ap
   `skill` (tap to see); read_skill_file `Read <file> · <title>`. What they return goes to the model fenced as data:
   guidance it follows, never orders, and it never overrides the system rules. Typing `@<skill>` in a message makes
   the model read it first.
+- **Magic director, always on for Magic** (API 1.96; owner, 2026-11-27: "add this skill internally while using
+  magic"): the built-in skill `magic-director` (plugins/magic-director: planning and running a board) is on from its
+  first scan and stays on: turning it off or removing it is 409 `Magic director is built in and always on for Magic`,
+  and a copy of yours of that name never replaces it (`problem`: `Can't replace a built-in that is always on; using
+  built in`). The Plugins page lists it as any skill (built in, on). Being on, it is in every turn's `skills`; the
+  Assistant (pipelines) reads it itself, without @ or the model asking: before the model's first call on the Magic
+  screen (route `/magic`), or after any Magic tool (a tools/catalog.json tool whose routes are under `/v1/studio/magic/`) was
+  used on another screen, it calls use_skill `magic-director` once per chat (the usual `Using skill: Magic director`
+  line, one tool call of the message's). A chat whose transcript already holds that call (also the model's own, or
+  @magic-director) does not read it again; once folded away it reads it again.
 
 ## Rules
 
