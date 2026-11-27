@@ -235,7 +235,12 @@ function Form({
       ...(shotKind && fromLast && prev ? { first: { block: prev.id, part: "last" as const } } : {}),
       ...(kind === "dialogue" ? { turns: [] } : {}),
       ...(k === "frame" ? { style: "sketch" as const } : {}),
-      ...(k === "sound" && shotUnder ? { from: shotUnder.id } : {}),
+      // only when a model takes a video: Stable Audio alone would grey From with the shot stuck in it
+      ...(k === "sound" &&
+      shotUnder &&
+      kindOf(kinds, "sound")?.models.some((m) => m.fields.includes("from"))
+        ? { from: shotUnder.id }
+        : {}),
     },
     takes: [],
     effects: [],

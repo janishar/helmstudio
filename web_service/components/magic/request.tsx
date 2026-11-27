@@ -371,7 +371,14 @@ export function RequestForm({
                 type="button"
                 aria-pressed={model?.workflow_id === m.workflow_id}
                 title={m.title}
-                onClick={() => set({ model: m.workflow_id, advanced: undefined })}
+                // a model that takes no video drops the shot it was made from (its From would stay greyed)
+                onClick={() =>
+                  set({
+                    model: m.workflow_id,
+                    advanced: undefined,
+                    ...(m.fields.includes("from") ? {} : { from: undefined }),
+                  })
+                }
               >
                 {m.name}
               </button>

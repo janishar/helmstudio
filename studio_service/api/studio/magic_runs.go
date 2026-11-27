@@ -236,7 +236,7 @@ func magicModel(ws []registry.Workflow, kind string, req map[string]any) (regist
 	}
 	if want := reqString(req, "model"); want != "" {
 		for _, w := range models {
-			if w.ID == want || (from && videoOf(ws, w) != nil && videoOf(ws, w).ID == want) {
+			if v := videoOf(ws, w); w.ID == want || (v != nil && v.ID == want) { // a model by its video workflow's id too
 				return pick(w)
 			}
 		}

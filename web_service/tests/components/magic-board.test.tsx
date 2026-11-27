@@ -144,6 +144,11 @@ describe("the board", () => {
     expect(within(dlg).getByRole("button", { name: "MMAudio" }).getAttribute("aria-pressed")).toBe(
       "true",
     );
+    // a model that takes no video drops the shot, so From is not stuck greyed on it
+    fireEvent.click(within(dlg).getByRole("button", { name: "Stable Audio 3 Small-SFX" }));
+    expect((within(dlg).getByRole("combobox", { name: "From" }) as HTMLSelectElement).value).toBe(
+      "",
+    );
   });
 
   it("Add step 2 greys what the model can't take, with why (frame 2d); a board frame is added as a draft", () => {

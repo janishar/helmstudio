@@ -449,3 +449,8 @@ them, and blocks draw covers and orbs (`components/magic/sound-mark.tsx`). Decis
   song's sections as markers on its block; Sound's Model › (not on the board's menu); dialogue blocks running; the
   Assistant's music and sound wording (phase F). The sample board keeps its model names (the fake mode). No browser
   walk on the dev stack (the owner uses it live; covered by the vitest journeys in fake mode).
+- **Review (2026-11-27):** a sound added under a shot starts from its video only when a sound model takes a video, and
+  picking a model that takes none drops `from` (Stable Audio alone left From greyed with the shot stuck in it, so the
+  block could never run); a request's `model` may name a model's video workflow (`mmaudio-video`) and runs the model,
+  its prompt workflow when it has no `from` (it was "on no host"). Left: a shot whose shown take is a picture (its own
+  picture) passes the check and the run's take input refuses it at run time.

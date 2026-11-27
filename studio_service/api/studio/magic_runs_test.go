@@ -324,6 +324,10 @@ func TestMagicMusicAndSound(t *testing.T) {
 	if _, detail := resolve(w, inputs); detail != "" {
 		t.Fatal(detail)
 	}
+	// a model named by its video workflow's id, made from a prompt again: the model's prompt workflow runs
+	if w, why := magicModel(ws, "sound", map[string]any{"kind": "sound", "model": "mmaudio-video"}); w.ID != "mmaudio-sound" || why != "" {
+		t.Fatal(w.ID, why)
+	}
 	sound.Request["model"] = "sa3-sound"
 	if got := whyNot(ws, d, sound); got != "Stable Audio 3 Small-SFX can't take a shot's video" {
 		t.Fatal(got)
