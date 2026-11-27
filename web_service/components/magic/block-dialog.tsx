@@ -5,7 +5,8 @@
 // marked, a running one with its progress) and Pin. Takes and runs have their right-click menus. API 1.89: a
 // dialogue's lines with their statuses, Run on, the tie with Unlink, and Compare takes (two side by side).
 import { useState } from "react";
-import { Columns2, Pin, TriangleAlert } from "lucide-react";
+import { Columns2, Maximize2, Pin, TriangleAlert } from "lucide-react";
+import { FullScreen } from "@/components/media";
 import { useHosts } from "@/components/create/memory-chip";
 import { machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
 import { DOWN_KEY, useHealth } from "@/lib/health";
@@ -90,18 +91,51 @@ export function KindTitle({ block: b }: { block: Pick<Block, "kind" | "name" | "
 /** A take on a stage: its player (a video, or an audio take's cover or orb over its player) or its picture. */
 function Stage({ b, t, n }: { b: Block; t?: TakeInfo; n: number }) {
   const look = t ? soundLook(b, t) : null;
+  const [full, setFull] = useState(false);
+  // a video fills the box edge to edge, on no picture of its own (the thumbnail behind it showed round its edges)
+  const video = t?.kind === "video" && !!t.url;
   return (
     <div
-      className="flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center p-2"
-      style={{ backgroundColor: "var(--s3)", backgroundImage: look ? undefined : t?.art }}
+      className={`flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center ${video ? "" : "p-2"}`}
+      style={{
+        backgroundColor: video ? "#000" : "var(--s3)",
+        backgroundImage: look || video ? undefined : t?.art,
+      }}
     >
       {t?.kind === "video" && t.url ? (
-        <video
-          src={t.url}
-          controls
-          className="h-full w-full object-contain"
-          aria-label={`Take ${n}`}
-        />
+        <span className="relative h-full w-full">
+          <video
+            src={t.url}
+            controls
+            // the browser's own full screen did nothing inside the dialog (an embedded browser); ours is the viewer
+            controlsList="nofullscreen"
+            className="h-full w-full object-contain"
+            aria-label={`Take ${n}`}
+          />
+          <button
+            type="button"
+            className="absolute top-2 right-2 grid size-8 place-items-center rounded-lg bg-black/55 text-white"
+            aria-label="Full screen"
+            title="Full screen"
+            onClick={() => setFull(true)}
+          >
+            <Maximize2 size={15} aria-hidden />
+          </button>
+          {full && (
+            <FullScreen
+              take={
+                {
+                  id: t.id,
+                  kind: "video",
+                  url: t.url,
+                  title: `Take ${n}`,
+                } as unknown as Parameters<typeof FullScreen>[0]["take"]
+              }
+              onClose={() => setFull(false)}
+              onStep={() => undefined}
+            />
+          )}
+        </span>
       ) : t?.kind === "audio" && t.url ? (
         // plan 39 phase H: the take's cover or orb over its player
         <span className="flex w-full flex-col items-center gap-2">

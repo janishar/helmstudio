@@ -16,8 +16,13 @@ export type PlayerApi = {
 
 /** The player full screen, or back. */
 function toggleFull(el: HTMLElement | null) {
-  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-  else void el?.requestFullscreen?.().catch(() => undefined);
+  if (!el) return;
+  if (document.fullscreenElement) return void document.exitFullscreen().catch(() => undefined);
+  // the window filled instead when the browser refuses (an embedded browser can swallow requestFullscreen)
+  if (el.classList.contains("fp-max")) return el.classList.remove("fp-max");
+  const fill = () => !document.fullscreenElement && el.classList.add("fp-max");
+  if (!el.requestFullscreen) return fill();
+  el.requestFullscreen().then(() => setTimeout(fill, 300), fill);
 }
 
 export function Player({
@@ -43,6 +48,9 @@ export function Player({
     const on = () => setFull(document.fullscreenElement === root.current);
     const key = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
+      // Esc leaves the window-filling fallback (the browser's own full screen handles its Esc itself)
+      if (e.key === "Escape" && root.current?.classList.contains("fp-max"))
+        return root.current.classList.remove("fp-max");
       if (e.key !== "f" || e.metaKey || e.ctrlKey || e.altKey) return;
       if (t?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
       e.preventDefault();
@@ -87,7 +95,9 @@ export function Player({
   }, []);
   useEffect(() => {
     const p = playable(doc, takes);
-    if (p) pv.current?.setDoc(p.doc, p.facts, {});
+    // each take's file: without them the engine loads no clip and only the still under the playhead shows
+    const urls = Object.fromEntries(Object.values(takes).map((t) => [t.id, t.url]));
+    if (p) pv.current?.setDoc(p.doc, p.facts, urls);
   }, [doc, takes]);
   useEffect(() => {
     apiRef.current = {
