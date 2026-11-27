@@ -15,6 +15,7 @@
           "workflow_id": "ltx-image-to-video",
           "name": "LTX 2.5",
           "title": "LTX-2.5 Image to video",
+          "family": "ltx",
           "fields": [
             "prompt",
             "first",

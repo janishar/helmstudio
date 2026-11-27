@@ -9757,6 +9757,8 @@ export interface components {
              * @enum {string}
              */
             style?: "sketch" | "rough" | "full";
+            /** @description from 1.94: the model variant it ran on, its title as the registry names it (`Turbo`; the id when no runner publishes the model); absent: its workflow has no model node (contracts/README.md, Magic: variants) */
+            variant?: string;
             /** @description from 1.89: a dialogue's run of this turn (its index in `turns`); from 1.90 the turn it ran for while its inputs match that turn's, else the turn whose inputs it matches now (a line moved, or one before it removed), else the turn it ran for; `current` is against that turn */
             turn?: number;
         };
@@ -9806,6 +9808,8 @@ export interface components {
             title: string;
             /** @description from 1.89: the workflow's env (Run on greys a host without it) */
             env?: string;
+            /** @description from 1.94: its `<family>/model` node's family, the `Model.family` of GET /v1/studio/models whose variants its Variant offers; absent: no model node (contracts/README.md, Magic: variants) */
+            family?: string;
             /** @description the kind's shared fields it fills */
             fields: components["schemas"]["MagicField"][];
             /** @description the kind's fields it cannot fill, each with the reason (`MiniMax H3 can't take a last frame`) */
@@ -9872,7 +9876,7 @@ export interface components {
             /** @description the estimate in GPU seconds (every run of its count); null: unknown */
             seconds: number | null;
             /**
-             * @description yours: your recent runs of that workflow on that host; pack: the pack's declared rate
+             * @description yours: your recent runs of that workflow on that host (from 1.94 at the request's model variant); pack: the pack's declared rate (from 1.94 only for the workflow's own variant)
              * @enum {string}
              */
             source: "yours" | "pack" | "unknown";

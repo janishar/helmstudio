@@ -211,6 +211,7 @@
       "block": "f1",
       "run_id": "7a1c2a8e-3b4d-4e5f-8a9b-0c1d2e3f4a5b",
       "workflow_id": "echo-video",
+      "variant": "Turbo",
       "status": "running",
       "progress": 40,
       "error": null,

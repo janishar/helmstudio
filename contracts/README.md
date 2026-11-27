@@ -4149,10 +4149,31 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   **yours** (the median over your last 5 takes of that workflow on that host of render_s per unit, × the block's
   units), else **pack** (`standard.seconds` × units), else **unknown** (null). Units: an image's megapixels, a
   video's seconds × its pixels / (1280 × 720), a voice's seconds. Per lane and in all (null when any is unknown);
-  `order` (board frames first, then lane by lane in time); **the ask rule** `ask`: true when a run other than a
+  `order` (board frames first, then lane by lane in time); from 1.94 the estimate follows the variant (Magic:
+  variants, below); **the ask rule** `ask`: true when a run other than a
   board frame has no estimate or the total of those runs is above `ask_above_gpu_minutes` (from 1.88 board frames
   are left out of that total, as they never ask), with `ask_text` (`3 shots, about 6 min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
 - **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 5; `magic_settings`).
+
+### Magic: variants (API 1.94; owner 2026-11-27, board MagicBoard frames 3 and 7; normative)
+
+- **The request's variant** is its Advanced `<model node>.variant` (`advanced: {"model.variant": "turbo"}`; every
+  standard workflow's model node is `model`); absent, or not one of the param's values, the workflow's own (Qwen
+  Image: `base`). No new request field: the form lifts it out of Advanced into a Variant choice beside Model, and
+  the Assistant sets it the same way ("use turbo"). A variant that loads at one precision (fp8) runs at it, as any
+  run does (the registry's RunsAt).
+- **`MagicModel.family`**: its model node's family, so the page reads that model's variants (titles, devices,
+  presence per host) from GET /v1/studio/models: the Variant choice offers the param's values, an fp8 one
+  (`devices: [cuda]`) only when a connected host has that device, and greys one no host it may run on has
+  (`Turbo fp8 not downloaded on gcp`, as Create's Run on says it).
+- **`MagicBlockRun.variant`**: the variant the run loaded (from its resolved graph's model node), as its title
+  (`Turbo`); the run history, a frame's take rows (`Sketch · 2 · Turbo`) and the take on stage (`Qwen Image 2.1 ·
+  Turbo`) show it.
+- **The estimate follows it**: **yours** is the median over your last 5 takes of that workflow on that host **made at
+  that variant** (`made_with.model.variant`); **pack** (`standard.seconds`) only when the variant is the workflow's
+  own, as that is what the pack measured; another variant with no runs of yours is **unknown** until it has one
+  (the page then says Time unknown; a shot asks first). The page's own estimate of an edited request does the same
+  with the pack's rate.
 
 ### Magic: Send to Timeline (API 1.82; plan 39 phase G, board MagicBoard frame 9; normative)
 
