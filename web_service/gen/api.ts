@@ -9102,7 +9102,7 @@ export interface components {
             prompt?: string;
             /** @description a voice block's line */
             line?: string;
-            /** @description a dialogue's turns (a Voice block with turns, owner 2026-11-27) */
+            /** @description a dialogue's turns (a Voice block with turns, owner 2026-11-27); from 1.89 each turn is its own run of the voice model, its line the text, its voice the speaker asset's (contracts/README.md, Magic: dialogue, Run on and Loop) */
             turns?: {
                 speaker: components["schemas"]["MagicId"];
                 text: string;
@@ -9149,6 +9149,10 @@ export interface components {
             };
             /** @description from 1.83: a storyboard frame's pick of the video model Generate from board makes its shot with */
             shot_model?: string;
+            /** @description from 1.89: Run on: its runs go to this host only (RunRequest.host); absent: Auto. Not one of its inputs: a change leaves its takes current */
+            host?: string;
+            /** @description from 1.89, a sound block: its take repeats to fill the block when played and sent (one clip after another); not one of its inputs */
+            loop?: boolean;
         };
         /** @description an effect badge (baked when sent) */
         MagicEffect: {
@@ -9636,6 +9640,17 @@ export interface components {
             progress?: number;
             /** @description failed: why */
             error?: string;
+            /** @description from 1.89, a dialogue only: each turn's own status, in the turns' order (the block's is running when one is, failed when one failed with no take, draft when none has a take, out of date when one is out of date or has no take, else done) */
+            turns?: {
+                status: components["schemas"]["MagicStatusName"];
+                progress?: number;
+                error?: string;
+                /**
+                 * Format: uuid
+                 * @description the take it plays: its newest run's
+                 */
+                take?: string;
+            }[];
         };
         MagicTake: {
             /** Format: uuid */
@@ -9656,6 +9671,10 @@ export interface components {
             run_id?: string | null;
             /** @description from 1.85, kind audio only: its class (Take.sound): a music block shows an album cover, sound and voice an orb */
             sound?: components["schemas"]["SoundClass"];
+            /** @description from 1.89: a video's or an audio take's seconds (a dialogue's turns play one after another, a Loop repeats) */
+            duration_s?: number | null;
+            /** @description from 1.89, a song with tagged lyrics (Take.audio.sections): its parts, the markers on its music block */
+            sections?: components["schemas"]["AudioSection"][];
         };
         /** @description one run of a block (its run history) */
         MagicBlockRun: {
@@ -9687,6 +9706,8 @@ export interface components {
              * @enum {string}
              */
             style?: "sketch" | "rough" | "full";
+            /** @description from 1.89: a dialogue's run of this turn (its index in `turns`) */
+            turn?: number;
         };
         /** @description from 1.83: one run of Make views */
         MagicAssetRun: {
@@ -9732,6 +9753,8 @@ export interface components {
             name: string;
             /** @description the workflow's title */
             title: string;
+            /** @description from 1.89: the workflow's env (Run on greys a host without it) */
+            env?: string;
             /** @description the kind's shared fields it fills */
             fields: components["schemas"]["MagicField"][];
             /** @description the kind's fields it cannot fill, each with the reason (`MiniMax H3 can't take a last frame`) */

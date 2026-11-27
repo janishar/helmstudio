@@ -4204,6 +4204,32 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   (its gradient from the prompt, a vinyl disc) and a sound or voice take as an orb (sky, amber), by the take's class
   whatever its lane.
 
+### Magic: dialogue, Run on and Loop (API 1.89; plan 39 gaps; normative)
+
+- **A dialogue** is a voice block whose request has `turns` (`[{speaker, text}]`: a speaker is a board asset). Each
+  turn is its own run of the voice model: the turn's text is the line, the speaker's `voice_id` the voice (the
+  request's own line and voice are not used), the request's model, seed and Advanced as for a line. Why it can't run:
+  `Line 2 has no words`, `Line 2's @mara has no voice`, no turns (`A dialogue needs a line`), the model's own (it must
+  take a line and a voice). `magic_runs.turn` keeps each run's turn; `MagicBlockRun.turn` says it. A Run of a dialogue
+  runs the turns that are not done (all of them when every one is); its count is one run per turn.
+- **Per turn status.** Each turn's runs (the last 20 of each turn) are hashed as a line block of that turn (its text,
+  speaker, the speaker's voice, the model, seed and Advanced, the block's length), so changing one line puts only that
+  turn out of date. `MagicStatus.turns[i]` is each turn's status and `take` (its newest run's take); the block's own
+  status is running when a turn is, failed when a turn failed with no take, draft when no turn has a take, out of date
+  when a turn is out of date or has no take yet, else done. Every turn's take joins the block's `takes`.
+- **Playing and sending.** A dialogue's turns play one after another from the block's start, each its take's length
+  (`MagicTake.duration_s`), cut at the block's end; Send to Timeline puts them on the lane's audio track the same way,
+  the first linked to the block's shot.
+- **Run on.** `MagicRequest.host` sends the block's runs to that host only (RunRequest.host, Create's Run on); the
+  plan's `host` is it. `MagicModel.env` is the workflow's env (the page greys a host without it). Not one of the
+  block's inputs: a change keeps its takes current.
+- **Loop.** `MagicRequest.loop` on a sound block repeats its take to fill the block when played and sent (one clip
+  after another, the last cut at the block's end). The web offers it for a sound made from a prompt (a sound made from
+  a shot's video follows the shot). Not one of the block's inputs.
+- **Takes.** `MagicTake.duration_s` (a video's or audio take's seconds) and `sections` (a song with tagged lyrics,
+  Take.audio.sections): the page draws a music block's sections as markers (a click seeks), else, for lyrics with
+  `[tags]` and no take that has sections, the tags spread over the block by their lines.
+
 ### Magic: the Assistant (API 1.87; plan 39 phase F, board MagicBoard frame 8; normative)
 
 - **Tools** (`tools/catalog.json`, surface assistant, served by studio as the thread's owner, its writes labelled
