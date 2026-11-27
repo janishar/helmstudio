@@ -145,6 +145,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/library/:id/:look_id", c.starterLookHandler)
 	group.DELETE("/library/:id/:look_id", c.starterLookHandler)
 	c.mountTimelines(group)
+	c.mountMagic(group) // API 1.80
 	c.mountAssistant(group)
 }
 
