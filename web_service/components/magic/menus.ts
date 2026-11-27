@@ -10,6 +10,7 @@ import {
   AudioLines,
   Blend,
   Brush,
+  Check,
   Clapperboard,
   ClipboardPaste,
   Columns2,
@@ -43,6 +44,7 @@ import {
   Trash2,
   Unlink,
   WandSparkles,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import type { Item, MenuItem } from "@/components/context-menu";
@@ -740,7 +742,8 @@ export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; item
             title: `From Gallery · ${lane.name} at ${clock(at, a.doc.target.fps, true)}`,
             onPick: ([t]) => {
               if (!t) return;
-              const bk: Kind = t.kind === "audio" ? (kind ? k : "voice") : t.kind === "video" ? "video" : "image";
+              const bk: Kind =
+                t.kind === "audio" ? (kind ? k : "voice") : t.kind === "video" ? "video" : "image";
               const fps = a.doc.target.fps;
               a.edit({
                 op: "add",
@@ -750,7 +753,9 @@ export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; item
                   at,
                   length: Math.max(1, Math.round((t.duration ?? 4) * fps)),
                   kind: bk,
-                  name: (t.title ?? "").slice(0, 60) || `${KIND_LABEL[bk]} ${a.doc.blocks.filter((x) => x.kind === bk).length + 1}`,
+                  name:
+                    (t.title ?? "").slice(0, 60) ||
+                    `${KIND_LABEL[bk]} ${a.doc.blocks.filter((x) => x.kind === bk).length + 1}`,
                   request: { kind: bk },
                   takes: [t.id],
                   pinned: t.id,
@@ -847,7 +852,11 @@ export function viewMenu(a: Act, x: Asset, take: string): { title: string; items
         keys: i === 0 ? undefined : "@ picks send it",
         off: i === 0 ? "It's the first" : undefined,
         onPick: () =>
-          a.edit({ op: "asset", id: x.id, set: { sheet: [take, ...x.sheet.filter((t) => t !== take)] } }),
+          a.edit({
+            op: "asset",
+            id: x.id,
+            set: { sheet: [take, ...x.sheet.filter((t) => t !== take)] },
+          }),
       },
       "-",
       {
@@ -1109,6 +1118,41 @@ export function runMenu(
       }),
       "-",
       { label: "Copy run id", icon: Copy, onPick: () => a.copyText(run.run_id) },
+    ],
+  };
+}
+
+// ------------------------------------------------------------------ the Assistant (plan 39 phase F, frame 8)
+
+/** The change's own menu (on the bar and on a block it draws). */
+export function proposalMenu(
+  on: { apply: () => void; discard: () => void },
+  title: string,
+): { title: string; items: Item[] } {
+  return {
+    title,
+    items: [
+      { label: "Apply", icon: Check, onPick: on.apply },
+      { label: "Discard", icon: X, onPick: on.discard },
+    ],
+  };
+}
+
+/** A revision's own menu: Restore rev N (not the board as it is now). */
+export function historyMenu(
+  on: { restore: (r: S<"MagicRevisionItem">) => void },
+  r: S<"MagicRevisionItem">,
+  now: number,
+): { title: string; items: Item[] } {
+  return {
+    title: `rev ${r.revision}`,
+    items: [
+      {
+        label: `Restore rev ${r.revision}`,
+        icon: RotateCcw,
+        off: r.revision === now ? "It's the board now" : undefined,
+        onPick: () => on.restore(r),
+      },
     ],
   };
 }

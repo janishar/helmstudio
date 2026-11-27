@@ -4,6 +4,7 @@
 // an edit is applied here first (lib/magic.ts, the same ops as studio's) and then sent with the revision it was made
 // on, one call after another, so the board never waits for the network and never runs ahead of studio.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { followSession } from "@/lib/runs";
 import {
@@ -78,6 +79,12 @@ export type Board = {
   remove: () => void;
   /** Send to Timeline (phase G): studio's sends of this board; null in the fake mode */
   sends: SendApi | null;
+  /** studio's revision of the board (0 in the fake mode) */
+  revision: number;
+  /** read studio's board again (the Assistant changed or ran it, API 1.87); nothing in the fake mode */
+  reload: () => void;
+  /** the kept revisions, newest first (History, MagicBoard frame 8); null in the fake mode */
+  revisions: (() => Promise<S<"MagicRevisionItem">[]>) | null;
 };
 
 // ------------------------------------------------------------------------------------------------ in studio
@@ -241,11 +248,23 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [planKey]);
 
+  // a board the address names later (navigate to /magic?b= while the page is open)
+  const named = useSearchParams()?.get("b") ?? null;
+  useEffect(() => {
+    if (named && current.current && named !== current.current)
+      queue(async () => {
+        if (named !== current.current) await open(named);
+      });
+  }, [named, queue, open]);
+
   useEffect(() => {
     queue(async () => {
       const { boards: list } = await ok(api.GET("/v1/studio/magic/boards"));
       setBoards(list.map(({ id, name }) => ({ id, name })));
-      const want = list.find((b) => b.id === remembered()) ?? list[0];
+      // the board the address names (the Assistant's navigate, API 1.87), else the one open last
+      const asked = new URLSearchParams(location.search).get("b");
+      const want =
+        list.find((b) => b.id === asked) ?? list.find((b) => b.id === remembered()) ?? list[0];
       if (want) await open(want.id);
       else await create({});
     });
@@ -373,6 +392,14 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       }),
     // the revision studio last answered (an edit still on its way is a 409, said in the dialog)
     sends: studioSends(id, wire.revision),
+    revision: wire.revision,
+    reload: () => void refresh().catch(() => undefined),
+    revisions: () =>
+      ok(
+        api.GET("/v1/studio/magic/boards/{board_id}/revisions", {
+          params: { path: { board_id: id }, query: { limit: 30 } },
+        }),
+      ).then((r) => r.revisions),
     estimate: (b) => estimates[b],
     plan: (pick) =>
       ok(api.POST("/v1/studio/magic/boards/{board_id}/plan", { ...board(id), body: pick })),
@@ -581,6 +608,9 @@ export function useLocalBoard(initial?: Store): Board {
       );
     },
     sends: null,
+    revision: 0,
+    reload: () => undefined,
+    revisions: null,
     estimate: () => undefined,
     plan: null,
     askAbove: 5,

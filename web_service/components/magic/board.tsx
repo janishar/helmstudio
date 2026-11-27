@@ -30,6 +30,7 @@ import {
   blockMenu,
   effectMenu,
   nextLaneName,
+  proposalMenu,
   snapshotMenu,
   type Act,
 } from "@/components/magic/menus";
@@ -53,6 +54,8 @@ import {
 import { EST_HOST, EST_S, estText } from "@/lib/magic-fixture";
 import { FORM_KINDS, type Estimate } from "@/lib/magic-standard";
 import { LoadingBoard } from "@/components/magic/loading";
+import { useScreenTools } from "@/components/assistant/tools";
+import { HistoryChip, ProposalBar, magicTools, useProposal } from "@/components/magic/assistant";
 import {
   useApiBoard,
   useLocalBoard,
@@ -172,8 +175,15 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   };
 
   /** One edit (one op, or several in order): applied all or nothing, one step of undo; a refusal says why. */
+  // the Assistant's change, drawn on the board until Apply or Discard (plan 39 phase F, frame 8)
+  const proposed = useProposal(board);
+  const waiting = !!proposed.card;
   const edit = useCallback(
     (ops: Op | Op[]) => {
+      if (waiting) {
+        setError("Apply or Discard the Assistant's change first.");
+        return false;
+      }
       const list = Array.isArray(ops) ? ops : [ops];
       let d = doc;
       for (const op of list) {
@@ -191,7 +201,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       setSel((s) => s.filter((id) => d.blocks.some((b) => b.id === id)));
       return true;
     },
-    [doc, board],
+    [doc, board, waiting],
   );
 
   /** Runs blocks (fake in the fake mode; in studio, their standard requests). */
@@ -227,6 +237,28 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     setSel([id]);
     setOpened(id);
   }, []);
+  // the Assistant's screen actions and summary (tools/actions.json `magic`)
+  useScreenTools(
+    // eslint-disable-next-line react-hooks/refs -- the player is read when an action runs, after render
+    magicTools({
+      id: board.id,
+      name: board.name,
+      revision: board.revision,
+      doc,
+      sel,
+      frame,
+      select: setSel,
+      open: (id) => {
+        if (doc.blocks.some((b) => b.id === id)) open(id);
+        else if (doc.transitions.some((t) => t.id === id && t.kind === "morph")) setMorph(id);
+        else return false;
+        return true;
+      },
+      play: (f) => player.current?.play(f),
+      pause: () => player.current?.pause(),
+      seek,
+    }),
+  );
 
   const act: Act = useMemo(
     () => ({
@@ -299,7 +331,13 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               const ops = [
                 ...before,
                 ...(model && made.request.model !== model
-                  ? [{ op: "block" as const, id: made.id, set: { request: { ...made.request, model } } }]
+                  ? [
+                      {
+                        op: "block" as const,
+                        id: made.id,
+                        set: { request: { ...made.request, model } },
+                      },
+                    ]
                   : []),
               ];
               if (ops.length && !edit(ops)) return;
@@ -475,6 +513,11 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             <Clock3 size={13} aria-hidden />
             Snapshots{snapshots.length ? ` · ${snapshots.length}` : ""}
           </button>
+          <HistoryChip
+            revisions={board.revisions}
+            revision={board.revision}
+            onRestore={(rev) => board.restoreSnapshot({ id: "", name: "", at: "", rev })}
+          />
           <SendsChip
             list={sendsList.list}
             sends={board.sends}
@@ -797,7 +840,21 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 setSel([]);
                 setAdding({ lane, at });
               }}
+              proposal={proposed.proposal}
+              onProposalMenu={(e) =>
+                proposed.card &&
+                openMenu(
+                  e,
+                  proposalMenu(
+                    { apply: () => proposed.answer(true), discard: () => proposed.answer(false) },
+                    proposed.card.title,
+                  ),
+                )
+              }
             />
+            {proposed.card && (
+              <ProposalBar card={proposed.card} why={proposed.why} onAnswer={proposed.answer} />
+            )}
             <button
               type="button"
               className="chip bevel self-start"

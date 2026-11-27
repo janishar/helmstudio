@@ -73,6 +73,28 @@ type Drag = {
   started: boolean;
   alt: boolean;
 };
+/** The Assistant's change drawn on the board (API 1.87, MagicBoard frame 8): the document it would make, each block it
+ * adds, moves or changes, and the ones it removes (drawn faded where they were). */
+export type Proposal = {
+  doc: Doc;
+  marks: Record<string, "new" | "moved" | "changed">;
+  removed: Block[];
+};
+/** a proposed block's outline and its chip: dashed green new, dashed blue moved or changed */
+const MARK = {
+  new: ["outline-2 outline-offset-1 outline-dashed outline-a1", "bg-a1 text-on1", "New"],
+  moved: [
+    "outline-2 outline-offset-1 outline-dashed outline-[#86cdea]",
+    "bg-[#86cdea] text-[#111]",
+    "Moved",
+  ],
+  changed: [
+    "outline-2 outline-offset-1 outline-dashed outline-[#86cdea]",
+    "bg-[#86cdea] text-[#111]",
+    "Changed",
+  ],
+} as const;
+
 export type Preview = {
   op: Op;
   snapped: { t: number; kind: SnapKind } | null;
@@ -122,7 +144,13 @@ export function Lanes({
   onView,
   onRename,
   onLaneClick,
+  proposal,
+  onProposalMenu,
 }: {
+  /** the Assistant's change, drawn in place of the board until Apply or Discard */
+  proposal?: Proposal | null;
+  /** a block the change draws: its menu (Apply, Discard) */
+  onProposalMenu?: (e: React.MouseEvent) => void;
   doc: Doc;
   takes: Takes;
   act: Act;
@@ -152,7 +180,7 @@ export function Lanes({
 
   // the board drawn while dragging: the op applied (a refused op keeps the last one that worked)
   const draft = pv ? apply(doc, pv.op) : null;
-  const shownDoc = draft && "doc" in draft ? draft.doc : doc;
+  const shownDoc = proposal ? proposal.doc : draft && "doc" in draft ? draft.doc : doc;
   const moved = new Set(pv ? ("ids" in pv.op ? pv.op.ids : "id" in pv.op ? [pv.op.id] : []) : []);
   const lastFrame = Math.max(0, ...shownDoc.blocks.map(end), ...doc.blocks.map(end));
   const trackW = Math.max(view - head, (lastFrame + 8 * fps) * pf);
@@ -321,8 +349,9 @@ export function Lanes({
   );
   const used = usedAsset ? new Set(usedIn(doc, usedAsset).map((b) => b.id)) : null;
   const visible = shownDoc.lanes.filter((l) => !l.hidden);
-  const ghosts =
-    pv && draft && "doc" in draft
+  const ghosts = proposal
+    ? proposal.removed
+    : pv && draft && "doc" in draft
       ? doc.blocks.filter((b) => {
           const now = shownDoc.blocks.find((x) => x.id === b.id);
           return !now || now.at !== b.at || now.lane !== b.lane;
@@ -423,7 +452,7 @@ export function Lanes({
                       <div
                         key={`g${b.id}`}
                         aria-hidden
-                        className="blk ghostb"
+                        className={`blk ghostb ${proposal ? "opacity-40 outline-2 outline-dashed outline-[#ff8a80]" : ""}`}
                         style={{ left: b.at * pf + 2, width: Math.max(8, b.length * pf - 4) }}
                       />
                     ))}
@@ -440,7 +469,10 @@ export function Lanes({
                         moved.has(b.id) && "lift",
                         tiedSel.has(b.id) && !sel.includes(b.id) && "tied",
                         used?.has(b.id) && "use",
+                        proposal?.marks[b.id] && MARK[proposal.marks[b.id]][0],
                       ]}
+                      mark={proposal?.marks[b.id]}
+                      onMarkMenu={onProposalMenu}
                       onDown={down}
                     />
                   ))}
@@ -543,6 +575,8 @@ function BlockView({
   pf,
   act,
   cls,
+  mark,
+  onMarkMenu,
   onDown,
 }: {
   d: Doc;
@@ -551,6 +585,9 @@ function BlockView({
   pf: number;
   act: Act;
   cls: (string | false | undefined)[];
+  /** the Assistant's change: its chip (New, Moved, Changed) and its menu */
+  mark?: Proposal["marks"][string];
+  onMarkMenu?: (e: React.MouseEvent) => void;
   onDown: (e: React.PointerEvent, b: Block, kind: "move" | "trim") => void;
 }) {
   const fps = d.target.fps;
@@ -660,6 +697,7 @@ function BlockView({
         }
       }}
       onContextMenu={(e) => {
+        if (mark && onMarkMenu) return onMarkMenu(e);
         if (!act.sel.includes(b.id)) act.select([b.id]);
         openMenu(e, blockMenu({ ...act, sel: act.sel.includes(b.id) ? act.sel : [b.id] }, b));
       }}
@@ -699,6 +737,13 @@ function BlockView({
           </span>
         )}
         <span className="grow" />
+        {mark && (
+          <span
+            className={`rounded-[5px] px-1.5 text-[10px] leading-[15px] font-semibold ${MARK[mark][1]}`}
+          >
+            {MARK[mark][2]}
+          </span>
+        )}
         {b.pinned && (
           <span className="pin" title="Pinned take">
             <Pin size={10} aria-hidden />

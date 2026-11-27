@@ -3,7 +3,7 @@
 // registers its actions and its summary once it has loaded (useScreenTools), always calling its own entry points; the
 // shell adds navigate and await. The drawer runs a turn's actions through it, in the tab that sent the message.
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, message, ok, okOr } from "@/lib/api";
+import { api, message, ok, okOr, type S } from "@/lib/api";
 import {
   SCREENS,
   argsError,
@@ -35,6 +35,12 @@ export type ScreenSpec = {
 };
 
 type Entry = { key: number; get: () => ScreenSpec };
+type AssistantCard = S<"AssistantCard">;
+export type ServerCards = {
+  cards: AssistantCard[];
+  key: string;
+  answer: (cardId: string, yes: boolean) => void;
+};
 
 /** The registry: screens in mount order (the newest is the screen now), the path, and listeners. */
 export class Registry {
@@ -44,6 +50,9 @@ export class Registry {
   path = "";
   roles: string[] = [];
   shell: Record<string, Handler> = {};
+  /** API 1.87: the chat's server cards that wait (the Magic page draws a board_edit card on its board), a key that
+   * moves with every change of the chat (a screen reads its data again) and how to answer a card */
+  server: ServerCards = { cards: [], key: "", answer: () => undefined };
 
   register(get: () => ScreenSpec) {
     const key = ++this.seq;
@@ -65,6 +74,14 @@ export class Registry {
   configure(roles: string[], shell: Record<string, Handler>) {
     this.roles = roles;
     this.shell = shell;
+  }
+  /** The drawer's chat (API 1.87): its waiting server cards and its key; listeners hear only a change. */
+  setServer(cards: AssistantCard[], key: string, answer: ServerCards["answer"]) {
+    const same =
+      key === this.server.key &&
+      cards.map((c) => c.id).join() === this.server.cards.map((c) => c.id).join();
+    this.server = { cards, key, answer };
+    if (!same) this.notify();
   }
   setPath(p: string) {
     this.path = p;

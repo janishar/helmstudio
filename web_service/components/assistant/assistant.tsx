@@ -553,6 +553,24 @@ export function useAssistant(me: S<"User"> | null) {
       card_id: cardId,
       answer: yes ? "yes" : "not_now",
     });
+  // API 1.87: the waiting server cards go to the screens (the Magic page draws a board_edit card on its board, its
+  // Apply and Discard answer it) with a key that moves as the chat does (the page reads its board again)
+  const cardAnswer = useRef(answerCard);
+  useEffect(() => {
+    cardAnswer.current = answerCard;
+  });
+  const entries = view?.entries;
+  const chatState = view?.thread.state;
+  useEffect(() => {
+    const cards = (entries ?? []).flatMap((e) =>
+      e.kind === "card" && e.card?.state === "waiting" ? [e.card] : [],
+    );
+    reg.setServer(
+      cards,
+      `${threadId ?? ""}:${entries?.length ?? 0}:${chatState ?? ""}`,
+      (id, yes) => cardAnswer.current(id, yes),
+    );
+  }, [reg, entries, chatState, threadId]);
   const continueHere = () => threadId && void post(threadId, { kind: "continue", client_id: cid });
   // the running turn takes a message as a steer (board frame 8): while it works, or runs this tab's actions
   const t = view?.thread;
@@ -1138,6 +1156,10 @@ const GO: Record<S<"AssistantCard">["kind"], string> = {
   web_search: "SEARCH",
   delete: "DELETE",
   plugin: "PLUGIN",
+  // API 1.87: Magic (board MagicBoard frame 8)
+  board_edit: "Apply",
+  magic_run: "Yes, run",
+  send: "Send",
 };
 const CARD_STATE: Record<S<"AssistantCard">["state"], string> = {
   waiting: "",
@@ -1241,7 +1263,11 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
         ? "This can't be undone."
         : c.kind === "plugin"
           ? "Runs a plugin's tool."
-          : "Runs on your machines.",
+          : c.kind === "board_edit"
+            ? "It's drawn on the board; Undo there takes it back."
+            : c.kind === "send"
+              ? "A new sequence; the board stays as it is."
+              : "Runs on your machines.",
   danger: c.kind === "delete",
 });
 

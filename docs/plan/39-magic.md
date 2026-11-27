@@ -465,3 +465,42 @@ arrived while it was open; `.nr` rows in the block dialog (Tied, running takes) 
 Compare takes, Loop, the music form's tie row and section markers, dialogue runs, Another view's model pick, renaming
 a handle, the Sound form's "From Shot 2 video" sits as a select (not the board's two-chip row), and the menus show
 Ctrl where the board shows the Mac key.
+
+**Phase F (2026-11-27, API 1.87; contract step 7).** The Assistant: the server tools `list_boards`, `show_board`,
+`try_board_edit`, `edit_board`, `restore_board`, `plan_board`, `run_blocks`, `board_frame` and `send_to_timeline`
+(tools/catalog.json; studio `api/studio/assistant_magic.go`, pipelines `assistant.py`), the cards `board_edit`,
+`magic_run` and `send`, the screen `magic` (select, openBlock, play, scrub; navigate `/magic?b=`), the change drawn on
+the board with Apply and Discard and History (`web_service/components/magic/assistant.tsx`), contract test
+`test_magic_assistant.py`. Decisions taken on the owner's behalf:
+
+- **Try, then propose.** `try_board_edit` is the model's own dry run (no card); `edit_board` is the proposal: its
+  card carries the ops and the page with that board open applies them to its document and draws them (dashed green
+  New, dashed blue Moved or Changed, removed faded); Apply and Discard are the card's Yes and Not now (the drawer shows
+  the same card, Apply / Not now). While a change is drawn the board's own edits wait ("Apply or Discard the
+  Assistant's change first."). A change that no longer applies to the board, or made on an older revision, says so on
+  the bar; Apply then fails with studio's 409 and the model reads the board again.
+- **Studio decides what a card shows.** A card tool is asked without `confirmed` first and studio answers a preview
+  (req.studio.tools `preview`, stored under the call id); the Yes asks again `confirmed` and the answer replaces the
+  preview. So the ask rule is studio's plan (`…/plan`), the edit's estimate is studio's plan of the document the edit
+  would make (`PlanMagicDoc`, the blocks it adds or changes), and a retried call never runs twice.
+- **The ask rule as built**: within the limit `run_blocks` runs at once (no card); above it (or with no estimate)
+  the pick's storyboard frames start at once and the card names the rest ("Run 3 shots, about 6 min?", "Above your 5
+  min limit. Frame 4 ran on its own (6 s)."); Not now tells the model the frames still ran. Only frames above the
+  limit: no card.
+- **"by Assistant"** is the revision's and run's `via` assistant (the assistant's studio calls carry it); `by` stays
+  user, so undo works on it as on the user's own edits. An assistant edit's History line is its summary in words
+  (`magic.Describe`: "Added 3 shots and Frame 4; moved Line 2"); the user's own edits keep their op names.
+- **History** is a chip beside Snapshots opening a dialog of the last 30 kept revisions (by you, by Assistant, by
+  studio; the summary; rev N · time), Restore rev N on the picked one or from its right-click menu (not the board now).
+- **`board_frame` renders nothing**: it says what each visible lane shows at a time (block, take, the second into it,
+  status); the model looks at a take with look_at (or sees it directly with a model that sees). Not on helm mcp yet
+  (the tools are assistant only).
+- **Restore asks** with the same `board_edit` card (no ops, `to`): "Restore rev 40?"; **Send asks** with a `send`
+  card (name, clips, bakes and their time, the warnings), even without bakes (a write is the user's click).
+- **Menus**: the change's own (Apply, Discard) on its bar and on every block it draws; a revision's (Restore rev N) in
+  History (components/magic/menus.ts `proposalMenu`, `historyMenu`).
+- **Contract noise**: the contract script wrote actions.json and assistant.schema.json back with its own JSON layout
+  (one value per line), so the 1.87.0 commit shows those files reflowed; the content is the same plus the additions.
+- **Not built**: the Assistant's music and sound wording beyond the kinds' nouns, helm mcp tools for Magic, a picture
+  from `board_frame` itself, no browser walk on the dev stack (the owner uses it live; vitest renders the proposal on the
+  fake board and the contract test runs the whole flow through Kong).
