@@ -193,6 +193,9 @@ func TestMagicBoards(t *testing.T) {
 		v1["at_s"] != 0.417 || agent["transitions"].([]any)[0].(map[string]any)["at_s"] != float64(4) {
 		t.Fatal(agent)
 	}
+	if req, _ := v1["request"].(map[string]any); req["kind"] == nil { // API 1.88: the whole request, to send back
+		t.Fatal(v1)
+	}
 	e.call(userA, "GET", base+"?view=x", nil, 422)
 
 	// rename, delete

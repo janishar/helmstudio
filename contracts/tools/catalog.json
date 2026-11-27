@@ -3485,7 +3485,7 @@
       }
     },
     "show_board": {
-      "description": "One Magic board for an agent: its revision, lanes, every block (frames and seconds, status, the take shown, prompt or line, ties, badges), transitions, assets and notes, and the estimate to run what is not done. Block ids and the revision are what the edit tools take.",
+      "description": "One Magic board for an agent: its revision, lanes, every block (frames and seconds, status, the take shown, its request, ties, badges), transitions, assets and notes, and the estimate to run what is not done. Block ids and the revision are what the edit tools take.",
       "surfaces": [
         "assistant"
       ],
@@ -3625,7 +3625,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                         },
                         "takes": {
                           "type": "array",
@@ -3937,7 +3937,7 @@
                     },
                     "request": {
                       "type": "object",
-                      "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                     },
                     "pinned": {
                       "oneOf": [
@@ -4095,7 +4095,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                         },
                         "pinned": {
                           "oneOf": [
@@ -4599,7 +4599,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                         },
                         "takes": {
                           "type": "array",
@@ -4911,7 +4911,7 @@
                     },
                     "request": {
                       "type": "object",
-                      "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                     },
                     "pinned": {
                       "oneOf": [
@@ -5069,7 +5069,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
                         },
                         "pinned": {
                           "oneOf": [

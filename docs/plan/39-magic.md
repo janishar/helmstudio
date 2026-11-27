@@ -528,3 +528,11 @@ Left: the lost-edits worry in the phase G report is closed (lanes.tsx has phase 
 Not walked in the browser: the Assistant's proposal bar and cards (the echo model makes no tool calls; vitest and
 `test_magic_assistant` cover them); the "Baking n/m" toast was seen at 0/3 only (the fake bakes in seconds); a Morph
 dialog stays open on Escape once its focus left (after Generate), the × closes it.
+
+**Cross-lane review, phases E, G, H and F (2026-11-27, API 1.88).** The four phases checked where they meet: one
+contract version line (1.82 to 1.87, no lost hunk), every service's `make gen` copy as committed, migrations 00060 to
+00062 in order, every lane's work still in lanes.tsx, board.tsx and menus.ts, the edits fixture covering every op, and
+Send taking music and sound lanes to audio tracks. Two fixes: the agent view's blocks carry their whole `request`
+(a `block` op replaces it, so the Assistant sending back only a prompt lost a shot's picks or a cue's lyrics and key),
+and the ask rule's total leaves board frames out (they never ask, so a pick of frames alone or frames plus shots under
+the limit no longer asks).

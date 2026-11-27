@@ -139,6 +139,10 @@ func TestAssistantMagic(t *testing.T) {
 			t.Fatal(run)
 		}
 	}
+	// API 1.88: board frames never ask, so they are left out of the ask rule's total (a limit of 0 included)
+	if p := e.call(userA, "POST", base+"/plan", map[string]any{"blocks": []string{"f1"}}, 200); p["ask"] != false || p["seconds"] == nil {
+		t.Fatal(p)
+	}
 	// within the limit: it runs at once, no preview
 	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 5}, 200)
 	if r := result(ask(userA, fresh(), "run_blocks", false, map[string]any{"board_id": id, "revision": 3, "blocks": []string{"v1"}})); len(r["started"].([]any)) != 2 {

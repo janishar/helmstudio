@@ -381,6 +381,9 @@ type AgentBlock struct {
 	TiedTo    []string `json:"tied_to"`
 	Effects   []string `json:"effects"`
 	FromFrame *string  `json:"from_frame,omitempty"`
+	// Request is its standard request as stored (API 1.88): a block op's request replaces it whole, so an agent sends
+	// it back with its changes
+	Request map[string]any `json:"request"`
 }
 
 // AgentLane is one lane of the agent view.
@@ -438,7 +441,7 @@ func AgentView(d Doc) Agent {
 	for _, b := range d.Blocks {
 		ab := AgentBlock{ID: b.ID, Lane: b.Lane, Kind: b.Kind, Name: b.Name, At: b.At, Length: b.Length, AtS: s(b.At),
 			EndS: s(b.end()), Status: "draft", Takes: len(b.Takes), TiedTo: []string{}, Effects: []string{},
-			FromFrame: b.FromFrame}
+			FromFrame: b.FromFrame, Request: b.Request}
 		switch {
 		case b.Pinned != nil:
 			ab.TakeID = b.Pinned

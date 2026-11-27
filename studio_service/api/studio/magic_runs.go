@@ -1285,7 +1285,7 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 		return err
 	}
 	ws := s.registry.Workflows()
-	total, known, unknownRun := 0.0, true, false
+	total, runs, known, unknownRun := 0.0, 0.0, true, false // runs: the total without board frames (they never ask)
 	lanes := map[string]*dto.MagicPlanLane{}
 	var kinds []string
 	for _, b := range blocks {
@@ -1338,6 +1338,9 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 			sec := math.Round(*rate*units*10) / 10
 			pb.Seconds = &sec
 			total += sec
+			if b.Kind != "frame" {
+				runs += sec
+			}
 			if lane.Seconds != nil {
 				*lane.Seconds += sec
 			}
@@ -1357,7 +1360,7 @@ func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Calle
 	if known {
 		out.Seconds = &total
 	}
-	out.Ask = unknownRun || total > out.LimitMinutes*60
+	out.Ask = unknownRun || runs > out.LimitMinutes*60
 	out.AskText = askText(kinds, out.Seconds)
 	return nil
 }

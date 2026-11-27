@@ -9819,7 +9819,7 @@ export interface components {
             seconds: number | null;
             /** @description the run order: storyboard frames first, then lane by lane, each in time */
             order: components["schemas"]["MagicId"][];
-            /** @description the ask rule: true when a run (not a board frame) has no estimate or the total is above ask_above_gpu_minutes */
+            /** @description the ask rule: true when a run (not a board frame) has no estimate or the total of those runs is above ask_above_gpu_minutes (from 1.88 board frames are left out of that total; they never ask) */
             ask: boolean;
             /** @description the ask card's line: `3 shots, about 6 min` */
             ask_text: string;
@@ -9845,6 +9845,8 @@ export interface components {
             /** @description the badges' names (off ones left out) */
             effects: string[];
             from_frame?: components["schemas"]["MagicId"];
+            /** @description from 1.88: its standard request as stored (a block op's `request` replaces it whole: send this one back with your changes) */
+            request?: components["schemas"]["MagicRequest"];
         };
         /** @description GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links */
         MagicAgentView: {

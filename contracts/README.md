@@ -3965,7 +3965,8 @@ Numbers in fixtures compare by value (1 = 1.0).
 A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
 tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
 studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); from 1.82 Send to Timeline
-(phase G, below); from 1.87 the Assistant's tools (Magic: the Assistant, below).
+(phase G, below); from 1.87 the Assistant's tools (Magic: the Assistant, below); from 1.88 the agent view's block
+`request` and the ask rule's total without board frames (cross-lane review).
 
 - **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
   "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
@@ -4028,8 +4029,10 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   revision is never pruned while it exists; Restore is `…/restore` with its `revision`.
 - **The agent view**: `GET …/boards/{board_id}?view=agent` (`MagicAgentView`): lanes with their block counts, every
   block flat with `at`/`length` in frames and `at_s`/`end_s`, its status (draft or done until runs come), the take it
-  shows, its prompt or line, what it is tied to and its badges; transitions with where their join is; assets with
-  the blocks they are used in; no signed links.
+  shows, its prompt or line, what it is tied to and its badges (from 1.88 its whole `request` too: a `block` op's
+  `request` replaces the stored one, so an agent sends it back with its changes, or a music block's lyrics or a
+  shot's picks are lost); transitions with where their join is; assets with the blocks they are used in; no signed
+  links.
 
 ### Magic: the standard request (API 1.81; plan 39 phase D; normative)
 
@@ -4090,8 +4093,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   units), else **pack** (`standard.seconds` × units), else **unknown** (null). Units: an image's megapixels, a
   video's seconds × its pixels / (1280 × 720), a voice's seconds. Per lane and in all (null when any is unknown);
   `order` (board frames first, then lane by lane in time); **the ask rule** `ask`: true when a run other than a
-  board frame has no estimate or the total is above `ask_above_gpu_minutes`, with `ask_text` (`3 shots, about 6
-  min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
+  board frame has no estimate or the total of those runs is above `ask_above_gpu_minutes` (from 1.88 board frames
+  are left out of that total, as they never ask), with `ask_text` (`3 shots, about 6 min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
 - **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 5; `magic_settings`).
 
 ### Magic: Send to Timeline (API 1.82; plan 39 phase G, board MagicBoard frame 9; normative)
