@@ -109,6 +109,21 @@ func TestAssistantMagic(t *testing.T) {
 	if bad.Code != "invalid" || bad.Error != "ops[0]: That lane is gone." {
 		t.Fatal(bad)
 	}
+	// asset pictures go on the asset's sheet: a lane named for them, or an image on one, is refused (try and edit alike)
+	sheet := "Asset pictures go on the asset's sheet: use make_views {asset, views}, not a lane or blocks of their own."
+	cast := []any{map[string]any{"op": "lane_add", "lane": map[string]any{"id": "cast", "name": "Characters", "role": "free"}},
+		map[string]any{"op": "add", "mode": "insert", "block": map[string]any{"id": "c1", "lane": "cast", "at": 0, "length": 24,
+			"kind": "image", "name": "Mara", "request": map[string]any{"kind": "image", "prompt": "@mara front view", "model": "echo-image"},
+			"takes": []any{}, "effects": []any{}}}}
+	for _, tool := range []string{"try_board_edit", "edit_board"} {
+		if r := ask(userA, fresh(), tool, false, map[string]any{"board_id": id, "base_revision": 1, "ops": cast}); r.Code != "invalid" || r.Error != sheet {
+			t.Fatal(tool, r)
+		}
+	}
+	free := []any{map[string]any{"op": "lane_add", "lane": map[string]any{"id": "b2", "name": "B roll", "role": "free"}}}
+	if r := ask(userA, fresh(), "try_board_edit", false, map[string]any{"board_id": id, "base_revision": 1, "ops": free}); r.Code != "" {
+		t.Fatal(r) // another name passes
+	}
 
 	// edit_board: the preview (the summary and the estimate of what it adds), nothing stored; the Yes saves it
 	call := fresh()

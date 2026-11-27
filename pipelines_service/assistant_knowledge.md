@@ -91,8 +91,9 @@ Deciding:
 - Ask only when a choice really matters (cost, a long run, a missing download); otherwise choose and say why.
 
 Magic boards:
-- Build from a brief in this order: assets first (asset_add: a character, prop or place), then the storyboard (frame
-  blocks with framing, words and @handles), then shots made from frames (from_frame, each starting from its frame's
+- Build from a brief in this order: assets first (asset_add: a character, prop or place) and lanes in one edit, then
+  make_views for each, then the storyboard in a second edit (frame blocks that @ pick their assets; the words say the
+  action, framing and move, never a look again), then shots made from frames (from_frame, each starting from its frame's
   picture or the last frame of the shot before: first {block, part: last}), then lines, music and sound tied to their
   shots (link). Lengths and times are in frames at the board's fps.
 - Plan an edit on show_board's revision, try it with try_board_edit, fix what it refuses, then edit_board once with
@@ -120,3 +121,4 @@ Magic boards:
   badges on the board only.
 - Make views: make_views {asset, views ["Front", "Side"]} runs one image each onto the asset's sheet, under the same
   ask rule as run_blocks.
+  Characters, props and places never get a lane or blocks of their own: their pictures are always make_views.

@@ -311,6 +311,10 @@ func (s *Service) magicEditPreview(ctx context.Context, caller common.Caller, ca
 		r := toolErr("internal", "internal error")
 		return nil, nil, &r
 	}
+	if assetLane(is, tried.Diff) {
+		r := toolErr("invalid", "Asset pictures go on the asset's sheet: use make_views {asset, views}, not a lane or blocks of their own.")
+		return nil, nil, &r
+	}
 	out := map[string]any{"revision": tried.Revision, "diff": tried.Diff, "warnings": tried.Warnings,
 		"summary": magic.Describe(was, is)}
 	if !estimate {
@@ -340,6 +344,34 @@ func (s *Service) magicEditPreview(ctx context.Context, caller common.Caller, ca
 		}
 	}
 	return out, est, nil
+}
+
+// assetWords name a lane for an asset's pictures ("Characters", "Props", "Character sheets").
+var assetWords = map[string]bool{"character": true, "prop": true, "place": true, "setting": true, "location": true,
+	"asset": true, "view": true, "sheet": true, "cast": true, "turnaround": true}
+
+// assetLane is whether an Assistant edit adds a lane named for asset pictures, or an image or frame on one that is not
+// a storyboard: those pictures belong on the asset's sheet (make_views). Storyboard frames that @ a character stay.
+// ponytail: by lane name only; an image @-picking one asset on a free lane named otherwise still passes.
+func assetLane(d magic.Doc, diff magic.Diff) bool {
+	named := func(id string) bool {
+		for _, l := range d.Lanes {
+			if l.ID == id && l.Role != "storyboard" {
+				for _, w := range strings.FieldsFunc(strings.ToLower(l.Name), func(r rune) bool { return r < 'a' || r > 'z' }) {
+					if assetWords[strings.TrimSuffix(w, "s")] {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+	if slices.ContainsFunc(diff.Lanes.Added, named) {
+		return true
+	}
+	return slices.ContainsFunc(d.Blocks, func(b *magic.Block) bool {
+		return (b.Kind == "image" || b.Kind == "frame") && slices.Contains(diff.Blocks.Added, b.ID) && named(b.Lane)
+	})
 }
 
 // magicRun is run_blocks: the plan first; within the limit everything runs at once (the final reply); above it, the

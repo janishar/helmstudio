@@ -55,23 +55,25 @@ nothing; a change after ten shots costs ten runs.
 
 Once the user says yes:
 - No board yet: create_board, then navigate /magic with b (its board_id). One fits already: show_board first.
-- One edit for the plan (try_board_edit, fix what it refuses, then edit_board with the same ops): the assets
-  (asset_add, each with its note holding the look words and the style line), the lanes (Storyboard, Shots, Voice,
-  Music, Sound as the plan needs) and one frame per beat at its time and length.
+- First edit, assets and lanes only (try_board_edit, fix what it refuses, then edit_board with the same ops): the
+  assets (asset_add, each with its note holding the look words and the style line) and the lanes (Storyboard,
+  Shots, Voice, Music, Sound as the plan needs). No frames yet.
 - The user applies the change on the board. Never say it is there before edit_board's result.
 
 ## 3. Characters, props and settings first (views)
 
+- Characters, props and places never get a lane or blocks of their own: their pictures are always make_views onto
+  the asset's sheet.
 - Make the views before any frame: make_views for each character (Front, Side, Back; an expression or two if the
   story needs them), each recurring prop (Front), each place (a Wide, and the Reverse if a scene cuts both ways).
-- Show the sheets; let the user pick or redo a view. A frame that @ picks an asset uses its sheet as the reference.
+- Show the sheets; let the user pick or redo a view. Only then a second edit adds the Storyboard frames (§4).
 - A voice for each speaking character goes on the asset (voice_id) before any dialogue. No voice yet: say so and
   point at Create's voice design or clone; then set it on the asset.
 
 ## 4. Storyboard frames
 
-- One frame per beat. Each frame: its words (what we see, in plain words), the @ picks of its characters, props
-  and place, its framing (size and angle: Wide shot, from a low angle) and its move for the shot to come (The camera
+- One frame per beat, at its time and length. Each frame @ picks its characters, props and place (their sheets
+  are its reference); its words say only the action, never a look again (the asset carries it); its framing (size and angle: Wide shot, from a low angle) and its move for the shot to come (The camera
   slowly pushes in). Framing and moves: the Cinematic filmmaker's words.
 - Start wide to show the place, then go closer for feelings; one action per frame.
 - Frames are cheap and never ask: run them as sketches first (the frame's style Sketch), 2 seeds where the beat
@@ -143,9 +145,10 @@ Brief: "a 30 s ad for a lemonade stand run by @mara, a girl of ten".
 1. Plan: idea in one line; style line "Live action, 35 mm, warm summer afternoon light, soft pastel colours";
    @mara (ten, freckles, yellow dress, bright voice), @stand (a wooden lemonade stand, hand-painted sign), @street
    (a quiet suburban street, wide and reverse); 7 beats adding up to 30 s. The user says yes.
-2. One edit: 3 assets, lanes Storyboard, Shots, Voice, Music, Sound; 7 frames at their times.
+2. First edit: 3 assets, lanes Storyboard, Shots, Voice, Music, Sound.
 3. make_views: @mara Front, Side; @stand Front; @street Wide, Reverse. The user picks.
-4. 7 frames as sketches, 2 seeds on the opening and the end card; pin, say why; the user picks; rough cut.
+4. Second edit: 7 frames at their times, each @ picking its assets ("@mara hands a cup over @stand, medium shot").
+   Run them as sketches, 2 seeds on the opening and the end card; pin, say why; the user picks; rough cut.
 5. 7 shots from the frames (LTX drafts), compare, then finals with the same seeds (about 10 to 15 GPU minutes:
    a card).
 6. A voice-over line tied to Shot 1 and Shot 7, one music cue from Shot 1, street ambience under it all.

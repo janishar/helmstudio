@@ -9,7 +9,8 @@ asset -> views -> frame -> the shot's first frame
 2. Its views: make_views makes the sheet (Front, Side, Back, an expression). The user picks; redo a view that is off
    before any frame uses it. A view made later does not change frames made before.
 3. The frame: the storyboard frame @ picks the asset (refs), so the asset's sheet goes in as the reference. Name the
-   asset with its @handle in the frame's words; the same handle, the same way, every time.
+   asset with its @handle in the frame's words; the same handle, the same way, every time. The frame's words say the
+   action, framing and move only, never the asset's look again: the asset carries it.
 4. The shot's first frame: a shot made from the frame (from_frame) starts from the frame's picture. A shot that
    continues the one before starts from that shot's last frame instead.
 
