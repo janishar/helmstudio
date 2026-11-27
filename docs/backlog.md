@@ -139,6 +139,19 @@ show on the Plugins page; the user's copy of the same name wins ("replaces built
 `format` with "needs a newer helmstudio". Later: upload a zip on the Plugins page for servers without folder access,
 skills in pipeline agent nodes.
 
+**Magic director skill** (owner, 2026-11-27: "do we need magic focused skill for aour assitant in addition to animator",
+then "the skill should make assistant plan first the charector, porps, settings, etc in order"). Draft after the owner's
+real-world test of Magic, so it fixes how the Assistant actually plans boards. The craft of a whole board (the built-in
+knowledge keeps the tool mechanics; Cinematic filmmaker keeps framing and moves, referenced, not repeated). Planning
+order, enforced: 1 characters (look, outfit, age, voice; their views made first), 2 props that recur or matter, 3
+settings (places, wide and reverse angles), 4 the look (one style line every frame reuses), 5 beats (moments with
+lengths that add up to the target), then 6 storyboard frames (one per beat, @ the characters, props and setting,
+framing, move), 7 shots from the liked frames, 8 voice, music and sound tied to shots. Steps 1-5 are shown as a plan
+for the owner's OK before any GPU time. Also: cheap sketches first and finals only for picked frames (variant per
+stage), the GPU limit, model fit (LTX vs MiniMax H3, first/last frames, joins), sound with picture (ties, music
+sections on beats, MMAudio from a shot), reviewing like a director (compare, pin, say why, flag out of date before
+Send), and sample plans (30 s ad, 1 min story, music video) with lanes, block counts and a GPU budget.
+
 ## Multi-arch images (noted 2026-11-25)
 
 The published images (ghcr.io/janishar/helmstudio-*) are linux/arm64 only (.tools/push-images): right for the Mac app's
