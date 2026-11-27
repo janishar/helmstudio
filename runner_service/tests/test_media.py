@@ -690,3 +690,45 @@ async def test_a_mux_job_whose_sound_is_a_video_fails_input(clips):
     store = store_of(clips, **{"runs/v/1/0.mp4": "t", "runs/a/1/0.wav": "a"})
     end = (await run(mux_command("runs/v/1/0.mp4", "runs/a/1/0.wav"), store))[-1]["data"]
     assert end["status"] == "failed" and end["failure"]["class"] == "input"
+
+
+def bake_command(kind: str, inputs: list[str], graph: str, frames: int) -> dict:
+    cmd = copy.deepcopy(BASE)
+    ins = [a for i in range(len(inputs)) for a in ("-i", f"{{in:{i}}}")]
+    args = [*HEAD, *ins, "-filter_complex", graph, "-map", "[vout]", "{venc}", "-r", "24", "-pix_fmt", "yuv420p",
+            "-map", "[aout]", *TAIL]  # fmt: skip
+    cmd["data"] = {"kind": "bake", "output_prefix": f"{U}bakes/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}{k}", "kind": "video"} for k in inputs],
+                   "bake": {"target": TARGET, "frames": frames, "samples": frames * 2000, "video_bitrate": 1000000,
+                            "args": args}}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    return cmd
+
+
+async def test_a_bake_job_wipes_two_clip_ends_into_a_short_clip(clips):
+    """API 1.82 (Magic: Send to Timeline): a wipe of the first clip's last half second into the second's first, the
+    first's sound faded out: bake.mp4 at the target, exactly 12 frames, with its poster, last frame and thumb."""
+    store = store_of(clips, **{"runs/x/1/0.mp4": "a", "runs/y/1/0.mp4": "a"})
+    graph = (f"[0:v:0]trim=start=0.5:end=1,setpts=PTS-STARTPTS,{CONFORM}[v0];"
+             f"[1:v:0]trim=start=0:end=0.5,setpts=PTS-STARTPTS,{CONFORM}[v1];"
+             "[v0][v1]xfade=transition=wipeleft:duration=0.5:offset=0,trim=duration=0.5[vout];"
+             "[0:a:0]atrim=start=0.5:end=1,asetpts=N/SR/TB,afade=t=out:st=0:d=0.5[aout]")  # fmt: skip
+    events = await run(bake_command("wipe", ["runs/x/1/0.mp4", "runs/y/1/0.mp4"], graph, 12), store)
+    end = events[-1]["data"]
+    assert end["status"] == "succeeded" and end["encoder"] == "libx264", end
+    r = end["result"]
+    assert r["key"].endswith("/bakes/" + BASE["job_id"] + "/bake.mp4") and "mode" not in r
+    v = r["video"]
+    assert v["frames"] == 12 and v["fps"] == 24 and v["has_audio"]
+    assert v["poster"]["key"].endswith("/bake.poster.png") and v["last"]["key"].endswith(
+        "/bake.last.png"
+    )
+    assert r.get("thumb") is None or r["thumb"]["key"].endswith("/bake.thumb.webp")
+    assert (r["width"], r["height"]) == (256, 128)
+
+
+async def test_a_bake_whose_output_is_off_its_frames_fails_verify(clips):
+    store = store_of(clips, **{"runs/x/1/0.mp4": "a"})
+    graph = f"[0:v:0]setpts=PTS-STARTPTS,{CONFORM}[vout];[0:a:0]anull[aout]"
+    end = (await run(bake_command("effects", ["runs/x/1/0.mp4"], graph, 12), store))[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["class"] == "verify"

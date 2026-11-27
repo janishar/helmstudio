@@ -9,7 +9,8 @@ weight holder.
   ffmpeg in its own process group with progress from `-progress pipe:1`, the output verified, poster (a tenth in)
   and last frame written; frame: that exact frame as a PNG (each with its thumbnail, API 1.48); thumbs: each input's
   thumbnail (README, Thumbnails); mux (API 1.79, README Music and sound: Save with the video): the video's picture
-  copied with the audio as its AAC stereo sound fitted to the picture's length, poster at frame 0 and the last frame
+  copied with the audio as its AAC stereo sound fitted to the picture's length, poster at frame 0 and the last frame;
+  bake (API 1.82, README Magic: Send to Timeline): an export's conform with studio's own graph, bake.mp4 and its pictures
   → uploads under output_prefix → one terminal status →
   ack (after the status is acked). The temp dir is removed on every path. A redelivery starts over."""
 
@@ -98,6 +99,14 @@ class MediaJobs:
                     planned = "copy" if data["export"]["mode"] == "copy" else self.encoders[0]
                     await events.publish("status", {"status": "running", "encoder": planned})
                     result, encoder = await self.export(data, events, tmp, cancel)
+                    extra = {"encoder": encoder}
+                elif (
+                    data["kind"] == "bake"
+                ):  # API 1.82: an export's conform with studio's own graph
+                    await events.publish(
+                        "status", {"status": "running", "encoder": self.encoders[0]}
+                    )
+                    result, encoder = await self.export(data, events, tmp, cancel, "bake")
                     extra = {"encoder": encoder}
                 elif data["kind"] == "mux":
                     await events.publish("status", {"status": "running", "encoder": "copy"})
@@ -189,8 +198,16 @@ class MediaJobs:
                 await done(n)
         return paths, infos
 
-    async def export(self, data: dict, events: MediaEvents, tmp: Path, cancel: asyncio.Event):
-        ex = data["export"]
+    async def export(
+        self,
+        data: dict,
+        events: MediaEvents,
+        tmp: Path,
+        cancel: asyncio.Event,
+        name: str = "export",
+    ):
+        """An export, or (API 1.82, `name` bake) a bake: the same conform, verify and pictures, named <name>.*."""
+        ex = data[name]
         last = [time.monotonic()]
 
         async def fetched(
@@ -201,7 +218,7 @@ class MediaJobs:
                 last[0] = time.monotonic()
 
         paths, infos = await self._fetch(data["inputs"], tmp, cancel, fetched)
-        mode, args, reason, listfile = ex["mode"], ex["args"], None, None
+        mode, args, reason, listfile = ex.get("mode", "conform"), ex["args"], None, None
         if mode == "copy":
             for e in ex["expect"]:
                 if e["input"] >= len(infos):
@@ -220,7 +237,7 @@ class MediaJobs:
                 listfile.write_text(media.concat_list([paths[i] for i in ex["concat"]],
                                                       [(infos[i]["video"] or {}).get("duration") for i in ex["concat"]]))  # fmt: skip
         encoder = "copy" if mode == "copy" else self.encoders[0]
-        out = tmp / "export.mp4"
+        out = tmp / f"{name}.mp4"
         argv = media.build(args, paths, out=out, listfile=listfile,
                            venc_args=media.venc(self.encoders[0], ex["video_bitrate"]))  # fmt: skip
         await self._ffmpeg(argv, ex["frames"], events, cancel, tmp)
@@ -230,30 +247,31 @@ class MediaJobs:
         v, frames, target = info["video"], info["frames"], ex["target"]
         prefix = data["output_prefix"]
         pictures = {}
-        for name, index in (("poster", frames // 10), ("last", frames - 1)):
-            png = tmp / f"{name}.png"
+        job = name
+        for pic, index in (("poster", frames // 10), ("last", frames - 1)):
+            png = tmp / f"{pic}.png"
             try:
                 await asyncio.to_thread(media.frame_png, out, index, png)
             except MediaError as e:  # the output, not an input, lacks the frame
                 raise MediaError("verify", str(e)) from None
-            key = f"{prefix}export.{name}.png"
+            key = f"{prefix}{job}.{pic}.png"
             body = png.read_bytes()
-            if name == "poster":  # API 1.48: its thumbnail first, export.thumb.webp
-                thumb = await self._thumb(body, f"{prefix}export.thumb.webp")
+            if pic == "poster":  # API 1.48: its thumbnail first, export.thumb.webp
+                thumb = await self._thumb(body, f"{prefix}{job}.thumb.webp")
             await self.store.put(key, body, "image/png")
-            pictures[name] = {
+            pictures[pic] = {
                 "key": key,
                 "width": v["width"],
                 "height": v["height"],
                 "bytes": len(body),
             }
-        key = f"{prefix}export.mp4"
+        key = f"{prefix}{job}.mp4"
         size, etag = await self.store.upload(key, out, "video/mp4")
         fps = float(Fraction(target["rate"]))
         video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": info["audio"] is not None,
                  **pictures, "stream": info["stream"]}  # fmt: skip
-        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag, "mode": mode,
-                  "video": video} | ({"thumb": thumb} if thumb else {})  # fmt: skip
+        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag,
+                  "video": video} | ({"thumb": thumb} if thumb else {}) | ({"mode": mode} if name == "export" else {})  # fmt: skip
         if reason:
             result["reason"] = reason
         return result, encoder
