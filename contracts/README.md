@@ -3965,7 +3965,7 @@ Numbers in fixtures compare by value (1 = 1.0).
 A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
 tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
 studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); from 1.82 Send to Timeline
-(phase G, below); the Assistant's tools come with a later phase (plan 39 §45.11), and so do their routes.
+(phase G, below); from 1.87 the Assistant's tools (Magic: the Assistant, below).
 
 - **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
   "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
@@ -4200,6 +4200,39 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   the run history lists the audio take. `MagicTake.sound` is the take's class: the web draws a music take as an album cover
   (its gradient from the prompt, a vinyl disc) and a sound or voice take as an orb (sky, amber), by the take's class
   whatever its lane.
+
+### Magic: the Assistant (API 1.87; plan 39 phase F, board MagicBoard frame 8; normative)
+
+- **Tools** (`tools/catalog.json`, surface assistant, served by studio as the thread's owner, its writes labelled
+  `via` assistant: a revision's History says "by Assistant", a run's `by` is assistant): `list_boards`, `show_board`
+  (the agent view and the plan of every block not done: the estimate), `try_board_edit` (a dry run: the diff, the
+  warnings and a `summary`; nothing stored), `edit_board` (the same ops on `base_revision`; card `board_edit`),
+  `restore_board` (card `board_edit`), `plan_board` (`…/plan`), `run_blocks` (card `magic_run`, asked only above the
+  limit), `board_frame` (what each visible lane shows at a board time: block, take, seconds into it, status; nothing
+  is rendered: look at a take with look_at) and `send_to_timeline` (card `send`). They are not on helm mcp yet.
+- **The summary** of an edit names what changed by block name: `Added Shot 2, Shot 3 and Frame 4; moved Line 2;
+  removed Shot 5` (more than three of one action: counts by kind, `Added 3 shots and Frame 4`), else lanes, assets and
+  transitions (`Changed Shot 2`, `Added a dissolve`); an assistant edit's revision keeps it as its `ops_summary`.
+- **Asking first.** studio.tools (req.studio.tools) asks a card tool without `confirmed` first: studio answers a
+  `preview` and does nothing else: `edit_board` the dry run (diff, warnings, summary) and `estimate` {seconds, host,
+  blocks} for the blocks it adds or changes that can run (null seconds: unknown); `restore_board` the revision it
+  brings back (`to`, its `by`, `via`, `ops_summary`, `saved_at`); `send_to_timeline` the send's dry-run plan. The
+  user's Yes asks again with `confirmed` under the same call id: studio does it and keeps that reply (asked again: the
+  same reply). Not now leaves the board as it was.
+- **The ask rule** (plan 39 §45.8): `run_blocks` plans the pick first (`…/plan`). Its ask rule false: everything
+  runs at once, no card, the final reply. True (a run above `ask_above_gpu_minutes`, or one with no estimate): the
+  pick's board frames start at once (they never ask) and the `preview` is the plan with `frames` (what started, each
+  `{block, run_id, seconds}`); the card says `Run 3 shots, about 6 min?` with `Above your 5 min limit. Frame 4 ran on
+  its own (6 s).` (or `It has no estimate yet.`); its Yes runs the rest. A run is checked against the board's
+  revision as the route does (409: read the board again).
+- **The proposal on the board** (frame 8): the `board_edit` card carries `board` {board_id, base_revision, ops} (a
+  restore: `to`, no ops). The Magic page with that board open applies the ops to its own document and draws the
+  result: new blocks dashed green with `New`, moved or changed ones dashed blue with `Moved`, removed ones faded, and a
+  bar `Assistant's change · <summary>` with the estimate, Discard (Not now) and Apply (Yes); the drawer shows the same
+  card. After the answer the page reads the board again.
+- **Screen actions** (`actions.json` screen `magic`, route `/magic`): `select` (block ids), `openBlock`, `play`
+  (from `at_s`, or `pause`) and `scrub` (`at_s`); the summary's fields are the board's id, name, revision and length,
+  its lanes with their block counts, the selection and the playhead. `navigate` takes `/magic` with `b` (a board id).
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 
@@ -4542,7 +4575,7 @@ names a card kind), the card kinds (each asked by some action or tool; tags from
 every screen. An action is never named like an assistant tool (an mcp-only tool such as `pick` is helm mcp's own
 namespace) or a shell action; every screen route is a `navigate` target; a
 screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
-the tools' cards plus `delete` (Clear all).
+the tools' cards plus `delete` (Clear all); from 1.87 the tag `board` (`changes the board`) on Magic's `board_edit`.
 
 ## Plugins (API 1.61; board docs/mock/Plugins.dc.html, release 0.1.0-alpha.2 items 33-34; normative)
 

@@ -4674,6 +4674,18 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
                 fail(f"tools/catalog.json {n}: ops must be openapi TimelineOp's: {union}")
             if any(not o.get("description") for o in ops):
                 fail(f"tools/catalog.json {n}: every op needs a one-line description")
+    # 1.87: Magic's edit tools write out openapi MagicOp's variants (each op's required fields and fields)
+    magic = {v["properties"]["op"]["const"]: (sorted(v["required"]), sorted(v["properties"]))
+             for v in spec["components"]["schemas"]["MagicOp"]["oneOf"]}
+    for n in ("try_board_edit", "edit_board"):
+        if n in catalog["tools"]:
+            ops = catalog["tools"][n]["input"]["properties"]["ops"]["items"]["oneOf"]
+            have = {o["properties"]["op"]["const"]: (sorted(o.get("required", [])), sorted(o["properties"])) for o in ops}
+            if have != magic:
+                fail(f"tools/catalog.json {n}: ops must be openapi MagicOp's variants "
+                     f"(differ: {sorted(k for k in set(magic) | set(have) if magic.get(k) != have.get(k))})")
+            if any(not o.get("description") for o in ops):
+                fail(f"tools/catalog.json {n}: every op needs a one-line description")
     shell = set(actions["screens"]["shell"]["actions"])
     to = set(actions["screens"]["shell"]["actions"]["navigate"]["input"]["properties"]["to"]["enum"])
     for sn, sc in actions["screens"].items():

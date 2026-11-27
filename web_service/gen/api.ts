@@ -7373,10 +7373,10 @@ export interface components {
         AssistantCard: {
             id: components["schemas"]["AssistantCallId"];
             /**
-             * @description from 1.61 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)
+             * @description from 1.61 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins); from 1.87 board_edit, magic_run and send (contracts/README.md, Magic: the Assistant)
              * @enum {string}
              */
-            kind: "look" | "web_search" | "delete" | "plugin";
+            kind: "look" | "web_search" | "delete" | "plugin" | "board_edit" | "magic_run" | "send";
             title: string;
             rows: {
                 label: string;
@@ -7387,6 +7387,15 @@ export interface components {
             take_ids?: string[];
             /** @enum {string} */
             state: "waiting" | "yes" | "not_now" | "cancelled";
+            /** @description from 1.87, board_edit: the board the change is drawn on; the Magic page with it open applies `ops` to its document and draws them (Apply is Yes, Discard is Not now); a restore carries `to` and no ops */
+            board?: {
+                /** Format: uuid */
+                board_id: string;
+                base_revision: number;
+                ops?: components["schemas"]["MagicOp"][];
+                /** @description a restore: the revision it brings back */
+                to?: number;
+            };
         };
         /** @description twin of assistant.schema.json caps: used by the current message */
         AssistantCaps: {
@@ -9498,7 +9507,7 @@ export interface components {
             via: "web" | "api" | "mcp" | "assistant" | null;
             /** Format: date-time */
             saved_at: string;
-            /** @description the op names of an /edits call (`move, link`), else the write's kind (create, undo, redo, restore) */
+            /** @description the op names of an /edits call (`move, link`), else the write's kind (create, undo, redo, restore); from 1.87 an assistant edit's summary (`Added Shot 2 and Shot 3; moved Line 2`) */
             ops_summary: string;
             blocks: number;
         };

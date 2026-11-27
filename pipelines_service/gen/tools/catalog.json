@@ -3463,6 +3463,2339 @@
         ]
       },
       "destructive": true
+    },
+    "list_boards": {
+      "description": "Your Magic boards, newest first: name, revision, lanes, blocks, length.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/boards"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {}
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/MagicBoardList"
+      }
+    },
+    "show_board": {
+      "description": "One Magic board for an agent: its revision, lanes, every block (frames and seconds, status, the take shown, prompt or line, ties, badges), transitions, assets and notes, and the estimate to run what is not done. Block ids and the revision are what the edit tools take.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/boards/{board_id}",
+        "POST /v1/studio/magic/boards/{board_id}/plan"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          }
+        },
+        "required": [
+          "board_id"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "board",
+          "plan"
+        ],
+        "properties": {
+          "board": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicAgentView"
+          },
+          "plan": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicPlan",
+            "description": "every block not done"
+          }
+        }
+      }
+    },
+    "try_board_edit": {
+      "description": "Try edits on a board without saving: the diff, the warnings and a summary, or the op that fails and why. Then propose the same ops with edit_board.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/edits"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision the ops were planned on (show_board's); a stale one is refused: read the board again and re-plan"
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "applied in order, all or nothing; ids you give new blocks, lanes and transitions are kept (unused ones), absent ones studio makes",
+            "items": {
+              "type": "object",
+              "required": [
+                "op"
+              ],
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add"
+                    },
+                    "block": {
+                      "type": "object",
+                      "required": [
+                        "lane",
+                        "at",
+                        "length",
+                        "kind",
+                        "name",
+                        "request",
+                        "takes",
+                        "effects"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "lane": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "at": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10368000
+                        },
+                        "length": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10368000
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "request": {
+                          "type": "object",
+                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                        },
+                        "takes": {
+                          "type": "array",
+                          "maxItems": 200,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "description": "take ids from its runs, oldest first (the caller's own)"
+                        },
+                        "pinned": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "the take it shows (absent: its latest)"
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "effects": {
+                          "type": "array",
+                          "maxItems": 20,
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "params": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": [
+                                    "number",
+                                    "string"
+                                  ]
+                                }
+                              },
+                              "off": {
+                                "type": "boolean",
+                                "description": "kept on the block but not applied"
+                              }
+                            }
+                          }
+                        },
+                        "from_frame": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                          "description": "a shot made from this storyboard frame"
+                        }
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "add: add a block (kind, name, length, its request) on a lane at frame `at`; insert pushes what starts there or later along, overwrite covers the span"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "dt",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "move"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "dt": {
+                      "type": "integer",
+                      "minimum": -10368000,
+                      "maximum": 10368000
+                    },
+                    "lane": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "to another lane (blocks from one lane)"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "move: move blocks by `dt` frames, on their lanes or onto `lane`; insert closes the gap they leave"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "trim"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10368000
+                    }
+                  },
+                  "description": "trim: set a block's `at` and `length` in frames (never over the next block)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "delete"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "delete: delete blocks; insert closes the gap"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "duplicate"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    }
+                  },
+                  "description": "duplicate: copy blocks after the group, unpinned"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "split"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    }
+                  },
+                  "description": "split: split a block at board frame `at`"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "link"
+                    },
+                    "block": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "to": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    }
+                  },
+                  "description": "link: tie a voice, music or sound block to a shot or a run of shots (`to`): it moves with them"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "unlink"
+                    },
+                    "block": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "unlink: untie a block"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away",
+                  "properties": {
+                    "op": {
+                      "const": "transition"
+                    },
+                    "between": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "start": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "end": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "cut",
+                        "dissolve",
+                        "fade",
+                        "wipe",
+                        "morph"
+                      ]
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    },
+                    "request": {
+                      "type": "object",
+                      "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                    },
+                    "pinned": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": ", kind morph only: one of its takes; null unpins"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "effect"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "effect"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "effect": {
+                      "type": "object",
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "params": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": [
+                              "number",
+                              "string"
+                            ]
+                          }
+                        },
+                        "off": {
+                          "type": "boolean",
+                          "description": "kept on the block but not applied"
+                        }
+                      }
+                    }
+                  },
+                  "description": "effect: add an effect badge (Grade, Slow, Stabilize) to blocks"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "index",
+                    "effect"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "effect_set"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "effect": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "params": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": [
+                                  "number",
+                                  "string"
+                                ]
+                              }
+                            },
+                            "off": {
+                              "type": "boolean",
+                              "description": "kept on the block but not applied"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "null takes it off"
+                    }
+                  },
+                  "description": "effect_set: change a block's effect at `index`; null takes it off"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "block"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "request": {
+                          "type": "object",
+                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                        },
+                        "pinned": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "null unpins"
+                        }
+                      }
+                    }
+                  },
+                  "description": "block: set a block's name, note, request (the standard request) or pinned take (null unpins)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "lane"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_add"
+                    },
+                    "lane": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "storyboard",
+                            "shots",
+                            "voice",
+                            "music",
+                            "sound",
+                            "free"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        }
+                      }
+                    },
+                    "after": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "absent: last"
+                    }
+                  },
+                  "description": "lane_add: add a lane (name, role) after `after`, else last"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "storyboard",
+                            "shots",
+                            "voice",
+                            "music",
+                            "sound",
+                            "free"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "description": "lane: set a lane's name, role or hidden"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "by"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_move"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "by": {
+                      "type": "integer",
+                      "enum": [
+                        -1,
+                        1
+                      ]
+                    }
+                  },
+                  "description": "lane_move: move a lane up (-1) or down (1)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_delete"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "lane_delete: delete a lane and its blocks"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "asset_delete"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "asset_delete: delete a board asset; its @ picks go"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "asset"
+                  ],
+                  "additionalProperties": false,
+                  "description": "asset_add: add a board asset (character, prop or place) with a unique handle and a name",
+                  "properties": {
+                    "op": {
+                      "const": "asset_add"
+                    },
+                    "asset": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "handle",
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "character",
+                            "prop",
+                            "place"
+                          ]
+                        },
+                        "handle": {
+                          "type": "string",
+                          "pattern": "^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$",
+                          "description": "its @ name (LibraryItem.handle's rule), unique on the board"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "sheet": {
+                          "type": "array",
+                          "maxItems": 50,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "views": {
+                          "type": "object",
+                          "maxProperties": 50,
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        },
+                        "voice_id": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "imported_from": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "description": "asset: set an asset's kind, name, note, voice, sheet (take ids) or views",
+                  "properties": {
+                    "op": {
+                      "const": "asset"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "character",
+                            "prop",
+                            "place"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "voice_id": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sheet": {
+                          "type": "array",
+                          "maxItems": 50,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "views": {
+                          "type": "object",
+                          "maxProperties": 50,
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "take"
+                  ],
+                  "additionalProperties": false,
+                  "description": "take_add: add a picture you own (a Gallery take) to a block's takes, pinned",
+                  "properties": {
+                    "op": {
+                      "const": "take_add"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "take": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "board_id",
+          "base_revision",
+          "ops"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "diff",
+          "warnings",
+          "summary"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "diff": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicDiff"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string",
+            "description": "what it changes, in the board's words"
+          }
+        }
+      }
+    },
+    "edit_board": {
+      "description": "Propose edits on a board: drawn on it with Apply and Discard; the user's Apply saves them as one revision (one undo step, by Assistant in History). Try them first with try_board_edit.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/edits",
+        "POST /v1/studio/magic/boards/{board_id}/plan"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "base_revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision the ops were planned on (show_board's); a stale one is refused: read the board again and re-plan"
+          },
+          "ops": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "description": "applied in order, all or nothing; ids you give new blocks, lanes and transitions are kept (unused ones), absent ones studio makes",
+            "items": {
+              "type": "object",
+              "required": [
+                "op"
+              ],
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "add"
+                    },
+                    "block": {
+                      "type": "object",
+                      "required": [
+                        "lane",
+                        "at",
+                        "length",
+                        "kind",
+                        "name",
+                        "request",
+                        "takes",
+                        "effects"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "lane": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "at": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 10368000
+                        },
+                        "length": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 10368000
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "request": {
+                          "type": "object",
+                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                        },
+                        "takes": {
+                          "type": "array",
+                          "maxItems": 200,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          },
+                          "description": "take ids from its runs, oldest first (the caller's own)"
+                        },
+                        "pinned": {
+                          "type": "string",
+                          "format": "uuid",
+                          "description": "the take it shows (absent: its latest)"
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "effects": {
+                          "type": "array",
+                          "maxItems": 20,
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "name"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "name": {
+                                "type": "string",
+                                "minLength": 1,
+                                "maxLength": 80
+                              },
+                              "params": {
+                                "type": "object",
+                                "additionalProperties": {
+                                  "type": [
+                                    "number",
+                                    "string"
+                                  ]
+                                }
+                              },
+                              "off": {
+                                "type": "boolean",
+                                "description": "kept on the block but not applied"
+                              }
+                            }
+                          }
+                        },
+                        "from_frame": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                          "description": "a shot made from this storyboard frame"
+                        }
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "add: add a block (kind, name, length, its request) on a lane at frame `at`; insert pushes what starts there or later along, overwrite covers the span"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "dt",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "move"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "dt": {
+                      "type": "integer",
+                      "minimum": -10368000,
+                      "maximum": 10368000
+                    },
+                    "lane": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "to another lane (blocks from one lane)"
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "move: move blocks by `dt` frames, on their lanes or onto `lane`; insert closes the gap they leave"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "trim"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 10368000
+                    }
+                  },
+                  "description": "trim: set a block's `at` and `length` in frames (never over the next block)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "mode"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "delete"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "insert",
+                        "overwrite"
+                      ]
+                    }
+                  },
+                  "description": "delete: delete blocks; insert closes the gap"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "duplicate"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    }
+                  },
+                  "description": "duplicate: copy blocks after the group, unpinned"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "at"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "split"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "at": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    }
+                  },
+                  "description": "split: split a block at board frame `at`"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block",
+                    "to"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "link"
+                    },
+                    "block": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "to": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    }
+                  },
+                  "description": "link: tie a voice, music or sound block to a shot or a run of shots (`to`): it moves with them"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "block"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "unlink"
+                    },
+                    "block": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "unlink: untie a block"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "kind"
+                  ],
+                  "additionalProperties": false,
+                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away",
+                  "properties": {
+                    "op": {
+                      "const": "transition"
+                    },
+                    "between": {
+                      "type": "array",
+                      "minItems": 2,
+                      "maxItems": 2,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "start": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "end": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "kind": {
+                      "type": "string",
+                      "enum": [
+                        "cut",
+                        "dissolve",
+                        "fade",
+                        "wipe",
+                        "morph"
+                      ]
+                    },
+                    "length": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 10368000
+                    },
+                    "request": {
+                      "type": "object",
+                      "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                    },
+                    "pinned": {
+                      "oneOf": [
+                        {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": ", kind morph only: one of its takes; null unpins"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "ids",
+                    "effect"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "effect"
+                    },
+                    "ids": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 2000,
+                      "uniqueItems": true,
+                      "items": {
+                        "type": "string",
+                        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                      }
+                    },
+                    "effect": {
+                      "type": "object",
+                      "required": [
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "params": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": [
+                              "number",
+                              "string"
+                            ]
+                          }
+                        },
+                        "off": {
+                          "type": "boolean",
+                          "description": "kept on the block but not applied"
+                        }
+                      }
+                    }
+                  },
+                  "description": "effect: add an effect badge (Grade, Slow, Stabilize) to blocks"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "index",
+                    "effect"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "effect_set"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "index": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 19
+                    },
+                    "effect": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "name"
+                          ],
+                          "additionalProperties": false,
+                          "properties": {
+                            "name": {
+                              "type": "string",
+                              "minLength": 1,
+                              "maxLength": 80
+                            },
+                            "params": {
+                              "type": "object",
+                              "additionalProperties": {
+                                "type": [
+                                  "number",
+                                  "string"
+                                ]
+                              }
+                            },
+                            "off": {
+                              "type": "boolean",
+                              "description": "kept on the block but not applied"
+                            }
+                          }
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ],
+                      "description": "null takes it off"
+                    }
+                  },
+                  "description": "effect_set: change a block's effect at `index`; null takes it off"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "block"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 120
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "request": {
+                          "type": "object",
+                          "description": "the standard request (show_board's blocks; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                        },
+                        "pinned": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "null unpins"
+                        }
+                      }
+                    }
+                  },
+                  "description": "block: set a block's name, note, request (the standard request) or pinned take (null unpins)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "lane"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_add"
+                    },
+                    "lane": {
+                      "type": "object",
+                      "required": [
+                        "name",
+                        "role"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "storyboard",
+                            "shots",
+                            "voice",
+                            "music",
+                            "sound",
+                            "free"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        }
+                      }
+                    },
+                    "after": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$",
+                      "description": "absent: last"
+                    }
+                  },
+                  "description": "lane_add: add a lane (name, role) after `after`, else last"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "role": {
+                          "type": "string",
+                          "enum": [
+                            "storyboard",
+                            "shots",
+                            "voice",
+                            "music",
+                            "sound",
+                            "free"
+                          ]
+                        },
+                        "hidden": {
+                          "type": "boolean"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "frame",
+                            "image",
+                            "video",
+                            "voice",
+                            "music",
+                            "sound"
+                          ]
+                        }
+                      }
+                    }
+                  },
+                  "description": "lane: set a lane's name, role or hidden"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "by"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_move"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "by": {
+                      "type": "integer",
+                      "enum": [
+                        -1,
+                        1
+                      ]
+                    }
+                  },
+                  "description": "lane_move: move a lane up (-1) or down (1)"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "lane_delete"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "lane_delete: delete a lane and its blocks"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "asset_delete"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    }
+                  },
+                  "description": "asset_delete: delete a board asset; its @ picks go"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "asset"
+                  ],
+                  "additionalProperties": false,
+                  "description": "asset_add: add a board asset (character, prop or place) with a unique handle and a name",
+                  "properties": {
+                    "op": {
+                      "const": "asset_add"
+                    },
+                    "asset": {
+                      "type": "object",
+                      "required": [
+                        "kind",
+                        "handle",
+                        "name"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                        },
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "character",
+                            "prop",
+                            "place"
+                          ]
+                        },
+                        "handle": {
+                          "type": "string",
+                          "pattern": "^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$",
+                          "description": "its @ name (LibraryItem.handle's rule), unique on the board"
+                        },
+                        "name": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 80
+                        },
+                        "sheet": {
+                          "type": "array",
+                          "maxItems": 50,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "views": {
+                          "type": "object",
+                          "maxProperties": 50,
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        },
+                        "voice_id": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "imported_from": {
+                          "type": "string",
+                          "maxLength": 80
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "set"
+                  ],
+                  "additionalProperties": false,
+                  "description": "asset: set an asset's kind, name, note, voice, sheet (take ids) or views",
+                  "properties": {
+                    "op": {
+                      "const": "asset"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "set": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "kind": {
+                          "type": "string",
+                          "enum": [
+                            "character",
+                            "prop",
+                            "place"
+                          ]
+                        },
+                        "name": {
+                          "type": "string",
+                          "maxLength": 80
+                        },
+                        "note": {
+                          "type": "string",
+                          "maxLength": 4000
+                        },
+                        "voice_id": {
+                          "oneOf": [
+                            {
+                              "type": "string",
+                              "maxLength": 80
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ]
+                        },
+                        "sheet": {
+                          "type": "array",
+                          "maxItems": 50,
+                          "items": {
+                            "type": "string",
+                            "format": "uuid"
+                          }
+                        },
+                        "views": {
+                          "type": "object",
+                          "maxProperties": 50,
+                          "additionalProperties": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 40
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op",
+                    "id",
+                    "take"
+                  ],
+                  "additionalProperties": false,
+                  "description": "take_add: add a picture you own (a Gallery take) to a block's takes, pinned",
+                  "properties": {
+                    "op": {
+                      "const": "take_add"
+                    },
+                    "id": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9_-]{1,40}$"
+                    },
+                    "take": {
+                      "type": "string",
+                      "format": "uuid"
+                    }
+                  }
+                }
+              ]
+            }
+          }
+        },
+        "required": [
+          "board_id",
+          "base_revision",
+          "ops"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "diff",
+          "warnings",
+          "summary"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "diff": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicDiff"
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "summary": {
+            "type": "string",
+            "description": "what it changes, in the board's words"
+          }
+        }
+      },
+      "card": "board_edit"
+    },
+    "restore_board": {
+      "description": "Bring back a kept revision of a board as a new revision (the History list; nothing is lost), after the user's Apply.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/restore",
+        "GET /v1/studio/magic/boards/{board_id}/revisions"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the current revision"
+          },
+          "to": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the revision to bring back"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision",
+          "to"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the new revision"
+          }
+        }
+      },
+      "card": "board_edit"
+    },
+    "plan_board": {
+      "description": "What running blocks would cost: per block its GPU seconds (yours, the pack's or unknown), machine and peak memory or why it can't run; per lane and in all; the run order; whether it asks you first.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/plan"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "blocks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,40}$"
+            },
+            "description": "these blocks (or morph transitions), in this order"
+          },
+          "lane": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "every block of this lane"
+          },
+          "stale": {
+            "type": "boolean",
+            "const": true,
+            "description": "every block that is not done"
+          }
+        },
+        "required": [
+          "board_id"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/MagicPlan"
+      }
+    },
+    "run_blocks": {
+      "description": "Run blocks: named ones, a lane's, or every block not done (exactly one of blocks, lane, stale). Storyboard frames and runs within the user's limit start at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/plan",
+        "POST /v1/studio/magic/boards/{board_id}/run"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the board's current revision"
+          },
+          "blocks": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,40}$"
+            },
+            "description": "these blocks (or morph transitions), in this order"
+          },
+          "lane": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "every block of this lane"
+          },
+          "stale": {
+            "type": "boolean",
+            "const": true,
+            "description": "every block that is not done"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "started",
+          "skipped"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "started": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicRunStarted/properties/started"
+          },
+          "skipped": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicRunStarted/properties/skipped"
+          }
+        }
+      },
+      "card": "magic_run"
+    },
+    "board_frame": {
+      "description": "Look at a board at a time: what each picture lane shows there (the block, the take it shows and the second into it, its status), and the sound under it. Look at a take with look_at.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/boards/{board_id}"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "at": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 86400,
+            "description": "board seconds"
+          }
+        },
+        "required": [
+          "board_id",
+          "at"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "at_s",
+          "frame",
+          "shown"
+        ],
+        "properties": {
+          "at_s": {
+            "type": "number",
+            "minimum": 0
+          },
+          "frame": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "the board frame at at_s"
+          },
+          "shown": {
+            "type": "array",
+            "description": "each visible lane with a block at that time, in lane order",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "lane",
+                "block",
+                "name",
+                "kind",
+                "take_id",
+                "offset_s",
+                "status"
+              ],
+              "properties": {
+                "lane": {
+                  "$ref": "../openapi.yaml#/components/schemas/MagicId"
+                },
+                "block": {
+                  "$ref": "../openapi.yaml#/components/schemas/MagicId"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "kind": {
+                  "$ref": "../openapi.yaml#/components/schemas/MagicKind"
+                },
+                "take_id": {
+                  "type": [
+                    "string",
+                    "null"
+                  ],
+                  "format": "uuid"
+                },
+                "offset_s": {
+                  "type": "number",
+                  "minimum": 0,
+                  "description": "seconds into the block"
+                },
+                "status": {
+                  "$ref": "../openapi.yaml#/components/schemas/MagicStatusName"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "send_to_timeline": {
+      "description": "Send the board as it is to the Timeline as a new sequence (shots on V1, lines and music on audio tracks, fades and wipes baked), after the user's Yes on the card. Baking ones answer 202: await nothing, the sends list shows it.",
+      "surfaces": [
+        "assistant"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/send"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the board's current revision"
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "the sequence's name; absent: <board> · send <n>"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision"
+        ]
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/MagicSendResult"
+      },
+      "card": "send"
     }
   }
 }
