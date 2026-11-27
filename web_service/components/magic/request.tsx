@@ -95,7 +95,7 @@ export function RequestForm({
   const field = (f: Field, body: React.ReactNode) => {
     const why = greyed(f);
     return (
-      <div key={f} className={`fld ${why ? "opacity-50" : ""}`}>
+      <div key={f} className={`fld ${f === "prompt" || f === "line" || f === "refs" ? "col-span-full" : ""} ${why ? "opacity-50" : ""}`}>
         <span className="lb">{FIELD_LABEL[f]}</span>
         <fieldset disabled={!!why} className="m-0 contents border-0 p-0">
           {body}
@@ -190,7 +190,7 @@ export function RequestForm({
           <input
             type="number"
             aria-label="Width"
-            className="in h-8 w-20 px-2"
+            className="in h-8 w-[68px] px-2"
             min={16}
             max={8192}
             value={req.width ?? doc.target.width}
@@ -200,7 +200,7 @@ export function RequestForm({
           <input
             type="number"
             aria-label="Height"
-            className="in h-8 w-20 px-2"
+            className="in h-8 w-[68px] px-2"
             min={16}
             max={8192}
             value={req.height ?? doc.target.height}
@@ -218,7 +218,7 @@ export function RequestForm({
             type="number"
             aria-label="Seed"
             placeholder="Random"
-            className="in h-8 w-28 px-2"
+            className="in h-8 w-full px-2"
             min={-1}
             value={req.seed == null || req.seed < 0 ? "" : req.seed}
             onChange={(e) =>
@@ -233,9 +233,10 @@ export function RequestForm({
                 key={n}
                 type="button"
                 aria-pressed={(req.count ?? 1) === n}
+                aria-label={n === 1 ? "1 seed" : `${n} seeds`}
                 onClick={() => set({ count: n === 1 ? undefined : n })}
               >
-                {n === 1 ? "1 seed" : `${n}`}
+                {n}
               </button>
             ))}
           </span>
@@ -298,7 +299,9 @@ export function RequestForm({
           <span className="text-[12px] text-t2">No model for this kind on any host</span>
         )}
       </div>
-      {(kind?.fields ?? []).map((f) => body[f]())}
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
+        {(kind?.fields ?? []).map((f) => body[f]())}
+      </div>
       {adv.length > 0 && (
         <details className="fld" open={advancedOpen}>
           <summary className="lb cursor-pointer">

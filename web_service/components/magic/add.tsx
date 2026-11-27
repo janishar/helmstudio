@@ -2,7 +2,7 @@
 // Add at a point (MagicBoard frame 2a, with 2b's greyed kinds until plan 38 ships Create's Music and Sound): the kind
 // with its orb, the length, Insert or Overwrite and what it starts from; then (frames 2c-2h, plan 39 phase D) the
 // standard request for an image, a video or a voice, and Generate. A board frame or a dialogue is added as a draft.
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { KIND_ICON } from "@/components/magic/icons";
@@ -69,6 +69,13 @@ export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
     setStep2(null);
     p.onClose();
   };
+  // Next and Back unmount the button that had the focus; with it on <body> Escape no longer closes the dialog
+  const box = useRef<HTMLDivElement>(null);
+  const on2 = !!step2;
+  useEffect(() => {
+    const d = box.current?.closest("dialog");
+    if (d && document.activeElement === document.body) d.focus();
+  }, [on2]);
   return (
     <Modal
       open={!!lane}
@@ -81,7 +88,9 @@ export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
             : "Add"
       }
       width="w-[min(94vw,560px)]"
+      aside={step2 ? "2 of 2" : undefined}
     >
+      <div ref={box} className="contents" />
       {lane && where && step2 ? (
         <Step2
           {...p}
@@ -127,7 +136,6 @@ function Step2({
       : "";
   return (
     <div className="mg-add flex flex-col gap-3">
-      <span className="text-[11px] text-t2">2 of 2</span>
       <RequestForm
         doc={doc}
         block={{ ...block, id: "" }}

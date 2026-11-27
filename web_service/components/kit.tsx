@@ -139,6 +139,7 @@ export function Modal({
   title,
   width = "w-[min(92vw,380px)]",
   back,
+  aside,
   children,
 }: {
   open: boolean;
@@ -148,6 +149,8 @@ export function Modal({
   width?: string;
   /** a "Back" button before the title (a dialog's second view, docs/mock/VoicePicker.dc.html) */
   back?: () => void;
+  /** a small note on the title's line, after it ("2 of 2") */
+  aside?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -199,7 +202,10 @@ export function Modal({
             <ChevronLeft size={16} aria-hidden />
           </button>
         )}
-        <h2 className="m-0 mr-auto font-display text-base font-bold">{title}</h2>
+        <div className="mr-auto flex items-baseline gap-2">
+          <h2 className="m-0 font-display text-base font-bold">{title}</h2>
+          {aside && <span className="text-[11px] text-t2">{aside}</span>}
+        </div>
         <button
           type="button"
           aria-label="Close"
