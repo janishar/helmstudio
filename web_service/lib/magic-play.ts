@@ -25,15 +25,26 @@ export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
   return out;
 }
 
+/** The blocks the picture plays, in time: the Shots lane's, and a Storyboard frame wherever no shot covers it (the
+ * rough cut of a board with few or no shots yet). */
+export function pictures(d: Doc): Block[] {
+  const lane = (r: string) => {
+    const l = d.lanes.find((x) => x.role === r);
+    return l ? inLane(d, l.id) : [];
+  };
+  const shots = lane("shots");
+  const frames = lane("storyboard").filter((f) => !shots.some((s) => s.at < end(f) && f.at < end(s)));
+  return [...shots, ...frames].sort((a, b) => a.at - b.at);
+}
+
 /** The board as a sequence for the Timeline's player (lib/timeline-preview.ts): the Shots lane on V1 (gaps as empty
  * slots, dissolves as they are), voice, music and sound lanes on audio tracks. Phase G's Send builds on it. */
 export function toSequence(d: Doc, takes: Takes, dissolves = true) {
   const fps = d.target.fps;
   const s = (f: number) => f / fps;
-  const shots = d.lanes.find((l) => l.role === "shots");
   const v1: Record<string, unknown>[] = [];
   let t = 0;
-  for (const b of shots ? inLane(d, shots.id) : []) {
+  for (const b of pictures(d)) {
     if (b.at > t) v1.push({ id: `gap${t}`, take_id: null, hold: s(b.at - t) });
     const take = shown(b, takes);
     const tr =
@@ -41,7 +52,8 @@ export function toSequence(d: Doc, takes: Takes, dissolves = true) {
     v1.push({
       id: b.id,
       take_id: take?.id ?? null,
-      ...(take ? { in: 0, out: s(b.length) } : { hold: s(b.length) }),
+      // a still (a frame, an image) holds; a video plays in to out
+      ...(take && b.kind === "video" ? { in: 0, out: s(b.length) } : { hold: s(b.length) }),
       ...(tr ? { transition_in: { type: "dissolve", frames: tr.length } } : {}),
     });
     t = end(b);

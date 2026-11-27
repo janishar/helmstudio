@@ -317,6 +317,18 @@ describe("status and undo", () => {
       transition_in: { type: "dissolve", frames: 12 },
     });
   });
+
+  it("with no shots yet, the Storyboard frames play as the rough cut", () => {
+    const { doc, takes } = sampleBoard();
+    const shots = doc.lanes.find((l) => l.role === "shots")!.id;
+    const noShots = { ...doc, blocks: doc.blocks.filter((b) => b.lane !== shots) };
+    const story = doc.lanes.find((l) => l.role === "storyboard")!.id;
+    const frames = noShots.blocks.filter((b) => b.lane === story).map((b) => b.id);
+    expect(frames.length).toBeGreaterThan(0);
+    const ids = toSequence(noShots, takes).doc.tracks[0].clips.map((c) => c.id);
+    expect(ids.filter((id) => !String(id).startsWith("gap"))).toEqual(expect.arrayContaining(frames));
+    expect(playable(noShots, takes)).not.toBeNull();
+  });
 });
 
 // API 1.89 (plan 39 gaps): a dialogue's turns, each a line block with its own status; its takes play one after

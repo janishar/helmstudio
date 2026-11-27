@@ -4,8 +4,8 @@
 // toSequence); phase B's fake takes have no files, so the stage shows the shot's picture under the playhead.
 import { useEffect, useRef, useState } from "react";
 import { Pause, Play } from "lucide-react";
-import { clock, duration, inLane, shown, type Doc, type Takes } from "@/lib/magic";
-import { playable } from "@/lib/magic-play";
+import { clock, duration, shown, type Doc, type Takes } from "@/lib/magic";
+import { pictures, playable } from "@/lib/magic-play";
 import { Preview } from "@/lib/timeline-preview";
 
 export type PlayerApi = {
@@ -100,11 +100,8 @@ export function Player({
     };
   });
 
-  // the picture: the Shots lane's block under the playhead, its take's art
-  const shots = doc.lanes.find((l) => l.role === "shots");
-  const under = shots
-    ? inLane(doc, shots.id).find((b) => b.at <= frame && frame < b.at + b.length)
-    : undefined;
+  // the picture: the shot (or, with none, the Storyboard frame) under the playhead, its take's art
+  const under = pictures(doc).find((b) => b.at <= frame && frame < b.at + b.length);
   const art = under ? shown(under, takes)?.art : undefined;
 
   const dragBar = (e: React.PointerEvent) => {
