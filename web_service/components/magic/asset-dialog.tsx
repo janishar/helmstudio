@@ -18,7 +18,16 @@ import {
   viewName,
   viewSize,
 } from "@/lib/magic-assets";
-import { ASSET_KINDS, HANDLE, duration, end, freshAssetId, usedIn, type Asset, type AssetKind } from "@/lib/magic";
+import {
+  ASSET_KINDS,
+  HANDLE,
+  duration,
+  end,
+  freshAssetId,
+  usedIn,
+  type Asset,
+  type AssetKind,
+} from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
 import { kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
@@ -107,7 +116,10 @@ function NewAsset({
         : "";
   const make = () => {
     const id = freshAssetId(a.doc);
-    if (!bad && a.edit({ op: "asset_add", asset: { id, kind, name: name.trim(), handle: h } }) !== false)
+    if (
+      !bad &&
+      a.edit({ op: "asset_add", asset: { id, kind, name: name.trim(), handle: h } }) !== false
+    )
       onMade(id);
   };
   return (
@@ -152,7 +164,11 @@ function NewAsset({
       {name && bad && <span className="text-[12px] text-bad">{bad}</span>}
       <div className="flex items-center gap-2">
         <span className="grow" />
-        <button type="button" className="h-9 rounded-[10px] px-3.5 text-[13px] font-medium text-t2" onClick={onCancel}>
+        <button
+          type="button"
+          className="h-9 rounded-[10px] px-3.5 text-[13px] font-medium text-t2"
+          onClick={onCancel}
+        >
           Cancel
         </button>
         <button type="submit" className="key h-9 rounded-xl px-3.5 text-[13px]" disabled={!!bad}>
@@ -187,15 +203,25 @@ function Body({
   const file = useRef<HTMLInputElement>(null);
   const [upload, setUpload] = useState<string | null>(null);
   const [error, setError] = useState("");
-  const running = runs.filter((r) => (r.status === "queued" || r.status === "running") && !r.takes.length);
+  const running = runs.filter(
+    (r) => (r.status === "queued" || r.status === "running") && !r.takes.length,
+  );
   const failed = runs.findLast((r) => r.status === "failed" && !r.takes.length);
-  const want = missingViews(x, running.map((r) => r.view));
+  const want = missingViews(
+    x,
+    running.map((r) => r.view),
+  );
   // Make views' model (API 1.89)
   const images = kindOf(kinds, "image")?.models ?? [];
   const [pick, setPick] = useState("");
   // the user's pick, else a real model (Echo, env fake, only when it is the only one)
-  const image = images.find((m) => m.workflow_id === pick) ?? images.find((m) => m.env !== "fake") ?? images[0];
-  const est = packSeconds(image, { kind: "image", length: 1, request: { kind: "image", ...viewSize(x.kind, d.target) } }, d);
+  const image =
+    images.find((m) => m.workflow_id === pick) ?? images.find((m) => m.env !== "fake") ?? images[0];
+  const est = packSeconds(
+    image,
+    { kind: "image", length: 1, request: { kind: "image", ...viewSize(x.kind, d.target) } },
+    d,
+  );
   // the views to make: the missing ones until the user picks (at most 6, the API's), and their own names added
   const [chosen, setChosen] = useState<string[] | null>(null);
   const [extra, setExtra] = useState<string[]>([]);
@@ -206,7 +232,9 @@ function Body({
     setError("");
     setUpload("Optimising…");
     try {
-      const t = await uploadFile(f, (p) => setUpload(p.step === "uploading" ? "Uploading…" : "Optimising…"));
+      const t = await uploadFile(f, (p) =>
+        setUpload(p.step === "uploading" ? "Uploading…" : "Optimising…"),
+      );
       a.edit({ op: "asset", id: x.id, set: { sheet: [...x.sheet, t.id].slice(0, 50) } });
     } catch (e) {
       setError(message(e));
@@ -247,7 +275,11 @@ function Body({
       <div className="grid gap-4 md:grid-cols-[minmax(0,1.25fr)_minmax(0,1fr)]">
         <section className="flex min-w-0 flex-col gap-3" aria-label="Sheet">
           <h3 className="m-0 text-[13px]">Sheet</h3>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2" role="list" aria-label="Views">
+          <div
+            className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2"
+            role="list"
+            aria-label="Views"
+          >
             {x.sheet.map((t, i) => (
               <button
                 key={t}
@@ -269,7 +301,11 @@ function Body({
               </button>
             ))}
             {running.map((r) => (
-              <div key={r.run_id} className="flex flex-col gap-1 rounded-xl bg-s2 p-1.5 text-[11px]" role="listitem">
+              <div
+                key={r.run_id}
+                className="flex flex-col gap-1 rounded-xl bg-s2 p-1.5 text-[11px]"
+                role="listitem"
+              >
                 <span className="grid aspect-square w-full place-items-center rounded-lg bg-s3">
                   <span className="mst run">{r.progress ?? 0}%</span>
                 </span>
@@ -277,16 +313,25 @@ function Body({
               </div>
             ))}
             {upload && (
-              <div className="grid aspect-square place-items-center rounded-xl bg-s2 text-[11px] text-t2" role="status">
+              <div
+                className="grid aspect-square place-items-center rounded-xl bg-s2 text-[11px] text-t2"
+                role="status"
+              >
                 {upload}
               </div>
             )}
           </div>
           {!x.sheet.length && !running.length && (
-            <p className="m-0 text-[12px] text-t2">No views yet: make them here, import a take or an Element, or add a file.</p>
+            <p className="m-0 text-[12px] text-t2">
+              No views yet: make them here, import a take or an Element, or add a file.
+            </p>
           )}
-          {failed && <span className="text-[12px] text-bad">{failed.view} failed: {failed.error ?? "failed"}</span>}
-          <div className="seg flex-wrap" role="group" aria-label="Views to make">
+          {failed && (
+            <span className="text-[12px] text-bad">
+              {failed.view} failed: {failed.error ?? "failed"}
+            </span>
+          )}
+          <div className="seg flex-wrap gap-1" role="group" aria-label="Views to make">
             {[...VIEWS[x.kind], ...extra].map((v) => {
               const busy = running.some((r) => r.view === v);
               const on = sel.includes(v);
@@ -323,7 +368,13 @@ function Body({
               type="button"
               className="chip bevel rounded-[10px] bg-s4"
               disabled={!a.views || !image || !sel.length}
-              title={!a.views ? (a.runOff ?? "Runs come with the standard request") : !image ? "No image model on any host" : `Makes ${sel.join(", ")}`}
+              title={
+                !a.views
+                  ? (a.runOff ?? "Runs come with the standard request")
+                  : !image
+                    ? "No image model on any host"
+                    : `Makes ${sel.join(", ")}`
+              }
               onClick={() => {
                 a.views?.(x.id, sel, image?.workflow_id);
                 setChosen(null);
@@ -331,7 +382,8 @@ function Body({
               }}
             >
               <Images size={13} aria-hidden />
-              Make {sel.length}{est != null && sel.length ? ` · ${estText(est * sel.length)}` : ""}
+              Make {sel.length}
+              {est != null && sel.length ? ` · ${estText(est * sel.length)}` : ""}
             </button>
             {images.length > 1 && (
               <select
@@ -386,7 +438,9 @@ function Body({
                 <span className="mo k8v" aria-hidden>
                   <Mic size={12} />
                 </span>
-                <b className="min-w-0 truncate">{voice ? voice.name : x.voice_id ? x.voice_id : "No voice"}</b>
+                <b className="min-w-0 truncate">
+                  {voice ? voice.name : x.voice_id ? x.voice_id : "No voice"}
+                </b>
                 {voice && <span className="mono min-w-0 truncate">{voiceLine(voice)}</span>}
                 <span className="grow" />
                 <button
@@ -394,7 +448,10 @@ function Body({
                   className="chip h-7 rounded-[9px] bg-s4 px-2.5 text-[12px]"
                   disabled={!voice?.thumb_url}
                   title={voice?.thumb_url ? "Play its sample" : "No sample to play"}
-                  onClick={() => voice?.thumb_url && void new Audio(voice.thumb_url).play().catch(() => undefined)}
+                  onClick={() =>
+                    voice?.thumb_url &&
+                    void new Audio(voice.thumb_url).play().catch(() => undefined)
+                  }
                 >
                   <Play size={11} aria-hidden />
                   Play
@@ -414,7 +471,9 @@ function Body({
                   ))}
                 </select>
               </div>
-              <span className="text-[11px] text-t2">Voice blocks that pick @{x.handle} speak in it.</span>
+              <span className="text-[11px] text-t2">
+                Voice blocks that pick @{x.handle} speak in it.
+              </span>
             </div>
           )}
           <label className="flex flex-col gap-1.5">
@@ -438,7 +497,11 @@ function Body({
                 {b.name.split(" · ")[0]}
               </button>
             ))}
-            {!used.length && <span className="text-[12px] text-t2">Not used yet: pick @{x.handle} in a prompt.</span>}
+            {!used.length && (
+              <span className="text-[12px] text-t2">
+                Not used yet: pick @{x.handle} in a prompt.
+              </span>
+            )}
           </div>
           <MiniBoard act={a} lit={new Set(used.map((b) => b.id))} />
           <p className="m-0 text-[11px] text-t2">
@@ -455,7 +518,11 @@ function MiniBoard({ act: a, lit }: { act: Act; lit: Set<string> }) {
   const d = a.doc;
   const total = Math.max(1, duration(d));
   return (
-    <div className="flex flex-col gap-1 rounded-xl bg-s2 p-2" aria-label="Where it is used, on the board" role="img">
+    <div
+      className="flex flex-col gap-1 rounded-xl bg-s2 p-2"
+      aria-label="Where it is used, on the board"
+      role="img"
+    >
       {d.lanes
         .filter((l) => !l.hidden)
         .map((l) => (
