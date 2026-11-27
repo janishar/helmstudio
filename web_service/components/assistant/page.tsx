@@ -46,6 +46,7 @@ const SHORT: Record<string, string> = {
   "media-tools": "Crop, resize, trim, join, pull frames. Each edit is a new take.",
   "cinematic-filmmaker": "A short live-action film, script to MP4.",
   animator: "A cartoon film in one style, script to MP4.",
+  "magic-director": "Always on for Magic: plans a board in order, then runs it.",
   [BRIDGE]: "Your own Claude plan, through Claude Code on this Mac",
 };
 
@@ -394,6 +395,7 @@ function AdminPage({ setup }: { setup: boolean }) {
                   title={p.title}
                   sub={SHORT[p.name] ?? p.when ?? p.description}
                   on={p.enabled}
+                  readOnly={p.name === "magic-director"} // API 1.96: built in, always on for Magic
                   onToggle={() => void togglePlugin(p)}
                 />
               ))}

@@ -1315,6 +1315,53 @@ async def test_use_skill_and_read_skill_file_make_their_lines(pool, fake):
     )  # fenced data to the model
 
 
+DIRECTOR = {
+    "name": "magic-director",
+    "title": "Magic director",
+    "when": "Working on a Magic board.",
+}
+GUIDE_DIRECTOR = {"name": "magic-director", "title": "Magic director", "when": DIRECTOR["when"], "version": "0.1.0",
+               "origin": "built_in", "text": "Characters, props and settings first.", "files": [], "recipes": []}  # fmt: skip
+
+
+def director_chat(pool, fake) -> Chat:
+    c = Chat(pool, fake)
+    c.skills, c.tool_names = [DIRECTOR], TOOLS + ["use_skill", "read_skill_file", "show_board"]
+    c.tools.results = {
+        "use_skill": GUIDE_DIRECTOR,
+        "show_board": {"board_id": BOARD, "revision": 1},
+    }
+    return c
+
+
+async def test_the_magic_director_is_read_on_magic_once_per_chat(pool, fake):
+    # API 1.96: before the first model call on /magic, no @ and no model ask; not again in the same chat
+    c = director_chat(pool, fake)
+    c.route = f"/magic?b={BOARD}"
+    c.script({"content": "Planned."}, {"content": "Again."})
+    step = await c.say("plan a 30 s ad")
+    assert step["lines"] == [{"id": c.cid(1, 0), "status": "done", "text": "Using skill: Magic director",
+                              "undo": False, "skill": "magic-director"}]  # fmt: skip
+    assert "Characters, props and settings first." in c.asked()[0]["messages"][1]["content"]
+    step = await c.say("now the music")
+    assert step["lines"] == []
+
+
+async def test_the_magic_director_is_not_read_on_other_screens(pool, fake):
+    c = director_chat(pool, fake)
+    c.script({"content": "Hi."})
+    step = await c.say("hello")
+    assert step["lines"] == [] and "Characters, props" not in c.asked()[0]["messages"][1]["content"]
+
+
+async def test_the_magic_director_is_read_after_a_magic_tool_elsewhere(pool, fake):
+    c = director_chat(pool, fake)
+    c.script(calls(("show_board", {"board_id": BOARD})), {"content": "Read it."})
+    step = await c.say("what is on my board?")
+    assert [x["text"] for x in step["lines"]] == ["Using skill: Magic director"]
+    assert "Characters, props and settings first." in c.asked()[1]["messages"][1]["content"]
+
+
 # --- model guides (API 1.71, alpha.2 item 35)
 
 CARDS = [{"family": "ltx", "title": "LTX-2.5", "card": "LTX-2.5 makes video with sound; Distilled drafts fast."},

@@ -74,6 +74,8 @@ CARDS = ("look_at", "web_search", "forget")
 MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "make_views", "send_to_timeline")
 # API 1.93: Magic runs that start without a card count under Auto mode's hourly caps; past them they ask once
 MAGIC_RUNS = ("run_blocks", "make_views")
+# API 1.96: the built-in skill read on every Magic board, once per chat, without the model asking
+MAGIC_SKILL = "magic-director"
 ACK_WAIT = 60  # seconds; a long turn sends in_progress every BEAT
 BEAT = 20
 RECURSION = 400  # graph steps per invocation: about 10 per model call
@@ -165,6 +167,22 @@ def _files() -> tuple[dict, dict]:
     return (
         json.loads((GEN / "catalog.json").read_text())["tools"],
         json.loads((GEN / "actions.json").read_text())["screens"],
+    )
+
+
+def magic_skill_due(s: dict) -> bool:
+    """The Magic director's guide is read before the next model call (API 1.96): on the Magic screen, or once a Magic
+    tool (routes under /v1/studio/magic/) was used, while studio sends the skill and this chat has not called it."""
+    chat, cat = s.get("chat") or [], _files()[0]
+    if not any(k["name"] == MAGIC_SKILL for k in s["data"].get("skills") or []) or any(
+        e["role"] == "call" and e["name"] == "use_skill" and e["args"].get("skill") == MAGIC_SKILL
+        for e in chat
+    ):
+        return False
+    return _on("/magic", (s.get("screen") or {}).get("route") or "/") or any(
+        e["role"] == "call"
+        and any("/v1/studio/magic/" in r for r in (cat.get(e["name"]) or {}).get("routes", []))
+        for e in chat
     )
 
 
@@ -798,6 +816,13 @@ class Assistant:
             up |= {"chat": chat[-CHAT_KEEP:], "steered": read + [x["id"] for x in new]}
             await self._send("evt.assistant.steered", f"evt.assistant.{tid}.steered", f"{tid}:steered:{','.join(x['id'] for x in new)}",
                              {"thread_id": tid, "turn": s["msg"], "steer_ids": [x["id"] for x in new]}, s)  # fmt: skip
+        caps = dict(s["caps"])
+        if up["to"] == "model" and caps["tool_calls"] < TOOL_CALLS and magic_skill_due(s | up):
+            # API 1.96: the guide joins the transcript as the skill's use_skill call, with its Using skill line
+            call = {"id": f"{tid}:{s['msg']}:{caps['tool_calls']}", "name": "use_skill", "kind": "tool",
+                    "args": {"skill": MAGIC_SKILL}}  # fmt: skip
+            caps["tool_calls"] += 1
+            up |= {"queue": [call], "caps": caps, "to": "tools"}
         return up
 
     async def model(self, s: State) -> State:

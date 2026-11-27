@@ -158,6 +158,9 @@ Place; Elements import as a copy), not Create Elements; the board is the shot li
 Roles: Animator = cartoon craft, Cinematic filmmaker = camera and framing, Magic director = planning and running a
 board; each refers to the others instead of repeating them. Add one line to the Animator's SKILL.md: on a Magic board,
 follow the Magic director skill for where things live.
+**Built (2026-11-27, alpha.6 row 38; API 1.96)**: plugins/magic-director, always on for Magic and read by the
+Assistant itself on the Magic screen or after a Magic tool, once per chat (owner: "add this skill internally while
+using magic"); contracts/README.md "Skills". Variant per stage is written as the request's `model.variant` (API 1.94).
 
 ## Multi-arch images (noted 2026-11-25)
 

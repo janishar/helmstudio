@@ -144,3 +144,38 @@ def test_a_folder_dropped_in_is_found(admin):
     while plugin(admin, name) and time.time() < deadline:
         time.sleep(1)
     assert plugin(admin, name) is None
+
+
+def test_magic_director_is_built_in_and_always_on(admin, api):
+    # API 1.96: on from the first scan, for every user; it can't be turned off or removed
+    p = plugin(admin, "magic-director")
+    assert (p["origin"], p["status"], p["title"]) == ("built_in", "on", "Magic director"), p
+    assert {"consistency.md", "sample-plans.md"} <= set(p["files"])
+    for r in (admin.put(f"{PLUGINS}/magic-director", json={"enabled": False}),
+              admin.delete(f"{PLUGINS}/magic-director")):  # fmt: skip
+        assert r.status_code == 409 and "always on for Magic" in r.json()["detail"], r.text
+    assert "magic-director" in [s["name"] for s in ok(api.get(SKILLS))["skills"]]
+    assert "# Magic director" in ok(api.get(f"{SKILLS}/magic-director"))["text"]
+
+
+def test_the_assistant_reads_the_magic_director_on_magic_once(api, assistant):  # noqa: F811
+    # API 1.96: on the Magic screen the guide is read before the first model call, once per chat; not elsewhere
+    fake("POST", "/__script", {assistant: [{"content": "Planned."}, {"content": "Again."}, {"content": "Hi."}]})
+    tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
+
+    def say(text: str, route: str) -> list[dict]:
+        ok(api.post(f"{THREADS}/{tid}/messages", json={"kind": "message", "client_id": TAB, "text": text,
+                                                       "screen": screen(route)}), 202)  # fmt: skip
+        got = wait_for(lambda: (g := ok(api.get(f"{THREADS}/{tid}")))["state"] == "idle" and g or None,
+                       timeout=60, what="the answer")  # fmt: skip
+        return [e["line"] for e in got["entries"] if e["kind"] == "line"]
+
+    try:
+        assert say("hello", "/gallery") == []
+        lines = say("plan a 30 s ad", "/magic")
+        assert [x["text"] for x in lines] == ["Using skill: Magic director"] and lines[0]["skill"] == "magic-director"
+        asked = [r for r in fake("GET", "/__requests") if r["model"] == assistant][-1]
+        assert "# Magic director" in json.dumps(asked["body"]["messages"])  # the guide reached the model
+        assert len(say("and the music", "/magic")) == 1  # once per chat
+    finally:
+        ok(api.delete(f"{THREADS}/{tid}"), 204)

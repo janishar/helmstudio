@@ -1,7 +1,7 @@
 {
   "name": "animator",
   "title": "Animator",
-  "version": "0.2.1",
+  "version": "0.2.0",
   "kind": "skill",
   "format": 1,
   "description": "Teaches the Assistant to make a cartoon film end to end: script and shot list, character model sheets, elements and voices, keyframes, animation with one cartoon style held across every shot, dialogue, Timeline edit and MP4 export.",

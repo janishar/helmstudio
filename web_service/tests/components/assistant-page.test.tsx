@@ -77,6 +77,13 @@ const plugins = [
   plugin({ name: "web-search", title: "Web search", kind: "assistant-tools" }),
   plugin({ name: "media-tools", title: "Media tools", kind: "assistant-tools" }),
   plugin({ name: "animator", title: "Animator", kind: "skill", enabled: false, status: "off" }),
+  plugin({
+    name: "magic-director",
+    title: "Magic director",
+    kind: "skill",
+    enabled: true,
+    status: "on",
+  }),
 ];
 const presets = [
   {
@@ -207,6 +214,12 @@ describe("the admin's page", () => {
         .getByRole("switch", { name: "Animator on" })
         .getAttribute("aria-checked"),
     ).toBe("false");
+    // API 1.96: built in, always on for Magic: on, and no turning it off
+    const director = within(section("Skills")).getByRole("switch", { name: "Magic director on" });
+    expect([
+      director.getAttribute("aria-checked"),
+      (director as HTMLButtonElement).disabled,
+    ]).toEqual(["true", true]);
     const put = echo();
     fireEvent.click(within(tools).getByRole("switch", { name: "Media tools on" }));
     await waitFor(() => expect(put).toHaveBeenCalled());
