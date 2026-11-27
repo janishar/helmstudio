@@ -870,13 +870,21 @@ export function assetMenu(a: Act, x: Asset): { title: string; items: Item[] } {
   };
 }
 
-/** A view on an asset's sheet (the asset dialog, frame 6): rename it, make it the first (the picture @ picks send),
- * take it off the sheet. */
-export function viewMenu(a: Act, x: Asset, take: string): { title: string; items: Item[] } {
+/** A view on an asset's sheet (the asset dialog, frame 6): open it full screen, rename it, make it the first (the
+ * picture @ picks send), take it off the sheet. */
+export function viewMenu(
+  a: Act,
+  x: Asset,
+  take: string,
+  onOpen?: () => void,
+): { title: string; items: Item[] } {
   const i = x.sheet.indexOf(take);
   return {
     title: `@${x.handle} · ${viewName(x, take)}`,
     items: [
+      ...(onOpen
+        ? [{ label: "Open full screen", icon: Maximize2, keys: "F", onPick: onOpen }, "-" as const]
+        : []),
       {
         label: "Rename view",
         icon: PencilLine,

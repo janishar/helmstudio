@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T05:30:00Z",
+  "at": "2026-11-28T06:00:00Z",
   "via": "Claude Code",
-  "note": "MagicBlockDialog Make views: the settings (size, variant, precision) are a chip beside Make with a sliders icon and a chevron, not a plain line under the buttons (owner, 2026-11-28: \"where?\")"
+  "note": "MagicBlockDialog: a sheet view opens full screen on a click (arrows step through the sheet); its menu leads with Open full screen (owner, 2026-11-28: \"should be able to open fullscreen view\")"
  }
 }

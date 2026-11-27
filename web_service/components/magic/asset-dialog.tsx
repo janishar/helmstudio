@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { ChevronDown, Images, Mic, Play, SlidersHorizontal, Upload } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
+import { FullScreen } from "@/components/media";
 import { KIND_NAME } from "@/components/magic/icons";
 import { assetMenu, viewMenu, type Act } from "@/components/magic/menus";
 import { VariantField, useModelList, useVariant } from "@/components/magic/request";
@@ -31,6 +32,7 @@ import {
 } from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
 import { VARIANT, kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
+import { useTakes } from "@/lib/take-cache";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
 import { voiceLine } from "@/lib/voices";
 
@@ -250,6 +252,10 @@ function Body({
     savePick(a.board, p);
   };
   const [setup, setSetup] = useState(false);
+  // a sheet view full screen (the media viewer: Esc closes, the arrows step through the sheet)
+  const [full, setFull] = useState<number | null>(null);
+  const sheetTake = useTakes(x.sheet);
+  const fullTake = full != null ? sheetTake(x.sheet[full]) : null;
   const def = viewSize(x.kind, d.target);
   const [w, h] = vp.size?.[x.kind] ?? [def.width, def.height];
   const vreq = {
@@ -335,6 +341,13 @@ function Body({
             role="list"
             aria-label="Views"
           >
+            {fullTake && full != null && (
+              <FullScreen
+                take={fullTake}
+                onClose={() => setFull(null)}
+                onStep={(d) => setFull((full + d + x.sheet.length) % x.sheet.length)}
+              />
+            )}
             {x.sheet.map((t, i) => (
               <button
                 key={t}
@@ -342,8 +355,14 @@ function Body({
                 role="listitem"
                 aria-label={viewName(x, t)}
                 className="flex flex-col gap-1 rounded-xl bg-s2 p-1.5 text-left text-[11px]"
-                onClick={(e) => openMenu(e, viewMenu(a, x, t))}
-                onContextMenu={(e) => openMenu(e, viewMenu(a, x, t))}
+                title="Open full screen (right-click for more)"
+                onClick={() => setFull(i)}
+                onContextMenu={(e) =>
+                  openMenu(
+                    e,
+                    viewMenu(a, x, t, () => setFull(i)),
+                  )
+                }
               >
                 <span
                   className="aspect-square w-full rounded-lg bg-s3 bg-cover bg-center"
