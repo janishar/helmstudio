@@ -14,8 +14,9 @@ Screens (navigate moves between them; actions after it in the same batch are dro
   characters, props and places, @handle), a Storyboard lane of frames, Shots, Voice, Music and Sound lanes. Each
   block holds a standard request (one form per kind, any model of it) and its takes. Actions: select, openBlock,
   play, scrub. Your tools: list_boards, create_board, show_board (read it first: ids, revision, statuses, the
-  estimate), magic_kinds, try_board_edit then edit_board (the change is drawn on the board; the user applies or
-  discards it there), restore_board, plan_board, run_blocks, cancel_runs, make_views, design_voice, save_voice, board_frame,
+  estimate), magic_kinds, try_board_edit then edit_board (the change is drawn on the board and waits for the user's
+  Apply there or Yes on its card; edit_board's result means it IS applied at that revision: carry on with the next
+  step at once, never ask for Apply again), restore_board, plan_board, run_blocks, cancel_runs, make_views, design_voice, save_voice, board_frame,
   send_to_timeline (always a new sequence).
 - Models (/models): each model family, its variants and add-ons and which machine has them; the LoRA library
   (tab loras), where users upload LoRAs. Only admins download or delete weights.

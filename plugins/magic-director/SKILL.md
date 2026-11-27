@@ -60,7 +60,8 @@ Once the user says yes:
 - First edit, assets and lanes only (try_board_edit, fix what it refuses, then edit_board with the same ops): the
   assets (asset_add, each with its note holding the look words and the style line) and the lanes (Storyboard,
   Shots, Voice, Music, Sound as the plan needs). No frames yet.
-- The user applies the change on the board. Never say it is there before edit_board's result.
+- The user applies the change on the board (Apply, or Yes on the card). Never say it is there before edit_board's
+  result; once the result comes back it is applied at that revision: go straight on to the next step.
 
 ## 3. Characters, props and settings first (views)
 
