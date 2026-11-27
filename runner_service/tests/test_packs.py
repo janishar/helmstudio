@@ -345,7 +345,7 @@ def test_minimax_h3_pack_publishes_the_canonical_fixtures():
     comps = lambda v: [(c["component"], c["precisions"], c["bytes"]) for c in v["components"]]
     assert comps(variant) == comps(want["variants"][0]) and variant["precisions"] == ["int8"]
     # the native runtime: no component in the plan, P = the child's peak at the template size (24 + 0.05 mp frames)
-    assert variant["memory"] == [{"precision": "int8", "peak_gb": 26.57, "components": [],
+    assert variant["memory"] == [{"precision": "int8", "peak_gb": 31.07, "components": [],
                                   "planned_at": {"mp": 0.4147, "frames": 124}}]  # fmt: skip
 
 
@@ -622,8 +622,8 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
     ]  # API 1.41
     params = wf["nodes"]["generate"]["params"]
     assert all(
-        params[k.split(".")[1]] == v for k, v in presets["Default"].items()
-    )  # the template opens on Default
+        params[k.split(".")[1]] == v for k, v in presets["Turbo"].items()
+    )  # the template opens on Turbo (owner, 2026-11-28: "make turbo as default in image and video gen")
 
     def flags(**kw):
         a = native.argv(

@@ -35,7 +35,7 @@
         "model": {
           "kind": "qwen-image/model",
           "params": {
-            "variant": "base",
+            "variant": "turbo",
             "precision": "int8"
           }
         },

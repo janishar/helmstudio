@@ -55,16 +55,16 @@
             "duration": "duration.duration"
           },
           "params": {
-            "steps": 20,
-            "layers": 45,
-            "reuse": 2,
+            "steps": 8,
+            "layers": 50,
+            "reuse": 1,
             "core_reuse": 1,
             "token_reduction": false,
             "render": "Full",
             "quality": "lossless",
             "flow_shift": 12,
             "audio_flow_shift": 3,
-            "lora": "none",
+            "lora": "turbo",
             "refs": [],
             "videos": [],
             "audios": []
@@ -251,16 +251,16 @@
             "last": "last.image"
           },
           "params": {
-            "steps": 20,
-            "layers": 45,
-            "reuse": 2,
+            "steps": 8,
+            "layers": 50,
+            "reuse": 1,
             "core_reuse": 1,
             "token_reduction": false,
             "render": "Full",
             "quality": "lossless",
             "flow_shift": 12,
             "audio_flow_shift": 3,
-            "lora": "none",
+            "lora": "turbo",
             "refs": [],
             "videos": [],
             "audios": []
@@ -455,16 +455,16 @@
             "duration": "duration.duration"
           },
           "params": {
-            "steps": 20,
-            "layers": 45,
-            "reuse": 2,
+            "steps": 8,
+            "layers": 50,
+            "reuse": 1,
             "core_reuse": 1,
             "token_reduction": false,
             "render": "Full",
             "quality": "lossless",
             "flow_shift": 12,
             "audio_flow_shift": 3,
-            "lora": "none",
+            "lora": "turbo",
             "refs": [],
             "videos": [],
             "audios": []
