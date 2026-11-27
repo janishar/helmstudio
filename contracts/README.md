@@ -4055,8 +4055,11 @@ Assistant's tools come with later phases (plan 39 §45.11), and so do their rout
   its video, made at once as `POST /takes/{id}/frame` does; an asset: its sheet's first take; a rows param gets
   `{image: {take_id}}` items, a frame row at `seconds` 0 or the clip's last frame; such a rows param left empty
   bypasses its node), the length on the frames param's grid at its fps, the size scaled to fit the params' bounds
-  and snapped to their steps; `set` then `advanced` fill the rest, the shared fields winning. A field the model
-  cannot fill is left out (the form greys it). Everything else is the run's own rules and 422s.
+  and snapped to their steps; `set` then `advanced` fill the rest, the shared fields winning (an `advanced` key
+  that is not one of the model's own Advanced params is dropped: one kept from another model). A field the model
+  cannot fill is left out (the form greys it). A model's required picks are why a block cannot run: a first frame on
+  an image node that may not stay empty (MiniMax H3: `MiniMax H3 needs a first frame`) and a voice (`Qwen3-TTS needs a
+  voice`). Everything else is the run's own rules and 422s.
 
 ### Magic: runs (API 1.81; normative)
 
@@ -4065,7 +4068,9 @@ Assistant's tools come with later phases (plan 39 §45.11), and so do their rout
   own session (`MagicBoard.session_id`, made at the first run, titled `Magic · <board>`, hidden from GET
   /v1/studio/sessions); `magic_runs` keeps run → block with the hash of the block's inputs then. Named `blocks` must
   all run (422 with why, `Shot 2: …`; 409 `Shot 2 is already running`); a `lane`'s or `stale`'s (every block not
-  done) that cannot are `skipped` with why. 409 when `revision` is not the current one.
+  done) that cannot are `skipped` with why, also when refused on the way (`Shot 1 has no take yet`, a frame still
+  being made, the run's own 4xx) while the others run. A frame a pick needs is made in a transaction of its own, so
+  its job outlives a refusal. 409 when `revision` is not the current one.
 - **Takes** join their block as the projector stores them: a studio revision appends the take id to the block's
   `takes` (undo skips it, as the Timeline's fills); a block gone since leaves the take in the gallery. The board's
   session events (`GET /v1/studio/sessions/{session_id}/events`) carry every run's status, progress and outputs: the

@@ -202,3 +202,32 @@ func blockOf(board map[string]any, id string) map[string]any {
 	}
 	return nil
 }
+
+// A lane's block refused on the way is skipped with why while the rest run (Shot 2 picks Shot 1, which has no take
+// yet); named, it is the 422 with its name. A voice block with no voice cannot run (the plan says why).
+func TestMagicRunsSkipRefused(t *testing.T) {
+	e := setup(t)
+	doc := magicRunBoard("")
+	blocks := doc["blocks"].([]any)
+	s1, s2, v1 := blocks[0].(map[string]any), blocks[1].(map[string]any), blocks[2].(map[string]any)
+	s1["takes"] = []string{}
+	delete(v1["request"].(map[string]any), "voice_id")
+	doc["blocks"] = []any{s1, s2, v1}
+	b := e.call(userA, "POST", "/v1/studio/magic/boards", map[string]any{"name": "Skip", "doc": doc}, 201)
+	base := "/v1/studio/magic/boards/" + b["id"].(string)
+	plan := e.call(userA, "POST", base+"/plan", map[string]any{"blocks": []string{"v1"}}, 200)
+	if v := plan["blocks"].([]any)[0].(map[string]any); v["reason"] != "Echo voice needs a voice" {
+		t.Fatal(plan)
+	}
+	if r := e.call(userA, "POST", base+"/run", map[string]any{"revision": 1, "blocks": []string{"s2"}}, 422); r["detail"] != "Shot 2: Shot 1 has no take yet" {
+		t.Fatal(r)
+	}
+	r := e.call(userA, "POST", base+"/run", map[string]any{"revision": 1, "stale": true}, 202)
+	if fmt.Sprint(r["started"].([]any)[0].(map[string]any)["block"]) != "s1" || len(r["started"].([]any)) != 1 ||
+		fmt.Sprint(r["skipped"]) != "[map[block:s2 reason:Shot 1 has no take yet] map[block:v1 reason:Echo voice needs a voice]]" {
+		t.Fatal(r)
+	}
+	if n := e.count(`SELECT count(*) FROM magic_runs WHERE board_id = $1`, b["id"]); n != 1 {
+		t.Fatal(n)
+	}
+}

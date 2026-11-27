@@ -192,8 +192,8 @@ func magicModel(ws []registry.Workflow, kind string, req map[string]any) (regist
 	return models[0], ""
 }
 
-// whyNot is why block b cannot run ("" when it can): its kind, a dialogue, no model.
-func whyNot(ws []registry.Workflow, b *magic.Block) string {
+// whyNot is why block b of d cannot run ("" when it can): its kind, a dialogue, no model, a pick its model needs.
+func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
 	switch b.Kind {
 	case "music":
 		return "Music " + strings.ToLower(offMusicSound[:1]) + offMusicSound[1:]
@@ -205,8 +205,44 @@ func whyNot(ws []registry.Workflow, b *magic.Block) string {
 	if turns, _ := b.Request["turns"].([]any); len(turns) > 0 {
 		return "Dialogue blocks can't run yet"
 	}
-	_, why := magicModel(ws, b.Kind, b.Request)
-	return why
+	w, why := magicModel(ws, b.Kind, b.Request)
+	if why != "" {
+		return why
+	}
+	// a first frame on an image node that may not stay empty (MiniMax H3's), and a voice, are required
+	if path, ok := w.Standard.Fields["first"]; ok {
+		nodeID, _, _ := strings.Cut(path, ".")
+		if n := w.Nodes[nodeID]; n.Kind == "image" && !n.Optional {
+			if first, _, _ := pickRefs(d, b); !picksSomething(d, first) {
+				return w.Standard.Model + " needs a first frame"
+			}
+		}
+	}
+	if _, ok := w.Standard.Fields["voice"]; ok && blockVoice(d, b) == "" {
+		return w.Standard.Model + " needs a voice"
+	}
+	return ""
+}
+
+// picksSomething is whether pick r names a block or an asset with a sheet that is on the board.
+func picksSomething(d magic.Doc, r map[string]any) bool {
+	if r == nil {
+		return false
+	}
+	if id, ok := r["asset"].(string); ok {
+		a := findAsset(d, id)
+		return a != nil && len(a.Sheet) > 0
+	}
+	id, _ := r["block"].(string)
+	return findBlock(d, id) != nil
+}
+
+// blockVoice is the voice block b speaks in: its voice asset's, else its voice_id ("" none).
+func blockVoice(d magic.Doc, b *magic.Block) string {
+	if a := findAsset(d, reqString(b.Request, "voice")); a != nil && a.VoiceID != nil {
+		return *a.VoiceID
+	}
+	return reqString(b.Request, "voice_id")
 }
 
 // magicPics are a block's pictures as take ids: its first and last frame and its refs ("" none).
@@ -265,8 +301,12 @@ func rowField(p registry.Param, typ string) string {
 func standardInputs(w registry.Workflow, b *magic.Block, target magic.Target, pics magicPics, voiceID string, seed int64) map[string]any {
 	st, req := w.Standard, b.Request
 	inputs := map[string]any{}
-	if adv, ok := req["advanced"].(map[string]any); ok {
-		maps.Copy(inputs, adv)
+	if adv, ok := req["advanced"].(map[string]any); ok { // only this model's own: a key kept from another is dropped
+		for _, p := range advancedParams(w) {
+			if v, ok := adv[p.Path]; ok {
+				inputs[p.Path] = v
+			}
+		}
 	}
 	maps.Copy(inputs, st.Set)
 	param := func(field string) (string, registry.Param, bool) {
@@ -477,15 +517,22 @@ func (s *Service) magicPicture(ctx context.Context, tx pgx.Tx, ownerID string, d
 	if part != "first" && part != "last" {
 		part = end
 	}
-	frame, job, err := s.frameOf(ctx, tx, ownerID, row, part)
+	// in a transaction of its own, so a frame job it starts outlives this request's (a 409 or a skip rolls it back)
+	frameID := ""
+	err = s.tx(ctx, common.Caller{ID: ownerID}, func(tx pgx.Tx) error {
+		frame, _, err := s.frameOf(ctx, tx, ownerID, row, part)
+		if frame != nil {
+			frameID = frame.ID
+		}
+		return err
+	})
 	if err != nil {
 		return "", err
 	}
-	if frame == nil {
-		_ = job
+	if frameID == "" {
 		return "", network.NewConflictError(name+"'s "+part+" frame is being made; try again in a moment", nil)
 	}
-	return frame.ID, nil
+	return frameID, nil
 }
 
 // ------------------------------------------------------------------ runs, takes and status
@@ -705,7 +752,7 @@ func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id st
 		ws := s.registry.Workflows()
 		for _, b := range blocks {
 			name := strings.Split(b.Name, " · ")[0]
-			why := whyNot(ws, b)
+			why := whyNot(ws, d, b)
 			if why == "" && status[b.ID].Status == "running" {
 				if named {
 					return network.NewConflictError(name+" is already running", nil)
@@ -719,8 +766,34 @@ func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id st
 				out.Skipped = append(out.Skipped, dto.MagicSkipped{Block: b.ID, Reason: why})
 				continue
 			}
-			made, err := s.runBlock(ctx, tx, caller, &row, d, b)
+			session, err := boardSession(ctx, tx, &row)
 			if err != nil {
+				return err
+			}
+			// each block in a savepoint: a lane's or stale's block refused on the way (a pick with no take yet, the
+			// run's own 4xx) is skipped with why; a named one is the error, with its name
+			sp, err := tx.Begin(ctx)
+			if err != nil {
+				return err
+			}
+			made, err := s.runBlock(ctx, sp, caller, &row, session, d, b)
+			var refused *network.APIError
+			if errors.As(err, &refused) && refused.Code < 500 {
+				if err := sp.Rollback(ctx); err != nil {
+					return err
+				}
+				switch {
+				case !named:
+					out.Skipped = append(out.Skipped, dto.MagicSkipped{Block: b.ID, Reason: refused.Message})
+					continue
+				case refused.Code == 409:
+					return network.NewConflictError(name+": "+refused.Message, nil)
+				}
+				return network.NewUnprocessableError(name+": "+refused.Message, nil)
+			} else if err != nil {
+				return err
+			}
+			if err := sp.Commit(ctx); err != nil {
 				return err
 			}
 			for _, r := range made {
@@ -743,7 +816,7 @@ func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id st
 }
 
 // runBlock makes block b's runs (its count, seeds from its seed) in the board's session and indexes them.
-func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller, row *boardRow, d magic.Doc, b *magic.Block) ([]dto.Run, error) {
+func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller, row *boardRow, session string, d magic.Doc, b *magic.Block) ([]dto.Run, error) {
 	w, _ := magicModel(s.registry.Workflows(), b.Kind, b.Request)
 	first, last, refs := pickRefs(d, b)
 	var pics magicPics
@@ -763,14 +836,7 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 			pics.Refs = append(pics.Refs, t)
 		}
 	}
-	voiceID := reqString(b.Request, "voice_id")
-	if a := findAsset(d, reqString(b.Request, "voice")); a != nil && a.VoiceID != nil {
-		voiceID = *a.VoiceID
-	}
-	session, err := boardSession(ctx, tx, row)
-	if err != nil {
-		return nil, err
-	}
+	voiceID := blockVoice(d, b)
 	seed, seeded := reqNumber(b.Request, "seed")
 	count, ok := reqNumber(b.Request, "count")
 	if !ok {
@@ -977,7 +1043,7 @@ func (s *Service) PlanMagicBoard(ctx context.Context, caller common.Caller, id s
 				lanes[b.Lane] = lane
 			}
 			lane.Blocks++
-			if why := whyNot(ws, b); why != "" {
+			if why := whyNot(ws, d, b); why != "" {
 				pb.Reason = &why
 				out.Blocks = append(out.Blocks, pb)
 				continue
@@ -986,7 +1052,7 @@ func (s *Service) PlanMagicBoard(ctx context.Context, caller common.Caller, id s
 			w, _ := magicModel(ws, b.Kind, b.Request)
 			// the host and peak as POST /runs/plan answers them, for the request without its pictures
 			_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
-				Inputs: standardInputs(w, b, d.Target, magicPics{}, reqString(b.Request, "voice_id"), -1)})
+				Inputs: standardInputs(w, b, d.Target, magicPics{}, blockVoice(d, b), -1)})
 			if perr == nil {
 				if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
 					host := slices.Sorted(maps.Keys(slots))[0]

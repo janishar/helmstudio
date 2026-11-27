@@ -47,7 +47,8 @@ func TestStandardInputsPerPack(t *testing.T) {
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=false keyframes.images=[map[image:map[take_id:` +
 				take + `] seconds:0] map[image:map[take_id:` + frame + `] seconds:8]] prompt.text=rain seed.seed=42`},
 		// no frame: LTX's keyframes node is bypassed (text to video)
-		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain","advanced":{"sample1.steps":8}}`, magicPics{}, "",
+		// Advanced keeps only the model's own (generate.steps is MiniMax H3's, kept from a switch: dropped)
+		{"ltx.", "mac.mlx", "ltx-image-to-video", "video", `{"prompt":"rain","advanced":{"sample1.steps":8,"generate.steps":6}}`, magicPics{}, "",
 			`canvas.height=704 canvas.width=1280 duration.frames=193 keyframes.bypass=true prompt.text=rain sample1.steps=8 seed.seed=42`},
 		{"minimax-h3.", "mac.native", "minimax-h3-image-to-video", "video", `{"prompt":"bus"}`, magicPics{First: take}, "",
 			`canvas.height=736 canvas.width=1280 duration.frames=192 first.image=map[take_id:` + take + `] prompt.text=bus seed.seed=42`},
@@ -71,6 +72,31 @@ func TestStandardInputsPerPack(t *testing.T) {
 		if _, detail := resolve(w, inputs); detail != "" {
 			t.Errorf("%s: %s", c.id, detail)
 		}
+	}
+}
+
+// A model's required picks are why a block cannot run: MiniMax H3's first frame, a voice model's voice.
+func TestWhyNotNeeds(t *testing.T) {
+	ws := []registry.Workflow{canonical(t, "minimax-h3.", "mac.native", "minimax-h3-image-to-video"),
+		canonical(t, "qwen3-tts.", "mac.torch", "qwen3-tts-voice-over")}
+	d := magic.Doc{Target: board}
+	shot, line := block("video", 96, `{"prompt":"bus"}`), block("voice", 48, `{"line":"hi"}`)
+	line.ID = "b2"
+	d.Blocks = []*magic.Block{shot, line}
+	if got := whyNot(ws, d, shot); got != "MiniMax H3 needs a first frame" {
+		t.Fatal(got)
+	}
+	if got := whyNot(ws, d, line); got != "Qwen3-TTS needs a voice" {
+		t.Fatal(got)
+	}
+	shot.Request["first"] = map[string]any{"block": "b2"}
+	line.Request["voice_id"] = "55555555-5555-4555-8555-555555555555"
+	if got := whyNot(ws, d, shot) + whyNot(ws, d, line); got != "" {
+		t.Fatal(got)
+	}
+	shot.Request["first"] = map[string]any{"block": "gone"} // a pick of a block no longer on the board
+	if got := whyNot(ws, d, shot); got != "MiniMax H3 needs a first frame" {
+		t.Fatal(got)
 	}
 }
 
