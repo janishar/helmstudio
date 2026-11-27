@@ -75,9 +75,13 @@ def test_the_assistant_proposes_an_edit_and_runs_after_the_users_yes(api, api_b,
 
         # above the limit (0 minutes: always) the run waits for the magic_run card; Not now runs nothing
         ok(user.put(SETTINGS, json={"ask_above_gpu_minutes": 0}))
+        # Shot 2's take lands as a new revision: wait for it, so run_blocks' revision is not stale (a race before)
+        rev = wait_for(
+            lambda: (r := ok(user.get(url))["revision"]) > 2 and r, timeout=60, what="Shot 2's take"
+        )
         fake("POST", "/__script", {assistant: [
             {"content": "Running.", "tool_calls": [{"tool": "run_blocks",
-                                                    "args": {"board_id": bid, "revision": 2, "blocks": ["s1"]}}]},
+                                                    "args": {"board_id": bid, "revision": rev, "blocks": ["s1"]}}]},
             {"content": "Left it."},
         ]})  # fmt: skip
         say("Run shot 1")

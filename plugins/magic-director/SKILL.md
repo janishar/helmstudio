@@ -107,8 +107,8 @@ Once the user says yes:
 
 ## 7. The GPU limit
 
-- run_blocks and make_views plan first. Frames and runs within the user's limit (Magic settings, 5 GPU minutes by
-  default) start at once; above it, or with no estimate yet, the user says yes on a card.
+- run_blocks and make_views plan first. Storyboard frames, and other runs within the user's limit (Magic settings,
+  5 GPU minutes by default), start at once; above it, or with no estimate yet, the user says yes on a card.
 - Run in small groups the user can review (a scene's frames, then its shots), not the whole board at once.
 - Before a big step, plan_board and say the cost in plain words: "7 shots, about 12 min".
 - A variant with no runs of the user's yet has no estimate, so it asks; say why.

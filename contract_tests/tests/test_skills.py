@@ -160,7 +160,11 @@ def test_magic_director_is_built_in_and_always_on(admin, api):
 
 def test_the_assistant_reads_the_magic_director_on_magic_once(api, assistant):  # noqa: F811
     # API 1.96: on the Magic screen the guide is read before the first model call, once per chat; not elsewhere
-    fake("POST", "/__script", {assistant: [{"content": "Planned."}, {"content": "Again."}, {"content": "Hi."}]})
+    fake(
+        "POST",
+        "/__script",
+        {assistant: [{"content": "Planned."}, {"content": "Again."}, {"content": "Hi."}]},
+    )
     tid = ok(api.post(THREADS, json={"client_id": TAB}), 201)["id"]
 
     def say(text: str, route: str) -> list[dict]:
@@ -173,9 +177,12 @@ def test_the_assistant_reads_the_magic_director_on_magic_once(api, assistant):  
     try:
         assert say("hello", "/gallery") == []
         lines = say("plan a 30 s ad", "/magic")
-        assert [x["text"] for x in lines] == ["Using skill: Magic director"] and lines[0]["skill"] == "magic-director"
+        assert [(x["text"], x.get("skill")) for x in lines] == [
+            ("Using skill: Magic director", "magic-director")
+        ]
         asked = [r for r in fake("GET", "/__requests") if r["model"] == assistant][-1]
-        assert "# Magic director" in json.dumps(asked["body"]["messages"])  # the guide reached the model
+        # the guide reached the model
+        assert "# Magic director" in json.dumps(asked["body"]["messages"])
         assert len(say("and the music", "/magic")) == 1  # once per chat
     finally:
         ok(api.delete(f"{THREADS}/{tid}"), 204)
