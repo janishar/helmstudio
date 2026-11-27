@@ -1,6 +1,8 @@
-// Magic, phase C (plan 39 §45.12): one fresh user on the test stack opens Magic from the rail on a new board kept in
-// studio, makes the sample board, adds a shot at a point, moves it, ties a line to another shot, undoes (studio's
-// undo), saves a snapshot, and finds it all again after a reload. Board: MagicBoard frames 1, 2, 4, 5, 11.
+// Magic, phases C and D (plan 39 §45.12): one fresh user on the test stack opens Magic from the rail on a new board
+// kept in studio, makes the sample board, adds a shot at a point with its standard request and generates it on the
+// fake runner (echo) until it is done with a take, opens it (run history, takes), moves it, ties a line to another
+// shot, undoes (studio's undo), saves a snapshot, and finds it all again after a reload. Board: MagicBoard frames 1,
+// 2, 3, 4, 5, 11.
 // Screenshots go to E2E_SHOTS.
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
@@ -34,23 +36,39 @@ test("Magic opens from the rail on a new board; the sample board is one pick awa
   await page.getByRole("menuitem", { name: "Sample board" }).click();
   for (const lane of ["Storyboard", "Shots", "Mara's lines", "Music", "Sound", "Lane 7"])
     await expect(page.getByRole("group", { name: `Lane ${lane}` })).toBeVisible();
-  // kept in studio: no takes yet, so every block is a draft; runs come with the standard request
+  // kept in studio: no takes yet, so every block is a draft; the board can run
   await expect(page.getByRole("button", { name: /Video block Shot 3/ })).toContainText("Draft");
-  await expect(page.getByRole("button", { name: "Run board" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Run board" })).toBeEnabled();
   await page.screenshot({ path: `${SHOTS}/1-board.png` });
 });
 
-test("add a shot at a point on the empty lane", async () => {
+test("add a shot at a point on the empty lane and generate it", async () => {
   const lane = page.getByRole("group", { name: "Lane Lane 7" });
   await lane.getByText("Empty · click to add").click({ position: { x: 4, y: 10 } });
-  const dlg = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+  let dlg = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
   await expect(dlg.getByRole("button", { name: /Music/ })).toBeDisabled();
   await dlg.getByRole("button", { name: "4 s" }).click();
-  await dlg.getByRole("button", { name: "Add" }).click();
-  await expect(lane.getByRole("button", { name: "Video block Shot 4, 4 s" })).toContainText(
-    "Draft",
-  );
-  await expect(status()).toHaveText("Added Shot 4");
+  await dlg.getByRole("button", { name: "Next" }).click();
+  // step 2: the standard request; Echo video can't take frames or a seed, each greyed with why
+  dlg = page.getByRole("dialog", { name: "Video · Shot 4" });
+  await dlg.getByRole("button", { name: "Echo video" }).click();
+  await expect(dlg.getByText("Echo video can't take a first frame")).toBeVisible();
+  await dlg.getByRole("textbox", { name: "Prompt" }).fill("a fox in the rain");
+  await expect(dlg.getByText(/≈ \d+ s/)).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/2-request.png` });
+  await dlg.getByRole("button", { name: "Generate" }).click();
+  const shot = lane.getByRole("button", { name: "Video block Shot 4, 4 s" });
+  await expect(status()).toHaveText("Running 1 block");
+  // the fake runner makes its take; the board's session events bring it to the block
+  await expect(shot).toContainText("Done", { timeout: 60_000 });
+  // opened: its run history and its take
+  await shot.dblclick();
+  const opened = page.getByRole("dialog", { name: "Video · Shot 4" });
+  await expect(opened.getByRole("group", { name: "Run 1" })).toBeVisible();
+  await expect(opened.getByRole("listitem", { name: /^Take 1/ })).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/3-opened.png` });
+  await page.keyboard.press("Escape");
+  await expect(opened).toBeHidden();
 });
 
 test("move it along the lane: it snaps and lands later", async () => {

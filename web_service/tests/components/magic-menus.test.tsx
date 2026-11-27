@@ -109,7 +109,7 @@ describe("a block's menu, by kind", () => {
     item(m.items, "Unlink").onPick!();
     expect(a.edit).toHaveBeenCalledWith({ op: "unlink", block: "v2" });
     item(m.items, "Go to Shot 2").onPick!();
-    expect(a.open).toHaveBeenCalledWith("s2");
+    expect(a.select).toHaveBeenCalledWith(["s2"]);
   });
 
   it("music and sound can't run before Create's Music and Sound", () => {

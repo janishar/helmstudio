@@ -3385,6 +3385,90 @@ export interface paths {
         patch: operations["studioPatchMagicSnapshot"];
         trace?: never;
     };
+    "/v1/studio/magic/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * From 1.81: per kind, its shared fields and the models that serve it (what each fills, the greyed reasons, its Advanced)
+         * @description contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks, a board frame always (the storyboard's phase).
+         */
+        get: operations["studioMagicKinds"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** From 1.81: the caller's Magic settings (default ask_above_gpu_minutes 5) */
+        get: operations["studioGetMagicSettings"];
+        /** From 1.81: set the caller's Magic settings */
+        put: operations["studioPutMagicSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.81: run blocks (their standard requests) in the board's session
+         * @description contracts/README.md, Magic: runs. Each block's request becomes a normal run (`count` runs, seeds seed, seed + 1, …)
+         *     in the board's own session, made at the first run and hidden from GET /v1/studio/sessions; each run's takes join
+         *     its block as studio revisions (undo skips them). 202 with the board, the runs started and (a lane or `stale`)
+         *     the blocks skipped with why. Named `blocks` must all run: one that cannot is the 422 with why (`Shot 2: Music
+         *     comes with Create's Music and Sound`); one already running is the 409 `Shot 2 is already running`. 409 when
+         *     `revision` is not the current one; the run's own 409 at 100 runs queued or running. The Assistant asks first
+         *     above the user's limit (…/plan's `ask`); a run asked for here is the user's.
+         */
+        post: operations["studioRunMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.81: the GPU-time estimate of a pick (per block, per lane, the total), the run order and the ask rule
+         * @description contracts/README.md, Magic: the estimate. Nothing is stored. Each block: your recent render times of its workflow on the host it would run on (the median of the last 5, scaled by length and size), else the pack's declared rate, else unknown; `ask` is the Assistant's ask rule.
+         */
+        post: operations["studioPlanMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -8909,9 +8993,10 @@ export interface components {
             /** @enum {string} */
             part: "first" | "last" | "take";
         };
-        /** @description a block's generation request as the board keeps it; the standard request per kind (models, what each fills) comes with plan 39 phase D */
+        /** @description a block's generation request as the board keeps it: from 1.81 the standard request (contracts/README.md, Magic: the standard request): the same shared fields for every model of a kind, the model's own params in `advanced` */
         MagicRequest: {
             kind: components["schemas"]["MagicKind"];
+            /** @description from 1.81: the workflow id of a model GET /v1/studio/magic/kinds lists for the kind; absent: the first one */
             model?: string;
             prompt?: string;
             /** @description a voice block's line */
@@ -8931,7 +9016,20 @@ export interface components {
             /** @description a sound made from this shot's video */
             from?: components["schemas"]["MagicId"];
             refs?: components["schemas"]["MagicRef"][];
-            /** @description the model's own params */
+            /** @description from 1.81: the shot's first frame (a block's last frame, an image block's take, an asset's picture) */
+            first?: components["schemas"]["MagicRef"];
+            /** @description from 1.81: the shot's last frame */
+            last?: components["schemas"]["MagicRef"];
+            /** @description from 1.81: absent: the board's */
+            width?: number;
+            height?: number;
+            /** @description from 1.81: -1 or absent: random */
+            seed?: number;
+            /** @description from 1.81: how many runs one Generate makes (seeds seed, seed + 1, …) */
+            count?: number;
+            /** @description from 1.81: a saved voice (library item of kind voice) when `voice` names no asset with one */
+            voice_id?: string;
+            /** @description the model's own params, `<node>.<param>` → value as a run's inputs (the shared fields win) */
             advanced?: Record<string, never>;
         };
         /** @description an effect badge (baked when sent) */
@@ -9015,6 +9113,21 @@ export interface components {
             doc: components["schemas"]["MagicDoc"];
             can_undo: boolean;
             can_redo: boolean;
+            /**
+             * Format: uuid
+             * @description from 1.81: the board's own session (made at its first run, hidden from GET /v1/studio/sessions): its events stream the board's runs
+             */
+            session_id?: string | null;
+            /** @description from 1.81: every block's runs, oldest first (the last 20 of each block) */
+            runs?: components["schemas"]["MagicBlockRun"][];
+            /** @description from 1.81: the takes the document names, by id (one deleted since is left out) */
+            takes?: {
+                [key: string]: components["schemas"]["MagicTake"];
+            };
+            /** @description from 1.81: every block's status by id (derived, contracts/README.md, Magic: runs) */
+            status?: {
+                [key: string]: components["schemas"]["MagicStatus"];
+            };
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -9243,6 +9356,167 @@ export interface components {
         MagicSnapshotPatch: {
             name: string;
         };
+        /**
+         * @description a shared field of the standard request (size = width and height)
+         * @enum {string}
+         */
+        MagicField: "prompt" | "line" | "refs" | "first" | "last" | "length" | "size" | "seed" | "voice";
+        /**
+         * @description derived (contracts/README.md, Magic: runs): draft (no take), running (a run queued or running), done (its shown take was made from its inputs as they are), out of date (they changed since), failed (its last run failed and it has no take)
+         * @enum {string}
+         */
+        MagicStatusName: "draft" | "running" | "done" | "out_of_date" | "failed";
+        MagicStatus: {
+            status: components["schemas"]["MagicStatusName"];
+            /** @description running: its newest run's */
+            progress?: number;
+            /** @description failed: why */
+            error?: string;
+        };
+        MagicTake: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "image" | "video" | "audio";
+            /** @description signed */
+            url?: string;
+            /** @description signed: a small WebP of the image or the poster once made */
+            thumb_url?: string | null;
+            /** @description a video's poster, signed */
+            poster_url?: string | null;
+            seed?: number | null;
+            /**
+             * Format: uuid
+             * @description the board's run that made it
+             */
+            run_id?: string | null;
+        };
+        /** @description one run of a block (its run history) */
+        MagicBlockRun: {
+            block: components["schemas"]["MagicId"];
+            /** Format: uuid */
+            run_id: string;
+            workflow_id?: string;
+            /** @enum {string} */
+            status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+            progress?: number;
+            error?: string | null;
+            /** @description the takes it made */
+            takes: string[];
+            /** @description the seed it asked for (-1: random) */
+            seed?: number | null;
+            /** @description made from the block's inputs as they are now (false: out of date) */
+            current: boolean;
+            /**
+             * @description who ran it (X-Helm-Client assistant)
+             * @enum {string}
+             */
+            by: "user" | "assistant";
+            /** Format: date-time */
+            created_at: string;
+            /** @description its first take's render time */
+            render_s?: number | null;
+        };
+        /** @description one Advanced field: a param of the model's workflow the standard fields do not fill */
+        MagicParam: {
+            /** @description <node>.<param> */
+            path: string;
+            /** @description its schema; `default` is the workflow's own value */
+            param: components["schemas"]["ParamSchema"];
+        };
+        MagicModel: {
+            workflow_id: string;
+            /** @description the model's name (`standard.model`) */
+            name: string;
+            /** @description the workflow's title */
+            title: string;
+            /** @description the kind's shared fields it fills */
+            fields: components["schemas"]["MagicField"][];
+            /** @description the kind's fields it cannot fill, each with the reason (`MiniMax H3 can't take a last frame`) */
+            greyed: {
+                [key: string]: string;
+            };
+            /** @description the pack's declared GPU seconds per unit (`standard.seconds`) */
+            seconds?: number | null;
+            advanced: components["schemas"]["MagicParam"][];
+        };
+        MagicKindInfo: {
+            kind: components["schemas"]["MagicKind"];
+            /** @description the kind's shared fields in form order */
+            fields: components["schemas"]["MagicField"][];
+            /** @description the workflows that serve it, the registry's order; empty: none on any host */
+            models: components["schemas"]["MagicModel"][];
+            /** @description why the kind cannot run yet (Music and Sound: `Comes with Create's Music and Sound`; a board frame: `Board frames come with the storyboard`) */
+            off?: string;
+        };
+        MagicKinds: {
+            kinds: components["schemas"]["MagicKindInfo"][];
+        };
+        MagicSettings: {
+            /** @description runs whose estimate is above this ask first (default 5; 0: always ask) */
+            ask_above_gpu_minutes: number;
+        };
+        /** @description which blocks: `blocks` (in this order), or a `lane`'s, or (`stale`) every block that is not done; exactly one */
+        MagicPick: {
+            blocks?: components["schemas"]["MagicId"][];
+            lane?: components["schemas"]["MagicId"];
+            /** @constant */
+            stale?: true;
+        };
+        /** @description MagicPick with the revision it was made on */
+        MagicRunCreate: {
+            /** @description the board's current revision, as the caller has it (409 when stale) */
+            revision: number;
+            blocks?: components["schemas"]["MagicId"][];
+            lane?: components["schemas"]["MagicId"];
+            /** @constant */
+            stale?: true;
+        };
+        MagicRunStarted: {
+            board: components["schemas"]["MagicBoard"];
+            started: {
+                block: components["schemas"]["MagicId"];
+                /** Format: uuid */
+                run_id: string;
+            }[];
+            /** @description a lane's or the stale pick's blocks that cannot run, with why */
+            skipped: {
+                block: components["schemas"]["MagicId"];
+                reason: string;
+            }[];
+        };
+        MagicPlanBlock: {
+            block: components["schemas"]["MagicId"];
+            /** @description the estimate in GPU seconds (every run of its count); null: unknown */
+            seconds: number | null;
+            /**
+             * @description yours: your recent runs of that workflow on that host; pack: the pack's declared rate
+             * @enum {string}
+             */
+            source: "yours" | "pack" | "unknown";
+            /** @description the host it would run on */
+            host: string | null;
+            peak_gb: number | null;
+            /** @description why it cannot run (then nothing else is planned for it) */
+            reason: string | null;
+        };
+        MagicPlan: {
+            blocks: components["schemas"]["MagicPlanBlock"][];
+            lanes: {
+                lane: components["schemas"]["MagicId"];
+                seconds: number | null;
+                blocks: number;
+            }[];
+            /** @description the whole pick; null when a block's is unknown */
+            seconds: number | null;
+            /** @description the run order: storyboard frames first, then lane by lane, each in time */
+            order: components["schemas"]["MagicId"][];
+            /** @description the ask rule: true when a run (not a board frame) has no estimate or the total is above ask_above_gpu_minutes */
+            ask: boolean;
+            /** @description the ask card's line: `3 shots, about 6 min` */
+            ask_text: string;
+            limit_minutes: number;
+        };
         MagicAgentBlock: {
             id: components["schemas"]["MagicId"];
             lane: components["schemas"]["MagicId"];
@@ -9252,11 +9526,7 @@ export interface components {
             length: number;
             at_s: number;
             end_s: number;
-            /**
-             * @description derived: draft with no take; running and out of date come with runs (phase D)
-             * @enum {string}
-             */
-            status: "draft" | "done";
+            status: components["schemas"]["MagicStatusName"];
             /** @description the take it shows: pinned, else its latest */
             take_id: string | null;
             takes: number;
@@ -14638,6 +14908,140 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MagicSnapshot"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioMagicKinds: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the kinds */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicKinds"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioGetMagicSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPutMagicSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicSettings"];
+            };
+        };
+        responses: {
+            /** @description the settings */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSettings"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioRunMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicRunCreate"];
+            };
+        };
+        responses: {
+            /** @description started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicRunStarted"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioPlanMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicPick"];
+            };
+        };
+        responses: {
+            /** @description the plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicPlan"];
                 };
             };
             401: components["responses"]["Unauthorized"];

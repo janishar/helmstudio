@@ -95,10 +95,39 @@ describe("the board", () => {
     );
     fireEvent.click(within(dlg).getByRole("button", { name: /Image/ }));
     fireEvent.click(within(dlg).getByRole("button", { name: "8 s" }));
-    fireEvent.click(within(dlg).getByRole("button", { name: "Add" }));
+    // step 2 (frame 2h): the standard request for an image, then Generate adds it and runs it
+    fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
+    const two = screen.getByRole("dialog", { name: "Image · Still 1" });
+    expect(within(two).getByRole("button", { name: "Qwen Image 2.1" })).toBeTruthy();
+    expect(within(two).getByRole("spinbutton", { name: "Width" })).toBeTruthy();
+    fireEvent.change(within(two).getByRole("textbox", { name: "Prompt" }), {
+      target: { value: "a title card" },
+    });
+    fireEvent.click(within(two).getByRole("button", { name: "Generate" }));
     const still = blockEl(/Image block Still 1, 8 s/);
-    expect(within(still).getByText("Draft")).toBeTruthy();
+    expect(still.textContent).toMatch(/\d+%/);
     expect(screen.getByRole("group", { name: "Lane Lane 7" }).textContent).toContain("1 block");
+  });
+
+  it("Add step 2 greys what the model can't take, with why (frame 2d); a board frame is added as a draft", () => {
+    render(<MagicBoard local />);
+    fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
+    let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+    fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
+    dlg = screen.getByRole("dialog", { name: /^Video · Shot/ });
+    fireEvent.click(within(dlg).getByRole("button", { name: "MiniMax H3" }));
+    expect(within(dlg).getByText("MiniMax H3 can't take a last frame")).toBeTruthy();
+    expect(within(dlg).getByRole("combobox", { name: "Last frame" }).matches(":disabled")).toBe(
+      true,
+    );
+    expect(within(dlg).getByRole("combobox", { name: "First frame" }).matches(":disabled")).toBe(
+      false,
+    );
+    fireEvent.click(within(dlg).getByRole("button", { name: "Back" }));
+    dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+    fireEvent.click(within(dlg).getByRole("button", { name: /Board frame/ }));
+    fireEvent.click(within(dlg).getByRole("button", { name: "Add" }));
+    expect(within(blockEl(/Board block Frame 4/)).getByText("Draft")).toBeTruthy();
   });
 
   it("shortening a shot shows the warning; Trim fits the line (frame 5b)", () => {

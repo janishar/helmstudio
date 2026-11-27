@@ -3,8 +3,17 @@
 // for the tests' fake mode, in this browser with fake takes (phase B's). The page edits through one shape, `Board`:
 // an edit is applied here first (lib/magic.ts, the same ops as studio's) and then sent with the revision it was made
 // on, one call after another, so the board never waits for the network and never runs ahead of studio.
-import { useCallback, useEffect, useRef, useState } from "react";
-import { api, message, ok, type S } from "@/lib/api";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, ApiError, message, ok, type S } from "@/lib/api";
+import { followSession } from "@/lib/runs";
+import {
+  FAKE_KINDS,
+  takesOf,
+  type BlockRun,
+  type Estimate,
+  type Kinds,
+  type Plan,
+} from "@/lib/magic-standard";
 import {
   commit,
   everywhere,
@@ -37,8 +46,19 @@ export type Board = {
   edit: (ops: Op[], next: Doc) => void;
   undo: () => void;
   redo: () => void;
-  /** runs blocks: how many started; null while runs can't go (they come with the standard request, phase D) */
-  run: ((ids: string[]) => number) | null;
+  /** runs blocks (or `stale`: every block not done): how many asked for; null while runs can't go */
+  run: ((ids: string[] | "stale") => number) | null;
+  /** the kinds studio serves (the fake mode's: MagicBoard frame 2's models) */
+  kinds: Kinds | null;
+  /** every block's runs, oldest first (the run history) */
+  runs: BlockRun[];
+  /** a block's GPU-time estimate (studio's plan), undefined while unknown here */
+  estimate: (id: string) => Estimate | undefined;
+  /** studio's plan of a pick (the ask rule); null in the fake mode */
+  plan: ((pick: { stale: true } | { blocks: string[] }) => Promise<Plan>) | null;
+  /** ask before runs above this many GPU minutes (Magic settings) */
+  askAbove: number;
+  setAskAbove: (minutes: number) => void;
   saveSnapshot: (name: string) => void;
   restoreSnapshot: (s: Snapshot) => void;
   renameSnapshot: (s: Snapshot, name: string) => void;
@@ -91,6 +111,9 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
   const [doc, setDoc] = useState<Doc | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [error, setError] = useState("");
+  const [kinds, setKinds] = useState<Kinds | null>(null);
+  const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
+  const [askAbove, setAskAboveState] = useState(5);
   const rev = useRef(0);
   const pending = useRef(0);
   const current = useRef("");
@@ -139,6 +162,65 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     [open],
   );
 
+  // the kinds and the settings, once
+  useEffect(() => {
+    ok(api.GET("/v1/studio/magic/kinds")).then(setKinds, () => undefined);
+    ok(api.GET("/v1/studio/magic/settings")).then(
+      (s) => setAskAboveState(s.ask_above_gpu_minutes),
+      () => undefined,
+    );
+  }, []);
+
+  /** the board again (a run moved on): only while no edit of ours is on its way, which brings it anyway */
+  const refresh = useCallback(async () => {
+    const id = current.current;
+    if (!id || pending.current) return;
+    const w = (await ok(api.GET("/v1/studio/magic/boards/{board_id}", board(id)))) as Wire;
+    if (current.current === id && !pending.current) show(w);
+  }, [show]);
+  // the board's runs move through its session's events (status, progress, outputs): read it again on them
+  const session = wire?.session_id ?? null;
+  useEffect(() => {
+    if (!session) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const stop = followSession(session, (e) => {
+      if (e.type === "session") return;
+      clearTimeout(t);
+      t = setTimeout(() => void refresh().catch(() => undefined), 250);
+    });
+    return () => {
+      clearTimeout(t);
+      stop();
+    };
+  }, [session, refresh]);
+  // every block's estimate at this revision (studio's plan)
+  const planKey = wire ? `${wire.id}:${wire.revision}:${wire.runs?.length ?? 0}` : "";
+  useEffect(() => {
+    if (!wire || !wire.doc.blocks.length) return;
+    let gone = false;
+    const ids = wire.doc.blocks.slice(0, 200).map((b) => b.id);
+    ok(
+      api.POST("/v1/studio/magic/boards/{board_id}/plan", {
+        ...board(wire.id),
+        body: { blocks: ids },
+      }),
+    ).then(
+      (p) => {
+        if (gone) return;
+        const m: Record<string, Estimate> = {};
+        for (const b of p.blocks)
+          if (!b.reason) m[b.block] = { seconds: b.seconds, host: b.host, source: b.source };
+        setEstimates(m);
+      },
+      () => undefined,
+    );
+    return () => {
+      gone = true;
+    };
+    // the plan follows the revision and the runs, not every render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [planKey]);
+
   useEffect(() => {
     queue(async () => {
       const { boards: list } = await ok(api.GET("/v1/studio/magic/boards"));
@@ -149,15 +231,34 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     });
   }, [queue, open, create]);
 
+  const takes = useMemo(
+    () => (wire ? takesOf(wire.doc as Doc, wire.runs ?? [], wire.takes ?? {}) : {}),
+    [wire],
+  );
   if (!wire || !doc) return { ready: false, error };
   const id = wire.id;
+  /** a call made on a revision studio has written past since (a run's take joined its block): made again, once, on
+   * the revision as it is now */
+  const fresh = <T>(send: () => Promise<T>): Promise<T> =>
+    send().catch(async (e) => {
+      if (
+        !(e instanceof ApiError) ||
+        e.status !== 409 ||
+        !/changed since you opened it/.test(e.message)
+      )
+        throw e;
+      rev.current = (
+        (await ok(api.GET("/v1/studio/magic/boards/{board_id}", board(id)))) as Wire
+      ).revision;
+      return send();
+    });
   return {
     ready: true,
     boards,
     id,
     name: wire.name,
     doc,
-    takes: {},
+    takes,
     canUndo: wire.can_undo,
     canRedo: wire.can_redo,
     snapshots,
@@ -167,14 +268,18 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       pending.current++;
       queue(async () => {
         // made on a board being left: dropped (the one opening is shown)
-        if (current.current !== id) return void (pending.current = Math.max(0, pending.current - 1));
-        const r = await ok(
-          api.POST("/v1/studio/magic/boards/{board_id}/edits", {
-            ...board(id),
-            headers: web,
-            body: { base_revision: rev.current, ops: ops as unknown as S<"MagicOp">[] },
-          }),
-        );
+        if (current.current !== id)
+          return void (pending.current = Math.max(0, pending.current - 1));
+        const send = () =>
+          ok(
+            api.POST("/v1/studio/magic/boards/{board_id}/edits", {
+              ...board(id),
+              headers: web,
+              body: { base_revision: rev.current, ops: ops as unknown as S<"MagicOp">[] },
+            }),
+          );
+        // a studio write since (a run's take joined its block): the same ops on the board as it is now, once
+        const r = await fresh(send);
         // a failure before it zeroed the count
         pending.current = Math.max(0, pending.current - 1);
         if (current.current === id) show(r.board);
@@ -185,12 +290,14 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       (wire.can_undo || pending.current > 0) &&
       queue(async () =>
         show(
-          await ok(
-            api.POST("/v1/studio/magic/boards/{board_id}/undo", {
-              ...board(id),
-              headers: web,
-              body: { revision: rev.current },
-            }),
+          await fresh(() =>
+            ok(
+              api.POST("/v1/studio/magic/boards/{board_id}/undo", {
+                ...board(id),
+                headers: web,
+                body: { revision: rev.current },
+              }),
+            ),
           ),
         ),
       ),
@@ -198,16 +305,47 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       wire.can_redo &&
       queue(async () =>
         show(
-          await ok(
-            api.POST("/v1/studio/magic/boards/{board_id}/redo", {
-              ...board(id),
-              headers: web,
-              body: { revision: rev.current },
-            }),
+          await fresh(() =>
+            ok(
+              api.POST("/v1/studio/magic/boards/{board_id}/redo", {
+                ...board(id),
+                headers: web,
+                body: { revision: rev.current },
+              }),
+            ),
           ),
         ),
       ),
-    run: null,
+    run: (ids) => {
+      queue(async () => {
+        const r = await fresh(() =>
+          ok(
+            api.POST("/v1/studio/magic/boards/{board_id}/run", {
+              ...board(id),
+              headers: web,
+              body:
+                ids === "stale"
+                  ? { revision: rev.current, stale: true }
+                  : { revision: rev.current, blocks: ids },
+            }),
+          ),
+        );
+        if (current.current === id) show(r.board);
+      });
+      return ids === "stale" ? -1 : ids.length;
+    },
+    kinds,
+    runs: wire.runs ?? [],
+    estimate: (b) => estimates[b],
+    plan: (pick) =>
+      ok(api.POST("/v1/studio/magic/boards/{board_id}/plan", { ...board(id), body: pick })),
+    askAbove,
+    setAskAbove: (m) => {
+      setAskAboveState(m);
+      void ok(api.PUT("/v1/studio/magic/settings", { body: { ask_above_gpu_minutes: m } })).catch(
+        (e) => setError(message(e)),
+      );
+    },
     saveSnapshot: (name) =>
       queue(async () => {
         const s = await ok(
@@ -374,9 +512,16 @@ export function useLocalBoard(initial?: Store): Board {
     edit: (_, next) => setH((x) => commit(x, next)),
     undo: () => setH(undo),
     redo: () => setH(redo),
+    kinds: FAKE_KINDS,
+    runs: [],
+    estimate: () => undefined,
+    plan: null,
+    askAbove: 5,
+    setAskAbove: () => undefined,
     /** a take per block, running, made from the block's inputs now; a studio write: it reaches every document in
      * the history, so Undo never takes a take back */
-    run: (ids) => {
+    run: (pick) => {
+      const ids = pick === "stale" ? h.now.blocks.map((b) => b.id) : pick;
       const fresh: Takes = {};
       for (const id of ids) {
         const b = h.now.blocks.find((x) => x.id === id);

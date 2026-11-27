@@ -3,19 +3,11 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import {
-  Camera,
-  ChevronDown,
-  Clock3,
-  Lock,
-  X,
-  Plus,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
+import { Camera, ChevronDown, Clock3, X, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
 import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
+import { BlockDialog } from "@/components/magic/block-dialog";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
 import { AssetsRow, Lanes, StatusChip, refText } from "@/components/magic/lanes";
 import {
@@ -40,12 +32,12 @@ import {
   statusOf,
   type Block,
   type Doc,
-  type Kind,
   type Mode,
   type Op,
   type Takes,
 } from "@/lib/magic";
 import { EST_HOST, EST_S, estText } from "@/lib/magic-fixture";
+import { FORM_KINDS, type Estimate } from "@/lib/magic-standard";
 import { LoadingBoard } from "@/components/magic/loading";
 import {
   useApiBoard,
@@ -57,8 +49,10 @@ import {
 import "./magic.css";
 
 const PANEL = "magic-side-panel";
-/** Why runs can't go while boards are in studio (plan 39 phase D brings the standard request). */
+/** Why runs can't go (a board with no way to run). */
 export const RUNS_LATER = "Runs come with the standard request";
+/** What runs in phase D: image, video and voice blocks that are not dialogues. */
+const runsHere = (b: Block) => FORM_KINDS.includes(b.kind) && !b.request.turns?.length;
 
 const noSub = () => () => undefined;
 const readPanel = () => {
@@ -116,6 +110,11 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const [viewW, setViewW] = useState(0);
   const [frame, setFrame] = useState(sample ? Math.round(10.5 * 24) : 0);
   const [adding, setAdding] = useState<AddAt | null>(null);
+  const [opened, setOpened] = useState<string | null>(null);
+  /** a block Generate made: it runs once the board has it */
+  const toRun = useRef<string | null>(null);
+  /** the ask card: a run of the board above the limit (plan 39 §45.8) */
+  const [asking, setAsking] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [usedAsset, setUsedAsset] = useState<string | null>(null);
   const [kept, setKept] = useState<string[]>([]);
@@ -164,13 +163,29 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     [doc, board],
   );
 
-  /** Runs blocks (fake in the fake mode); in studio, not yet. */
+  /** Runs blocks (fake in the fake mode; in studio, their standard requests). */
   const run = useCallback(
-    (ids: string[]) => {
+    (ids: string[] | "stale") => {
       if (!board.run) return setSaid(RUNS_LATER);
       const n = board.run(ids);
-      if (n) setSaid(`Running ${n} block${n > 1 ? "s" : ""}`);
+      if (n < 0) setSaid("Running every block that isn't done");
+      else if (n) setSaid(`Running ${n} block${n > 1 ? "s" : ""}`);
     },
+    [board],
+  );
+  useEffect(() => {
+    const id = toRun.current;
+    if (id && doc.blocks.some((b) => b.id === id)) {
+      toRun.current = null;
+      run([id]);
+    }
+  }, [doc, run]);
+  /** a block's estimate: studio's plan, else (the fake mode) the kind's guess */
+  const estOf = useCallback(
+    (b: Block): Estimate | undefined =>
+      board.plan
+        ? board.estimate(b.id)
+        : { seconds: EST_S[b.kind], host: EST_HOST, source: "yours" },
     [board],
   );
 
@@ -179,8 +194,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   }, []);
   const open = useCallback((id: string) => {
     setSel([id]);
-    setPanel(true);
-    document.getElementById(`magic-side`)?.scrollTo?.({ top: 0 });
+    setOpened(id);
   }, []);
 
   const act: Act = useMemo(
@@ -193,6 +207,12 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       edit,
       run,
       runOff: board.run ? undefined : RUNS_LATER,
+      estimate: board.plan
+        ? (id: string) => {
+            const s = board.estimate(id)?.seconds;
+            return s == null ? undefined : estText(s, true);
+          }
+        : undefined,
       select: setSel,
       open,
       add: (lane, at, kind) => setAdding({ lane, at, kind }),
@@ -214,7 +234,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         : null,
       copyText: (s) => void navigator.clipboard?.writeText(s).catch(() => undefined),
     }),
-    [doc, takes, mode, frame, sel, edit, run, board.run, open, seek, clip],
+    [doc, takes, mode, frame, sel, edit, run, board, open, seek, clip],
   );
 
   // zoom: fit (the whole board across) up to 240 px a second, ×1.25 a step
@@ -264,8 +284,26 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
 
   const zPct = Math.round((Math.log(pps / lo) / Math.log(MAX_PPS / lo)) * 100) || 0;
 
-  const runnable = doc.blocks.filter((b) => b.kind !== "music" && b.kind !== "sound");
-  const boardEst = runnable.reduce((n, b) => n + EST_S[b.kind], 0);
+  const runnable = doc.blocks.filter((b) =>
+    board.plan ? runsHere(b) : b.kind !== "music" && b.kind !== "sound",
+  );
+  const todo = runnable.filter((b) => statusOf(doc, b, takes).s !== "done");
+  const ests = (todo.length ? todo : runnable).map(estOf);
+  const boardEst = ests.some((e) => e?.seconds == null)
+    ? null
+    : ests.reduce((n, e) => n + (e?.seconds ?? 0), 0);
+  const boardHost = ests.find((e) => e?.host)?.host ?? "";
+  /** Run board: every block that isn't done; in studio, asking first above the limit */
+  const runBoard = async () => {
+    if (!board.plan) return run(todo.map((b) => b.id));
+    try {
+      const p = await board.plan({ stale: true });
+      if (p.ask) setAsking(`${p.ask_text} · above your ${p.limit_minutes} min limit`);
+      else run("stale");
+    } catch {
+      run("stale");
+    }
+  };
   const hiddenLanes = doc.lanes.filter((l) => l.hidden);
   const over = overruns(doc).filter((o) => !kept.includes(o.block));
   const one = sel.length === 1 ? doc.blocks.find((b) => b.id === sel[0]) : undefined;
@@ -455,9 +493,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 type="button"
                 className="chip bevel"
                 disabled={!runnable.length || !board.run}
-                onClick={() =>
-                  run(runnable.filter((b) => statusOf(doc, b, takes).s !== "done").map((b) => b.id))
-                }
+                onClick={() => void runBoard()}
                 title={board.run ? "Runs every block that isn't done" : RUNS_LATER}
               >
                 <Play10 />
@@ -466,7 +502,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               {runnable.length > 0 && board.run && (
                 <span className="est" title="From your own recent runs of these models">
                   <Clock3 size={13} aria-hidden />
-                  <b>{estText(boardEst)}</b> · {EST_HOST}
+                  <b>{boardEst == null ? "Time unknown" : estText(boardEst)}</b>
+                  {boardHost && ` · ${boardHost}`}
                 </span>
               )}
               <span className="grow" />
@@ -606,6 +643,26 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 </div>
               );
             })}
+            {asking && (
+              <div className="warn" role="alert">
+                <b>Run the board?</b>
+                <span>{asking}</span>
+                <span className="grow" />
+                <button
+                  type="button"
+                  className="chip"
+                  onClick={() => {
+                    setAsking(null);
+                    run("stale");
+                  }}
+                >
+                  Run
+                </button>
+                <button type="button" className="chip" onClick={() => setAsking(null)}>
+                  Cancel
+                </button>
+              </div>
+            )}
             {error && <ErrorNote>{error}</ErrorNote>}
             {doc.assets.length > 0 && <AssetsRow doc={doc} act={act} usedAsset={usedAsset} />}
             <Lanes
@@ -712,10 +769,34 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         <p role="status" className="m-0 -mt-2 min-h-4 px-1 text-[12px] text-t2">
           {said}
         </p>
+        <BlockDialog
+          act={act}
+          block={doc.blocks.find((b) => b.id === opened) ?? null}
+          kinds={board.kinds}
+          runs={board.runs}
+          estimate={opened ? board.estimate(opened) : undefined}
+          onClose={() => setOpened(null)}
+        />
         <AddDialog
           doc={doc}
+          kinds={board.kinds}
           where={adding}
           mode={mode}
+          onGenerate={
+            board.run
+              ? (block, m) => {
+                  const before = new Set(doc.blocks.map((b) => b.id));
+                  const r = apply(doc, { op: "add", block, mode: m });
+                  if ("error" in r) return setError(r.error);
+                  edit({ op: "add", block, mode: m });
+                  const made = r.doc.blocks.find((b) => !before.has(b.id));
+                  if (made) {
+                    setSel([made.id]);
+                    toRun.current = made.id;
+                  }
+                }
+              : null
+          }
           onClose={() => setAdding(null)}
           onAdd={(block, m) => {
             const before = new Set(doc.blocks.map((b) => b.id));
@@ -736,7 +817,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           className="mg-side aside m-3.5 flex flex-[1_1_320px] flex-col gap-3.5 px-[18px] pt-4 pb-6 max-md:hidden md:ml-0"
         >
           {one ? (
-            <BlockPanel key={one.id} d={doc} b={one} takes={takes} act={act} />
+            <BlockPanel key={one.id} d={doc} b={one} takes={takes} act={act} est={estOf(one)} />
           ) : sel.length > 1 ? (
             <div className="flex flex-col gap-2">
               <h2>{sel.length} blocks</h2>
@@ -783,6 +864,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 if (name) board.renameSnapshot(s, name);
               }}
               onDelete={board.deleteSnapshot}
+              askAbove={board.plan ? board.askAbove : null}
+              onAskAbove={board.setAskAbove}
             />
           )}
         </aside>
@@ -919,12 +1002,26 @@ function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
 }
 
 /** One block's details (frame 1's side panel), with what to do when it failed or is out of date (frame 11). */
-function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act: Act }) {
+function BlockPanel({
+  d,
+  b,
+  takes,
+  act,
+  est,
+}: {
+  d: Doc;
+  b: Block;
+  takes: Takes;
+  act: Act;
+  est?: Estimate;
+}) {
   const fps = d.target.fps;
   const take = shown(b, takes);
   const lane = d.lanes.find((l) => l.id === b.lane);
   const nth = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
-  const runningTake = b.takes.map((id) => takes[id]).findLast((t) => t?.status === "running");
+  const runningTake = Object.values(takes).findLast(
+    (t) => t.block === b.id && t.status === "running",
+  );
   const tied = d.links.filter((l) => l.block === b.id || l.to.includes(b.id));
   const into =
     d.transitions.find((t) => t.between?.[1] === b.id) ??
@@ -948,10 +1045,11 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
           </span>
         </span>
       </div>
-      <div className="pic" style={{ background: take?.art ?? "var(--s2)" }}>
+      <div className="pic" style={{ backgroundColor: "var(--s2)", backgroundImage: take?.art }}>
         {runningTake ? (
           <span className="mst run rounded-full bg-black/60 px-2 py-0.5">
-            Take {nth(runningTake.id)} · {Math.round(runningTake.progress ?? 0)}%
+            {nth(runningTake.id) ? `Take ${nth(runningTake.id)}` : "Running"} ·{" "}
+            {Math.round(runningTake.progress ?? 0)}%
           </span>
         ) : take ? (
           <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
@@ -1070,8 +1168,7 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
           </button>
         </div>
       </div>
-      <button type="button" className="act" disabled title="Comes with the block dialog">
-        <Lock size={13} className="mr-2 text-t2" aria-hidden />
+      <button type="button" className="act" onClick={() => act.open(b.id)}>
         Open
       </button>
       <div className="flex items-center gap-2">
@@ -1100,10 +1197,11 @@ function BlockPanel({ d, b, takes, act }: { d: Doc; b: Block; takes: Takes; act:
           Run up to here
         </button>
       </div>
-      {!audio && !act.runOff && (
+      {!audio && !act.runOff && est && (
         <span className="est" title="From your own recent runs of this model">
           <Clock3 size={13} aria-hidden />
-          <b>{estText(EST_S[b.kind as Kind])}</b> · {EST_HOST}
+          <b>{est.seconds == null ? "Time unknown" : estText(est.seconds)}</b>
+          {est.host && ` · ${est.host}`}
         </span>
       )}
       <p className="m-0 text-[11px] text-t2">
@@ -1123,10 +1221,15 @@ function BoardPanel({
   onRestore,
   onRename,
   onDelete,
+  askAbove,
+  onAskAbove,
 }: {
   d: Doc;
   takes: Takes;
   snapshots: Snapshot[];
+  /** Magic settings: ask before runs above this many GPU minutes (null: the fake mode) */
+  askAbove: number | null;
+  onAskAbove: (minutes: number) => void;
   onClose: () => void;
   onSave: () => void;
   onRestore: (s: Snapshot) => void;
@@ -1157,6 +1260,25 @@ function BoardPanel({
         </div>
       </div>
       <p className="m-0 text-[12px] text-t2">Select a block to see its details.</p>
+      {askAbove != null && (
+        <label className="flex items-center gap-2 text-[12px] text-t2">
+          Ask before runs over
+          <input
+            type="number"
+            aria-label="Ask above GPU minutes"
+            className="in h-7 w-16 px-2"
+            min={0}
+            max={600}
+            step={0.5}
+            defaultValue={askAbove}
+            onBlur={(e) => {
+              const v = Math.min(600, Math.max(0, +e.target.value));
+              if (!Number.isNaN(v) && v !== askAbove) onAskAbove(v);
+            }}
+          />
+          GPU min
+        </label>
+      )}
       <div className="flex items-center gap-2">
         <h3 className="mr-auto">
           Snapshots <small className="mono text-t2">{snapshots.length}</small>

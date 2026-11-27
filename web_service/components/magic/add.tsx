@@ -1,13 +1,26 @@
 "use client";
 // Add at a point (MagicBoard frame 2a, with 2b's greyed kinds until plan 38 ships Create's Music and Sound): the kind
-// with its orb, the length, Insert or Overwrite and what it starts from. Phase B adds a draft block; the standard
-// request for the kind (frame 2's step 2) comes with phase D.
+// with its orb, the length, Insert or Overwrite and what it starts from; then (frames 2c-2h, plan 39 phase D) the
+// standard request for an image, a video or a voice, and Generate. A board frame or a dialogue is added as a draft.
 import { useState } from "react";
 import { Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { KIND_ICON } from "@/components/magic/icons";
 import { NOT_YET, defaultKind } from "@/components/magic/menus";
-import { clock, end, inLane, secs, type Block, type Doc, type Kind, type Mode } from "@/lib/magic";
+import { EstimateLine, RequestForm } from "@/components/magic/request";
+import { KIND_NAME } from "@/components/magic/icons";
+import {
+  clock,
+  end,
+  inLane,
+  secs,
+  type Block,
+  type Doc,
+  type Kind,
+  type MagicRequest,
+  type Mode,
+} from "@/lib/magic";
+import { FORM_KINDS, kindOf, modelOf, type Kinds } from "@/lib/magic-standard";
 
 type Pick = Kind | "dialogue";
 const TILES: { k: Pick; name: string; sub: string }[] = [
@@ -38,53 +51,129 @@ function nameFor(d: Doc, k: Pick): string {
   return `${NAMES[k]} ${d.blocks.filter((b) => b.kind === kind).length + 1}`;
 }
 
-export function AddDialog({
-  doc,
-  where,
-  mode: mode0,
-  onAdd,
-  onClose,
-}: {
+type AddProps = {
   doc: Doc;
-  where: AddAt | null;
+  kinds: Kinds | null;
   mode: Mode;
+  /** a draft (a board frame, a dialogue) */
   onAdd: (block: Omit<Block, "id">, mode: Mode) => void;
+  /** step 2's Generate: the block with its request, then its run; null while runs can't go */
+  onGenerate: ((block: Omit<Block, "id">, mode: Mode) => void) | null;
   onClose: () => void;
-}) {
-  const lane = where && doc.lanes.find((l) => l.id === where.lane);
+};
+
+export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
+  const lane = where && p.doc.lanes.find((l) => l.id === where.lane);
+  const [step2, setStep2] = useState<{ block: Omit<Block, "id">; mode: Mode } | null>(null);
+  const close = () => {
+    setStep2(null);
+    p.onClose();
+  };
   return (
     <Modal
       open={!!lane}
-      onClose={onClose}
-      title={lane ? `Add at ${clock(where!.at, doc.target.fps, true)} · ${lane.name}` : "Add"}
+      onClose={close}
+      title={
+        step2
+          ? `${KIND_NAME[step2.block.kind]} · ${step2.block.name}`
+          : lane
+            ? `Add at ${clock(where!.at, p.doc.target.fps, true)} · ${lane.name}`
+            : "Add"
+      }
       width="w-[min(94vw,560px)]"
     >
-      {lane && where && (
-        <Form
-          key={`${where.lane}:${where.at}`}
-          doc={doc}
-          where={where}
-          mode0={mode0}
-          onAdd={onAdd}
-          onClose={onClose}
+      {lane && where && step2 ? (
+        <Step2
+          {...p}
+          block={step2.block}
+          mode={step2.mode}
+          onBack={() => setStep2(null)}
+          onClose={close}
         />
+      ) : (
+        lane &&
+        where && (
+          <Form
+            key={`${where.lane}:${where.at}`}
+            {...p}
+            where={where}
+            mode0={p.mode}
+            onNext={(block, mode) => setStep2({ block, mode })}
+            onClose={close}
+          />
+        )
       )}
     </Modal>
   );
 }
 
+/** Step 2 (frames 2c-2h): the standard request for the kind, its estimate, Back and Generate. */
+function Step2({
+  doc,
+  kinds,
+  block: b0,
+  mode,
+  onGenerate,
+  onBack,
+  onClose,
+}: AddProps & { block: Omit<Block, "id">; onBack: () => void }) {
+  const [req, setReq] = useState<MagicRequest>(b0.request);
+  const model = modelOf(kinds, req);
+  const block = { ...b0, request: req };
+  const off = !onGenerate
+    ? "Runs can't go here"
+    : !model
+      ? "No model for this kind on any host"
+      : "";
+  return (
+    <div className="mg-add flex flex-col gap-3">
+      <span className="text-[11px] text-t2">2 of 2</span>
+      <RequestForm
+        doc={doc}
+        block={{ ...block, id: "" }}
+        kinds={kinds}
+        request={req}
+        onChange={setReq}
+      />
+      <div className="flex items-center gap-2">
+        <EstimateLine model={model} block={block} doc={doc} />
+        <span className="grow" />
+        <button
+          type="button"
+          className="h-9 rounded-[10px] px-3.5 text-[13px] font-medium text-t2"
+          onClick={onBack}
+        >
+          Back
+        </button>
+        <button
+          type="button"
+          className="key h-9 rounded-xl px-3.5 text-[13px]"
+          disabled={!!off}
+          title={off || undefined}
+          onClick={() => {
+            onGenerate!({ ...block, request: { ...req, model: model!.workflow_id } }, mode);
+            onClose();
+          }}
+        >
+          Generate
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function Form({
   doc,
+  kinds,
   where,
   mode0,
   onAdd,
+  onNext,
   onClose,
-}: {
-  doc: Doc;
+}: AddProps & {
   where: AddAt;
   mode0: Mode;
-  onAdd: (block: Omit<Block, "id">, mode: Mode) => void;
-  onClose: () => void;
+  onNext: (block: Omit<Block, "id">, mode: Mode) => void;
 }) {
   const fps = doc.target.fps;
   const lane = doc.lanes.find((l) => l.id === where.lane)!;
@@ -116,28 +205,27 @@ function Form({
         ? `Overwrite covers ${next.name.split(" · ")[0]} from ${clock(next.at, fps)}`
         : "";
 
-  const add = () => {
-    const k: Kind = kind === "dialogue" ? "voice" : kind;
-    onAdd(
-      {
-        lane: lane.id,
-        at: where.at,
-        length: Math.max(1, len),
-        kind: k,
-        name: nameFor(doc, kind),
-        request: {
-          kind: k,
-          refs: shotKind && fromLast && prev ? [{ block: prev.id, part: "last" }] : [],
-          ...(kind === "dialogue" ? { turns: [] } : {}),
-          ...(k === "frame" ? { style: "sketch" as const } : {}),
-        },
-        takes: [],
-        effects: [],
-        ...(shotKind && fromFrame && frame ? { from_frame: frame.id } : {}),
-      },
-      mode,
-    );
-  };
+  const k: Kind = kind === "dialogue" ? "voice" : kind;
+  // image, video and voice go on to their standard request (step 2); a board frame or a dialogue is a draft
+  const staged = kind !== "dialogue" && FORM_KINDS.includes(k) && !kindOf(kinds, k)?.off;
+  const draft = (): Omit<Block, "id"> => ({
+    lane: lane.id,
+    at: where.at,
+    length: Math.max(1, len),
+    kind: k,
+    name: nameFor(doc, kind),
+    request: {
+      kind: k,
+      refs: [],
+      ...(shotKind && fromLast && prev ? { first: { block: prev.id, part: "last" as const } } : {}),
+      ...(kind === "dialogue" ? { turns: [] } : {}),
+      ...(k === "frame" ? { style: "sketch" as const } : {}),
+    },
+    takes: [],
+    effects: [],
+    ...(shotKind && fromFrame && frame ? { from_frame: frame.id } : {}),
+  });
+  const add = () => (staged ? onNext(draft(), mode) : onAdd(draft(), mode));
 
   return (
     <div className="mg-add flex flex-col gap-3">
@@ -261,7 +349,7 @@ function Form({
           Cancel
         </button>
         <button type="button" className="key h-9 rounded-xl px-3.5 text-[13px]" onClick={add}>
-          Add
+          {staged ? "Next" : "Add"}
         </button>
       </div>
     </div>

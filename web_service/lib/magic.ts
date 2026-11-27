@@ -12,10 +12,20 @@ export type Target = { width: number; height: number; fps: number; sample_rate: 
 export type Lane = { id: string; name: string; role: Role; hidden?: boolean; kind?: Kind };
 /** An @ pick inside a request: an asset, or another block's first frame, last frame or take. */
 export type Ref = { asset: string } | { block: string; part: "first" | "last" | "take" };
-/** The standard generation request (phase D fills it per kind; Advanced is the model's own params). */
+/** The standard generation request (API 1.81, contracts/README.md "Magic: the standard request"): the same shared
+ * fields for every model of a kind; `model` is a workflow id from GET /magic/kinds; Advanced is the model's own params. */
 export type MagicRequest = {
   kind: Kind;
   model?: string;
+  /** a shot's first and last frame, a still's size, the seed and how many runs one Generate makes */
+  first?: Ref;
+  last?: Ref;
+  width?: number;
+  height?: number;
+  seed?: number;
+  count?: number;
+  /** a saved voice when `voice` names no asset with one */
+  voice_id?: string;
   prompt?: string;
   /** a voice block's line; a dialogue's turns (owner: Dialogue is a Voice block with turns) */
   line?: string;
@@ -98,7 +108,12 @@ export type Op =
     }
   | { op: "effect"; ids: string[]; effect: Effect }
   | { op: "effect_set"; id: string; index: number; effect: Effect | null }
-  | { op: "block"; id: string; set: Partial<Pick<Block, "name" | "note" | "request" | "pinned">> }
+  | {
+      op: "block";
+      id: string;
+      /** pinned null unpins (an absent key is no change once sent as JSON) */
+      set: Partial<Pick<Block, "name" | "note" | "request">> & { pinned?: string | null };
+    }
   | { op: "lane_add"; lane: Omit<Lane, "id"> & { id?: string }; after?: string }
   | { op: "lane"; id: string; set: Partial<Omit<Lane, "id">> }
   | { op: "lane_move"; id: string; by: -1 | 1 }
@@ -581,8 +596,11 @@ export type TakeInfo = {
   inputs: string;
   error?: string;
   seed?: number;
-  /** the picture (a CSS background) of a fake take */
+  /** the picture (a CSS background): a fake take's gradients, a studio take's thumbnail */
   art?: string;
+  /** a studio take's signed link and kind (the block dialog's stage) */
+  url?: string;
+  kind?: "image" | "video" | "audio";
 };
 export type Takes = Record<string, TakeInfo>;
 
@@ -602,8 +620,15 @@ export function inputsOf(d: Doc, b: Block, takes: Takes): string {
     const x = id ? byId.get(id) : undefined;
     return x ? (shown(x, takes)?.id ?? null) : null;
   };
-  const picks = (b.request.refs ?? []).map((r) => ("block" in r ? take(r.block) : r.asset));
-  return JSON.stringify([b.request, take(b.from_frame), picks]);
+  const pick = (r?: Ref) => (!r ? null : "block" in r ? take(r.block) : r.asset);
+  const picks = (b.request.refs ?? []).map(pick);
+  return JSON.stringify([
+    b.request,
+    take(b.from_frame),
+    picks,
+    pick(b.request.first),
+    pick(b.request.last),
+  ]);
 }
 
 export type Status =
@@ -616,7 +641,11 @@ export type Status =
 /** Derived, never stored (§45.7): running when a run of it is going, failed when its last run failed and nothing is
  * done, draft with no take, out of date when its inputs changed after the take shown was made, else done. */
 export function statusOf(d: Doc, b: Block, takes: Takes): Status {
-  const ts = b.takes.map((id) => takes[id]).filter(Boolean);
+  // a block's takes, then its runs that have none yet (in studio: running or failed, `run:<id>`)
+  const ts = [
+    ...b.takes.map((id) => takes[id]).filter(Boolean),
+    ...Object.values(takes).filter((t) => t.block === b.id && !b.takes.includes(t.id)),
+  ];
   const run = ts.findLast((t) => t.status === "running");
   if (run) return { s: "running", progress: run.progress ?? 0 };
   const t = shown(b, takes);

@@ -105,10 +105,12 @@ export type Act = {
   sel: string[];
   edit: (op: Op | Op[]) => unknown;
   run: (ids: string[]) => void;
-  /** why runs can't go yet (boards in studio before the standard request, plan 39 phase D); estimates hide with it */
+  /** why runs can't go yet; estimates hide with it */
   runOff?: string;
+  /** a block's estimate as a menu shows it ("≈ 1:50"); absent: the kind's guess (the fake mode) */
+  estimate?: (id: string) => string | undefined;
   select: (ids: string[]) => void;
-  /** select it and show its details in the side panel */
+  /** select it and open it (the block dialog, frame 3) */
   open: (id: string) => void;
   /** the Add dialog at a lane and time, a kind picked */
   add: (lane: string, at: number, kind?: Kind) => void;
@@ -187,7 +189,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
   const run: MenuItem = gate(a, {
     label: "Run",
     icon: WandSparkles,
-    keys: est(b.kind),
+    keys: a.estimate ? a.estimate(b.id) : est(b.kind),
     off: audio(b.kind) ? NOT_YET : undefined,
     onPick: () => a.run([b.id]),
   });
@@ -242,7 +244,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
           ? {
               label: `Go to ${tiedTo.name.split(" · ")[0]}`,
               icon: LocateFixed,
-              onPick: () => a.open(tiedTo.id),
+              onPick: () => a.select([tiedTo.id]),
             }
           : tie,
         !!tiedTo && { label: "Fit to shot", icon: MoveHorizontal, onPick: () => fit(a, b) },
@@ -388,7 +390,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
         ? {
             label: "Unpin take",
             icon: PinOff,
-            onPick: () => a.edit({ op: "block", id: b.id, set: { pinned: undefined } }),
+            onPick: () => a.edit({ op: "block", id: b.id, set: { pinned: null } }),
           }
         : {
             label: "Pin take",
@@ -459,7 +461,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
               request: {
                 kind: "video",
                 model: b.request.model,
-                refs: [{ block: b.id, part: "last" }],
+                first: { block: b.id, part: "last" },
               },
               takes: [],
               effects: [],
@@ -754,7 +756,7 @@ export function tieMenu(a: Act, link: Link): { title: string; items: Item[] } {
   return {
     title: `Tie · ${short(b)} → ${target}`,
     items: [
-      { label: `Go to ${short(to[0])}`, icon: LocateFixed, onPick: () => a.open(to[0].id) },
+      { label: `Go to ${short(to[0])}`, icon: LocateFixed, onPick: () => a.select([to[0].id]) },
       { label: "Tie to", icon: Link2, items: tieItems(a, b) },
       {
         label: to.length > 1 ? "Fit to shots" : "Fit to shot",
@@ -810,6 +812,63 @@ export function snapshotMenu(
       { label: "Rename", icon: PencilLine, onPick: on.rename },
       "-",
       { label: "Delete", icon: Trash2, danger: true, onPick: on.remove },
+    ],
+  };
+}
+
+/** A take in the block dialog (frame 3's takes): pin or unpin it, show it, copy its id. */
+export function takeMenu(
+  a: Act,
+  b: Block,
+  take: string,
+  n: number,
+  show: () => void,
+): { title: string; items: Item[] } {
+  const pinned = b.pinned === take;
+  return {
+    title: `Take ${n}`,
+    items: [
+      { label: "Show", icon: Eye, onPick: show },
+      pinned
+        ? {
+            label: "Unpin",
+            icon: Pin,
+            onPick: () => a.edit({ op: "block", id: b.id, set: { pinned: null } }),
+          }
+        : {
+            label: `Pin take ${n}`,
+            icon: Pin,
+            onPick: () => a.edit({ op: "block", id: b.id, set: { pinned: take } }),
+          },
+      "-",
+      { label: "Copy take id", icon: Copy, onPick: () => a.copyText(take) },
+    ],
+  };
+}
+
+/** A run in the block dialog's run history: run it again with its seed, copy its id. */
+export function runMenu(
+  a: Act,
+  b: Block,
+  run: { run_id: string; seed?: number | null },
+  n: number,
+): { title: string; items: Item[] } {
+  const seed = run.seed != null && run.seed >= 0 ? run.seed : undefined;
+  return {
+    title: `Run ${n}`,
+    items: [
+      gate(a, {
+        label: seed != null ? `Run again · seed ${seed}` : "Run again",
+        icon: WandSparkles,
+        off: audio(b.kind) ? NOT_YET : undefined,
+        onPick: () => {
+          if (seed != null && seed !== b.request.seed)
+            a.edit({ op: "block", id: b.id, set: { request: { ...b.request, seed } } });
+          a.run([b.id]);
+        },
+      }),
+      "-",
+      { label: "Copy run id", icon: Copy, onPick: () => a.copyText(run.run_id) },
     ],
   };
 }
