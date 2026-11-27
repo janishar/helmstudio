@@ -37,6 +37,7 @@ import {
   Plus,
   Power,
   RefreshCw,
+  Repeat,
   RotateCcw,
   Scissors,
   Shapes,
@@ -147,16 +148,16 @@ export type Act = {
         onPick: (takes: { id: string; kind: string; duration?: number; title?: string }[]) => void;
       }) => void)
     | null;
-  /** Make views of an asset (null while runs can't go) */
-  views?: ((asset: string, views: string[]) => void) | null;
+  /** Make views of an asset (null while runs can't go), on an image model (absent: the kind's first) */
+  views?: ((asset: string, views: string[], model?: string) => void) | null;
+  /** Compare takes of a block (API 1.89: its dialog's Compare) */
+  compare?: (id: string) => void;
 };
 
 const icon = (C: (p: { className?: string }) => React.ReactNode) => C as unknown as LucideIcon;
 const kindIcon = (k: Kind) => KIND_ICON[k];
 const blockById = (d: Doc, id: string) => d.blocks.find((b) => b.id === id);
 const laneOf = (d: Doc, id: string) => d.lanes.find((l) => l.id === id);
-/** what runs: every block but a dialogue (its turns can't run yet) */
-const runs = (b: Block) => !b.request.turns?.length;
 /** a block's run estimate, as the menu shows it ("≈ 1:50", "≈ 12 s") */
 const est = (k: Kind) => estText(EST_S[k], true);
 /** a run item, off with the board's reason while runs can't go (its estimate hidden) */
@@ -255,7 +256,9 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
         open,
         run,
         play,
-        {
+        b.request.turns
+          ? { label: "Voice", icon: Mic, off: "Each line has its speaker: Open" }
+          : {
           label: "Voice",
           icon: Mic,
           items: d.assets
@@ -267,7 +270,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
                 a.edit({ op: "block", id: b.id, set: { request: { ...b.request, voice: x.id } } }),
             })),
           off: d.assets.some((x) => x.voice_id) ? undefined : "No asset has a voice yet",
-        },
+            },
         "-",
         tiedTo
           ? {
@@ -355,6 +358,19 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
             a.run([b.id]);
           },
         }),
+        {
+          // API 1.89: the take repeats to fill the block (MagicBoard 2g)
+          label: "Loop",
+          icon: Repeat,
+          checked: !!b.request.loop,
+          off: b.request.from ? "Not with a shot's video" : undefined,
+          onPick: () =>
+            a.edit({
+              op: "block",
+              id: b.id,
+              set: { request: { ...b.request, loop: b.request.loop ? undefined : true } },
+            }),
+        },
         "-",
         tie,
         unlink,
@@ -448,7 +464,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
               .map((x) => x.id),
           ),
       }),
-      { label: "Compare takes", icon: Columns2, off: SOON.dialog },
+      compareItem(a, b),
       pinned
         ? {
             label: "Unpin take",
@@ -559,7 +575,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
 /** Several blocks: run them, move, effects, duplicate, delete. */
 export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[] } {
   const bs = ids.map((id) => blockById(a.doc, id)).filter((b): b is Block => !!b);
-  const runnable = bs.filter(runs);
+  const runnable = bs;
   const lanes = new Set(bs.map((b) => b.lane));
   return {
     title: `${bs.length} blocks`,
@@ -571,7 +587,6 @@ export function multiMenu(a: Act, ids: string[]): { title: string; items: Item[]
           runnable.reduce((n, b) => n + EST_S[b.kind], 0),
           true,
         ),
-        off: runnable.length ? undefined : "Dialogue blocks can't run yet",
         onPick: () => a.run(runnable.map((b) => b.id)),
       }),
       {
@@ -614,7 +629,7 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
   const d = a.doc;
   const bs = inLane(d, lane.id);
   const i = d.lanes.indexOf(lane);
-  const runnable = bs.filter(runs);
+  const runnable = bs;
   return {
     title: `Lane · ${lane.name}`,
     items: [
@@ -637,11 +652,7 @@ export function laneMenu(a: Act, lane: Lane): { title: string; items: Item[] } {
               true,
             )
           : undefined,
-        off: !bs.length
-          ? "Nothing on it"
-          : runnable.length
-            ? undefined
-            : "Dialogue blocks can't run yet",
+        off: bs.length ? undefined : "Nothing on it",
         onPick: () => a.run(runnable.map((b) => b.id)),
       }),
       {
@@ -1092,6 +1103,45 @@ export function takeMenu(
           },
       "-",
       { label: "Copy take id", icon: Copy, onPick: () => a.copyText(take) },
+    ],
+  };
+}
+
+/** Compare takes (frame 10): its dialog's two takes side by side; off with fewer than two. */
+export function compareItem(a: Act, b: Block): MenuItem {
+  const n = b.takes.filter((id) => a.takes[id]?.status === "done").length;
+  return {
+    label: "Compare takes",
+    icon: Columns2,
+    off: n > 1 ? (a.compare ? undefined : SOON.dialog) : n ? "Only one take yet" : "No takes yet",
+    onPick: () => a.compare?.(b.id),
+  };
+}
+
+/** A dialogue's line in its form (API 1.89): move it, remove it. */
+export function turnMenu(
+  i: number,
+  n: number,
+  on: { up: () => void; down: () => void; remove: () => void },
+): { title: string; items: Item[] } {
+  return {
+    title: `Line ${i + 1}`,
+    items: [
+      { label: "Move up", icon: ArrowUp, off: i > 0 ? undefined : "It's the first line", onPick: on.up },
+      { label: "Move down", icon: ArrowDown, off: i < n - 1 ? undefined : "It's the last line", onPick: on.down },
+      "-",
+      { label: "Remove line", icon: Trash2, danger: true, onPick: on.remove },
+    ],
+  };
+}
+
+/** A song's section marker on its music block (API 1.89): the playhead to it, play from it. */
+export function sectionMenu(a: Act, b: Block, label: string, at: number): { title: string; items: Item[] } {
+  return {
+    title: `${b.name.split(" · ")[0]} · ${label}`,
+    items: [
+      { label: "Play from here", icon: Play, keys: "Space", onPick: () => a.play(at) },
+      { label: "Playhead here", icon: LocateFixed, onPick: () => a.seek(at) },
     ],
   };
 }

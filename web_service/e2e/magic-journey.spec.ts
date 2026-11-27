@@ -46,18 +46,18 @@ test("add a shot at a point on the empty lane and generate it", async () => {
   const lane = page.getByRole("group", { name: "Lane Lane 7" });
   await lane.getByText("Empty · click to add").click({ position: { x: 4, y: 10 } });
   let dlg = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
-  await expect(dlg.getByRole("button", { name: /Music/ })).toBeDisabled();
-  await dlg.getByRole("button", { name: "4 s" }).click();
+  await expect(dlg.getByRole("button", { name: /Music/ })).toBeEnabled(); // phase H: Echo music serves it
+  await dlg.getByRole("button", { name: "5 s" }).click();
   await dlg.getByRole("button", { name: "Next" }).click();
   // step 2: the standard request; Echo video can't take frames or a seed, each greyed with why
   dlg = page.getByRole("dialog", { name: "Video · Shot 4" });
-  await dlg.getByRole("button", { name: "Echo video" }).click();
+  await dlg.getByRole("combobox", { name: "Model" }).selectOption({ label: "Echo video" });
   await expect(dlg.getByText("Echo video can't take a first frame")).toBeVisible();
   await dlg.getByRole("textbox", { name: "Prompt" }).fill("a fox in the rain");
   await expect(dlg.getByText(/≈ \d+ s/)).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/2-request.png` });
   await dlg.getByRole("button", { name: "Generate" }).click();
-  const shot = lane.getByRole("button", { name: "Video block Shot 4, 4 s" });
+  const shot = lane.getByRole("button", { name: "Video block Shot 4, 5 s" });
   await expect(status()).toHaveText("Running 1 block");
   // the fake runner makes its take; the board's session events bring it to the block
   await expect(shot).toContainText("Done", { timeout: 60_000 });
@@ -72,7 +72,7 @@ test("add a shot at a point on the empty lane and generate it", async () => {
 });
 
 test("move it along the lane: it snaps and lands later", async () => {
-  const shot = page.getByRole("button", { name: "Video block Shot 4, 4 s" });
+  const shot = page.getByRole("button", { name: "Video block Shot 4, 5 s" });
   const before = await shot.evaluate((el) => (el as HTMLElement).style.left);
   const box = (await shot.boundingBox())!;
   await page.mouse.move(box.x + 30, box.y + 20);
@@ -107,7 +107,7 @@ test("tie Line 2 to Shot 3, then undo back to Shot 2", async () => {
   await page.getByRole("button", { name: "Save snapshot" }).click();
   await expect(status()).toHaveText("Saved Snapshot 1");
   await page.reload();
-  await expect(page.getByRole("button", { name: "Video block Shot 4, 4 s" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Video block Shot 4, 5 s" })).toBeVisible();
   await expect(page.getByRole("button", { name: "The Last Tide" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Snapshots · 1" })).toBeVisible();
 });

@@ -8,7 +8,7 @@ import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
 import { AssetDialog } from "@/components/magic/asset-dialog";
-import { BlockDialog } from "@/components/magic/block-dialog";
+import { BlockDialog, CompareDialog } from "@/components/magic/block-dialog";
 import { FrameDialog } from "@/components/magic/frame-dialog";
 import { ImportDialog } from "@/components/magic/import";
 import { RoughCut } from "@/components/magic/rough-cut";
@@ -40,6 +40,7 @@ import {
   clock,
   duration,
   end,
+  freshId,
   inLane,
   overruns,
   secs,
@@ -132,6 +133,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const [frame, setFrame] = useState(sample ? Math.round(10.5 * 24) : 0);
   const [adding, setAdding] = useState<AddAt | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
+  /** a block whose takes are compared side by side (API 1.89) */
+  const [comparing, setComparing] = useState<string | null>(null);
   /** a block Generate made: it runs once the board has it */
   const toRun = useRef<string | null>(null);
   /** the ask card: a run of the board above the limit (plan 39 §45.8) */
@@ -312,6 +315,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       importTo: board.gallery ? (asset) => setImporting({ asset }) : undefined,
       rough: setRough,
       openMorph: setMorph,
+      compare: setComparing,
       gallery: board.gallery ? setPicking : null,
       views: board.run ? board.makeViews : null,
       fromBoard: board.run
@@ -975,6 +979,11 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             )
           }
         />
+        <CompareDialog
+          act={act}
+          block={doc.blocks.find((b) => b.id === comparing) ?? null}
+          onClose={() => setComparing(null)}
+        />
         <BlockDialog
           act={act}
           block={doc.blocks.find((b) => b.id === opened && b.kind !== "frame") ?? null}
@@ -990,16 +999,16 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           mode={mode}
           onGenerate={
             board.run
-              ? (block, m) => {
-                  const before = new Set(doc.blocks.map((b) => b.id));
-                  const r = apply(doc, { op: "add", block, mode: m });
-                  if ("error" in r) return setError(r.error);
-                  edit({ op: "add", block, mode: m });
-                  const made = r.doc.blocks.find((b) => !before.has(b.id));
-                  if (made) {
-                    setSel([made.id]);
-                    toRun.current = made.id;
-                  }
+              ? (block, m, tie) => {
+                  // a line or cue tied in step 2 is added with its tie, in one edit
+                  const id = freshId(doc, "b");
+                  const ops: Op[] = [
+                    { op: "add", block: { ...block, id }, mode: m },
+                    ...(tie ? [{ op: "link" as const, block: id, to: tie }] : []),
+                  ];
+                  if (!edit(ops)) return;
+                  setSel([id]);
+                  toRun.current = id;
                 }
               : null
           }

@@ -2,9 +2,10 @@
 // A block opened (MagicBoard frame 3; plan 39 phases D and H: music and sound too): left, its @ references, what is tied to it, notes the
 // Assistant also reads and the run history (who ran it, how long); middle, the standard request with Advanced open
 // and Generate with its estimate; right, the take on stage, the takes (the picked one outlined, the pinned one
-// marked, a running one with its progress) and Pin. Takes and runs have their right-click menus.
+// marked, a running one with its progress) and Pin. Takes and runs have their right-click menus. API 1.89: a
+// dialogue's lines with their statuses, Run on, the tie with Unlink, and Compare takes (two side by side).
 import { useState } from "react";
-import { Pin } from "lucide-react";
+import { Columns2, Pin } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { Modal } from "@/components/kit";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
@@ -12,7 +13,17 @@ import { StatusChip, refText } from "@/components/magic/lanes";
 import { runMenu, takeMenu, type Act } from "@/components/magic/menus";
 import { EstimateLine, RequestForm } from "@/components/magic/request";
 import { SoundMark, soundLook } from "@/components/magic/sound-mark";
-import { clock, end, shown, type Block, type MagicRequest, type Ref } from "@/lib/magic";
+import { estText } from "@/lib/magic-fixture";
+import {
+  clock,
+  end,
+  shown,
+  turnStatuses,
+  type Block,
+  type MagicRequest,
+  type Ref,
+  type TakeInfo,
+} from "@/lib/magic";
 import {
   FORM_KINDS,
   modelOf,
@@ -42,6 +53,7 @@ export function BlockDialog({
       open={!!block}
       onClose={onClose}
       title={block ? `${KIND_NAME[block.kind]} · ${block.name}` : "Block"}
+      heading={block && <KindTitle block={block} />}
       width="w-[min(96vw,1120px)]"
     >
       {block && (
@@ -56,6 +68,112 @@ export function BlockDialog({
         />
       )}
     </Modal>
+  );
+}
+
+/** A dialog's title as the board draws it: the kind's badge, then the name (MagicBoard 2c, 3). */
+export function KindTitle({ block: b }: { block: Pick<Block, "kind" | "name" | "request"> }) {
+  return (
+    <span className="mg-title flex items-center gap-2">
+      <span className={`kb k-${b.kind}`}>{b.request.turns ? "Dialogue" : KIND_NAME[b.kind]}</span>
+      {b.name}
+    </span>
+  );
+}
+
+/** A take on a stage: its player (a video, or an audio take's cover or orb over its player) or its picture. */
+function Stage({ b, t, n }: { b: Block; t?: TakeInfo; n: number }) {
+  const look = t ? soundLook(b, t) : null;
+  return (
+    <div
+      className="flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center p-2"
+      style={{ backgroundColor: "var(--s3)", backgroundImage: look ? undefined : t?.art }}
+    >
+      {t?.kind === "video" && t.url ? (
+        <video src={t.url} controls className="h-full w-full object-contain" aria-label={`Take ${n}`} />
+      ) : t?.kind === "audio" && t.url ? (
+        // plan 39 phase H: the take's cover or orb over its player
+        <span className="flex w-full flex-col items-center gap-2">
+          {look && <SoundMark look={look} art={t.art} large />}
+          <audio src={t.url} controls aria-label={`Take ${n}`} className="w-full" />
+        </span>
+      ) : (
+        !t && <span className="text-[12px] text-t2">No take yet</span>
+      )}
+    </div>
+  );
+}
+
+/** Compare takes (MagicBoard frames 3 and 10, API 1.89): two of a block's takes side by side, each picked from its
+ * takes, with Pin. */
+export function CompareDialog({
+  act: a,
+  block: b,
+  onClose,
+}: {
+  act: Act;
+  block: Block | null;
+  onClose: () => void;
+}) {
+  return (
+    <Modal
+      open={!!b}
+      onClose={onClose}
+      title={b ? `Compare takes · ${b.name}` : "Compare takes"}
+      width="w-[min(96vw,980px)]"
+    >
+      {b && <CompareBody key={b.id} a={a} b={b} />}
+    </Modal>
+  );
+}
+
+function CompareBody({ a, b }: { a: Act; b: Block }) {
+  const done = b.takes.filter((id) => a.takes[id]?.status === "done");
+  const shownId = shown(b, a.takes)?.id;
+  // the shown take, and the newest other one
+  const [pair, setPair] = useState<[string, string]>(() => {
+    const first = shownId ?? done.at(-1) ?? "";
+    return [first, done.findLast((id) => id !== first) ?? first];
+  });
+  const n = (id: string) => b.takes.indexOf(id) + 1;
+  return (
+    <div className="mg-add grid gap-4 md:grid-cols-2">
+      {pair.map((id, side) => (
+        <section key={side} className="flex min-w-0 flex-col gap-2" aria-label={side ? "Right" : "Left"}>
+          <select
+            aria-label={side ? "Right take" : "Left take"}
+            className="in h-8 px-2 text-[13px]"
+            value={id}
+            onChange={(e) =>
+              setPair((p) => (side ? [p[0], e.target.value] : [e.target.value, p[1]]))
+            }
+          >
+            {done.map((t) => {
+              const seed = a.takes[t]?.seed;
+              return (
+                <option key={t} value={t}>
+                  Take {n(t)}
+                  {seed != null && seed >= 0 ? ` · seed ${seed}` : ""}
+                  {b.pinned === t ? " · pinned" : ""}
+                </option>
+              );
+            })}
+          </select>
+          <div onContextMenu={(e) => openMenu(e, takeMenu(a, b, id, n(id), () => undefined))}>
+            <Stage b={b} t={a.takes[id]} n={n(id)} />
+          </div>
+          <button
+            type="button"
+            className="chip bevel self-start rounded-[10px] bg-s4"
+            disabled={b.pinned === id}
+            onClick={() => a.edit({ op: "block", id: b.id, set: { pinned: id } })}
+          >
+            <Pin size={13} aria-hidden />
+            {b.pinned === id ? `Take ${n(id)} is pinned` : `Pin take ${n(id)}`}
+          </button>
+        </section>
+      ))}
+    </div>
   );
 }
 
@@ -87,14 +205,15 @@ function Body({
   const stage = picked ? a.takes[picked] : undefined;
   const n = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
   const model = modelOf(kinds, req);
-  const look = stage ? soundLook(b, stage) : null;
-  const form = FORM_KINDS.includes(b.kind) && !req.turns?.length;
+  const form = FORM_KINDS.includes(b.kind);
   const refs: { r: Ref; why: string }[] = [
     ...(req.first ? [{ r: req.first, why: "first frame of this shot" }] : []),
     ...(req.last ? [{ r: req.last, why: "last frame of this shot" }] : []),
     ...(req.refs ?? []).map((r) => ({ r, why: "a reference" })),
   ];
   const tied = d.links.filter((l) => l.block === b.id || l.to.includes(b.id));
+  const link = d.links.find((l) => l.block === b.id);
+  const seconds = (changed ? undefined : estimate?.seconds) ?? undefined;
   const save = () => changed && a.edit({ op: "block", id: b.id, set: { request: req } });
   const generate = () => {
     save();
@@ -115,7 +234,20 @@ function Body({
         </span>
         <StatusChip d={d} b={b} takes={a.takes} />
         <span className="grow" />
-        {picked && b.pinned !== picked && (
+        {takes.length > 1 && a.compare && !b.request.turns && (
+          <button
+            type="button"
+            className="chip bevel rounded-[10px] bg-s4"
+            onClick={() => {
+              save();
+              a.compare!(b.id);
+            }}
+          >
+            <Columns2 size={13} aria-hidden />
+            Compare
+          </button>
+        )}
+        {picked && b.pinned !== picked && !b.request.turns && (
           <button
             type="button"
             className="chip bevel rounded-[10px] bg-s4"
@@ -211,6 +343,13 @@ function Body({
                 request={req}
                 onChange={setReq}
                 advancedOpen
+                runOn={!!a.gallery} // in studio: the fake mode has no hosts
+                turnStatuses={req.turns ? turnStatuses(d, { ...b, request: req }, a.takes) : undefined}
+                tie={
+                  link && (b.kind === "voice" || b.kind === "music")
+                    ? { to: link.to, onUnlink: () => a.edit({ op: "unlink", block: b.id }) }
+                    : null
+                }
               />
               <div className="flex items-center gap-2">
                 <EstimateLine
@@ -228,43 +367,19 @@ function Body({
                   onClick={generate}
                 >
                   Generate
+                  {/* "≈ 1:50" from your own recent runs (MagicBoard frame 3) */}
+                  {seconds != null && <small className="ml-1.5 font-normal opacity-75">{estText(seconds, true)}</small>}
                 </button>
               </div>
             </>
           ) : (
             <p className="m-0 text-[13px] text-t2">
-              {kinds?.kinds.find((k) => k.kind === b.kind)?.off ??
-                (req.turns?.length ? "Dialogue blocks can't run yet" : "")}
+              {kinds?.kinds.find((k) => k.kind === b.kind)?.off ?? ""}
             </p>
           )}
         </section>
         <section className="flex min-w-0 flex-col gap-2.5" aria-label="Takes">
-          <div
-            className="flex aspect-video items-end overflow-hidden rounded-xl bg-cover bg-center p-2"
-            style={{ backgroundColor: "var(--s3)", backgroundImage: look ? undefined : stage?.art }}
-          >
-            {stage?.kind === "video" && stage.url ? (
-              <video
-                src={stage.url}
-                controls
-                className="h-full w-full object-contain"
-                aria-label={`Take ${n(picked)}`}
-              />
-            ) : stage?.kind === "audio" && stage.url ? (
-              // plan 39 phase H: the take's cover or orb over its player
-              <span className="flex w-full flex-col items-center gap-2">
-                {look && <SoundMark look={look} art={stage.art} large />}
-                <audio
-                  src={stage.url}
-                  controls
-                  aria-label={`Take ${n(picked)}`}
-                  className="w-full"
-                />
-              </span>
-            ) : (
-              !stage && <span className="text-[12px] text-t2">No take yet</span>
-            )}
-          </div>
+          <Stage b={b} t={stage} n={n(picked)} />
           {stage && (
             <span className="text-[12px] text-t2">
               Take {n(picked)}

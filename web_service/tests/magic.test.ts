@@ -8,19 +8,23 @@ import {
   everywhere,
   history,
   inLane,
+  inputsOf,
   joins,
   overruns,
   redo,
   snap,
+  sectionsOf,
   snapGroup,
   statusOf,
+  turnBlock,
+  turnStatuses,
   undo,
   type Block,
   type Doc,
   type Op,
 } from "@/lib/magic";
 import { emptyDoc, sampleBoard } from "@/lib/magic-fixture";
-import { playable, toSequence } from "@/lib/magic-play";
+import { playable, soundClips, toSequence } from "@/lib/magic-play";
 
 const S = 24; // frames a second
 const ok = (d: Doc, op: Op) => {
@@ -311,5 +315,71 @@ describe("status and undo", () => {
     expect(toSequence(doc, takes).doc.tracks[0].clips[1]).toMatchObject({
       transition_in: { type: "dissolve", frames: 12 },
     });
+  });
+});
+
+// API 1.89 (plan 39 gaps): a dialogue's turns, each a line block with its own status; its takes play one after
+// another, a Loop's take again and again; a song's sections from its take, else its lyrics' tags.
+describe("dialogue, Loop and sections", () => {
+  const dialogue = (): Block => ({
+    id: "dl",
+    lane: "lines",
+    at: 24,
+    length: 4 * S,
+    kind: "voice",
+    name: "Dialogue 1",
+    request: {
+      kind: "voice",
+      turns: [
+        { speaker: "a1", text: "Hi." },
+        { speaker: "a2", text: "Yo." },
+      ],
+    },
+    takes: [],
+    effects: [],
+  });
+  it("a turn is its line block; the dialogue's status is its turns'", () => {
+    const d = board();
+    const b = dialogue();
+    d.blocks.push(b);
+    expect(turnBlock(b, 1).request).toEqual({ kind: "voice", line: "Yo.", voice: "a2" });
+    expect(statusOf(d, b, {}).s).toBe("draft");
+    const t0 = { id: "t0", block: "dl", status: "done" as const, turn: 0, inputs: "" };
+    t0.inputs = inputsOf(d, turnBlock(b, 0), {});
+    b.takes = ["t0"];
+    expect(turnStatuses(d, b, { t0 }).map((s) => s.s)).toEqual(["done", "draft"]);
+    expect(statusOf(d, b, { t0 }).s).toBe("old"); // a line with no take yet
+    const t1 = { ...t0, id: "t1", turn: 1, inputs: inputsOf(d, turnBlock(b, 1), {}) };
+    b.takes = ["t0", "t1"];
+    expect(statusOf(d, b, { t0, t1 }).s).toBe("done");
+    b.request.turns![1].text = "Yo, later.";
+    expect(turnStatuses(d, b, { t0, t1 }).map((s) => s.s)).toEqual(["done", "old"]);
+    // Run on and Loop are not inputs
+    expect(inputsOf(d, { ...b, request: { ...b.request, host: "gcp", loop: true } }, {})).toBe(
+      inputsOf(d, b, {}),
+    );
+  });
+  it("turns play one after another, a Loop's take repeats, each cut at the block's end", () => {
+    const b = dialogue();
+    const takes = {
+      t0: { id: "t0", block: "dl", status: "done" as const, turn: 0, inputs: "", duration: 1.5 },
+      t1: { id: "t1", block: "dl", status: "done" as const, turn: 1, inputs: "", duration: 5 },
+    };
+    b.takes = ["t0", "t1"];
+    expect(soundClips(b, takes, S).map((c) => [c.take_id, c.at, c.out])).toEqual([
+      ["t0", 1, 1.5],
+      ["t1", 2.5, 2.5],
+    ]);
+    const rain: Block = { ...b, request: { kind: "sound", loop: true }, kind: "sound", takes: ["t0"] };
+    expect(soundClips(rain, takes, S).map((c) => c.out)).toEqual([1.5, 1.5, 1]);
+  });
+  it("a song's sections: its take's, else its lyrics' tags by their lines", () => {
+    const b = { ...dialogue(), kind: "music" as const, request: { kind: "music" as const, lyrics: "[verse]\na\nb\nc\n[chorus]\nd" } };
+    expect(sectionsOf(b, undefined, 8).map((c) => [c.label, c.start_s, c.end_s])).toEqual([
+      ["verse", 0, 6],
+      ["chorus", 6, 8],
+    ]);
+    const take = { id: "m", block: "dl", status: "done" as const, inputs: "", sections: [{ label: "intro", start_s: 0, end_s: 3 }] };
+    expect(sectionsOf(b, take, 8)).toEqual(take.sections);
   });
 });

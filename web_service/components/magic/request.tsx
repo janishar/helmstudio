@@ -2,11 +2,17 @@
 // The standard request of a block (MagicBoard frames 2c-2h and 3's middle; contracts/README.md "Magic: the standard
 // request"): the model, the kind's shared fields (the same few for every model), each one the picked model can't
 // fill greyed with the reason, the model's own params under Advanced, and the GPU-time estimate before Generate.
-import { Clock3 } from "lucide-react";
+import { Clock3, Plus, X } from "lucide-react";
+import { openMenu } from "@/components/context-menu";
+import { RunOnChip } from "@/components/create/run-on";
+import { useHosts } from "@/components/create/memory-chip";
 import { AtText } from "@/components/magic/at-text";
-import { refText } from "@/components/magic/lanes";
+import { LinkGlyph } from "@/components/magic/icons";
+import { STATUS, refText } from "@/components/magic/lanes";
+import { turnMenu } from "@/components/magic/menus";
 import { useVoices } from "@/lib/library";
-import { secs, type Block, type Doc, type MagicRequest, type Ref } from "@/lib/magic";
+import { machines, pinnedMachine } from "@/lib/run-on";
+import { secs, type Block, type Doc, type MagicRequest, type Ref, type Status } from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
 import {
   FIELD_LABEL,
@@ -70,6 +76,142 @@ export function EstimateLine({
   );
 }
 
+/** What a block is tied to, as its form says it ("Tied to Shot 2 · moves with it", MagicBoard 2e, 2f), and Unlink. */
+export type Tie = { to: string[]; onUnlink: () => void };
+
+/** "Tied to Shot 2 · moves with it", "Tied to Shots 1–3 · stretches with them". */
+export function tieText(d: Doc, to: string[]): string {
+  const names = to.map((id) => d.blocks.find((b) => b.id === id)?.name.split(" · ")[0] ?? "a gone shot");
+  if (names.length === 1) return `Tied to ${names[0]} · moves with it`;
+  const nums = names.map((n) => /(\d+)$/.exec(n)?.[1]);
+  const run = nums.every(Boolean) ? `Shots ${nums[0]}–${nums.at(-1)}` : names.join(", ");
+  return `Tied to ${run} · stretches with them`;
+}
+
+/** Run on (MagicBoard frame 3, as Create's: docs/mock/RunOn.dc.html): Auto, or a host, greyed when it can't take the
+ * model's workflow. */
+function RunOnField({ req, env, set }: { req: MagicRequest; env?: string; set: (p: Partial<MagicRequest>) => void }) {
+  const list = machines(useHosts());
+  return (
+    <div className="fld">
+      <span className="lb">Run on</span>
+      <span className="flex">
+        <RunOnChip
+          id="magic-run-on"
+          list={list}
+          chosen={pinnedMachine(list, req.host ?? "")}
+          env={env}
+          picks={[]}
+          onPick={(host) => set({ host: host || undefined })}
+        />
+      </span>
+    </div>
+  );
+}
+
+/** A dialogue's lines (a Voice block with turns, API 1.89): each a speaker (a board asset with a voice) and its words,
+ * its own status; Add a line; each row's menu moves or removes it. */
+function Turns({
+  doc,
+  req,
+  set,
+  statuses,
+}: {
+  doc: Doc;
+  req: MagicRequest;
+  set: (p: Partial<MagicRequest>) => void;
+  statuses?: Status[];
+}) {
+  const turns = req.turns ?? [];
+  const speakers = doc.assets.filter((a) => a.voice_id);
+  const put = (next: { speaker: string; text: string }[]) => set({ turns: next });
+  const move = (i: number, by: number) => {
+    const next = [...turns];
+    const [t] = next.splice(i, 1);
+    next.splice(i + by, 0, t);
+    put(next);
+  };
+  return (
+    <div className="fld col-span-full">
+      <span className="lb">Lines · {turns.length}</span>
+      <div className="flex flex-col gap-1.5" role="list" aria-label="Lines">
+        {turns.map((t, i) => {
+          const st = statuses?.[i];
+          return (
+            <div
+              key={i}
+              role="listitem"
+              aria-label={`Line ${i + 1}`}
+              className="flex items-center gap-1.5"
+              onContextMenu={(e) =>
+                openMenu(
+                  e,
+                  turnMenu(i, turns.length, {
+                    up: () => move(i, -1),
+                    down: () => move(i, 1),
+                    remove: () => put(turns.filter((_, j) => j !== i)),
+                  }),
+                )
+              }
+            >
+              <select
+                aria-label={`Line ${i + 1} speaker`}
+                className="in h-8 w-[110px] shrink-0 px-2 text-[13px]"
+                value={t.speaker}
+                onChange={(e) => put(turns.map((x, j) => (j === i ? { ...x, speaker: e.target.value } : x)))}
+              >
+                <option value="">Speaker</option>
+                {speakers.map((a) => (
+                  <option key={a.id} value={a.id}>
+                    @{a.handle}
+                  </option>
+                ))}
+              </select>
+              <input
+                aria-label={`Line ${i + 1}`}
+                className="in h-8 min-w-0 grow px-2 text-[13px]"
+                value={t.text}
+                placeholder="What they say"
+                onChange={(e) => put(turns.map((x, j) => (j === i ? { ...x, text: e.target.value } : x)))}
+              />
+              {st &&
+                (st.s === "running" ? (
+                  <span className="mst run">{Math.round(st.progress)}%</span>
+                ) : (
+                  <span className={`mst ${STATUS[st.s][0]}`} title={st.s === "failed" ? st.error : undefined}>
+                    {STATUS[st.s][1]}
+                  </span>
+                ))}
+              <button
+                type="button"
+                aria-label={`Remove line ${i + 1}`}
+                className="grid size-7 shrink-0 place-items-center rounded-lg text-t2 hover:bg-s3"
+                onClick={() => put(turns.filter((_, j) => j !== i))}
+              >
+                <X size={14} aria-hidden />
+              </button>
+            </div>
+          );
+        })}
+        {!speakers.length && (
+          <span className="text-[11px] text-t2">Give an asset a voice to make it a speaker.</span>
+        )}
+        <button
+          type="button"
+          className="chip bevel self-start rounded-[10px] bg-s4"
+          disabled={turns.length >= 100}
+          onClick={() =>
+            put([...turns, { speaker: turns.at(-2)?.speaker ?? speakers[0]?.id ?? "", text: "" }])
+          }
+        >
+          <Plus size={13} aria-hidden />
+          Add a line
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function RequestForm({
   doc,
   block,
@@ -77,6 +219,9 @@ export function RequestForm({
   request: req,
   onChange,
   advancedOpen = false,
+  tie,
+  runOn = false,
+  turnStatuses,
 }: {
   doc: Doc;
   /** the block it is for (its id, kind and length; a draft in Add) */
@@ -85,6 +230,12 @@ export function RequestForm({
   request: MagicRequest;
   onChange: (req: MagicRequest) => void;
   advancedOpen?: boolean;
+  /** a voice or music block's tie, said under its fields with Unlink */
+  tie?: Tie | null;
+  /** the block dialog's Run on (MagicBoard frame 3) */
+  runOn?: boolean;
+  /** a dialogue's turn statuses (the block dialog) */
+  turnStatuses?: Status[];
 }) {
   const voices = useVoices();
   const kind = kindOf(kinds, block.kind);
@@ -295,12 +446,13 @@ export function RequestForm({
     seed: () =>
       field(
         "seed",
-        <span className="flex flex-wrap items-center gap-2 text-[13px]">
+        // "42 · 2 seeds" (MagicBoard 2c): the seed, then how many runs one Generate makes (seed, seed + 1, …)
+        <span className="flex items-center gap-1.5 text-[13px]">
           <input
             type="number"
             aria-label="Seed"
             placeholder="Random"
-            className="in h-8 w-full px-2"
+            className="in mono h-8 min-w-[84px] flex-1 px-2"
             min={-1}
             value={req.seed == null || req.seed < 0 ? "" : req.seed}
             onChange={(e) =>
@@ -309,19 +461,23 @@ export function RequestForm({
               })
             }
           />
-          <span className="seg" role="group" aria-label="Seeds">
-            {[1, 2, 3, 4].map((n) => (
-              <button
-                key={n}
-                type="button"
-                aria-pressed={(req.count ?? 1) === n}
-                aria-label={n === 1 ? "1 seed" : `${n} seeds`}
-                onClick={() => set({ count: n === 1 ? undefined : n })}
+          {!req.turns && (
+            <>
+              <span className="text-t2">·</span>
+              <select
+                aria-label="Seeds"
+                className="in h-8 shrink-0 px-1.5 text-[13px]"
+                value={req.count ?? 1}
+                onChange={(e) => set({ count: +e.target.value === 1 ? undefined : +e.target.value })}
               >
-                {n}
-              </button>
-            ))}
-          </span>
+                {[1, 2, 3, 4].map((n) => (
+                  <option key={n} value={n}>
+                    {n === 1 ? "1 seed" : `${n} seeds`}
+                  </option>
+                ))}
+              </select>
+            </>
+          )}
         </span>,
       ),
     voice: () =>
@@ -359,38 +515,91 @@ export function RequestForm({
   if (kind?.off) return <p className="m-0 text-[13px] text-t2">{kind.off}</p>;
   const adv = advancedOf(model, req);
   const advValues = (req.advanced ?? {}) as Record<string, unknown>;
+  const others = models.filter((m) => m.workflow_id !== model?.workflow_id).map((m) => m.name);
+  // a dialogue's lines take the place of the line and the voice (API 1.89)
+  const fields = (kind?.fields ?? []).filter((f) => !req.turns || (f !== "line" && f !== "voice"));
   return (
     <div className="flex flex-col gap-3">
-      <div className="fld">
-        <span className="lb">Model</span>
-        {models.length ? (
-          <div className="seg flex-wrap" role="group" aria-label="Model">
-            {models.map((m) => (
-              <button
-                key={m.workflow_id}
-                type="button"
-                aria-pressed={model?.workflow_id === m.workflow_id}
-                title={m.title}
+      <div className={runOn ? "grid grid-cols-2 gap-3" : "contents"}>
+        <div className="fld">
+          <span className="lb">Model</span>
+          {models.length ? (
+            // a select with the other models as its hint (MagicBoard 2c: "or MiniMax H3")
+            <span className="flex min-w-0 flex-wrap items-center gap-2">
+              <select
+                aria-label="Model"
+                className="in h-8 min-w-0 px-2 text-[13px]"
+                value={model?.workflow_id ?? ""}
+                title={model?.title}
                 // a model that takes no video drops the shot it was made from (its From would stay greyed)
-                onClick={() =>
+                onChange={(e) => {
+                  const m = models.find((x) => x.workflow_id === e.target.value)!;
                   set({
                     model: m.workflow_id,
                     advanced: undefined,
                     ...(m.fields.includes("from") ? {} : { from: undefined }),
-                  })
-                }
+                  });
+                }}
               >
-                {m.name}
-              </button>
-            ))}
-          </div>
-        ) : (
-          <span className="text-[12px] text-t2">No model for this kind on any host</span>
-        )}
+                {models.map((m) => (
+                  <option key={m.workflow_id} value={m.workflow_id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+              {others.length > 0 && (
+                <span className="text-[11px] text-t2">or {others.join(", ")}</span>
+              )}
+            </span>
+          ) : (
+            <span className="text-[12px] text-t2">No model for this kind on any host</span>
+          )}
+        </div>
+        {runOn && <RunOnField req={req} env={model?.env} set={set} />}
       </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">
-        {(kind?.fields ?? []).map((f) => body[f]())}
+        {req.turns && <Turns doc={doc} req={req} set={set} statuses={turnStatuses} />}
+        {fields.map((f) => body[f]())}
+        {/* a still's place on the board (MagicBoard 2h) */}
+        {block.kind === "image" && (
+          <div className="fld">
+            <span className="lb">Length on board</span>
+            <span className="mono text-[13px]">{secs(block.length, fps)}</span>
+          </div>
+        )}
+        {/* Loop (MagicBoard 2g, API 1.89): the take repeats to fill the block; a sound from a shot's video follows it */}
+        {block.kind === "sound" && (
+          <div className={`fld ${req.from ? "opacity-50" : ""}`}>
+            <span className="lb">Loop</span>
+            <span className="seg" role="group" aria-label="Loop">
+              {[false, true].map((on) => (
+                <button
+                  key={String(on)}
+                  type="button"
+                  disabled={!!req.from}
+                  aria-pressed={!!req.loop === on}
+                  onClick={() => set({ loop: on || undefined })}
+                >
+                  {on ? "On" : "Off"}
+                </button>
+              ))}
+            </span>
+            {req.from && <span className="text-[11px] text-t2">Not with a shot&apos;s video</span>}
+          </div>
+        )}
       </div>
+      {tie && (
+        <div className="nr">
+          <span className="lkm" aria-hidden>
+            <LinkGlyph />
+          </span>
+          {tieText(doc, tie.to)}
+          <span className="grow" />
+          <button type="button" className="chip bevel rounded-[10px] bg-s4" onClick={tie.onUnlink}>
+            Unlink
+          </button>
+        </div>
+      )}
       {adv.length > 0 && (
         <details className="fld" open={advancedOpen}>
           <summary className="lb cursor-pointer">

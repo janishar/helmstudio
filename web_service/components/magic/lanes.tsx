@@ -6,6 +6,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pin } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
+import { sectionColor } from "@/components/create/audio";
 import { JOIN_ICON, KIND_NAME, Wave } from "@/components/magic/icons";
 import { MorphBlocks } from "@/components/magic/send";
 import {
@@ -15,6 +16,7 @@ import {
   emptyMenu,
   joinMenu,
   laneMenu,
+  sectionMenu,
   tieMenu,
   type Act,
 } from "@/components/magic/menus";
@@ -26,6 +28,7 @@ import {
   inLane,
   joins,
   secs,
+  sectionsOf,
   shown,
   snap,
   snapGroup,
@@ -111,7 +114,7 @@ export function refText(d: Doc, r: Ref): string {
   return `@${name} · ${{ first: "first frame", last: "last frame", take: "take" }[r.part]}`;
 }
 
-const STATUS = {
+export const STATUS = {
   draft: ["dr", "Draft"],
   done: ["done", "Done"],
   old: ["old", "Out of date"],
@@ -727,6 +730,37 @@ function BlockView({
       )}
       {/* plan 39 phase H: the cover or orb by the shown take's class (a sound placed on the Music lane is an orb) */}
       {look && audioRow(<SoundMark look={look} art={art} />, WAVE[look])}
+      {/* API 1.89: a song's sections as markers (a click puts the playhead there) */}
+      {b.kind === "music" && (
+        <div className="pointer-events-none absolute inset-x-0 top-[22px] z-[1] h-3.5" role="group" aria-label="Sections">
+          {sectionsOf(b, take, b.length / fps)
+            .filter((c) => c.start_s * fps < b.length)
+            .map((c, i) => {
+              const at = b.at + Math.round(c.start_s * fps);
+              return (
+                <button
+                  key={i}
+                  type="button"
+                  className="pointer-events-auto absolute top-0 h-3.5 max-w-[80px] truncate border-l-2 pl-1 text-left text-[9px] leading-[14px] text-t1"
+                  style={{ left: c.start_s * fps * pf, borderLeftColor: sectionColor(c.label) }}
+                  title={c.guess ? `${c.label} · about here (from the lyrics)` : c.label}
+                  aria-label={`${c.label} at ${clock(at, fps)}`}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    act.seek(at);
+                  }}
+                  onContextMenu={(e) => {
+                    e.stopPropagation();
+                    openMenu(e, sectionMenu(act, b, c.label, at));
+                  }}
+                >
+                  {c.label}
+                </button>
+              );
+            })}
+        </div>
+      )}
       <div className="bf">
         {b.kind === "voice" || b.kind === "music" ? null : chips}
         {fx}

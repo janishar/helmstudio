@@ -1,10 +1,12 @@
 "use client";
 // Add at a point (MagicBoard frame 2a): the kind with its orb, the length, Insert or Overwrite and what it starts from;
 // then (frames 2c-2h, plan 39 phases D and H) the standard request for an image, a video, a voice, music or a sound,
-// and Generate. A board frame or a dialogue is added as a draft.
+// and Generate; a dialogue (API 1.89) its lines. A board frame is added as a draft. A line or a cue added under a shot
+// is tied to it (2e, 2f: "Tied to Shot 2 · Unlink").
 import { useEffect, useRef, useState } from "react";
 import { Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
+import { KindTitle } from "@/components/magic/block-dialog";
 import { KIND_ICON } from "@/components/magic/icons";
 import { defaultKind } from "@/components/magic/menus";
 import { EstimateLine, RequestForm } from "@/components/magic/request";
@@ -56,14 +58,16 @@ type AddProps = {
   mode: Mode;
   /** a draft (a board frame, a dialogue) */
   onAdd: (block: Omit<Block, "id">, mode: Mode) => void;
-  /** step 2's Generate: the block with its request, then its run; null while runs can't go */
-  onGenerate: ((block: Omit<Block, "id">, mode: Mode) => void) | null;
+  /** step 2's Generate: the block with its request (tied to `tie` when given), then its run; null while runs can't go */
+  onGenerate: ((block: Omit<Block, "id">, mode: Mode, tie?: string[]) => void) | null;
   onClose: () => void;
 };
 
 export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
   const lane = where && p.doc.lanes.find((l) => l.id === where.lane);
-  const [step2, setStep2] = useState<{ block: Omit<Block, "id">; mode: Mode } | null>(null);
+  const [step2, setStep2] = useState<{ block: Omit<Block, "id">; mode: Mode; tie?: string[] } | null>(
+    null,
+  );
   const close = () => {
     setStep2(null);
     p.onClose();
@@ -87,6 +91,7 @@ export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
             : "Add"
       }
       width="w-[min(94vw,560px)]"
+      heading={step2 ? <KindTitle block={step2.block} /> : undefined}
       aside={step2 ? "2 of 2" : undefined}
     >
       <div ref={box} className="contents" />
@@ -95,6 +100,7 @@ export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
           {...p}
           block={step2.block}
           mode={step2.mode}
+          tie0={step2.tie}
           onBack={() => setStep2(null)}
           onClose={close}
         />
@@ -106,7 +112,7 @@ export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
             {...p}
             where={where}
             mode0={p.mode}
-            onNext={(block, mode) => setStep2({ block, mode })}
+            onNext={(block, mode, tie) => setStep2({ block, mode, tie })}
             onClose={close}
           />
         )
@@ -121,11 +127,13 @@ function Step2({
   kinds,
   block: b0,
   mode,
+  tie0,
   onGenerate,
   onBack,
   onClose,
-}: AddProps & { block: Omit<Block, "id">; onBack: () => void }) {
+}: AddProps & { block: Omit<Block, "id">; tie0?: string[]; onBack: () => void }) {
   const [req, setReq] = useState<MagicRequest>(b0.request);
+  const [tie, setTie] = useState(tie0);
   const model = modelOf(kinds, req);
   const block = { ...b0, request: req };
   const off = !onGenerate
@@ -141,6 +149,7 @@ function Step2({
         kinds={kinds}
         request={req}
         onChange={setReq}
+        tie={tie && { to: tie, onUnlink: () => setTie(undefined) }}
       />
       <div className="flex items-center gap-2">
         <EstimateLine model={model} block={block} doc={doc} />
@@ -158,7 +167,7 @@ function Step2({
           disabled={!!off}
           title={off || undefined}
           onClick={() => {
-            onGenerate!({ ...block, request: { ...req, model: model!.workflow_id } }, mode);
+            onGenerate!({ ...block, request: { ...req, model: model!.workflow_id } }, mode, tie);
             onClose();
           }}
         >
@@ -180,7 +189,7 @@ function Form({
 }: AddProps & {
   where: AddAt;
   mode0: Mode;
-  onNext: (block: Omit<Block, "id">, mode: Mode) => void;
+  onNext: (block: Omit<Block, "id">, mode: Mode, tie?: string[]) => void;
 }) {
   const fps = doc.target.fps;
   const lane = doc.lanes.find((l) => l.id === where.lane)!;
@@ -221,8 +230,12 @@ function Form({
         : "";
 
   const k: Kind = kind === "dialogue" ? "voice" : kind;
-  // image, video and voice go on to their standard request (step 2); a board frame or a dialogue is a draft
-  const staged = kind !== "dialogue" && FORM_KINDS.includes(k) && !kindOf(kinds, k)?.off;
+  // image, video, voice (a dialogue too), music and sound go on to their standard request (step 2); a board frame is a
+  // draft
+  const staged = FORM_KINDS.includes(k) && !kindOf(kinds, k)?.off;
+  // a dialogue starts with two lines, its speakers the board's first two voices
+  const voiced = doc.assets.filter((a) => a.voice_id);
+  const lines = [0, 1].map((i) => ({ speaker: voiced[i % Math.max(1, voiced.length)]?.id ?? "", text: "" }));
   const draft = (): Omit<Block, "id"> => ({
     lane: lane.id,
     at: where.at,
@@ -233,7 +246,7 @@ function Form({
       kind: k,
       refs: [],
       ...(shotKind && fromLast && prev ? { first: { block: prev.id, part: "last" as const } } : {}),
-      ...(kind === "dialogue" ? { turns: [] } : {}),
+      ...(kind === "dialogue" ? { turns: lines } : {}),
       ...(k === "frame" ? { style: "sketch" as const } : {}),
       // only when a model takes a video: Stable Audio alone would grey From with the shot stuck in it
       ...(k === "sound" &&
@@ -246,7 +259,9 @@ function Form({
     effects: [],
     ...(shotKind && fromFrame && frame ? { from_frame: frame.id } : {}),
   });
-  const add = () => (staged ? onNext(draft(), mode) : onAdd(draft(), mode));
+  // a line or a cue under a shot is tied to it
+  const tie = (k === "voice" || k === "music") && shotUnder && shotUnder.lane !== lane.id ? [shotUnder.id] : undefined;
+  const add = () => (staged ? onNext(draft(), mode, tie) : onAdd(draft(), mode));
 
   return (
     <div className="mg-add flex flex-col gap-3">

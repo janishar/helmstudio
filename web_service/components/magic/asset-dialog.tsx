@@ -189,7 +189,10 @@ function Body({
   const running = runs.filter((r) => (r.status === "queued" || r.status === "running") && !r.takes.length);
   const failed = runs.findLast((r) => r.status === "failed" && !r.takes.length);
   const want = missingViews(x, running.map((r) => r.view));
-  const image = kindOf(kinds, "image")?.models[0];
+  // Make views' model (API 1.89: a pick; the image kind's first by default)
+  const images = kindOf(kinds, "image")?.models ?? [];
+  const [pick, setPick] = useState("");
+  const image = images.find((m) => m.workflow_id === pick) ?? images[0];
   const side = Math.min(d.target.width, d.target.height, 1024);
   const est = packSeconds(
     image,
@@ -296,7 +299,7 @@ function Body({
                       label: v,
                       keys: est == null ? undefined : estText(est, true),
                       off: running.some((r) => r.view === v) ? "Being made" : undefined,
-                      onPick: () => a.views?.(x.id, [v]),
+                      onPick: () => a.views?.(x.id, [v], image?.workflow_id),
                     })),
                     {
                       label: "Another view…",
@@ -305,7 +308,7 @@ function Body({
                         const v = prompt("A view or an expression", x.kind === "character" ? "Smile" : "Top")
                           ?.trim()
                           .slice(0, 40);
-                        if (v) a.views?.(x.id, [v]);
+                        if (v) a.views?.(x.id, [v], image?.workflow_id);
                       },
                     },
                     "-",
@@ -313,7 +316,7 @@ function Body({
                       label: `Make ${want.length === VIEWS[x.kind].length ? "all" : "the missing"} ${want.length}`,
                       keys: est == null ? undefined : estText(est * want.length, true),
                       off: want.length ? undefined : "Being made",
-                      onPick: () => a.views?.(x.id, want),
+                      onPick: () => a.views?.(x.id, want, image?.workflow_id),
                     },
                   ],
                 })
@@ -322,6 +325,21 @@ function Body({
               <Images size={13} aria-hidden />
               Make views{est != null ? ` · ${estText(est * want.length)}` : ""}
             </button>
+            {images.length > 1 && (
+              <select
+                aria-label="Views model"
+                title="The model Make views runs"
+                className="in h-8 px-2 text-[12px]"
+                value={image?.workflow_id}
+                onChange={(e) => setPick(e.target.value)}
+              >
+                {images.map((m) => (
+                  <option key={m.workflow_id} value={m.workflow_id}>
+                    {m.name}
+                  </option>
+                ))}
+              </select>
+            )}
             <button
               type="button"
               className="chip bevel rounded-[10px] bg-s4"

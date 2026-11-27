@@ -5,6 +5,7 @@ import type { S } from "@/lib/api";
 import { coverFor } from "@/lib/takes";
 import {
   inputsOf,
+  turnBlock,
   type Block,
   type Doc,
   type Kind,
@@ -95,6 +96,7 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
         status: "done",
         inputs: r.current ? CURRENT : `old:${r.run_id}`,
         seed: r.seed ?? undefined,
+        turn: r.turn ?? undefined,
       };
     if (r.takes.length) continue;
     if (r.status === "queued" || r.status === "running")
@@ -104,6 +106,7 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
         status: "running",
         progress: r.progress ?? 0,
         inputs: "",
+        turn: r.turn ?? undefined,
       };
     else if (r.status === "failed")
       out[`run:${r.run_id}`] = {
@@ -112,6 +115,7 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
         status: "failed",
         error: r.error ?? "failed",
         inputs: "",
+        turn: r.turn ?? undefined,
       };
   }
   const owner = new Map<string, string>();
@@ -132,13 +136,16 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
       kind: t.kind,
       sound: t.sound,
       seed: t.seed ?? out[id]?.seed,
+      duration: t.duration_s ?? undefined,
+      sections: t.sections,
     };
   }
-  // made from the inputs studio has now: they are the block's inputs as studio's document has them
+  // made from the inputs studio has now: they are the block's inputs as studio's document has them (a dialogue
+  // turn's: its line block's, API 1.89)
   for (const t of Object.values(out))
     if (t.inputs === CURRENT) {
       const b = doc.blocks.find((x) => x.id === t.block);
-      t.inputs = b ? inputsOf(doc, b, out) : "";
+      t.inputs = !b ? "" : t.turn != null ? inputsOf(doc, turnBlock(b, t.turn), out) : inputsOf(doc, b, out);
     }
   return out;
 }
@@ -155,7 +162,9 @@ export function runLine(r: BlockRun, n: number): { title: string; sub: string } 
   const at = new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return {
     title: `Run ${n}`,
-    sub: [seed, r.by === "assistant" ? "by Assistant" : "", took, at].filter(Boolean).join(" · "),
+    sub: [r.turn != null ? `line ${r.turn + 1}` : "", seed, r.by === "assistant" ? "by Assistant" : "", took, at]
+      .filter(Boolean)
+      .join(" · "),
   };
 }
 

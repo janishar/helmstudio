@@ -11,7 +11,9 @@ import {
   joinMenu,
   laneMenu,
   multiMenu,
+  sectionMenu,
   tieMenu,
+  turnMenu,
   effectMenu,
   viewMenu,
   type Act,
@@ -429,5 +431,44 @@ describe("phase E: assets, views and the Gallery", () => {
     expect(item(emptyMenu(actOn(), l7, 0).items, "From Gallery").off).toBe(
       "The Gallery is in studio",
     );
+  });
+});
+
+// API 1.89 (plan 39 gaps): Compare takes, a sound's Loop, a dialogue that runs, its lines' and a song's sections' menus.
+describe("the gaps' menus", () => {
+  it("Compare takes opens the compare; off with fewer than two takes", () => {
+    const compare = vi.fn();
+    const a = actOn({ compare });
+    const s2 = block(a.doc, "s2");
+    s2.takes = s2.takes.filter((id) => a.takes[id]?.status === "done").slice(0, 1);
+    expect(item(blockMenu(a, s2).items, "Compare takes").off).toBe("Only one take yet");
+    s2.takes = [...s2.takes, s2.takes[0] + "b"];
+    a.takes[s2.takes[1]] = { ...a.takes[s2.takes[0]], id: s2.takes[1] };
+    item(blockMenu(a, s2).items, "Compare takes").onPick!();
+    expect(compare).toHaveBeenCalledWith("s2");
+  });
+  it("a sound's Loop toggles it; off for a sound from a shot's video", () => {
+    const a = actOn();
+    const x2 = block(a.doc, "x2");
+    x2.request = { kind: "sound", prompt: "rain" };
+    item(blockMenu(a, x2).items, "Loop").onPick!();
+    expect(a.edit.mock.calls[0][0].set.request.loop).toBe(true);
+    x2.request = { kind: "sound", from: "s2" };
+    expect(item(blockMenu(a, x2).items, "Loop").off).toBe("Not with a shot's video");
+  });
+  it("a dialogue runs; its lines move and go; a section puts the playhead there", () => {
+    const a = actOn();
+    const v = a.doc.blocks.find((b) => b.kind === "voice")!;
+    v.request = { kind: "voice", turns: [{ speaker: "mara", text: "Hi." }] };
+    expect(item(blockMenu(a, v).items, "Run").off).toBeUndefined();
+    expect(item(blockMenu(a, v).items, "Voice").off).toBe("Each line has its speaker: Open");
+    const on = { up: vi.fn(), down: vi.fn(), remove: vi.fn() };
+    const m = turnMenu(0, 2, on);
+    expect(labels(m.items)).toEqual(["Move up", "Move down", "-", "Remove line"]);
+    expect(item(m.items, "Move up").off).toBe("It's the first line");
+    item(m.items, "Remove line").onPick!();
+    expect(on.remove).toHaveBeenCalled();
+    item(sectionMenu(a, v, "chorus", 48).items, "Playhead here").onPick!();
+    expect(a.seek).toHaveBeenCalledWith(48);
   });
 });

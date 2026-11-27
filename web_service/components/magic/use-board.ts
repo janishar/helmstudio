@@ -22,6 +22,7 @@ import {
   history,
   inputsOf,
   redo,
+  turnBlock,
   undo,
   type Doc,
   type History,
@@ -57,8 +58,9 @@ export type Board = {
   runs: BlockRun[];
   /** the Make views runs, oldest first (phase E) */
   assetRuns: AssetRun[];
-  /** Make views: one image per view of an asset, onto its sheet; null while runs can't go */
-  makeViews: ((asset: string, views: string[]) => void) | null;
+  /** Make views: one image per view of an asset, onto its sheet, on an image model (absent: the first); null while
+   * runs can't go */
+  makeViews: ((asset: string, views: string[], model?: string) => void) | null;
   /** whether the Gallery and uploads are there (false in the fake mode) */
   gallery: boolean;
   /** a block's GPU-time estimate (studio's plan), undefined while unknown here */
@@ -377,14 +379,14 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     runs: wire.runs ?? [],
     assetRuns: wire.asset_runs ?? [],
     gallery: true,
-    makeViews: (asset, views) =>
+    makeViews: (asset, views, model) =>
       queue(async () => {
         const r = await fresh(() =>
           ok(
             api.POST("/v1/studio/magic/boards/{board_id}/assets/{asset_id}/views", {
               params: { path: { board_id: id, asset_id: asset } },
               headers: web,
-              body: { revision: rev.current, views },
+              body: { revision: rev.current, views, ...(model ? { model } : {}) },
             }),
           ),
         );
@@ -622,7 +624,23 @@ export function useLocalBoard(initial?: Store): Board {
       const fresh: Takes = {};
       for (const id of ids) {
         const b = h.now.blocks.find((x) => x.id === id);
-        if (!b || b.request.turns?.length) continue; // a dialogue can't run yet (music and sound can: phase H)
+        if (!b) continue;
+        // a dialogue: a take per line (API 1.89), made from that line's inputs
+        if (b.request.turns) {
+          b.request.turns.forEach((_, i) => {
+            const tid = `${b.id}-t${newId()}`;
+            fresh[tid] = {
+              id: tid,
+              block: b.id,
+              status: "running",
+              progress: 0,
+              turn: i,
+              duration: 1.5,
+              inputs: inputsOf(h.now, turnBlock(b, i), takes),
+            };
+          });
+          continue;
+        }
         const tid = `${b.id}-t${newId()}`;
         fresh[tid] = {
           id: tid,

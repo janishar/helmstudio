@@ -8,6 +8,18 @@ import { MagicBoard } from "@/components/magic/board";
 import { loadStore } from "@/components/magic/use-board";
 import { closeMenu } from "@/components/context-menu";
 
+/** The Model select (MagicBoard 2c: a select, the other models its hint): its picked name, and a pick by name. */
+const modelName = (dlg: HTMLElement) => {
+  const sel = within(dlg).getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+  return sel.selectedOptions[0]?.textContent;
+};
+const pickModel = (dlg: HTMLElement, name: string) => {
+  const sel = within(dlg).getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+  const o = [...sel.options].find((x) => x.textContent === name);
+  if (!o) throw new Error(`no model ${name}`);
+  fireEvent.change(sel, { target: { value: o.value } });
+};
+
 vi.mock("@/components/magic/magic.css", () => ({}));
 
 beforeAll(() => {
@@ -96,7 +108,7 @@ describe("the board", () => {
     // step 2 (frame 2h): the standard request for an image, then Generate adds it and runs it
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
     const two = screen.getByRole("dialog", { name: "Image · Still 1" });
-    expect(within(two).getByRole("button", { name: "Qwen Image 2.1" })).toBeTruthy();
+    expect(modelName(two)).toBe("Qwen Image 2.1");
     expect(within(two).getByRole("spinbutton", { name: "Width" })).toBeTruthy();
     fireEvent.change(within(two).getByRole("textbox", { name: "Prompt" }), {
       target: { value: "a title card" },
@@ -115,14 +127,13 @@ describe("the board", () => {
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
     dlg = screen.getByRole("dialog", { name: /^Music · Cue/ });
     // MiniMax Music 3 is the default: no key or BPM, with why
-    expect(
-      within(dlg).getByRole("button", { name: "MiniMax Music 3" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(modelName(dlg)).toBe("MiniMax Music 3");
+    expect(within(dlg).getByText("or ACE-Step 1.5")).toBeTruthy();
     expect(within(dlg).getByRole("textbox", { name: "Style" })).toBeTruthy();
     expect(within(dlg).getByRole("textbox", { name: "Lyrics" })).toBeTruthy();
     expect(within(dlg).getByText("MiniMax Music 3 can't take a key")).toBeTruthy();
     expect(within(dlg).getByRole("combobox", { name: "Key" }).matches(":disabled")).toBe(true);
-    fireEvent.click(within(dlg).getByRole("button", { name: "ACE-Step 1.5" }));
+    pickModel(dlg, "ACE-Step 1.5");
     expect(within(dlg).getByRole("combobox", { name: "Key" }).matches(":disabled")).toBe(false);
     fireEvent.change(within(dlg).getByRole("combobox", { name: "Key" }), {
       target: { value: "D minor" },
@@ -141,11 +152,9 @@ describe("the board", () => {
     expect((within(dlg).getByRole("combobox", { name: "From" }) as HTMLSelectElement).value).toBe(
       "s2",
     );
-    expect(within(dlg).getByRole("button", { name: "MMAudio" }).getAttribute("aria-pressed")).toBe(
-      "true",
-    );
+    expect(modelName(dlg)).toBe("MMAudio");
     // a model that takes no video drops the shot, so From is not stuck greyed on it
-    fireEvent.click(within(dlg).getByRole("button", { name: "Stable Audio 3 Small-SFX" }));
+    pickModel(dlg, "Stable Audio 3 Small-SFX");
     expect((within(dlg).getByRole("combobox", { name: "From" }) as HTMLSelectElement).value).toBe(
       "",
     );
@@ -157,7 +166,7 @@ describe("the board", () => {
     let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
     dlg = screen.getByRole("dialog", { name: /^Video · Shot/ });
-    fireEvent.click(within(dlg).getByRole("button", { name: "MiniMax H3" }));
+    pickModel(dlg, "MiniMax H3");
     expect(within(dlg).getByText("MiniMax H3 can't take a last frame")).toBeTruthy();
     expect(within(dlg).getByRole("combobox", { name: "Last frame" }).matches(":disabled")).toBe(
       true,
@@ -170,6 +179,50 @@ describe("the board", () => {
     fireEvent.click(within(dlg).getByRole("button", { name: /Board frame/ }));
     fireEvent.click(within(dlg).getByRole("button", { name: "Add" }));
     expect(within(blockEl(/Board block Frame 4/)).getByText("Draft")).toBeTruthy();
+  });
+
+  it("API 1.89: a dialogue's lines run one each, with their statuses; Compare takes side by side", () => {
+    vi.useFakeTimers();
+    try {
+      render(<MagicBoard local />);
+      fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
+      let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+      fireEvent.click(within(dlg).getByRole("button", { name: /Dialogue/ }));
+      fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
+      dlg = screen.getByRole("dialog", { name: /^Voice · Dialogue \d/ });
+      expect(within(dlg).getByText("Dialogue", { selector: ".kb" })).toBeTruthy();
+      const lines = within(dlg).getByRole("list", { name: "Lines" });
+      expect(within(lines).getAllByRole("listitem")).toHaveLength(2);
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 1" }), { target: { value: "Hi." } });
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), { target: { value: "Yo." } });
+      fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
+      expect(blockEl(/Voice block Dialogue \d/).textContent).toMatch(/\d+%/);
+      act(() => vi.advanceTimersByTime(6000));
+      expect(within(blockEl(/Voice block Dialogue \d/)).getByText("Done")).toBeTruthy();
+      fireEvent.doubleClick(blockEl(/Voice block Dialogue \d/));
+      dlg = screen.getByRole("dialog", { name: /^Voice · Dialogue \d/ });
+      const rows = within(within(dlg).getByRole("list", { name: "Lines" })).getAllByRole("listitem");
+      expect(rows.map((r) => within(r).getByText(/Done|Draft/).textContent)).toEqual(["Done", "Done"]);
+      // one line changed: only it is out of date
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), { target: { value: "Yo, later." } });
+      expect(within(rows[1]).getByText("Out of date")).toBeTruthy();
+      fireEvent.click(within(dlg).getByRole("button", { name: "Close" }));
+      fireEvent(dlg, new Event("close")); // jsdom's close() fires none
+      // Shot 2 again: two takes, compared side by side
+      fireEvent.doubleClick(blockEl(/Video block Shot 2/));
+      dlg = screen.getByRole("dialog", { name: /^Video · Shot 2/ });
+      fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
+      act(() => vi.advanceTimersByTime(6000));
+      fireEvent.click(within(dlg).getByRole("button", { name: "Compare" }));
+      const cmp = screen.getByRole("dialog", { name: /Compare takes · Shot 2/ });
+      const left = within(cmp).getByRole("combobox", { name: "Left take" }) as HTMLSelectElement;
+      const right = within(cmp).getByRole("combobox", { name: "Right take" }) as HTMLSelectElement;
+      expect(left.value).not.toBe(right.value);
+      fireEvent.click(within(within(cmp).getByRole("region", { name: "Right" })).getByRole("button", { name: /Pin take/ }));
+      expect(within(cmp).getByText(/is pinned/)).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("shortening a shot shows the warning; Trim fits the line (frame 5b)", () => {

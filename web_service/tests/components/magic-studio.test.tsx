@@ -10,6 +10,18 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { apply, type Doc } from "@/lib/magic";
 import { emptyDoc } from "@/lib/magic-fixture";
 
+/** The Model select (MagicBoard 2c: a select, the other models its hint): its picked name, and a pick by name. */
+const modelName = (dlg: HTMLElement) => {
+  const sel = within(dlg).getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+  return sel.selectedOptions[0]?.textContent;
+};
+const pickModel = (dlg: HTMLElement, name: string) => {
+  const sel = within(dlg).getByRole("combobox", { name: "Model" }) as HTMLSelectElement;
+  const o = [...sel.options].find((x) => x.textContent === name);
+  if (!o) throw new Error(`no model ${name}`);
+  fireEvent.change(sel, { target: { value: o.value } });
+};
+
 vi.mock("@/components/magic/magic.css", () => ({}));
 
 type Run = {
@@ -346,14 +358,11 @@ describe("runs in studio (plan 39 phase D)", () => {
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
     dlg = screen.getByRole("dialog", { name: "Video · Shot 1" });
     // the first model: every field but the seed
-    const model = within(dlg).getByRole("group", { name: "Model" });
-    expect(
-      within(model).getByRole("button", { name: "Echo keyframes" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    expect(modelName(dlg)).toBe("Echo keyframes");
     expect(within(dlg).getByText("Echo keyframes can't take a seed")).toBeTruthy();
     expect(within(dlg).getByRole("spinbutton", { name: "Seed" }).matches(":disabled")).toBe(true);
     // the other model greys the frames, each with why
-    fireEvent.click(within(model).getByRole("button", { name: "Echo video" }));
+    pickModel(dlg, "Echo video");
     expect(within(dlg).getByText("Echo video can't take a last frame")).toBeTruthy();
     expect(within(dlg).getByRole("combobox", { name: "First frame" }).matches(":disabled")).toBe(
       true,

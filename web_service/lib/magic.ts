@@ -42,6 +42,10 @@ export type MagicRequest = {
   /** a storyboard frame's shot size, angle and move (API 1.83), and the model of the shot made from it */
   framing?: Framing;
   shot_model?: string;
+  /** Run on: its runs go to this host only (absent: Auto), and a sound's Loop (its take repeats to fill the block);
+   * neither is one of its inputs (API 1.89) */
+  host?: string;
+  loop?: boolean;
   refs?: Ref[];
   advanced?: Record<string, unknown>;
 };
@@ -739,6 +743,7 @@ export const usedIn = (d: Doc, asset: string) => {
   return d.blocks.filter(
     (b) =>
       b.request.voice === asset ||
+      !!b.request.turns?.some((t) => t.speaker === asset) || // a dialogue's speaker (API 1.89)
       picks(b.request.first) ||
       picks(b.request.last) ||
       (b.request.refs ?? []).some(picks),
@@ -764,11 +769,16 @@ export type TakeInfo = {
   kind?: "image" | "video" | "audio";
   /** an audio take's class (API 1.85): music draws an album cover, sound and voice an orb */
   sound?: "music" | "sound" | "voice";
+  /** API 1.89: its seconds, a song's sections, and the dialogue turn its run made it for */
+  duration?: number;
+  sections?: { label: string; start_s: number; end_s: number }[];
+  turn?: number;
 };
 export type Takes = Record<string, TakeInfo>;
 
 /** The take a block shows: its pinned one, else its latest done one. */
 export function shown(b: Block, takes: Takes): TakeInfo | undefined {
+  if (b.request.turns) return turnTakes(b, takes).find(Boolean); // a dialogue shows its first line's
   if (b.pinned && takes[b.pinned]?.status === "done") return takes[b.pinned];
   return [...b.takes]
     .reverse()
@@ -778,6 +788,10 @@ export function shown(b: Block, takes: Takes): TakeInfo | undefined {
 
 /** What a block's take depends on: its request, the frame it was made from, the takes of blocks it @-picks. */
 export function inputsOf(d: Doc, b: Block, takes: Takes): string {
+  // Run on and Loop are not inputs (API 1.89)
+  const request = { ...b.request };
+  delete request.host;
+  delete request.loop;
   const byId = new Map(d.blocks.map((x) => [x.id, x]));
   const take = (id?: string) => {
     const x = id ? byId.get(id) : undefined;
@@ -792,7 +806,7 @@ export function inputsOf(d: Doc, b: Block, takes: Takes): string {
   // a shot made from a frame follows the frame's request too (its words make the shot's prompt)
   const frame = b.from_frame ? byId.get(b.from_frame) : undefined;
   return JSON.stringify([
-    b.request,
+    request,
     take(b.from_frame),
     picks,
     pick(b.request.first),
@@ -809,9 +823,86 @@ export type Status =
   | { s: "old" }
   | { s: "failed"; error: string };
 
+// ------------------------------------------------------------------------------------------------ dialogue (API 1.89)
+
+/** Turn i of a dialogue as the line block its run is made from: its text the line, its speaker the voice. */
+export function turnBlock(b: Block, i: number): Block {
+  const t = b.request.turns?.[i];
+  const request: MagicRequest = { ...b.request, line: t?.text, voice: t?.speaker };
+  delete request.turns;
+  delete request.count;
+  delete request.voice_id;
+  return { ...b, request };
+}
+
+/** Each turn's take: its newest run's done take still on the block (undefined: none yet). */
+export function turnTakes(b: Block, takes: Takes): (TakeInfo | undefined)[] {
+  return (b.request.turns ?? []).map((_, i) =>
+    [...b.takes]
+      .reverse()
+      .map((id) => takes[id])
+      .find((t) => t?.turn === i && t.status === "done"),
+  );
+}
+
+/** Each turn's status, as a line block's (its runs are the takes made for that turn). */
+export function turnStatuses(d: Doc, b: Block, takes: Takes): Status[] {
+  const shownOf = turnTakes(b, takes);
+  return (b.request.turns ?? []).map((_, i) => {
+    const mine = Object.values(takes).filter((t) => t.block === b.id && t.turn === i);
+    const run = mine.findLast((t) => t.status === "running");
+    if (run) return { s: "running", progress: run.progress ?? 0 };
+    const t = shownOf[i];
+    if (!t) {
+      const last = mine.at(-1);
+      return last?.status === "failed" ? { s: "failed", error: last.error ?? "failed" } : { s: "draft" };
+    }
+    return t.inputs === inputsOf(d, turnBlock(b, i), takes) ? { s: "done" } : { s: "old" };
+  });
+}
+
+/** A dialogue's status from its turns': running when one is, failed when one failed with no take, draft when none has
+ * a take, out of date when one is out of date or has no take yet, else done (studio's rule). */
+function dialogueStatus(turns: Status[]): Status {
+  const running = turns.find((t) => t.s === "running");
+  if (running) return running;
+  const failed = turns.findIndex((t) => t.s === "failed");
+  if (failed >= 0)
+    return { s: "failed", error: `Line ${failed + 1}: ${(turns[failed] as { error: string }).error}` };
+  if (turns.every((t) => t.s === "draft")) return { s: "draft" };
+  return turns.some((t) => t.s !== "done") ? { s: "old" } : { s: "done" };
+}
+
+/** A song's sections on its block, in seconds into it: its shown take's (API 1.89), else the lyrics' `[tags]` spread
+ * over the block by their lines (`guess`). */
+export function sectionsOf(
+  b: Block,
+  take: TakeInfo | undefined,
+  seconds: number,
+): { label: string; start_s: number; end_s: number; guess?: boolean }[] {
+  if (take?.sections?.length) return take.sections;
+  const parts: { label: string; lines: number }[] = [];
+  for (const raw of (b.request.lyrics ?? "").split("\n")) {
+    const line = raw.trim();
+    const tag = /^\[([^\]]{1,40})\]$/.exec(line);
+    if (tag) parts.push({ label: tag[1].trim(), lines: 0 });
+    else if (line && parts.length) parts.at(-1)!.lines++;
+  }
+  // ponytail: by lines, not by sung time; the take's own sections (ACE-Step) replace the guess
+  const total = parts.reduce((n, p) => n + Math.max(1, p.lines), 0);
+  let at = 0;
+  return parts.map((p) => {
+    const start = at;
+    at += (Math.max(1, p.lines) / total) * seconds;
+    return { label: p.label, start_s: start, end_s: at, guess: true };
+  });
+}
+
 /** Derived, never stored (§45.7): running when a run of it is going, failed when its last run failed and nothing is
- * done, draft with no take, out of date when its inputs changed after the take shown was made, else done. */
+ * done, draft with no take, out of date when its inputs changed after the take shown was made, else done; a
+ * dialogue's from its turns' (API 1.89). */
 export function statusOf(d: Doc, b: Block, takes: Takes): Status {
+  if (b.request.turns) return dialogueStatus(turnStatuses(d, b, takes));
   // a block's takes, then its runs that have none yet (in studio: running or failed, `run:<id>`)
   const ts = [
     ...b.takes.map((id) => takes[id]).filter(Boolean),

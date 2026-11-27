@@ -695,6 +695,23 @@ export function MorphDialog({
               {!models.length && <option value="">No model takes a first and a last frame</option>}
             </select>
           </label>
+          {/* API 1.89: the morph's own prompt (absent: the clip goes from one frame to the other with none) */}
+          <label className="flex flex-col gap-1 text-[12px] text-t2">
+            Prompt
+            <textarea
+              aria-label="Prompt"
+              className="in min-h-12 px-2.5 py-2 text-[13px] text-t1"
+              placeholder="How one becomes the other (optional)"
+              defaultValue={t.request?.prompt ?? ""}
+              onBlur={(e) => {
+                const prompt = e.target.value.trim();
+                if (prompt === (t.request?.prompt ?? "")) return;
+                const request: MagicRequest = { ...(t.request ?? { kind: "video" }), kind: "video", prompt };
+                if (!prompt) delete request.prompt;
+                set({ request });
+              }}
+            />
+          </label>
           <div className="flex flex-col gap-1 text-[12px] text-t2">
             Length
             <div className="flex gap-1.5" role="group" aria-label="Length">

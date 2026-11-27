@@ -140,6 +140,7 @@ export function Modal({
   width = "w-[min(92vw,380px)]",
   back,
   aside,
+  heading,
   children,
 }: {
   open: boolean;
@@ -151,6 +152,8 @@ export function Modal({
   back?: () => void;
   /** a small note on the title's line, after it ("2 of 2") */
   aside?: ReactNode;
+  /** what the title's line shows instead of `title` (a kind's badge and a name); `title` stays its name */
+  heading?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -203,7 +206,7 @@ export function Modal({
           </button>
         )}
         <div className="mr-auto flex items-baseline gap-2">
-          <h2 className="m-0 font-display text-base font-bold">{title}</h2>
+          <h2 className="m-0 font-display text-base font-bold">{heading ?? title}</h2>
           {aside && <span className="text-[11px] text-t2">{aside}</span>}
         </div>
         <button
