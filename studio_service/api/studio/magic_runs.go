@@ -1453,7 +1453,7 @@ func askAbove(ctx context.Context, tx pgx.Tx) (float64, error) {
 }
 
 var magicNoun = map[string][2]string{"video": {"shot", "shots"}, "image": {"still", "stills"}, "voice": {"line", "lines"},
-	"frame": {"frame", "frames"}, "music": {"cue", "cues"}, "sound": {"sound", "sounds"}}
+	"frame": {"frame", "frames"}, "music": {"cue", "cues"}, "sound": {"sound", "sounds"}, "view": {"view", "views"}}
 
 // askText is the ask card's line: "3 shots, about 6 min".
 func askText(kinds []string, seconds *float64) string {

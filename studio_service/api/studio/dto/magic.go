@@ -90,13 +90,8 @@ type MagicStatus struct {
 	Turns []MagicTurnStatus `json:"turns,omitempty"`
 }
 
-// MagicTurnStatus is one dialogue turn's status (API 1.89).
-type MagicTurnStatus struct {
-	Status   string  `json:"status"`
-	Progress *int    `json:"progress,omitempty"`
-	Error    string  `json:"error,omitempty"`
-	Take     *string `json:"take,omitempty"`
-}
+// MagicTurnStatus is one dialogue turn's status (API 1.89; the agent view's too, API 1.93).
+type MagicTurnStatus = magic.TurnStatus
 
 // MagicTake is a take the document names, as the board shows it.
 type MagicTake struct {

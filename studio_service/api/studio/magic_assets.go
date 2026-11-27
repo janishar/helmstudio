@@ -73,6 +73,47 @@ func assetRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]dto.MagicAsset
 	return out, err
 }
 
+// viewBlocks are Make views' runs of asset a as image blocks (one per view, model "" the kind's first), as they run
+// and as they are planned.
+func viewBlocks(d magic.Doc, a *magic.Asset, views []string, model string) []*magic.Block {
+	var out []*magic.Block
+	for _, view := range views {
+		b := &magic.Block{ID: a.ID, Kind: "image", Length: 1, Name: "@" + a.Handle,
+			Request: map[string]any{"kind": "image", "prompt": viewPrompt(a, view)}}
+		if model != "" {
+			b.Request["model"] = model
+		}
+		if a.Kind == "character" || a.Kind == "prop" { // a sheet view is square
+			side := float64(min(d.Target.Width, d.Target.Height, 1024))
+			b.Request["width"], b.Request["height"] = side, side
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// PlanMagicViews is the plan of Make views (API 1.93, the Assistant's make_views under the ask rule): each view an
+// image run of model on board id's asset, with the caller's rates. An unknown asset plans nothing (the route says why).
+func (s *Service) PlanMagicViews(ctx context.Context, caller common.Caller, id, assetID string, views []string, model string) (dto.MagicPlan, error) {
+	if !s.registry.Ready() {
+		return dto.MagicPlan{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.MagicPlan{Blocks: []dto.MagicPlanBlock{}, Lanes: []dto.MagicPlanLane{}, Order: []string{}}
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := readBoard(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		d := row.doc()
+		a := findAsset(d, assetID)
+		if a == nil {
+			return nil
+		}
+		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, viewBlocks(d, a, views, model), &out)
+	})
+	return out, err
+}
+
 // MakeMagicViews answers POST …/assets/{asset_id}/views: one run of the image model (the request's, else the kind's
 // first) per view, in the board's session.
 func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, assetID string, body *dto.MagicViewsCreate) (dto.MagicViewsStarted, error) {
@@ -120,13 +161,8 @@ func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, 
 			pics.Refs, pics.RefAssets = []string{a.Sheet[0]}, []string{""}
 		}
 		via := common.ViaOf(caller.Via)
-		for _, view := range body.Views {
-			b := &magic.Block{ID: a.ID, Kind: "image", Length: 1, Name: "@" + a.Handle,
-				Request: map[string]any{"kind": "image", "prompt": viewPrompt(a, view)}}
-			if a.Kind == "character" || a.Kind == "prop" { // a sheet view is square
-				side := float64(min(d.Target.Width, d.Target.Height, 1024))
-				b.Request["width"], b.Request["height"] = side, side
-			}
+		for i, b := range viewBlocks(d, a, body.Views, "") {
+			view := body.Views[i]
 			run, err := s.createRun(ctx, tx, caller, session, &dto.RunRequest{WorkflowID: w.ID,
 				Inputs: standardInputs(w, d, b, pics, "", -1)})
 			if err != nil {

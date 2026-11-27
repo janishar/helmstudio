@@ -528,6 +528,8 @@ type ToolsRequest struct {
 	Args     json.RawMessage `json:"args"`
 	// Confirmed (API 1.87) is the user's Yes on a Magic card tool's card: without it studio answers the preview
 	Confirmed bool `json:"confirmed,omitempty"`
+	// Ask (API 1.93) makes run_blocks and make_views answer the preview even within the limit (Auto past its caps)
+	Ask bool `json:"ask,omitempty"`
 }
 
 // ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.

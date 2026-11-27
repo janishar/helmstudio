@@ -365,26 +365,39 @@ func Warnings(d Doc) []string {
 
 // AgentBlock is MagicAgentBlock.
 type AgentBlock struct {
-	ID        string   `json:"id"`
-	Lane      string   `json:"lane"`
-	Kind      string   `json:"kind"`
-	Name      string   `json:"name"`
-	At        int      `json:"at"`
-	Length    int      `json:"length"`
-	AtS       float64  `json:"at_s"`
-	EndS      float64  `json:"end_s"`
-	Status    string   `json:"status"`
-	TakeID    *string  `json:"take_id"`
-	Takes     int      `json:"takes"`
-	Prompt    string   `json:"prompt,omitempty"`
-	Line      string   `json:"line,omitempty"`
-	Note      string   `json:"note,omitempty"`
-	TiedTo    []string `json:"tied_to"`
-	Effects   []string `json:"effects"`
-	FromFrame *string  `json:"from_frame,omitempty"`
+	ID     string  `json:"id"`
+	Lane   string  `json:"lane"`
+	Kind   string  `json:"kind"`
+	Name   string  `json:"name"`
+	At     int     `json:"at"`
+	Length int     `json:"length"`
+	AtS    float64 `json:"at_s"`
+	EndS   float64 `json:"end_s"`
+	Status string  `json:"status"`
+	TakeID *string `json:"take_id"`
+	Takes  int     `json:"takes"`
+	// API 1.93: every take, newest first; whether take_id is the pinned one; a failed block's why; a dialogue's turns
+	TakeIDs   []string     `json:"take_ids"`
+	Pinned    bool         `json:"pinned"`
+	Error     string       `json:"error,omitempty"`
+	Turns     []TurnStatus `json:"turns,omitempty"`
+	Prompt    string       `json:"prompt,omitempty"`
+	Line      string       `json:"line,omitempty"`
+	Note      string       `json:"note,omitempty"`
+	TiedTo    []string     `json:"tied_to"`
+	Effects   []string     `json:"effects"`
+	FromFrame *string      `json:"from_frame,omitempty"`
 	// Request is its standard request as stored (API 1.88): a block op's request replaces it whole, so an agent sends
 	// it back with its changes
 	Request map[string]any `json:"request"`
+}
+
+// TurnStatus is one dialogue turn's status (API 1.89, MagicStatus.turns).
+type TurnStatus struct {
+	Status   string  `json:"status"`
+	Progress *int    `json:"progress,omitempty"`
+	Error    string  `json:"error,omitempty"`
+	Take     *string `json:"take,omitempty"`
 }
 
 // AgentLane is one lane of the agent view.
@@ -404,11 +417,21 @@ type AgentTransition struct {
 
 // AgentAsset is an asset with the blocks it is used in.
 type AgentAsset struct {
-	ID     string   `json:"id"`
-	Kind   string   `json:"kind"`
-	Handle string   `json:"handle"`
-	Name   string   `json:"name"`
-	UsedIn []string `json:"used_in"`
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Handle string `json:"handle"`
+	Name   string `json:"name"`
+	// API 1.93: its sheet with the views' names, its voice and note
+	Sheet   []AgentSheet `json:"sheet"`
+	VoiceID string       `json:"voice_id,omitempty"`
+	Note    string       `json:"note,omitempty"`
+	UsedIn  []string     `json:"used_in"`
+}
+
+// AgentSheet is one take of an asset's sheet with its view's name.
+type AgentSheet struct {
+	TakeID string `json:"take_id"`
+	View   string `json:"view,omitempty"`
 }
 
 // Agent is MagicAgentView's board part.
@@ -442,7 +465,11 @@ func AgentView(d Doc) Agent {
 	for _, b := range d.Blocks {
 		ab := AgentBlock{ID: b.ID, Lane: b.Lane, Kind: b.Kind, Name: b.Name, At: b.At, Length: b.Length, AtS: s(b.At),
 			EndS: s(b.end()), Status: "draft", Takes: len(b.Takes), TiedTo: []string{}, Effects: []string{},
-			FromFrame: b.FromFrame, Request: b.Request}
+			FromFrame: b.FromFrame, Request: b.Request, TakeIDs: slices.Clone(b.Takes), Pinned: b.Pinned != nil}
+		slices.Reverse(ab.TakeIDs)
+		if ab.TakeIDs == nil {
+			ab.TakeIDs = []string{}
+		}
 		switch {
 		case b.Pinned != nil:
 			ab.TakeID = b.Pinned
@@ -493,17 +520,37 @@ func AgentView(d Doc) Agent {
 		out.Transitions = append(out.Transitions, AgentTransition{Transition: *t, AtS: s(at)})
 	}
 	for _, a := range d.Assets {
-		used := []string{}
-		for _, b := range d.Blocks {
-			refs, _ := b.Request["refs"].([]any)
-			picks := slices.ContainsFunc(refs, func(r any) bool { m, _ := r.(map[string]any); return m["asset"] == a.ID })
-			if b.Request["voice"] == a.ID || picks {
-				used = append(used, b.ID)
-			}
+		sheet := []AgentSheet{}
+		for _, t := range a.Sheet {
+			sheet = append(sheet, AgentSheet{TakeID: t, View: a.Views[t]})
 		}
-		out.Assets = append(out.Assets, AgentAsset{ID: a.ID, Kind: a.Kind, Handle: a.Handle, Name: a.Name, UsedIn: used})
+		aa := AgentAsset{ID: a.ID, Kind: a.Kind, Handle: a.Handle, Name: a.Name, Sheet: sheet, UsedIn: UsedIn(d, a.ID)}
+		if a.VoiceID != nil {
+			aa.VoiceID = *a.VoiceID
+		}
+		if a.Note != nil {
+			aa.Note = *a.Note
+		}
+		out.Assets = append(out.Assets, aa)
 	}
 	return out
+}
+
+// UsedIn are the blocks asset is used in, as lib/magic.ts usedIn counts them (API 1.93): its @ picks (refs, the first
+// and last frame), a voice that is it, a dialogue turn it speaks.
+func UsedIn(d Doc, asset string) []string {
+	picks := func(r any) bool { m, _ := r.(map[string]any); return m != nil && m["asset"] == asset }
+	used := []string{}
+	for _, b := range d.Blocks {
+		refs, _ := b.Request["refs"].([]any)
+		turns, _ := b.Request["turns"].([]any)
+		if b.Request["voice"] == asset || picks(b.Request["first"]) || picks(b.Request["last"]) ||
+			slices.ContainsFunc(refs, picks) ||
+			slices.ContainsFunc(turns, func(t any) bool { m, _ := t.(map[string]any); return m != nil && m["speaker"] == asset }) {
+			used = append(used, b.ID)
+		}
+	}
+	return used
 }
 
 // ------------------------------------------------------------------ an edit in words (API 1.87)

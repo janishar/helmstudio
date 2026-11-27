@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 
@@ -68,6 +69,34 @@ func TestAssistantMagic(t *testing.T) {
 	if shown["board"].(map[string]any)["revision"] != float64(1) || shown["plan"].(map[string]any)["order"] == nil {
 		t.Fatal(shown)
 	}
+	// API 1.93: every take id, newest first, and whether the shown one is pinned
+	for _, b := range shown["board"].(map[string]any)["blocks"].([]any) {
+		if b := b.(map[string]any); b["id"] == "s1" && (fmt.Sprint(b["take_ids"]) != "["+shot+"]" || b["pinned"] != false) {
+			t.Fatal(b)
+		}
+	}
+	if got := result(ask(userA, fresh(), "list_boards", false, map[string]any{"q": "nothing like it"})); len(got["boards"].([]any)) != 0 {
+		t.Fatal(got)
+	}
+	if got := result(ask(userA, fresh(), "list_boards", false, map[string]any{"q": "rain"})); len(got["boards"].([]any)) != 1 {
+		t.Fatal(got)
+	}
+	// magic_kinds: the models of one kind (workflow ids for a request's model)
+	kinds := result(ask(userA, fresh(), "magic_kinds", false, map[string]any{"kind": "video"}))["kinds"].([]any)
+	if len(kinds) != 1 || kinds[0].(map[string]any)["kind"] != "video" || len(kinds[0].(map[string]any)["models"].([]any)) == 0 {
+		t.Fatal(kinds)
+	}
+	// create_board: an empty board, no card; asked again under the same call: the same board, not a second one
+	call0 := fresh()
+	made := result(ask(userA, call0, "create_board", false, map[string]any{"name": "Brief"}))
+	if again := result(ask(userA, call0, "create_board", false, map[string]any{"name": "Brief"})); made["name"] != "Brief" ||
+		made["revision"] != float64(1) || again["board_id"] != made["board_id"] {
+		t.Fatal(made, again)
+	}
+	if n := len(e.call(userA, "GET", "/v1/studio/magic/boards", nil, 200)["boards"].([]any)); n != 2 {
+		t.Fatal(n)
+	}
+	e.call(userA, "DELETE", "/v1/studio/magic/boards/"+made["board_id"].(string), nil, 204)
 	add := []any{map[string]any{"op": "add", "mode": "insert", "block": map[string]any{"id": "s3", "lane": "shots", "at": 96,
 		"length": 48, "kind": "video", "name": "Shot 3", "request": map[string]any{"kind": "video", "prompt": "a bus",
 			"model": "echo-video"}, "takes": []any{}, "effects": []any{}}}}
@@ -145,7 +174,7 @@ func TestAssistantMagic(t *testing.T) {
 	}
 	// within the limit: it runs at once, no preview
 	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 5}, 200)
-	if r := result(ask(userA, fresh(), "run_blocks", false, map[string]any{"board_id": id, "revision": 3, "blocks": []string{"v1"}})); len(r["started"].([]any)) != 2 {
+	if r := result(ask(userA, fresh(), "run_blocks", false, map[string]any{"board_id": id, "revision": 3, "blocks": []string{"v1"}})); len(r["started"].([]any)) != 2 || r["seconds"] == nil {
 		t.Fatal(r)
 	}
 	if r := ask(userA, fresh(), "run_blocks", false, map[string]any{"board_id": id, "revision": 1, "blocks": []string{"v1"}}); r.Code != "conflict" {
@@ -186,6 +215,69 @@ func TestAssistantMagic(t *testing.T) {
 	}
 	if l := e.call(userA, "GET", base+"/sends", nil, 200)["sends"].([]any); len(l) != 1 {
 		t.Fatal(l)
+	}
+
+	// API 1.93: a failed block says why; a dialogue's turns; an asset's sheet, voice and where it is used
+	s2run := r["started"].([]any)[0].(map[string]any)["run_id"].(string)
+	e.exec(`UPDATE runs SET status = 'failed', error = 'out of memory' WHERE id = $1`, s2run) // as the projector ends it
+	ed := e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": revision(), "ops": []any{
+		map[string]any{"op": "asset_add", "asset": map[string]any{"id": "mara", "kind": "character", "handle": "mara",
+			"name": "Mara", "voice_id": "echo/ada", "note": "a fisher"}},
+		map[string]any{"op": "add", "mode": "insert", "block": map[string]any{"id": "d1", "lane": "lines", "at": 96, "length": 48,
+			"kind": "voice", "name": "Talk", "request": map[string]any{"kind": "voice", "turns": []any{
+				map[string]any{"speaker": "mara", "text": "Hi."}, map[string]any{"speaker": "mara", "text": "Bye."}}},
+			"takes": []any{}, "effects": []any{}}}}}, 200)
+	rev := int(ed["board"].(map[string]any)["revision"].(float64))
+	view := result(ask(userA, fresh(), "show_board", false, map[string]any{"board_id": id}))["board"].(map[string]any)
+	byID := map[string]map[string]any{}
+	for _, b := range view["blocks"].([]any) {
+		byID[b.(map[string]any)["id"].(string)] = b.(map[string]any)
+	}
+	if s2 := byID["s2"]; s2["status"] != "failed" || s2["error"] != "out of memory" {
+		t.Fatal(s2)
+	}
+	if d1 := byID["d1"]; len(d1["turns"].([]any)) != 2 || d1["turns"].([]any)[0].(map[string]any)["status"] != "draft" {
+		t.Fatal(d1)
+	}
+	if m := view["assets"].([]any)[0].(map[string]any); m["voice_id"] != "echo/ada" || m["note"] != "a fisher" ||
+		fmt.Sprint(m["sheet"]) != "[]" || fmt.Sprint(m["used_in"]) != "[d1]" {
+		t.Fatal(m)
+	}
+
+	// make_views: within the limit the views start at once (no card) with their estimate
+	views := map[string]any{"board_id": id, "revision": rev, "asset": "mara", "views": []string{"Front"}}
+	made = result(ask(userA, fresh(), "make_views", false, views))
+	if len(made["started"].([]any)) != 1 || made["seconds"] == nil || made["revision"] == nil {
+		t.Fatal(made)
+	}
+	// above the limit: the card first (run_blocks' preview shape), the Yes starts them
+	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 0}, 200)
+	call = fresh()
+	views["views"], views["revision"] = []string{"Side", "Back"}, revision()
+	p = preview(ask(userA, call, "make_views", false, views))
+	if rest := p["rest"].(map[string]any); fmt.Sprint(rest["names"]) != "[Side Back]" || rest["host"] != "fake" ||
+		!strings.HasPrefix(rest["ask_text"].(string), "2 views, about ") || len(p["frames"].([]any)) != 0 {
+		t.Fatal(p)
+	}
+	if got := result(ask(userA, call, "make_views", true, views)); len(got["started"].([]any)) != 2 {
+		t.Fatal(got)
+	}
+	if bad := ask(userA, fresh(), "make_views", false, map[string]any{"board_id": id, "revision": revision(), "asset": "nobody",
+		"views": []string{"Front"}}); bad.Code != "invalid" || bad.Error != "unknown asset nobody" {
+		t.Fatal(bad)
+	}
+	// ask (Auto past its hour's caps): the preview even within the limit, for run_blocks and make_views
+	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 5}, 200)
+	asks := func(tool string, args map[string]any) message.ToolsReply {
+		raw, _ := json.Marshal(args)
+		return e.service.Tool(context.Background(), &message.ToolsRequest{OwnerID: userA, ThreadID: thread,
+			CallID: thread + ":1:" + fresh(), Tool: tool, Args: raw, Ask: true})
+	}
+	if p := preview(asks("run_blocks", map[string]any{"board_id": id, "revision": revision(), "blocks": []string{"v1"}})); fmt.Sprint(p["rest"].(map[string]any)["names"]) != "[Line 1]" {
+		t.Fatal(p)
+	}
+	if p := preview(asks("make_views", map[string]any{"board_id": id, "revision": revision(), "asset": "mara", "views": []string{"Top"}})); fmt.Sprint(p["rest"].(map[string]any)["names"]) != "[Top]" {
+		t.Fatal(p)
 	}
 
 	// another user's board, bad args

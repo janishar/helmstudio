@@ -261,7 +261,8 @@ func (s *Service) GetMagicAgent(ctx context.Context, caller common.Caller, id st
 		runs, err := boardRuns(ctx, tx, row.ID) // API 1.81: the derived status
 		status := blockStatuses(d, runs)
 		for i := range out.Blocks {
-			out.Blocks[i].Status = status[out.Blocks[i].ID].Status
+			st := status[out.Blocks[i].ID]
+			out.Blocks[i].Status, out.Blocks[i].Error, out.Blocks[i].Turns = st.Status, st.Error, st.Turns // API 1.93
 		}
 		return err
 	})

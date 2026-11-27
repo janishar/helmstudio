@@ -3,6 +3,7 @@ package studio
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -11,6 +12,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/helmstudio/helmgo/network"
 	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 
@@ -28,13 +30,16 @@ import (
 
 // magicTools are each tool's args and which it needs.
 var magicTools = map[string][2][]string{
-	"list_boards":      {},
+	"list_boards":      {{"q"}, {}},
+	"create_board":     {{"name", "target"}, {}},
 	"show_board":       {{"board_id"}, {"board_id"}},
+	"magic_kinds":      {{"kind"}, {}},
 	"try_board_edit":   {{"board_id", "base_revision", "ops"}, {"board_id", "base_revision", "ops"}},
 	"edit_board":       {{"board_id", "base_revision", "ops"}, {"board_id", "base_revision", "ops"}},
 	"restore_board":    {{"board_id", "revision", "to"}, {"board_id", "revision", "to"}},
 	"plan_board":       {{"board_id", "blocks", "lane", "stale"}, {"board_id"}},
 	"run_blocks":       {{"board_id", "revision", "blocks", "lane", "stale"}, {"board_id", "revision"}},
+	"make_views":       {{"board_id", "revision", "asset", "views", "model"}, {"board_id", "revision", "asset", "views"}},
 	"board_frame":      {{"board_id", "at"}, {"board_id", "at"}},
 	"send_to_timeline": {{"board_id", "revision", "name"}, {"board_id", "revision"}},
 }
@@ -53,6 +58,13 @@ type magicArgs struct {
 	Stale        *bool           `json:"stale"`
 	At           *float64        `json:"at"`
 	Name         *string         `json:"name"`
+	// API 1.93
+	Q      *string         `json:"q"`
+	Target json.RawMessage `json:"target"`
+	Kind   *string         `json:"kind"`
+	Asset  string          `json:"asset"`
+	Views  []string        `json:"views"`
+	Model  *string         `json:"model"`
 }
 
 // magicFramePreview is a board frame run_blocks started before asking.
@@ -107,8 +119,36 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 	}
 	switch req.Tool {
 	case "list_boards":
+		path := "/v1/studio/magic/boards"
+		if a.Q != nil {
+			path += "?q=" + url.QueryEscape(*a.Q)
+		}
 		var out json.RawMessage
-		return orRefused(call(http.MethodGet, "/v1/studio/magic/boards", nil, &out), out)
+		return orRefused(call(http.MethodGet, path, nil, &out), out)
+	case "create_board": // API 1.93: an empty board, no card (nothing is lost or run)
+		body := map[string]any{}
+		if a.Name != nil {
+			body["name"] = *a.Name
+		}
+		if a.Target != nil {
+			body["target"] = a.Target
+		}
+		var board struct {
+			ID       string `json:"id"`
+			Name     string `json:"name"`
+			Revision int    `json:"revision"`
+		}
+		return orRefused(call(http.MethodPost, "/v1/studio/magic/boards", body, &board),
+			map[string]any{"board_id": board.ID, "name": board.Name, "revision": board.Revision})
+	case "magic_kinds": // API 1.93: the models, their fields, greyed ones, env and Advanced
+		var out dto.MagicKinds
+		if refused := call(http.MethodGet, "/v1/studio/magic/kinds", nil, &out); refused != nil {
+			return *refused
+		}
+		if a.Kind != nil {
+			out.Kinds = slices.DeleteFunc(out.Kinds, func(k dto.MagicKindInfo) bool { return k.Kind != *a.Kind })
+		}
+		return message.ToolsReply{Result: out}
 	case "show_board":
 		var board, plan json.RawMessage
 		if refused := call(http.MethodGet, base+"?view=agent", nil, &board); refused != nil {
@@ -175,7 +215,9 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 		return orRefused(call(http.MethodPost, base+"/restore", map[string]any{"revision": a.Revision, "to": a.To}, &board),
 			map[string]any{"revision": board.Revision})
 	case "run_blocks":
-		return s.magicRun(call, base, a, pick, req.Confirmed, asked)
+		return s.magicRun(call, base, a, pick, req.Confirmed, req.Ask, asked)
+	case "make_views":
+		return s.magicViews(ctx, caller, call, base, a, req.Confirmed, req.Ask)
 	case "send_to_timeline":
 		body := map[string]any{"revision": a.Revision, "dry_run": !req.Confirmed}
 		if a.Name != nil {
@@ -302,7 +344,7 @@ func (s *Service) magicEditPreview(ctx context.Context, caller common.Caller, ca
 
 // magicRun is run_blocks: the plan first; within the limit everything runs at once (the final reply); above it, the
 // board frames start and the preview is the plan with them; after the Yes the rest runs.
-func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[string]any, confirmed bool, asked *message.ToolsReply) message.ToolsReply {
+func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[string]any, confirmed, ask bool, asked *message.ToolsReply) message.ToolsReply {
 	run := func(p map[string]any) (dto.MagicRunStarted, *message.ToolsReply) {
 		body := map[string]any{"revision": a.Revision}
 		for k, v := range p {
@@ -318,16 +360,20 @@ func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[st
 		out.MagicRunStarted.Board.Revision = out.Board.Revision
 		return out.MagicRunStarted, refused
 	}
-	final := func(p map[string]any) message.ToolsReply {
+	final := func(p map[string]any, seconds *float64) message.ToolsReply {
 		got, refused := run(p)
 		if refused != nil {
 			return *refused
 		}
-		return message.ToolsReply{Result: map[string]any{"revision": got.Board.Revision, "started": got.Started, "skipped": got.Skipped}}
+		return message.ToolsReply{Result: map[string]any{"revision": got.Board.Revision, "started": got.Started, "skipped": got.Skipped,
+			"seconds": seconds}}
 	}
 	if confirmed {
 		var before struct {
 			Frames []magicFramePreview `json:"frames"`
+			Rest   struct {
+				Seconds *float64 `json:"seconds"`
+			} `json:"rest"`
 		}
 		if asked != nil {
 			raw, _ := json.Marshal(asked.Preview)
@@ -341,18 +387,19 @@ func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[st
 				}
 			}
 			if len(rest) == 0 {
-				return message.ToolsReply{Result: map[string]any{"revision": a.Revision, "started": []any{}, "skipped": []any{}}}
+				return message.ToolsReply{Result: map[string]any{"revision": a.Revision, "started": []any{}, "skipped": []any{},
+					"seconds": 0.0}}
 			}
-			return final(map[string]any{"blocks": rest})
+			return final(map[string]any{"blocks": rest}, before.Rest.Seconds)
 		}
-		return final(pick) // a lane's or the stale pick: what runs already is left out
+		return final(pick, before.Rest.Seconds) // a lane's or the stale pick: what runs already is left out
 	}
 	var plan dto.MagicPlan
 	if refused := call(http.MethodPost, base+"/plan", pick, &plan); refused != nil {
 		return *refused
 	}
-	if !plan.Ask {
-		return final(pick)
+	if !plan.Ask && !ask { // API 1.93: ask, Auto past its hour's caps: the preview even within the limit
+		return final(pick, plan.Seconds)
 	}
 	var view dto.MagicAgentView
 	if refused := call(http.MethodGet, base+"?view=agent", nil, &view); refused != nil {
@@ -405,12 +452,67 @@ func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[st
 		}
 	}
 	if len(rest) == 0 { // only frames (or nothing that can run): nothing is left to ask
+		frameSeconds := 0.0
+		for _, f := range frames {
+			if f.Seconds != nil {
+				frameSeconds += *f.Seconds
+			}
+		}
 		return message.ToolsReply{Result: map[string]any{"revision": a.Revision, "started": append([]dto.MagicStarted{}, started...),
-			"skipped": []any{}}}
+			"skipped": []any{}, "seconds": frameSeconds}}
 	}
 	return message.ToolsReply{Preview: map[string]any{"revision": a.Revision, "plan": plan, "frames": frames,
 		"rest": map[string]any{"blocks": rest, "names": names, "seconds": restSeconds, "host": host,
 			"ask_text": askText(kinds, restSeconds)}}}
+}
+
+// magicViews is make_views (API 1.93): Make views planned as image runs; within the limit (and not ask) they start at
+// once, else the preview is run_blocks' {revision, plan, frames: [], rest} and the Yes starts them.
+func (s *Service) magicViews(ctx context.Context, caller common.Caller, call magicCall, base string, a magicArgs, confirmed, ask bool) message.ToolsReply {
+	start := func(seconds *float64) message.ToolsReply {
+		body := map[string]any{"revision": a.Revision, "views": a.Views}
+		if a.Model != nil {
+			body["model"] = *a.Model
+		}
+		var out struct {
+			dto.MagicViewsStarted
+			Board struct {
+				Revision int `json:"revision"`
+			} `json:"board"`
+		}
+		if refused := call(http.MethodPost, base+"/assets/"+url.PathEscape(a.Asset)+"/views", body, &out); refused != nil {
+			return *refused
+		}
+		return message.ToolsReply{Result: map[string]any{"revision": out.Board.Revision, "started": out.Started, "seconds": seconds}}
+	}
+	plan, err := s.PlanMagicViews(ctx, caller, a.BoardID, a.Asset, a.Views, deref(a.Model))
+	if err != nil {
+		var refused *network.APIError
+		if errors.As(err, &refused) && refused.Code == http.StatusNotFound {
+			return toolErr("not_found", "%s", refused.Message)
+		}
+		return toolErr("internal", "internal error")
+	}
+	if confirmed || (!plan.Ask && !ask) || len(plan.Blocks) == 0 { // no asset: the route says why
+		return start(plan.Seconds)
+	}
+	for _, b := range plan.Blocks {
+		if b.Reason != nil { // a view that cannot run: the route refuses it (no card for nothing)
+			return start(plan.Seconds)
+		}
+	}
+	var host *string
+	if len(plan.Blocks) > 0 {
+		host = plan.Blocks[0].Host
+	}
+	kinds := make([]string, len(a.Views))
+	for i := range kinds {
+		kinds[i] = "view"
+	}
+	plan.AskText = askText(kinds, plan.Seconds)
+	return message.ToolsReply{Preview: map[string]any{"revision": a.Revision, "plan": plan, "frames": []any{},
+		"rest": map[string]any{"blocks": []string{}, "names": a.Views, "seconds": plan.Seconds, "host": host,
+			"ask_text": plan.AskText}}}
 }
 
 // shortName is a block's name before its " · " words ("Shot 2 · rain": "Shot 2").
