@@ -57,6 +57,7 @@ import {
   end,
   freshId,
   inLane,
+  inputsOf,
   overruns,
   secs,
   shown,
@@ -1305,9 +1306,35 @@ function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
           <button type="button" className="chip" onClick={() => act.open(b.id)}>
             Open
           </button>
+        ) : b.pinned ? (
+          // a pin keeps an old take showing: pin the newest take made from the block's current inputs, else unpin
+          (() => {
+            const fresh = [...b.takes]
+              .reverse()
+              .map((id) => takes[id])
+              .find((t) => t?.status === "done" && t.inputs === inputsOf(doc, b, takes));
+            return fresh && fresh.id !== b.pinned ? (
+              <button
+                type="button"
+                className="chip"
+                title="Show the newest take, made from the current words"
+                onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: fresh.id } })}
+              >
+                Pin newest
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="chip"
+                title="Take the pin off: the newest take shows"
+                onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: null } })}
+              >
+                Unpin
+              </button>
+            );
+          })()
         ) : (
-          take &&
-          b.pinned !== take.id && (
+          take && (
             <button
               type="button"
               className="chip"
