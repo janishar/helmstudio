@@ -4668,6 +4668,11 @@ showing a setup message instead of a chat while it is not set up or off.
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`, from 1.69 `save_shots`) go without one.
+  (plan 16 §20.8, owner 2026-11-27: "yes add them to mcp") A write on both surfaces (the Magic tools) keeps its card
+  in the app and carries `mcp_description`, the text helm mcp offers in place of `description`: over MCP there is no
+  card, the call does what it says at once (the client's own ask is the Yes), and a costly one answers the plan it
+  ran with (run_blocks: MagicPlan next to the runs; send_to_timeline: its own plan). `mcp_description` is only for a
+  tool on both surfaces.
 - (1.62) Checks past the input schema, each an invalid answer (asked once more, then the turn ends `answer`):
   `remember`'s text is plain words: no JSON, no UUID, no field name (a word with `_`, or a dotted path of three or
   more parts; an `@handle` is fine). A `generate` after a `switchTo` (this message) to a workflow whose `media` is
@@ -4675,7 +4680,7 @@ showing a setup message instead of a chat while it is not set up or off.
   so the model must write the spoken line (or a Dialogue script, one `@name: text` line each) first.
 - (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
   it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes; from 1.49
-  `edit_timeline` and `restore_timeline`) is an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
+  `edit_timeline` and `restore_timeline`; from plan 16 §20.8 `edit_board` and `restore_board`) is a write helm mcp serves; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
   the client asks before each call.
 - `offered_tools(roles, web_search, look_at)`: surface assistant, every role held, `web_search` only when on,
   `look_at` only when an ask workflow can run now.

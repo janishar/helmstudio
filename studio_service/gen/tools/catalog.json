@@ -3467,7 +3467,8 @@
     "list_boards": {
       "description": "Your Magic boards, newest first: name, revision, lanes, blocks, length; q finds them by name.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3492,8 +3493,10 @@
     },
     "create_board": {
       "description": "Make a new empty Magic board (no lanes yet), for building from a brief when no board fits; then open it with navigate /magic, query b, and fill it with edit_board.",
+      "mcp_description": "Make a new empty Magic board (no lanes yet), for building from a brief when no board fits; then fill it with edit_board (lane_add, then add).",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -3572,7 +3575,8 @@
     "show_board": {
       "description": "One Magic board for an agent: revision, lanes, every block (times, status, error, the take shown, all take ids, pinned, request, dialogue turns, ties, badges), transitions, assets (sheet views, voice, note, used in), notes, and the estimate for what is not done.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3616,7 +3620,8 @@
     "magic_kinds": {
       "description": "Magic's kinds and their models: per kind its fields, per model its workflow id (a request's model), the fields it fills, the ones greyed with why, its env (Run on needs a host with it) and its Advanced params (<node>.<param>). Read it before choosing a model or an Advanced value.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3648,7 +3653,8 @@
     "try_board_edit": {
       "description": "Try edits on a board without saving: the diff, the warnings and a summary, or the op that fails and why. Then propose the same ops with edit_board.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -4620,11 +4626,14 @@
     },
     "edit_board": {
       "description": "Propose edits on a board: drawn on it with Apply and Discard; the user's Apply saves them as one revision (one undo step, by Assistant in History). Try them first with try_board_edit.",
+      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. Try them first with try_board_edit.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
+      "destructive": true,
       "roles": [],
       "routes": [
         "POST /v1/studio/magic/boards/{board_id}/edits",
@@ -5595,11 +5604,14 @@
     },
     "restore_board": {
       "description": "Bring back a kept revision of a board as a new revision (the History list; nothing is lost), after the user's Apply.",
+      "mcp_description": "Bring back a kept revision of a board as a new revision (the History list; nothing is lost); revision is the current one.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
+      "destructive": true,
       "roles": [],
       "routes": [
         "POST /v1/studio/magic/boards/{board_id}/restore",
@@ -5650,7 +5662,8 @@
     "plan_board": {
       "description": "What running blocks would cost: per block its GPU seconds (yours, the pack's or unknown), machine and peak memory or why it can't run; per lane and in all; the run order; whether it asks you first.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -5699,8 +5712,10 @@
     },
     "run_blocks": {
       "description": "Run blocks: named ones, a lane's, or every block not done (exactly one of blocks, lane, stale). Storyboard frames and runs within the user's limit start at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs.",
+      "mcp_description": "Run blocks: named ones, a lane's, or every block not done (exactly one of blocks, lane, stale). No card over MCP: they start at once, and the answer has the plan (GPU seconds, machine) with the runs; read plan_board first. Then show_board shows their status.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -5782,8 +5797,10 @@
     },
     "make_views": {
       "description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. Within the user's limit it starts at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs and read the sheet in show_board.",
+      "mcp_description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. No card over MCP: they start at once. Then read the sheet in show_board.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -5864,8 +5881,10 @@
     },
     "board_frame": {
       "description": "Look at a board at a time: what each picture lane shows there (the block, the take it shows and the second into it, its status), and the sound under it. Look at a take with look_at.",
+      "mcp_description": "Look at a board at a time: what each visible lane shows there (the block, the take it shows and the second into it, its status), the sound under it too. See a take with get_take.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -5963,8 +5982,10 @@
     },
     "send_to_timeline": {
       "description": "Send the board as it is to the Timeline as a new sequence (shots on V1, lines and music on audio tracks, fades and wipes baked), after the user's Yes on the card. Baking ones answer 202: await nothing, the sends list shows it.",
+      "mcp_description": "Send the board as it is to the Timeline as a new sequence (shots on V1, lines and music on audio tracks, fades and wipes baked). No card over MCP: it sends at once; the answer has the plan (what went, the bakes). With bakes the sequence comes when they finish.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,

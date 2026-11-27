@@ -4658,10 +4658,13 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
             fail(f"{w}: a studio tool names its routes, a pipelines tool none")
         if any(r.split(" ")[1].startswith("/v1/studio/admin/") for r in t["routes"]) != ("admin" in t["roles"]):
             fail(f"{w}: an admin route needs roles [admin], and roles [admin] an admin route")
-        if not t["read_only"] and "mcp" in t["surfaces"] and "assistant" in t["surfaces"]:
-            fail(f"{w}: a write tool is mcp only, or the assistant's behind a card")
-        if t.get("destructive") and (t["read_only"] or t["surfaces"] != ["mcp"]):
-            fail(f"{w}: destructive is an mcp-only write (plan 16)")
+        both = "mcp" in t["surfaces"] and "assistant" in t["surfaces"]
+        if not t["read_only"] and both and "mcp_description" not in t:  # plan 16 §20.8: Magic over MCP
+            fail(f"{w}: a write on both surfaces says what it does over MCP, with no card: mcp_description")
+        if "mcp_description" in t and not both:
+            fail(f"{w}: mcp_description is for a tool on both surfaces")
+        if t.get("destructive") and (t["read_only"] or "mcp" not in t["surfaces"]):
+            fail(f"{w}: destructive is a write helm mcp serves (plan 16)")
         if (not t["read_only"] and "assistant" in t["surfaces"] and "card" not in t and t["served_by"] != "pipelines"
                 and n not in CARDLESS_WRITES):
             fail(f"{w}: an assistant write needs a card (only memory writes and {sorted(CARDLESS_WRITES)} go without)")
