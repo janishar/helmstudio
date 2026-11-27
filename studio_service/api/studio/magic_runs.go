@@ -453,6 +453,7 @@ type magicPics struct {
 
 // magicStyle and magicFraming are the words a frame's style and framing add to its prompt (and a shot made from it).
 var magicStyle = map[string]string{
+	"film":   "", // the film's own style (the default): no style sentence, the frame's words carry the board's look
 	"sketch": "A storyboard sketch: loose pencil lines, black and white",
 	"rough":  "A rough storyboard drawing: simple shapes, grey shading",
 	"full":   "A finished storyboard frame: full colour, cinematic light",
@@ -514,7 +515,7 @@ func magicPrompt(d magic.Doc, b *magic.Block, mention string, refAssets []string
 		if len(with) > 0 {
 			feat = "With " + strings.Join(with, ", ")
 		}
-		text = sentences(magicStyle[cmp.Or(reqString(b.Request, "style"), "sketch")], shot, text, feat)
+		text = sentences(magicStyle[cmp.Or(reqString(b.Request, "style"), "film")], shot, text, feat)
 	case strings.TrimSpace(text) == "" && b.FromFrame != nil:
 		if f := findBlock(d, *b.FromFrame); f != nil {
 			shot, move := framingWords(f.Request)
@@ -1303,7 +1304,7 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 	hash, via := inputsHash(d, b), common.ViaOf(caller.Via)
 	var label *string // a frame keeps the style it is drawn in
 	if b.Kind == "frame" {
-		style := cmp.Or(reqString(b.Request, "style"), "sketch")
+		style := cmp.Or(reqString(b.Request, "style"), "film")
 		label = &style
 	}
 	var out []dto.Run

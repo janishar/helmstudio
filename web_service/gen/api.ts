@@ -9155,10 +9155,10 @@ export interface components {
             /** @description a voice block's voice: an asset id */
             voice?: components["schemas"]["MagicId"];
             /**
-             * @description a storyboard frame's style
+             * @description a storyboard frame's style; from 1.99 `film` (the film's own style: no style sentence), absent: film
              * @enum {string}
              */
-            style?: "sketch" | "rough" | "full";
+            style?: "film" | "sketch" | "rough" | "full";
             /** @description a sound made from this shot's video (from 1.85: its shown take runs the model's `video` workflow, MMAudio's video to sound) */
             from?: components["schemas"]["MagicId"];
             refs?: components["schemas"]["MagicRef"][];
@@ -9753,10 +9753,10 @@ export interface components {
             /** @description its first take's render time */
             render_s?: number | null;
             /**
-             * @description from 1.83: a board frame's style when it ran
+             * @description from 1.83: a board frame's style when it ran (from 1.99 `film`)
              * @enum {string}
              */
-            style?: "sketch" | "rough" | "full";
+            style?: "film" | "sketch" | "rough" | "full";
             /** @description from 1.94: the model variant it ran on, its title as the registry names it (`Turbo`; the id when no runner publishes the model); absent: its workflow has no model node (contracts/README.md, Magic: variants) */
             variant?: string;
             /** @description from 1.89: a dialogue's run of this turn (its index in `turns`); from 1.90 the turn it ran for while its inputs match that turn's, else the turn whose inputs it matches now (a line moved, or one before it removed), else the turn it ran for; `current` is against that turn */

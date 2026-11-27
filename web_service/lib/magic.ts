@@ -32,7 +32,7 @@ export type MagicRequest = {
   turns?: { speaker: string; text: string }[];
   /** a voice block's voice (an asset id), a frame's style */
   voice?: string;
-  style?: "sketch" | "rough" | "full";
+  style?: "film" | "sketch" | "rough" | "full";
   /** a sound made from a shot's video (its shown take; API 1.85: the model's video workflow runs) */
   from?: string;
   /** a music block's lyrics (empty: an instrumental), key ("D minor", absent: Auto) and BPM (absent: Auto) (API 1.85) */

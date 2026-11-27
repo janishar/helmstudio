@@ -11,7 +11,7 @@ estimate for this install wins, and the user's limit (5 min by default) decides 
 - Beats: 6 to 8, 3 to 5 s each: the hook (0-3 s), the problem, the product, using it, the payoff, the end card with
   the name (hold it 3 s).
 - Blocks: 7 frames, 7 shots, 1 to 3 voice-over lines, 1 music cue, 1 or 2 sounds.
-- GPU budget: views 5 images; frames 7 sketches x 2 seeds, then 7 finals (a few minutes); shots 7 drafts, then 7
+- GPU budget: views 5 images; frames 7 Turbo drafts x 2 seeds, then 7 finals (a few minutes); shots 7 drafts, then 7
   finals (the bulk: 10 to 20 min, a card); sound a few minutes. About 20 to 30 min in all.
 - Tip: the product's look must not drift: pick it in every frame it is in, and pin only takes where it reads.
 
@@ -36,5 +36,5 @@ estimate for this install wins, and the user's limit (5 min by default) decides 
   new angle rather than new places.
 - Blocks: about 40 frames, 40 shots, 1 music block (every shot tied to the section it sits in).
 - Joins: hard cuts on the beat; a morph or a dissolve only at a section change.
-- GPU budget: the most of the three (1.5 to 2 h of shots): sketch every frame, final only the picked shots, and run
+- GPU budget: the most of the three (1.5 to 2 h of shots): draft every frame on Turbo, final only the picked shots, and run
   section by section.

@@ -1,6 +1,6 @@
 "use client";
-// A storyboard frame opened (MagicBoard frame 7; plan 39 phase E): left, the picture on stage, its style (Sketch,
-// Rough or Full) and its takes by style, Redraw, or drop your own; right, who and where (assets: their pictures feed
+// A storyboard frame opened (MagicBoard frame 7; plan 39 phase E): left, the picture on stage, its style (Film, the
+// default: the film's own style; Sketch, Rough or Full) and its takes by style, Redraw, or drop your own; right, who and where (assets: their pictures feed
 // it), the framing (shot size, angle, move), what happens, the length, the line, the model and the shot's model, and
 // the shot made from it with Generate from board. Rough cut plays the frames in order with their lines. Frames never
 // go to the Timeline. Every change is kept when the dialog closes.
@@ -35,6 +35,7 @@ import {
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
 
 const STYLES = [
+  ["film", "Film"],
   ["sketch", "Sketch"],
   ["rough", "Rough"],
   ["full", "Full"],
@@ -153,9 +154,9 @@ function Body({
   const running = Object.values(a.takes).filter((t) => t.block === b.id && t.status === "running");
   // each take by the style it was drawn in; a picture of your own is yours
   const styleOf = new Map(
-    runs.flatMap((r) => r.takes.map((t) => [t, r.style ?? "sketch"] as const)),
+    runs.flatMap((r) => r.takes.map((t) => [t, r.style ?? "film"] as const)),
   );
-  // API 1.94: and by the variant it ran on ("Sketch · 2 · Turbo")
+  // API 1.94: and by the variant it ran on ("Film · 2 · Turbo")
   const variantOfTake = (t: string) => a.takes[t]?.variant ?? "";
   const groups = [...STYLES, ["yours", "Yours"] as const].flatMap(([k, label]) => {
     const ids = done.filter((t) => (styleOf.get(t) ?? "yours") === k);
@@ -169,7 +170,7 @@ function Body({
   const models = kindOf(kinds, "frame")?.models ?? [];
   const model = modelOf(kinds, req);
   const variant = useVariant(model, req).title;
-  // the model line under the picture: "Sketch 2 · Qwen Image 2.1 · Turbo · seed 42"
+  // the model line under the picture: "Film 2 · Qwen Image 2.1 · Turbo · seed 42"
   const stageLine =
     picked && stage
       ? [
@@ -307,7 +308,7 @@ function Body({
                 <button
                   key={v}
                   type="button"
-                  aria-pressed={(req.style ?? "sketch") === v}
+                  aria-pressed={(req.style ?? "film") === v}
                   onClick={() => set({ style: v })}
                 >
                   {text}

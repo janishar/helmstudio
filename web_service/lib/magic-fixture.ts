@@ -128,7 +128,6 @@ export function sampleBoard(): { name: string; doc: Doc; takes: Takes } {
       request: {
         kind: "frame",
         model: "Qwen Image 2.1 Turbo",
-        style: "sketch",
         prompt: what,
         refs: i === 1 ? [mara, { asset: "umbrella" }] : [mara],
       },

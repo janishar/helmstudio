@@ -307,6 +307,9 @@ func TestMagicPrompt(t *testing.T) {
 			"With Bus stop."}, // a pick with no picture yet is still named
 		{shot, "", nil, "Wide shot, from a low angle. Mara waits in the rain. The camera slowly pushes in."},
 		{block("video", 96, `{"prompt":"@mara runs, @fox follows"}`), "", nil, "Mara runs, @fox follows"},
+		// API 1.99: no style is film, the film's own style: no style sentence
+		{block("frame", 96, `{"framing":{"size":"close"},"prompt":"@mara smiles. Flat warm colours."}`), "", nil,
+			"Close-up. Mara smiles. Flat warm colours."},
 	}
 	for i, c := range cases {
 		if got := magicPrompt(d, c.b, c.mention, c.refs); got != c.want {

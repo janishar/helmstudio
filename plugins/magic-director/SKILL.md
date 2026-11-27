@@ -74,18 +74,23 @@ Once the user says yes:
 - make_views takes width and height (for a 2K sheet, or another shape) and advanced {"model.variant",
   "model.precision"} for the whole call; leave them out for the defaults (Turbo, the host's precision).
 - Show the sheets; let the user pick or redo a view. Only then a second edit adds the Storyboard frames (§4).
-- A voice for each speaking character goes on the asset (voice_id) before any dialogue. No voice yet: say so and
-  point at Create's voice design or clone; then set it on the asset.
+- A voice for each speaking character goes on the asset (voice_id) before any dialogue. Right after its views:
+  - design_voice {asset, design, line}: design from its note (sex, age, tone, accent, pace), line a sentence or
+    two in character (3 s or more). Await the run; show the take so the user hears it.
+  - Redo on the user's word: design_voice again with voice_id (other words, no new voice). Each try differs.
+  - save_voice {asset, take_id} with the take the user picked: it keeps that take and sets the voice on the asset.
+  - Only then dialogue. A voice the user already has (Create's design or clone): set it with an asset op instead.
 
 ## 4. Storyboard frames
 
 - One frame per beat, at its time and length. Each frame @ picks its characters, props and place (their sheets
-  are its reference); its words say only the action, never a look again (the asset carries it); its framing (size and angle: Wide shot, from a low angle) and its move for the shot to come (The camera
+  are its reference); its words say only the action, never a look again (the asset carries it), and end with the board's style
+  line; its framing (size and angle: Wide shot, from a low angle) and its move for the shot to come (The camera
   slowly pushes in). Framing and moves: the Cinematic filmmaker's words.
 - Start wide to show the place, then go closer for feelings; one action per frame.
-- Frames are cheap and never ask: run them as sketches first (the frame's style Sketch), 2 seeds where the beat
-  matters. Then compare, pin the one you like, say why, and let the user pick.
-- Run a frame as rough or full only once the board reads well as a whole (play the rough cut).
+- Frames are cheap and never ask: draft them in the film's own style (style film, the default: leave style out)
+  on the fast variant (Turbo), 2 seeds where the beat matters. Then compare, pin one, say why, let the user pick.
+- Style Sketch (black and white pencil) only when the user asks for sketches.
 
 ## 5. Shots from the liked frames
 
@@ -104,10 +109,10 @@ Once the user says yes:
   one picture should turn into the next (a morph is a block with its own prompt and runs with run_blocks). Fade and
   wipe are baked on Send; keep them short.
 
-## 6. Sketches first, finals only for picks
+## 6. Drafts first, finals only for picks
 
 - Every stage: the cheap way first, the final only for what the user picked.
-  - Frames: Sketch, then rough or full for the picked ones.
+  - Frames: the film's own style on Turbo, then the picked ones on the workflow's own variant.
   - Images (views, frames): a fast variant first (set the request's Advanced `model.variant`, for example
     turbo), then the picked one again on the workflow's own variant with the same seed.
   - Shots: a short or fast draft (LTX, or H3's draft steps) to check the action and the camera, then the final with
@@ -155,7 +160,7 @@ Brief: "a 30 s ad for a lemonade stand run by @mara, a girl of ten".
 2. First edit: 3 assets, lanes Storyboard, Shots, Voice, Music, Sound.
 3. make_views: @mara Front, Side; @stand Front; @street Wide, Reverse. The user picks.
 4. Second edit: 7 frames at their times, each @ picking its assets ("@mara hands a cup over @stand, medium shot").
-   Run them as sketches, 2 seeds on the opening and the end card; pin, say why; the user picks; rough cut.
+   Run them in the film's style on Turbo, 2 seeds on the opening and the end card; pin, say why; the user picks; rough cut.
 5. 7 shots from the frames (LTX drafts), compare, then finals with the same seeds (about 10 to 15 GPU minutes:
    a card).
 6. A voice-over line tied to Shot 1 and Shot 7, one music cue from Shot 1, street ambience under it all.

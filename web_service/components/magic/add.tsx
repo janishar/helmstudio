@@ -32,7 +32,7 @@ const TILES: { k: Pick; name: string; sub: string }[] = [
   { k: "dialogue", name: "Dialogue", sub: "lines, two or more" },
   { k: "music", name: "Music", sub: "a cue" },
   { k: "sound", name: "Sound", sub: "effects" },
-  { k: "frame", name: "Board frame", sub: "a sketch" },
+  { k: "frame", name: "Board frame", sub: "a storyboard" },
 ];
 const NAMES: Record<Pick, string> = {
   video: "Shot",
@@ -255,7 +255,6 @@ function Form({
       refs: [],
       ...(shotKind && fromLast && prev ? { first: { block: prev.id, part: "last" as const } } : {}),
       ...(kind === "dialogue" ? { turns: lines } : {}),
-      ...(k === "frame" ? { style: "sketch" as const } : {}),
       // only when a model takes a video: Stable Audio alone would grey From with the shot stuck in it
       ...(k === "sound" &&
       shotUnder &&

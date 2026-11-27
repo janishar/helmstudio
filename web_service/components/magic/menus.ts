@@ -99,7 +99,7 @@ export const EFFECTS: Effect[] = [
   { name: "Stabilize" },
 ];
 export const LENGTHS = [0.5, 1, 2];
-const STYLES = ["sketch", "rough", "full"] as const;
+const STYLES = ["film", "sketch", "rough", "full"] as const;
 
 /** Make views' model, size and the model's own params for the batch (API 1.98). */
 export type ViewsMore = Omit<S<"MagicViewsCreate">, "revision" | "views">;
@@ -424,7 +424,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
           icon: Brush,
           items: STYLES.map((s) => ({
             label: s[0].toUpperCase() + s.slice(1),
-            checked: (b.request.style ?? "sketch") === s,
+            checked: (b.request.style ?? "film") === s,
             onPick: () =>
               a.edit({ op: "block", id: b.id, set: { request: { ...b.request, style: s } } }),
           })),
