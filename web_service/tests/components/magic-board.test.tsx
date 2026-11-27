@@ -304,7 +304,14 @@ describe("the board", () => {
     render(<MagicBoard local />);
     fireEvent.click(screen.getByRole("button", { name: "The Last Tide" }));
     fireEvent.click(screen.getByRole("button", { name: "New board", hidden: true }));
+    // frame 12: its size and fps first, set once
+    fireEvent.click(screen.getByRole("button", { name: "9:16 · 720 × 1280", hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: "30", hidden: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Create", hidden: true }));
     expect(screen.getByRole("heading", { name: "A new board" })).toBeTruthy();
+    expect(screen.getByTitle("Set when the board was made").textContent).toMatch(
+      /^720 × 1280 · 30 fps/,
+    );
     expect(
       (screen.getByRole("button", { name: "Build from a brief" }) as HTMLButtonElement).disabled,
     ).toBe(true);

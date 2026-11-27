@@ -105,7 +105,8 @@ Magic boards:
   pin the best with a block op. Send to the Timeline only when the user asks.
 - cancel_runs stops a board's runs still going, at once, no card: blocks, a lane, run_ids (run_blocks' started) or
   all. "Stop the frames" means the Storyboard lane's; "stop what you started" means your run_ids.
-- No board fits a brief: create_board, then navigate /magic with query b (its board_id), then add lanes and blocks.
+- No board fits a brief: create_board (target: the plan's size and fps; it can't change later), then navigate /magic
+  with query b (its board_id), then add lanes and blocks.
 - Models: magic_kinds lists each kind's models (a request's model is a workflow id), the fields each greys and why,
   its env and its Advanced params (<node>.<param>). Run on is request.host (a host from hosts; absent: Auto).
 - "Use turbo" (or dev, distilled, fp8) means the model's variant: request.advanced {"model.variant": "turbo"}, one of

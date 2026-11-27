@@ -3,7 +3,7 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, Square, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { Camera, Square, Clock3, Lock, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
 import { mod, openMenu } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -517,7 +517,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               named by {board.namedBy}
             </span>
           )}
-          <span className="pill max-md:hidden">
+          <span className="pill max-md:hidden" title="Set when the board was made">
+            <Lock size={11} className="mr-1 inline align-[-1px] text-t2" aria-hidden />
             {doc.target.width} × {doc.target.height} · {fps} fps · {clock(total, fps, true)}
           </span>
           <span className="grow" />

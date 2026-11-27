@@ -41,6 +41,8 @@ Before any run, write the plan in chat and wait for the user's OK. No GPU time b
 
 The plan, short:
 - Idea: one or two sentences (who wants what, what stands in the way, how it ends) and the target length.
+- Format: the board's size and fps (16:9 1280 × 720 at 24 fps; 9:16 720 × 1280 for vertical). create_board passes
+  it as target; it can't change later.
 - Style line: one line every frame and shot reuses, word for word. "2D cartoon, bold clean outlines, flat colours"
   or "Live action, 35 mm, soft window light, muted teal and amber". For a cartoon, take it from the Animator.
 - Characters: per character the look, outfit, age and voice, and its @handle (`@mara`). Only those who appear.

@@ -99,7 +99,8 @@ export type Board = {
   renameSnapshot: (s: Snapshot, name: string) => void;
   deleteSnapshot: (s: Snapshot) => void;
   switchTo: (id: string) => void;
-  newBoard: () => void;
+  /** a new board at `target` (absent: 1280 × 720 · 24 fps); its target can't change later */
+  newBoard: (target?: S<"MagicTarget">) => void;
   sampleBoard: () => void;
   /** renames a board (absent: the open one) */
   rename: (name: string, id?: string) => void;
@@ -552,7 +553,7 @@ export function useApiBoard():
         setSnapshots((all) => all.filter((x) => x.id !== s.id));
       }),
     switchTo: (to) => queue(() => open(to)),
-    newBoard: () => queue(() => create({})),
+    newBoard: (target) => queue(() => create(target ? { target } : {})),
     sampleBoard: () => queue(() => create({ name: sampleBoard().name, doc: sampleDoc() as never })),
     rename: (name, which = id) =>
       queue(async () => {
@@ -796,11 +797,11 @@ export function useLocalBoard(initial?: Store): Board {
       setSnapshots((all) => all.map((x) => (x.id === s.id ? { ...x, name } : x))),
     deleteSnapshot: (s) => setSnapshots((all) => all.filter((x) => x.id !== s.id)),
     switchTo: (id) => switchTo(id),
-    newBoard: () => {
+    newBoard: (target) => {
       const b: Saved = {
         id: newId(),
         name: "Untitled board",
-        doc: emptyDoc(),
+        doc: { ...emptyDoc(), ...(target && { target }) },
         takes: {},
         snapshots: [],
       };

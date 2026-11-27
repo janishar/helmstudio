@@ -2,9 +2,11 @@
 // Magic's board switcher (docs/mock/Search.dc.html frame 2, owner 2026-11-27 "approved"): the board name opens a
 // popover with the SearchField (past 8 boards), New board and the boards; each row has its right-click menu (Open,
 // Rename, Delete). A right-click on the name keeps the board's own menu (New board, Sample board, Rename, Delete).
-import { useEffect, useRef } from "react";
+// New board asks its size and fps first (MagicBoard frame 12); they are set then and stay.
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { openMenu, type Item } from "@/components/context-menu";
+import { Modal } from "@/components/kit";
 import type { Board, BoardRow } from "@/components/magic/use-board";
 import { Marked, NoMatch, SearchField, useSearch, useSlashOpens } from "@/components/search";
 import { when } from "@/lib/format";
@@ -16,6 +18,7 @@ export function BoardSwitcher({ board }: { board: Board }) {
     hide();
     if (b.id !== board.id) board.switchTo(b.id);
   };
+  const [making, setMaking] = useState(false);
   const search = useSearch({
     items: board.boards,
     text: (b) => [b.name],
@@ -51,7 +54,7 @@ export function BoardSwitcher({ board }: { board: Board }) {
     openMenu(e, {
       title: board.name,
       items: [
-        { label: "New board", icon: Plus, onPick: board.newBoard },
+        { label: "New board", icon: Plus, onPick: () => setMaking(true) },
         { label: "Sample board", onPick: board.sampleBoard },
         { label: "Rename", icon: Pencil, onPick: () => rename(board) },
         "-",
@@ -135,7 +138,7 @@ export function BoardSwitcher({ board }: { board: Board }) {
           <button
             type="button"
             className="chip bevel mb-1 justify-center rounded-[10px] bg-s4"
-            onClick={() => (hide(), board.newBoard())}
+            onClick={() => (hide(), setMaking(true))}
           >
             <Plus size={14} aria-hidden /> New board
           </button>
@@ -147,6 +150,68 @@ export function BoardSwitcher({ board }: { board: Board }) {
           </div>
         </div>
       </div>
+      <Modal open={making} onClose={() => setMaking(false)} title="New board">
+        <NewBoard
+          onCreate={(width, height, fps) => {
+            setMaking(false);
+            board.newBoard({ width, height, fps, sample_rate: 48000 });
+          }}
+        />
+      </Modal>
     </>
+  );
+}
+
+const SIZES = [
+  { ratio: "16:9", w: 1280, h: 720 },
+  { ratio: "16:9", w: 1920, h: 1080 },
+  { ratio: "9:16", w: 720, h: 1280 },
+  { ratio: "1:1", w: 1024, h: 1024 },
+];
+const FPS = [24, 25, 30];
+
+/** the New board dialog: size and fps, set once (the header shows them locked after) */
+function NewBoard({ onCreate }: { onCreate: (w: number, h: number, fps: number) => void }) {
+  const [size, setSize] = useState(SIZES[0]);
+  const [fps, setFps] = useState(24);
+  return (
+    <div className="mg-add flex flex-col gap-3">
+      <div className="fld">
+        <span className="lb">Size</span>
+        <div className="seg flex-wrap" role="group" aria-label="Size">
+          {SIZES.map((s) => (
+            <button
+              key={s.w + "x" + s.h}
+              type="button"
+              aria-pressed={size === s}
+              onClick={() => setSize(s)}
+            >
+              {s.ratio} · {s.w} × {s.h}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="fld">
+        <span className="lb">fps</span>
+        <div className="seg" role="group" aria-label="fps">
+          {FPS.map((f) => (
+            <button key={f} type="button" aria-pressed={fps === f} onClick={() => setFps(f)}>
+              {f}
+            </button>
+          ))}
+        </div>
+        <span className="text-[11px] text-t2">Can&apos;t change later</span>
+      </div>
+      <div className="flex">
+        <span className="grow" />
+        <button
+          type="button"
+          className="key h-9 rounded-xl px-3.5 text-[13px]"
+          onClick={() => onCreate(size.w, size.h, fps)}
+        >
+          Create
+        </button>
+      </div>
+    </div>
   );
 }
