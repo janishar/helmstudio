@@ -47,7 +47,8 @@ def run_doc() -> dict:
                 "length": 48,
                 "kind": "music",
                 "name": "Cue 1",
-                "request": {"kind": "music"},
+                # API 1.85: music runs; this cue names a model the fake host has not got (skipped with why)
+                "request": {"kind": "music", "model": "ace-step-music"},
                 "takes": [],
                 "effects": [],
             },
@@ -69,10 +70,8 @@ def test_kinds_and_settings(api):
     assert any(p["path"] == "video.delay_ms" for p in video["echo-video"]["advanced"])
     assert [m["workflow_id"] for m in kinds["image"]["models"]] == ["echo"]
     assert [m["workflow_id"] for m in kinds["voice"]["models"]] == ["echo-voice-over"]
-    assert (
-        kinds["music"]["off"] == "Comes with Create's Music and Sound"
-        and not kinds["music"]["models"]
-    )
+    assert [m["workflow_id"] for m in kinds["music"]["models"]] == ["echo-music"]
+    assert "off" not in kinds["music"]
     assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 5}
     assert ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 2.5})) == {
         "ask_above_gpu_minutes": 2.5
@@ -91,13 +90,13 @@ def test_a_block_runs_into_a_take(api, api_b):
     assert plan["order"] == ["s1", "m1"] and plan["limit_minutes"] == 5
     s1, m1 = plan["blocks"]
     assert s1["source"] == "pack" and s1["seconds"] == 0.5 and s1["host"]
-    assert m1["reason"] == "Music comes with Create's Music and Sound"
+    assert m1["reason"] == "its model ace-step-music is on no host"
     assert plan["ask"] is False and plan["ask_text"] == "1 shot, about 1 s"
 
     r = api.post(f"{base}/run", json={"revision": 1, "blocks": ["m1"]})
     assert (
         r.status_code == 422
-        and r.json()["detail"] == "Cue 1: Music comes with Create's Music and Sound"
+        and r.json()["detail"] == "Cue 1: its model ace-step-music is on no host"
     )
     assert api.post(f"{base}/run", json={"revision": 9, "blocks": ["s1"]}).status_code == 409
     for path, body in (("run", {"revision": 1, "stale": True}), ("plan", {"stale": True})):
