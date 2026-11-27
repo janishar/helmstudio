@@ -208,8 +208,10 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 		out = toolErr("forbidden", "%s needs the %s role", req.Tool, strings.Join(tool.Roles, " and "))
 	case req.Tool == "look_at":
 		return s.lookAt(ctx, caller, req) // it keeps its reply with its run
+	case asked != nil:
+		return s.magicConfirmed(ctx, caller, req)
 	case isMagicTool(req.Tool):
-		out = s.magicTool(ctx, caller, req, asked)
+		out = s.magicTool(ctx, caller, req, nil)
 	default:
 		out = s.readTool(ctx, caller, req.Tool, req.Args)
 	}
@@ -221,11 +223,10 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 	}
 	{
 		if err := common.System(ctx, s.db, func(tx pgx.Tx) error {
-			// a preview is replaced by the answer after the Yes (API 1.87); any other reply is kept as it came first
+			// the reply as it came first (a preview's answer after the Yes is magicConfirmed's)
 			_, err := tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply)
-				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO UPDATE SET reply = EXCLUDED.reply
-				WHERE assistant_tool_calls.reply ? 'preview' AND NOT EXCLUDED.reply ? 'preview'`, req.CallID, req.ThreadID,
-				owner, req.Tool, toJSON(out))
+				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO NOTHING`, req.CallID, req.ThreadID, owner, req.Tool,
+				toJSON(out))
 			return err
 		}); err != nil {
 			log.Printf("studio.tools %s: %v", req.CallID, err)

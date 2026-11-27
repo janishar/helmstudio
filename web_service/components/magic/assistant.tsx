@@ -227,6 +227,8 @@ export function HistoryChip({
             <button
               type="button"
               className="chip bevel mt-1 self-start rounded-[10px] bg-s4"
+              disabled={picked === revision}
+              title={picked === revision ? "It's the board now" : undefined}
               onClick={() => restore({ revision: picked } as Rev)}
             >
               <RotateCcw size={13} aria-hidden />

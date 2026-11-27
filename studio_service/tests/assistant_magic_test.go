@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/helmstudio/studio_service/api/studio/message"
@@ -166,8 +167,21 @@ func TestAssistantMagic(t *testing.T) {
 	if p := preview(ask(userA, call, "send_to_timeline", false, map[string]any{"board_id": id, "revision": 3})); p["plan"] == nil {
 		t.Fatal(p)
 	}
-	if s := result(ask(userA, call, "send_to_timeline", true, map[string]any{"board_id": id, "revision": 3})); s["send"] == nil {
-		t.Fatal(s)
+	// the Yes asked twice at once (a timeout's retry): one send, both answers the same
+	var wg sync.WaitGroup
+	sent := make([]map[string]any, 2)
+	for i := range sent {
+		wg.Go(func() {
+			sent[i] = asMap(ask(userA, call, "send_to_timeline", true, map[string]any{"board_id": id, "revision": 3}).Result)
+		})
+	}
+	wg.Wait()
+	s0, s1 := sent[0]["send"], sent[1]["send"]
+	if s0 == nil || fmt.Sprint(s0) != fmt.Sprint(s1) {
+		t.Fatal(sent)
+	}
+	if l := e.call(userA, "GET", base+"/sends", nil, 200)["sends"].([]any); len(l) != 1 {
+		t.Fatal(l)
 	}
 
 	// another user's board, bad args

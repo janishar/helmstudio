@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/helmstudio/helmgo/utility"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/helmstudio/studio_service/api/magic"
 	"github.com/helmstudio/studio_service/api/studio/dto"
@@ -189,6 +191,42 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 		return message.ToolsReply{Result: out}
 	}
 	return toolErr("invalid", "studio does not serve %s", req.Tool)
+}
+
+// magicConfirmed answers the user's Yes on a card tool's preview (API 1.87) with the call's row locked, so a Yes asked
+// again while the first still runs (a timeout's retry) waits for it and answers what it did: nothing runs twice. The
+// answer replaces the preview; an internal error keeps it, to be asked again.
+func (s *Service) magicConfirmed(ctx context.Context, caller common.Caller, req *message.ToolsRequest) message.ToolsReply {
+	var out message.ToolsReply
+	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT reply FROM assistant_tool_calls WHERE call_id = $1 FOR UPDATE`,
+			req.CallID).Scan(&raw); err != nil {
+			return err
+		}
+		var asked message.ToolsReply
+		if err := json.Unmarshal(raw, &asked); err != nil {
+			return err
+		}
+		if asked.Preview == nil { // answered meanwhile
+			out = asked
+			return nil
+		}
+		out = s.magicTool(ctx, caller, req, &asked)
+		if out.Code == "internal" {
+			return nil
+		}
+		if out.Code == "" {
+			out.Tool = req.Tool
+		}
+		_, err := tx.Exec(ctx, `UPDATE assistant_tool_calls SET reply = $2 WHERE call_id = $1`, req.CallID, toJSON(out))
+		return err
+	})
+	if err != nil {
+		log.Printf("studio.tools %s: %v", req.CallID, err)
+		return toolErr("internal", "internal error")
+	}
+	return out
 }
 
 // orRefused is the refusal, else result.

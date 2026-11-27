@@ -504,3 +504,9 @@ the board with Apply and Discard and History (`web_service/components/magic/assi
 - **Not built**: the Assistant's music and sound wording beyond the kinds' nouns, helm mcp tools for Magic, a picture
   from `board_frame` itself, no browser walk on the dev stack (the owner uses it live; vitest renders the proposal on the
   fake board and the contract test runs the whole flow through Kong).
+- **Review fixes (phase F)**: the user's Yes on a card tool's preview now runs with the call's row locked
+  (`magicConfirmed`, `SELECT … FOR UPDATE`), so a Yes asked again while the first still runs (pipelines retries after
+  its 5 s timeout) waits and answers what the first did: one edit, one restore, one send, one run. Before, both ran
+  (two sends, two sequences). Any other reply is kept as it came first (`ON CONFLICT DO NOTHING`), so a retried
+  preview that is refused no longer replaces the stored preview. History's Restore button is off on the current
+  revision ("It's the board now"), as its menu already was.
