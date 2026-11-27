@@ -7,6 +7,10 @@
 :is(.mg, .mg-side) .mb {
   position: relative;
   box-sizing: border-box;
+  /* fills the page's height, so the player sits at the window's bottom right; the lanes scroll inside (owner,
+     2026-11-27) */
+  flex: 1 1 auto;
+  min-height: 360px;
   border-radius: 28px 28px 28px 12px;
   background: var(--in);
   padding: 10px 14px 14px;
@@ -113,11 +117,13 @@
   color: var(--t2);
 }
 
-/* the scroller: the Assets row, the ruler and the lanes scroll sideways together */
+/* the scroller: the Assets row, the ruler and the lanes scroll sideways together, and down when they outgrow the panel */
 :is(.mg, .mg-side) .scroller {
   position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--s4) transparent;
 }
