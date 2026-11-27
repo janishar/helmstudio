@@ -150,11 +150,17 @@ export function BoardSwitcher({ board }: { board: Board }) {
           </div>
         </div>
       </div>
-      <Modal open={making} onClose={() => setMaking(false)} title="New board">
+      <Modal
+        open={making}
+        onClose={() => setMaking(false)}
+        title="New board"
+        width="w-[min(92vw,440px)]"
+      >
         <NewBoard
-          onCreate={(width, height, fps) => {
+          onClose={() => setMaking(false)}
+          onCreate={(name, width, height, fps) => {
             setMaking(false);
-            board.newBoard({ width, height, fps, sample_rate: 48000 });
+            board.newBoard({ width, height, fps, sample_rate: 48000 }, name || undefined);
           }}
         />
       </Modal>
@@ -163,92 +169,130 @@ export function BoardSwitcher({ board }: { board: Board }) {
 }
 
 const SIZES = [
-  { ratio: "16:9", w: 1280, h: 720 },
-  { ratio: "16:9", w: 1920, h: 1080 },
-  { ratio: "9:16", w: 720, h: 1280 },
-  { ratio: "1:1", w: 1024, h: 1024 },
+  { label: "16:9 · 1280 × 720", w: 1280, h: 720 },
+  { label: "16:9 · 1920 × 1080", w: 1920, h: 1080 },
+  { label: "9:16 · 720 × 1280", w: 720, h: 1280 },
+  { label: "1:1 · 1024 × 1024", w: 1024, h: 1024 },
 ];
-const FPS = [24, 25, 30];
+const FPS = [24, 25, 30, 50, 60];
+const field = "in h-[38px]";
 
-/** the New board dialog: size (a preset or Custom) and fps, set once (the header shows them locked after) */
-function NewBoard({ onCreate }: { onCreate: (w: number, h: number, fps: number) => void }) {
-  const [size, setSize] = useState<(typeof SIZES)[number] | "custom">(SIZES[0]);
-  const [cw, setCw] = useState("1280");
-  const [ch, setCh] = useState("720");
-  const [fps, setFps] = useState(24);
-  // a custom side: a multiple of 16 (what the models take), 16 to 8192 (studio's rule)
-  const side = (v: string) => Math.min(8192, Math.max(16, Math.round((+v || 0) / 16) * 16));
-  const w = size === "custom" ? side(cw) : size.w;
-  const h = size === "custom" ? side(ch) : size.h;
+/** The New board form, as the Timeline's New sequence (name, width, height, frame rate) with a Size preset above
+ * them; set once, the header shows them locked after. */
+function NewBoard({
+  onCreate,
+  onClose,
+}: {
+  onCreate: (name: string, w: number, h: number, fps: number) => void;
+  onClose: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [w, setW] = useState("1280");
+  const [h, setH] = useState("720");
+  const [fps, setFps] = useState("24");
+  const preset = SIZES.findIndex((s) => String(s.w) === w && String(s.h) === h);
+  // a side: a whole number, 16 to 8192 (studio's rule), a multiple of 16 (what the models take)
+  const dim = (v: string) => /^\d+$/.test(v) && +v >= 16 && +v <= 8192 && +v % 16 === 0;
   return (
-    <div className="mg-add flex flex-col gap-3">
-      <div className="fld">
-        <span className="lb">Size</span>
-        <div className="seg flex-col items-stretch" role="group" aria-label="Size">
-          {SIZES.map((s) => (
-            <button
-              key={s.w + "x" + s.h}
-              type="button"
-              className="text-left"
-              aria-pressed={size === s}
-              onClick={() => setSize(s)}
-            >
-              {s.ratio} · {s.w} × {s.h}
-            </button>
+    <form
+      className="flex flex-col gap-3"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onCreate(name.trim(), +w, +h, +fps);
+      }}
+    >
+      <label htmlFor="nb-name" className="text-[13px]">
+        Name
+      </label>
+      <input
+        id="nb-name"
+        className={field}
+        value={name}
+        maxLength={80}
+        placeholder="Untitled board"
+        onChange={(e) => setName(e.target.value)}
+      />
+      <div>
+        <label htmlFor="nb-size" className="label">
+          Size
+        </label>
+        <select
+          id="nb-size"
+          className={field}
+          value={preset}
+          onChange={(e) => {
+            const s = SIZES[+e.target.value];
+            if (!s) return;
+            setW(String(s.w));
+            setH(String(s.h));
+          }}
+        >
+          {SIZES.map((s, i) => (
+            <option key={s.label} value={i}>
+              {s.label}
+            </option>
           ))}
-          <button
-            type="button"
-            className="text-left"
-            aria-pressed={size === "custom"}
-            onClick={() => setSize("custom")}
+          <option value={-1}>Custom</option>
+        </select>
+      </div>
+      <div className="grid grid-cols-3 gap-2">
+        <div>
+          <label htmlFor="nb-w" className="label">
+            Width
+          </label>
+          <input
+            id="nb-w"
+            className={field}
+            inputMode="numeric"
+            value={w}
+            onChange={(e) => setW(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="nb-h" className="label">
+            Height
+          </label>
+          <input
+            id="nb-h"
+            className={field}
+            inputMode="numeric"
+            value={h}
+            onChange={(e) => setH(e.target.value)}
+          />
+        </div>
+        <div>
+          <label htmlFor="nb-fps" className="label">
+            Frame rate
+          </label>
+          <select
+            id="nb-fps"
+            className={field}
+            value={fps}
+            onChange={(e) => setFps(e.target.value)}
           >
-            Custom
-          </button>
+            {FPS.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </select>
         </div>
-        {size === "custom" && (
-          <div className="flex items-center gap-2">
-            <input
-              aria-label="Width"
-              inputMode="numeric"
-              className="h-9 w-24 rounded-xl border border-s5 bg-s1 px-3 text-t1"
-              value={cw}
-              onChange={(e) => setCw(e.target.value.replace(/\D/g, ""))}
-            />
-            <span className="text-t2">×</span>
-            <input
-              aria-label="Height"
-              inputMode="numeric"
-              className="h-9 w-24 rounded-xl border border-s5 bg-s1 px-3 text-t1"
-              value={ch}
-              onChange={(e) => setCh(e.target.value.replace(/\D/g, ""))}
-            />
-            <span className="mono text-[11px] text-t2">
-              {w} × {h}
-            </span>
-          </div>
-        )}
       </div>
-      <div className="fld">
-        <span className="lb">fps</span>
-        <div className="seg" role="group" aria-label="fps">
-          {FPS.map((f) => (
-            <button key={f} type="button" aria-pressed={fps === f} onClick={() => setFps(f)}>
-              {f}
-            </button>
-          ))}
-        </div>
-        <span className="text-[11px] text-t2">Can&apos;t change later</span>
-      </div>
-      <div className="flex">
-        <span className="grow" />
+      <p className="m-0 text-[12px] text-t2">
+        Can&apos;t change later. Width and height in steps of 16. Sound is 48 kHz.
+      </p>
+      <div className="flex justify-end gap-2">
+        <button type="button" className="chip bevel rounded-[10px]" onClick={onClose}>
+          Cancel
+        </button>
         <button
-          type="button"
-          className="key h-9 rounded-xl px-3.5 text-[13px]"
-          onClick={() => onCreate(w, h, fps)}
+          type="submit"
+          className="h-10 rounded-[10px] bg-a1 px-[18px] text-[13px] font-semibold text-on1"
+          disabled={!(dim(w) && dim(h))}
         >
           Create
         </button>
       </div>
-    </div>
+    </form>
   );
 }

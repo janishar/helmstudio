@@ -305,8 +305,12 @@ describe("the board", () => {
     fireEvent.click(screen.getByRole("button", { name: "The Last Tide" }));
     fireEvent.click(screen.getByRole("button", { name: "New board", hidden: true }));
     // frame 12: its size and fps first, set once
-    fireEvent.click(screen.getByRole("button", { name: "9:16 · 720 × 1280", hidden: true }));
-    fireEvent.click(screen.getByRole("button", { name: "30", hidden: true }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Size", hidden: true }), {
+      target: { value: "2" }, // 9:16 · 720 × 1280
+    });
+    fireEvent.change(screen.getByRole("combobox", { name: "Frame rate", hidden: true }), {
+      target: { value: "30" },
+    });
     fireEvent.click(screen.getByRole("button", { name: "Create", hidden: true }));
     expect(screen.getByRole("heading", { name: "A new board" })).toBeTruthy();
     expect(screen.getByTitle("Set when the board was made").textContent).toMatch(
