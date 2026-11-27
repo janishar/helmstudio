@@ -71,6 +71,30 @@ def maker(new_user):
         yield c
 
 
+def test_a_board_is_named_from_its_first_prompt(maker):
+    """API 1.91 (Magic, Names): "Untitled board" is default until a block has a prompt, then the prompt's first words;
+    a typed name or a rename is the user's and kept."""
+    b = ok(maker.post(BOARDS), 201)
+    assert (b["name"], b["title_source"], b["named_by"]) == ("Untitled board", "default", None)
+    base = f"{BOARDS}/{b['id']}"
+    lane = {"op": "lane_add", "lane": {"id": "shots", "name": "Shots", "role": "shots"}}
+    shot = ADD | {
+        "block": ADD["block"]
+        | {"at": 0, "request": {"kind": "video", "prompt": "a red fox in the snow"}}
+    }
+    named = ok(maker.post(f"{base}/edits", json=edits(1, lane, shot)))["board"]
+    assert (named["name"], named["title_source"]) == ("A red fox in the", "prompt")
+    assert named["session_id"]  # the board's session, made to ask the namer
+    mine = ok(maker.patch(base, json={"name": "Fox"}))
+    assert (mine["name"], mine["title_source"], mine["named_by"]) == ("Fox", "user", None)
+    doc = board_doc()
+    doc["blocks"][0]["request"] = {"kind": "video", "prompt": "gulls over a grey sea"}
+    typed = ok(maker.post(BOARDS, json={"name": "Typed", "doc": doc}), 201)
+    assert (typed["name"], typed["title_source"]) == ("Typed", "user")
+    for x in (b, typed):
+        ok(maker.delete(f"{BOARDS}/{x['id']}"), 204)
+
+
 def test_boards_and_edits(maker):
     api = maker
     empty = ok(api.post(BOARDS), 201)

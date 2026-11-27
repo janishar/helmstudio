@@ -31,6 +31,9 @@ type MagicBoard struct {
 	Status    map[string]MagicStatus `json:"status"`
 	// API 1.83: the runs that make assets' views
 	AssetRuns []MagicAssetRun `json:"asset_runs"`
+	// API 1.91: who wrote the name, as a sequence's
+	TitleSource string  `json:"title_source"`
+	NamedBy     *string `json:"named_by"`
 }
 
 // MagicAssetRun is one run of Make views: an asset's view being made (API 1.83).

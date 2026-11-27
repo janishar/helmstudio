@@ -20,6 +20,7 @@ import (
 	"github.com/helmstudio/helmgo/network"
 	"github.com/helmstudio/helmgo/utility"
 
+	"github.com/helmstudio/studio_service/api/magic"
 	"github.com/helmstudio/studio_service/api/studio/dto"
 	"github.com/helmstudio/studio_service/api/studio/message"
 	"github.com/helmstudio/studio_service/api/studio/model"
@@ -184,6 +185,11 @@ func namePrompt(reg *registry.Registry, run model.Run) string {
 	if typed, ok := exp.Typed[found[0].Node+"."+found[0].Param.Name].(string); ok {
 		text = typed
 	}
+	return cleanPrompt(text)
+}
+
+// cleanPrompt is a prompt as the namer is sent it: <imageN> tags removed, spaces collapsed, cut to 2000 characters.
+func cleanPrompt(text string) string {
 	text = strings.Join(strings.Fields(imageTag.ReplaceAllString(text, " ")), " ")
 	if utf8.RuneCountInString(text) > maxNamePrompt {
 		text = string([]rune(text)[:maxNamePrompt])
@@ -302,6 +308,57 @@ func askTimelineName(ctx context.Context, tx pgx.Tx, reg *registry.Registry, rem
 	return nil
 }
 
+// boardPrompt is what a Magic board is named from (API 1.91): its first block (lane then time order) with a prompt,
+// else a line, else a dialogue's first line with words; "" when none has one.
+func boardPrompt(d magic.Doc) string {
+	for _, b := range d.Blocks {
+		texts := []any{b.Request["prompt"], b.Request["line"]}
+		turns, _ := b.Request["turns"].([]any)
+		for _, t := range turns {
+			if m, ok := t.(map[string]any); ok {
+				texts = append(texts, m["text"])
+			}
+		}
+		for _, t := range texts {
+			if text, _ := t.(string); cleanPrompt(text) != "" {
+				return cleanPrompt(text)
+			}
+		}
+	}
+	return ""
+}
+
+// askBoardName names an untitled Magic board once (API 1.91, as askTimelineName a sequence): while its name is default
+// and it was never asked, the first stored document whose blocks hold a prompt gives the prompt's first words at once
+// (title_source prompt; the board's session, made now if it has none, too, marked asked) and, when the setting names
+// something, cmd.pipeline.name for that session with the board id as its run id; the answer names both
+// (namedHandler).
+func askBoardName(ctx context.Context, tx pgx.Tx, remoteOn bool, row *boardRow) error {
+	if row.TitleSource != "default" || row.NameAsked {
+		return nil
+	}
+	prompt := boardPrompt(row.doc())
+	title := promptTitle(prompt)
+	if title == "" {
+		return nil
+	}
+	sessionID, err := boardSession(ctx, tx, row)
+	if err != nil {
+		return err
+	}
+	named, err := one[boardRow](ctx, tx, `UPDATE magic_boards SET name = $2, title_source = 'prompt', name_asked = true
+		WHERE id = $1 RETURNING `+boardCols, row.ID, title)
+	if err != nil {
+		return err
+	}
+	*row = named
+	if _, err := tx.Exec(ctx, `UPDATE sessions SET title = $2, title_source = 'prompt', name_asked = true WHERE id = $1`,
+		sessionID, "Magic · "+title); err != nil {
+		return err
+	}
+	return enqueueName(ctx, tx, remoteOn, row.OwnerID, sessionID, row.ID, prompt)
+}
+
 // nameTimelinesOf is askTimelineName for each sequence run's shot just filled (the projector).
 func (p *Projector) nameTimelinesOf(ctx context.Context, tx pgx.Tx, run model.Run) error {
 	_, timelines, _, err := shotsOf(ctx, tx, run)
@@ -365,11 +422,19 @@ func (p *Projector) namedHandler(ctx context.Context, msg *micro.NatsJetStreamMe
 		if err != nil {
 			return err
 		}
+		// API 1.91: so does a Magic board's (asked by askBoardName, the board id as the run id)
+		board, err := tx.Exec(ctx, `UPDATE magic_boards SET name = $2, title_source = 'model', named_by = $3
+			WHERE session_id = $1 AND owner_id = $4 AND deleted_at IS NULL AND name_asked
+			AND title_source IN ('default', 'prompt')`, d.SessionID, title, d.NamedBy, event.OwnerID)
+		if err != nil {
+			return err
+		}
+		named := seq.RowsAffected() + board.RowsAffected()
 		tag, err := tx.Exec(ctx, `UPDATE sessions SET title = $2, title_source = 'model', named_by = $3
 			WHERE id = $1 AND owner_id = $4 AND title_source IN ('default', 'prompt')
 			AND ($6 OR EXISTS (SELECT 1 FROM runs WHERE id = $5 AND session_id = $1))`, d.SessionID, title, d.NamedBy,
-			event.OwnerID, d.RunID, seq.RowsAffected() > 0)
-		if err != nil || (tag.RowsAffected() == 0 && seq.RowsAffected() == 0) {
+			event.OwnerID, d.RunID, named > 0)
+		if err != nil || (tag.RowsAffected() == 0 && named == 0) {
 			return err
 		}
 		return appendEvent(ctx, tx, model.Run{ID: d.RunID, SessionID: d.SessionID, OwnerID: event.OwnerID}, "session",

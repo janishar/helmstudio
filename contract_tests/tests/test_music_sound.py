@@ -227,6 +227,17 @@ def test_use_goes_by_class_as_offers_do(um, anon, song):
     )
 
 
+def test_a_run_goes_by_class_as_offers_do(um, anon, sid, song):
+    """API 1.91: POST …/runs holds the offers' class rule: a voice take into a music-only edit is 422, a song runs."""
+    voice = upload_audio(um, anon)["id"]
+    inputs = {"prompt.text": "new chorus", "repaint.span": {"start": 0.5, "end": 1}}
+    why = f"repaint.source: take {voice} is voice; this workflow takes music only"
+    assert (
+        run(um, sid, REPAINT, inputs | {"repaint.source": {"take_id": voice}}, 422)["detail"] == why
+    )
+    run(um, sid, REPAINT, inputs | {"repaint.source": {"take_id": song["id"]}})
+
+
 def test_a_repaint_takes_a_span_on_the_song(um, sid, song):
     inputs = {"prompt.text": "new chorus", "repaint.source": {"take_id": song["id"]},
               "repaint.span": {"start": 2.00049, "end": 3.5}, "repaint.delay_ms": 0}  # fmt: skip

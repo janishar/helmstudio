@@ -32,9 +32,13 @@ type boardRow struct {
 	Revision             int
 	CreatedAt, UpdatedAt time.Time
 	SessionID            *string // API 1.81: made at its first run
+	TitleSource          string  // API 1.91: default | prompt | user | model, as a sequence's name
+	NamedBy              *string
+	NameAsked            bool
 }
 
-const boardCols = `id::text, owner_id::text, name, doc, revision, created_at, updated_at, session_id::text`
+const boardCols = `id::text, owner_id::text, name, doc, revision, created_at, updated_at, session_id::text,
+	title_source, named_by, name_asked`
 
 func (r boardRow) doc() magic.Doc {
 	d, err := magic.Parse(r.Doc)
@@ -119,7 +123,7 @@ func boardKept(ctx context.Context, tx pgx.Tx, id string, p *int) (bool, error) 
 // boardDTO is the board as answered, with whether undo and redo can go and (API 1.81) its runs, takes and statuses.
 func (s *Service) boardDTO(ctx context.Context, tx pgx.Tx, row boardRow) (dto.MagicBoard, error) {
 	out := dto.MagicBoard{ID: row.ID, Name: row.Name, Revision: row.Revision, Doc: row.doc(), CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt}
+		UpdatedAt: row.UpdatedAt, TitleSource: row.TitleSource, NamedBy: row.NamedBy}
 	undo, redo, err := boardPointers(ctx, tx, row.ID, row.Revision)
 	if err == nil {
 		out.CanUndo, err = boardKept(ctx, tx, row.ID, undo)
@@ -202,18 +206,21 @@ func (s *Service) CreateMagicBoard(ctx context.Context, caller common.Caller, bo
 				return err
 			}
 		}
-		name := "Untitled board"
+		name, source := "Untitled board", "default"
 		if body.Name != nil {
-			name = strings.TrimSpace(*body.Name)
+			name, source = strings.TrimSpace(*body.Name), "user"
 		}
 		data, _ := json.Marshal(doc)
-		row, err := one[boardRow](ctx, tx, `INSERT INTO magic_boards (id, owner_id, name, doc) VALUES ($1, $2, $3, $4)
-			RETURNING `+boardCols, utility.NewID(), caller.ID, name, data)
+		row, err := one[boardRow](ctx, tx, `INSERT INTO magic_boards (id, owner_id, name, doc, title_source)
+			VALUES ($1, $2, $3, $4, $5) RETURNING `+boardCols, utility.NewID(), caller.ID, name, data, source)
 		if err != nil {
 			return err
 		}
 		if _, err := tx.Exec(ctx, `INSERT INTO magic_board_revisions (board_id, owner_id, revision, doc, by, via, ops_summary)
 			VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
+			return err
+		}
+		if err := askBoardName(ctx, tx, s.remoteOn, &row); err != nil { // API 1.91
 			return err
 		}
 		out, err = s.boardDTO(ctx, tx, row)
@@ -263,6 +270,9 @@ func (s *Service) editBoard(ctx context.Context, caller common.Caller, id string
 		if err == nil {
 			err = fn(tx, &row)
 		}
+		if err == nil { // API 1.91: an undo, redo or restore may bring a prompt
+			err = askBoardName(ctx, tx, s.remoteOn, &row)
+		}
 		if err == nil {
 			out, err = s.boardDTO(ctx, tx, row)
 		}
@@ -271,11 +281,18 @@ func (s *Service) editBoard(ctx context.Context, caller common.Caller, id string
 	return out, err
 }
 
-// PatchMagicBoard renames the board (no revision).
+// PatchMagicBoard renames the board (no revision): the name is the user's (API 1.91), so the namer never replaces it,
+// nor its session's title.
 func (s *Service) PatchMagicBoard(ctx context.Context, caller common.Caller, id string, body *dto.MagicBoardPatch) (dto.MagicBoard, error) {
 	return s.editBoard(ctx, caller, id, func(tx pgx.Tx, row *boardRow) error {
-		updated, err := one[boardRow](ctx, tx, `UPDATE magic_boards SET name = $2, updated_at = clock_timestamp() WHERE id = $1
-			RETURNING `+boardCols, row.ID, strings.TrimSpace(*body.Name))
+		if row.SessionID != nil {
+			if _, err := tx.Exec(ctx, `UPDATE sessions SET title_source = 'user', named_by = NULL WHERE id = $1
+				AND title_source IN ('default', 'prompt')`, *row.SessionID); err != nil {
+				return err
+			}
+		}
+		updated, err := one[boardRow](ctx, tx, `UPDATE magic_boards SET name = $2, title_source = 'user', named_by = NULL,
+			updated_at = clock_timestamp() WHERE id = $1 RETURNING `+boardCols, row.ID, strings.TrimSpace(*body.Name))
 		*row = updated
 		return err
 	})
@@ -343,6 +360,9 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 		}
 		undo := row.Revision
 		if err := storeBoard(ctx, tx, &row, doc, userWrite(caller, summary), &undo, nil); err != nil {
+			return err
+		}
+		if err := askBoardName(ctx, tx, s.remoteOn, &row); err != nil { // API 1.91
 			return err
 		}
 		out.Revision = row.Revision
