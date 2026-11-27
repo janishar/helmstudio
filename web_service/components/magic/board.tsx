@@ -636,6 +636,18 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 <SlidersHorizontal size={16} strokeWidth={1.75} aria-hidden />
               </button>
               <span className="bsep" />
+              {/* Play the board from the playhead (MagicBoard frame 1; owner, 2026-11-27: "keep it run add play button") */}
+              <button
+                type="button"
+                className="chip bevel max-md:hidden"
+                aria-label={playing ? "Pause the board" : "Play the board"}
+                aria-keyshortcuts="Space"
+                title={playing ? "Pause (Space)" : "Play the board from the playhead (Space)"}
+                onClick={() => (playing ? player.current?.pause() : player.current?.play())}
+              >
+                {playing ? <Pause10 /> : <Play10 />}
+                {playing ? "Pause" : "Play"}
+              </button>
               <button
                 type="button"
                 className="chip bevel"
@@ -1189,6 +1201,12 @@ const MagnetGlyph = () => (
     <path d="M6 8h4M14 8h4" />
   </svg>
 );
+const Pause10 = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+    <path d="M7 4h3.5v16H7zM13.5 4H17v16h-3.5z" />
+  </svg>
+);
+
 const Play10 = () => (
   <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
     <path d="M7 4v16l13-8z" />

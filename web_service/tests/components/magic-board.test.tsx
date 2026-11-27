@@ -265,6 +265,16 @@ describe("the board", () => {
     expect(blockEl(/Voice block Line 1, 3.4 s/)).toBeTruthy();
   });
 
+  it("Play beside Run board plays the board from the playhead and turns into Pause (frame 1)", () => {
+    render(<MagicBoard local />);
+    const bar = screen.getByRole("toolbar", { name: "Board tools" });
+    const play = within(bar).getByRole("button", { name: "Play the board" });
+    expect(play.nextElementSibling?.textContent).toContain("Run board");
+    fireEvent.click(play);
+    expect(
+      within(bar).getByRole("button", { name: /Pause the board|Play the board/ }),
+    ).toBeTruthy();
+  });
   it("the player goes full screen from ⛶ (frame 1)", () => {
     const req = vi.fn(() => Promise.resolve());
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
