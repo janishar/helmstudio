@@ -220,7 +220,9 @@ export function statusOf(
   const by = new Map<string, Host[]>();
   for (const h of runners) by.set(h.host, [...(by.get(h.host) ?? []), h]);
   let recent = false;
-  for (const host of [...by.keys()].sort()) {
+  // a Mac's runners first, NVIDIA hosts last (board g1), each by name
+  const isGpu = (h: string) => by.get(h)!.some((e) => e.device?.kind === "cuda");
+  for (const host of [...by.keys()].sort((a, b) => +isGpu(a) - +isGpu(b) || a.localeCompare(b))) {
     const envs = by.get(host)!.toSorted((a, b) => a.env.localeCompare(b.env));
     const fresh = (h: Host) => now - Date.parse(h.updated_at) < STALE_MS;
     const gpu = envs.find((e) => e.device?.kind === "cuda");

@@ -414,9 +414,9 @@ describe("g · the status tile", () => {
     expect(s.tile).toBe("Runner down");
     expect(s.rows.map((r) => [r.name, r.sub, r.text])).toEqual([
       ["Studio", "", "Answering"],
-      ["NVIDIA", "gcp · RTX PRO 6000", expect.stringMatching(/^Offline since \d\d:\d\d$/)],
       ["mlx runner", "mac-studio", "Stopped"],
       ["torch runner", "mac-studio", "Ready"],
+      ["NVIDIA", "gcp · RTX PRO 6000", expect.stringMatching(/^Offline since \d\d:\d\d$/)],
     ]);
   });
 

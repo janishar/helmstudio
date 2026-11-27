@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T15:00:00Z",
+  "at": "2026-11-27T16:20:00Z",
   "via": "Claude Code",
-  "note": "Error states (docs/mock/ErrorStates.dc.html, web app): StatusBanner (Studio isn’t answering · Retry now, Back online), StatusTile and its popover (Runner down, No runner, Studio down), RunFailedCard (This run stopped in plain words, Show details, Retry; the failed tile's Retry, Show details, Copy error rows), RunWaiting (trying again 2 of 2, Waiting · N ahead, Live updates paused · retrying, the why line under a greyed Generate); icons server-crash, wifi-off, refresh-cw, circle-check (owner, 2026-11-27: \"Approved, build it\")"
+  "note": "Error states, browser pass (docs/mock/ErrorStates.dc.html, web app): the status tile uses the activity icon (as the board draws it) and lists a Mac's runners before NVIDIA hosts; the waiting line uses clock-3; the clip's Make shot form greys its Generate like the Timeline's Generate shot (owner, 2026-11-27: \"Approved, build it\")"
  }
 }

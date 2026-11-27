@@ -10,6 +10,7 @@ import {
   AtSign,
   AudioLines,
   Check,
+  Clock3,
   Download,
   Film,
   Clapperboard,
@@ -3206,7 +3207,7 @@ export function Create({
                     ? "Sending…"
                     : notDownloaded
                       ? drive
-                        ? "Not connected"
+                        ? "Generate"
                         : "Not downloaded"
                       : blocked
                         ? `${blocked} problem${blocked === 1 ? "" : "s"}`
@@ -3765,7 +3766,7 @@ function RunStrip({
           {wait.retry ? (
             <LoaderCircle size={14} className="spin" aria-hidden />
           ) : (
-            <TriangleAlert size={14} aria-hidden />
+            <Clock3 size={14} aria-hidden />
           )}
           {wait.line}
         </span>

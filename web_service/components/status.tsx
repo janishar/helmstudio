@@ -5,7 +5,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Boxes, CircleCheck, LoaderCircle, RefreshCw, ServerCrash, Server } from "lucide-react";
+import { Boxes, CircleCheck, LoaderCircle, RefreshCw, Activity, Server } from "lucide-react";
 import { openMenu, type Item } from "@/components/context-menu";
 import { useHosts } from "@/components/create/memory-chip";
 import { arm, retryNow, statusOf, useHealth, type StatusRow } from "@/lib/health";
@@ -100,7 +100,7 @@ export function StatusTile({ admin }: { admin: boolean }) {
         style={{ anchorName: "--status" } as React.CSSProperties}
       >
         <span className="hdot" aria-hidden />
-        <ServerCrash aria-hidden />
+        <Activity aria-hidden />
         <span className="hl">{tile}</span>
       </button>
       <div
