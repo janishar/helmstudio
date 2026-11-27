@@ -28,10 +28,10 @@
   html {
     @apply font-sans;
   }
-  /* every scrollbar the theme's: thin, a soft thumb on no track (the browser's grey bar showed on the Magic strip) */
+  /* every scrollbar the theme's: thin, an accent thumb on no track (an s4 one vanished on the panels) */
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--s4) transparent;
+    scrollbar-color: var(--a1) transparent;
   }
   /* 14/20 text on the body, not the root: the root stays 16px, so Tailwind's rem units land on the mock's px */
   body {
@@ -2288,8 +2288,6 @@
       padding: 14px 16px 40px 14px;
       overflow-x: hidden;
       overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--s4) transparent;
     }
   }
   .dock-item:not([aria-current]) .tile {

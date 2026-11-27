@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T01:10:00Z",
+  "at": "2026-11-28T01:40:00Z",
   "via": "Claude Code",
-  "note": "AssistantDrawer live steps: each tool call gets a running line that turns into a done tick, and Thinking restarts per model call (owner, 2026-11-28: \"yes show each step in the panel\"); Scrollbars: every scrolling area the thin themed bar, an s4 thumb on no track (README Visual foundations)"
+  "note": "Scrollbars: the thumb is the accent a1, still thin and with no track (s4 vanished on the panels; owner, 2026-11-28: \"use accent color and make it thin\")"
  }
 }

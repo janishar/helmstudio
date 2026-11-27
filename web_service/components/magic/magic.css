@@ -124,8 +124,6 @@
   min-height: 0;
   overflow-x: auto;
   overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--s4) transparent;
 }
 :is(.mg, .mg-side) .lh {
   position: sticky;
