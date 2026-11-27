@@ -39,7 +39,7 @@ var magicTools = map[string][2][]string{
 	"restore_board":    {{"board_id", "revision", "to"}, {"board_id", "revision", "to"}},
 	"plan_board":       {{"board_id", "blocks", "lane", "stale"}, {"board_id"}},
 	"run_blocks":       {{"board_id", "revision", "blocks", "lane", "stale"}, {"board_id", "revision"}},
-	"make_views":       {{"board_id", "revision", "asset", "views", "model"}, {"board_id", "revision", "asset", "views"}},
+	"make_views":       {{"board_id", "revision", "asset", "views", "model", "width", "height", "advanced"}, {"board_id", "revision", "asset", "views"}},
 	"board_frame":      {{"board_id", "at"}, {"board_id", "at"}},
 	"send_to_timeline": {{"board_id", "revision", "name"}, {"board_id", "revision"}},
 }

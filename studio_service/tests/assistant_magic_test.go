@@ -260,7 +260,9 @@ func TestAssistantMagic(t *testing.T) {
 	}
 
 	// make_views: within the limit the views start at once (no card) with their estimate
-	views := map[string]any{"board_id": id, "revision": rev, "asset": "mara", "views": []string{"Front"}}
+	// API 1.98: its size and advanced are taken (they were refused as unknown args)
+	views := map[string]any{"board_id": id, "revision": rev, "asset": "mara", "views": []string{"Front"},
+		"width": 768, "height": 1024, "advanced": map[string]any{}}
 	made = result(ask(userA, fresh(), "make_views", false, views))
 	if len(made["started"].([]any)) != 1 || made["seconds"] == nil || made["revision"] == nil {
 		t.Fatal(made)
