@@ -340,11 +340,9 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	switch name {
 	case "sessions":
 		if args.SessionID == nil {
-			get("sessions", "/sessions")
-			cut(result, "sessions", "sessions", limit)
+			get("sessions", fmt.Sprintf("/sessions?limit=%d", limit)) // API 1.92: the list pages
 		} else {
-			get("runs", "/sessions/"+esc(args.SessionID)+"/runs")
-			cut(result, "runs", "runs", limit)
+			get("runs", fmt.Sprintf("/sessions/%s/runs?limit=%d", esc(args.SessionID), limit))
 			get("takes", fmt.Sprintf("/sessions/%s/takes?limit=%d", esc(args.SessionID), limit))
 		}
 	case "list_workflows":
@@ -488,18 +486,6 @@ func single(body json.RawMessage, refused *message.ToolsReply) message.ToolsRepl
 		return *refused
 	}
 	return message.ToolsReply{Result: body}
-}
-
-// cut keeps the first n items of result[key][field] (a list the route does not page).
-func cut(result map[string]any, key, field string, n int) {
-	raw, ok := result[key].(json.RawMessage)
-	var doc map[string]json.RawMessage
-	var items []json.RawMessage
-	if !ok || json.Unmarshal(raw, &doc) != nil || json.Unmarshal(doc[field], &items) != nil {
-		return
-	}
-	doc[field] = toJSON(items[:min(n, len(items))])
-	result[key] = doc
 }
 
 // cmpAny is v, or fallback when v is nil.

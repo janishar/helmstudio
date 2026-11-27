@@ -504,7 +504,8 @@ type TimelineSummary struct {
 
 // TimelineList is GET /timelines.
 type TimelineList struct {
-	Timelines []TimelineSummary `json:"timelines"`
+	Timelines  []TimelineSummary `json:"timelines"`
+	NextCursor *string           `json:"next_cursor"` // API 1.92
 }
 
 // TimelineShot is New shot's 202.

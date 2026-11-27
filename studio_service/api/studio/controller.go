@@ -244,8 +244,19 @@ func withBody[B, T any](ctx *gin.Context, status int, fn func(caller common.Call
 
 // listSessionsHandler: GET /sessions.
 func (c *controller) listSessionsHandler(ctx *gin.Context) {
-	out, err := c.service.ListSessions(ctx.Request.Context(), common.MustCaller(ctx))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, 100); ok {
+		out, err := c.service.ListSessions(ctx.Request.Context(), common.MustCaller(ctx), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
+}
+
+// pageOr422 is ParsePage of the request's query (def: the list's default limit); false after a 422 (API 1.92).
+func pageOr422(ctx *gin.Context, def int) (Page, bool) {
+	page, detail := ParsePage(ctx.Request.URL.Query(), def)
+	if detail != "" {
+		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+	}
+	return page, detail == ""
 }
 
 // createSessionHandler: POST /sessions — the body is optional.
@@ -436,8 +447,10 @@ func (c *controller) listHostsHandler(ctx *gin.Context) {
 
 // listRunsHandler: GET /sessions/{id}/runs.
 func (c *controller) listRunsHandler(ctx *gin.Context) {
-	out, err := c.service.ListRuns(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, 100); ok {
+		out, err := c.service.ListRuns(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
 }
 
 // createRunHandler: POST /sessions/{id}/runs — 202 with the run, queued or already failed.
@@ -573,14 +586,23 @@ func (c *controller) serveEvents(ctx *gin.Context, read func(ctx context.Context
 
 // listBatchesHandler: GET /batches.
 func (c *controller) listBatchesHandler(ctx *gin.Context) {
-	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
-	if detail != "" {
-		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+	page, ok := pageOr422(ctx, 60)
+	if !ok {
 		return
 	}
-	out, err := c.service.ListBatches(ctx.Request.Context(), common.MustCaller(ctx), page)
+	states := ctx.QueryArray("state") // API 1.92
+	for _, state := range states {
+		if !slices.Contains(batchStates, state) {
+			network.SendError(ctx, http.StatusUnprocessableEntity, "state must be one of "+strings.Join(batchStates, ", "))
+			return
+		}
+	}
+	out, err := c.service.ListBatches(ctx.Request.Context(), common.MustCaller(ctx), page, states)
 	reply(ctx, http.StatusOK, out, err)
 }
+
+// batchStates are BatchStatus's values (contracts/openapi.yaml), GET /batches's state filter.
+var batchStates = []string{"queued", "running", "waiting", "paused", "done", "failed", "stopped"}
 
 // createBatchHandler: POST /batches — 202 with the batch, queued.
 func (c *controller) createBatchHandler(ctx *gin.Context) {
@@ -597,7 +619,7 @@ func (c *controller) getBatchHandler(ctx *gin.Context) {
 
 // listBatchRowsHandler: GET /batches/{id}/rows — 404 before any 422.
 func (c *controller) listBatchRowsHandler(ctx *gin.Context) {
-	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
+	page, detail := ParsePage(ctx.Request.URL.Query(), 60)
 	caller := common.MustCaller(ctx)
 	if detail != "" {
 		if _, err := c.service.GetBatch(ctx.Request.Context(), caller, ctx.Param("id")); err != nil {
@@ -736,8 +758,10 @@ func (c *controller) getJudgeTestHandler(ctx *gin.Context) {
 
 // listPipelinesHandler: GET /pipelines.
 func (c *controller) listPipelinesHandler(ctx *gin.Context) {
-	out, err := c.service.ListPipelines(ctx.Request.Context(), common.MustCaller(ctx))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, MaxPipelines); ok {
+		out, err := c.service.ListPipelines(ctx.Request.Context(), common.MustCaller(ctx), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
 }
 
 // getPipelineHandler: GET /pipelines/{id}.
@@ -826,8 +850,14 @@ func (c *controller) batchEventsHandler(ctx *gin.Context) {
 func (c *controller) listLibraryHandler(ctx *gin.Context) {
 	query, detail := ParseLibraryQuery(ctx.Query("kind"), ctx.Query("group"), ctx.Query("q"), ctx.Query("limit"))
 	query.Source, query.Family, query.Workflow = ctx.Query("source"), ctx.Query("family"), ctx.Query("workflow")
+	words := ctx.Query("words") // API 1.92
+	for _, word := range strings.Fields(strings.ToLower(words)) {
+		query.Words = append(query.Words, cmp.Or(strings.TrimPrefix(word, "@"), word))
+	}
 	switch {
 	case detail != "":
+	case utf8.RuneCountInString(words) > 200:
+		detail = "words must be at most 200 characters"
 	case query.Source != "" && query.Source != "mine" && query.Source != "starter":
 		detail = "source must be mine or starter"
 	case query.Family != "" && !familySlug.MatchString(query.Family):

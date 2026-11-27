@@ -206,21 +206,29 @@ func (s *Service) GetRun(ctx context.Context, caller common.Caller, runID string
 	return out, err
 }
 
-// ListRuns returns the session's newest 100 runs: never a deleted one or its hidden naming run (API 1.43).
-func (s *Service) ListRuns(ctx context.Context, caller common.Caller, sessionID string) (dto.RunList, error) {
+// ListRuns returns a page of the session's runs, newest first: never a deleted one or its hidden naming run (API 1.43).
+// API 1.92: q matches the workflow id and title and the inputs' text values.
+func (s *Service) ListRuns(ctx context.Context, caller common.Caller, sessionID string, page Page) (dto.RunList, error) {
 	if !utility.IsUUID(sessionID) {
 		return dto.RunList{}, errNotFound
 	}
 	out := dto.RunList{Runs: []dto.Run{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+	args := sqlArgs{sessionID}
+	match := matchSQL(page.Words, &args, `workflow_id`, `workflow_title`, jsonTexts(`inputs`))
+	tail, err := keysetSQL(page, &args, `created_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		if _, err := one[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions WHERE id = $1`, sessionID); err != nil {
 			return err
 		}
 		runs, err := collect[model.Run](ctx, tx, `SELECT `+model.RunCols+` FROM runs WHERE session_id = $1
-			AND deleted_at IS NULL AND purpose IS NULL ORDER BY created_at DESC, id LIMIT 100`, sessionID)
+			AND deleted_at IS NULL AND purpose IS NULL`+match+tail, args...)
 		if err != nil {
 			return err
 		}
+		runs, out.NextCursor = pageOf(runs, page.Limit, func(r model.Run) (time.Time, string) { return r.CreatedAt, r.ID })
 		ids := make([]string, len(runs))
 		for i, run := range runs {
 			ids[i] = run.ID

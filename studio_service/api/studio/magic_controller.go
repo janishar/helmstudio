@@ -17,8 +17,10 @@ import (
 // mountMagic registers the Magic board routes (API 1.80, plan 39 phase C).
 func (c *controller) mountMagic(group *gin.RouterGroup) {
 	group.GET("/magic/boards", func(ctx *gin.Context) {
-		out, err := c.service.ListMagicBoards(ctx.Request.Context(), common.MustCaller(ctx))
-		reply(ctx, http.StatusOK, out, err)
+		if page, ok := pageOr422(ctx, MaxBoards); ok {
+			out, err := c.service.ListMagicBoards(ctx.Request.Context(), common.MustCaller(ctx), page)
+			reply(ctx, http.StatusOK, out, err)
+		}
 	})
 	group.POST("/magic/boards", func(ctx *gin.Context) { // an empty body is an empty board
 		body, err := optionalBody[dto.MagicBoardCreate](ctx)

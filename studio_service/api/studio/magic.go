@@ -164,12 +164,18 @@ func storeBoard(ctx context.Context, tx pgx.Tx, row *boardRow, doc magic.Doc, w 
 	return err
 }
 
-// ListMagicBoards is the caller's boards, newest first.
-func (s *Service) ListMagicBoards(ctx context.Context, caller common.Caller) (dto.MagicBoardList, error) {
+// ListMagicBoards is a page of the caller's boards, newest updated first; API 1.92: q matches the name.
+func (s *Service) ListMagicBoards(ctx context.Context, caller common.Caller, page Page) (dto.MagicBoardList, error) {
 	out := dto.MagicBoardList{Boards: []dto.MagicBoardSummary{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[boardRow](ctx, tx, `SELECT `+boardCols+` FROM magic_boards WHERE deleted_at IS NULL
-			ORDER BY updated_at DESC, id LIMIT 100`)
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `name`)
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[boardRow](ctx, tx, `SELECT `+boardCols+` FROM magic_boards WHERE deleted_at IS NULL`+match+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r boardRow) (time.Time, string) { return r.UpdatedAt, r.ID })
 		for _, row := range rows {
 			d := row.doc()
 			out.Boards = append(out.Boards, dto.MagicBoardSummary{ID: row.ID, Name: row.Name, Revision: row.Revision,

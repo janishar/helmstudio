@@ -527,7 +527,8 @@ type PipelineValidation struct {
 
 // PipelineList is the caller's pipelines, newest first.
 type PipelineList struct {
-	Pipelines []Pipeline `json:"pipelines"`
+	Pipelines  []Pipeline `json:"pipelines"`
+	NextCursor *string    `json:"next_cursor"` // API 1.92
 }
 
 // PipelineCreate is POST /pipelines: a whole document with optional based_on, or {based_on, title?} to copy.

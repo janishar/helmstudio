@@ -284,7 +284,8 @@ type MagicBoardSummary struct {
 
 // MagicBoardList is GET /magic/boards.
 type MagicBoardList struct {
-	Boards []MagicBoardSummary `json:"boards"`
+	Boards     []MagicBoardSummary `json:"boards"`
+	NextCursor *string             `json:"next_cursor"` // API 1.92
 }
 
 // boardName is "" or why name is not a board's or snapshot's name.

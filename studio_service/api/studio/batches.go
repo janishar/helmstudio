@@ -260,51 +260,22 @@ func (s *Service) GetBatch(ctx context.Context, caller common.Caller, batchID st
 	return out, err
 }
 
-// Page is a list's cursor and size: After is the opaque next_cursor of the page before.
-type Page struct {
-	After string
-	Limit int
-}
-
-// ParsePage reads cursor and limit (1-200, default 60); the second result is the 422 detail.
-func ParsePage(cursor, limit string) (Page, string) {
-	page := Page{After: cursor, Limit: 60}
-	if limit != "" {
-		n, err := strconv.Atoi(limit)
-		if err != nil || n < 1 || n > 200 {
-			return page, "limit must be a whole number from 1 to 200"
-		}
-		page.Limit = n
-	}
-	if cursor != "" {
-		if _, err := base64.RawURLEncoding.DecodeString(cursor); err != nil {
-			return page, "cursor is not a next_cursor"
-		}
-	}
-	return page, ""
-}
-
-// ListBatches returns a page of the caller's batches, newest first; the cursor is the last one's (created_at, id).
-func (s *Service) ListBatches(ctx context.Context, caller common.Caller, page Page) (dto.BatchPage, error) {
+// ListBatches returns a page of the caller's batches, newest first; the cursor is the last one's (created_at, id). API
+// 1.92: q matches the title, the pipeline's and the workflow's; states keeps those statuses.
+func (s *Service) ListBatches(ctx context.Context, caller common.Caller, page Page, states []string) (dto.BatchPage, error) {
 	out := dto.BatchPage{Batches: []dto.Batch{}}
-	where, args := `WHERE true`, []any{page.Limit + 1}
-	if page.After != "" {
-		raw, _ := base64.RawURLEncoding.DecodeString(page.After)
-		stamp, id, _ := strings.Cut(string(raw), "|")
-		at, err := time.Parse(time.RFC3339Nano, stamp)
-		if err != nil || !utility.IsUUID(id) {
-			return out, network.NewUnprocessableError("cursor is not a next_cursor", nil)
-		}
-		where, args = `WHERE (b.created_at, b.id) < ($2, $3::uuid)`, append(args, at, id)
+	args := sqlArgs{}
+	where := `WHERE true` + matchSQL(page.Words, &args, `b.title`, `b.pipeline_title`, `b.workflow_title`)
+	if len(states) > 0 {
+		where += ` AND b.status = ANY(` + args.add(states) + `::text[])`
 	}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[model.Batch](ctx, tx, model.BatchFrom+where+` ORDER BY b.created_at DESC, b.id DESC LIMIT $1`, args...)
-		if len(rows) > page.Limit {
-			rows = rows[:page.Limit]
-			last := rows[len(rows)-1]
-			next := base64.RawURLEncoding.EncodeToString([]byte(last.CreatedAt.UTC().Format(time.RFC3339Nano) + "|" + last.ID))
-			out.NextCursor = &next
-		}
+	tail, err := keysetSQL(page, &args, `b.created_at`, `b.id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[model.Batch](ctx, tx, model.BatchFrom+where+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(b model.Batch) (time.Time, string) { return b.CreatedAt, b.ID })
 		for _, row := range rows {
 			out.Batches = append(out.Batches, batchDTO(row))
 		}
@@ -328,12 +299,15 @@ func (s *Service) ListBatchRows(ctx context.Context, caller common.Caller, batch
 		}
 		after = n
 	}
+	args := sqlArgs{batchID, after, page.Limit + 1}
+	// API 1.92: q matches the inputs' text values and the status as shown
+	match := matchSQL(page.Words, &args, jsonTexts(`br.inputs`), `(`+model.RowShown+`)`)
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		if _, err := one[struct{ ID string }](ctx, tx, `SELECT id::text FROM batches WHERE id = $1`, batchID); err != nil {
 			return err
 		}
-		rows, err := collect[model.BatchRow](ctx, tx, model.BatchRowFrom+`WHERE br.batch_id = $1 AND br.n > $2
-			ORDER BY br.n LIMIT $3`, batchID, after, page.Limit+1)
+		rows, err := collect[model.BatchRow](ctx, tx, model.BatchRowFrom+`WHERE br.batch_id = $1 AND br.n > $2`+match+`
+			ORDER BY br.n LIMIT $3`, args...)
 		if len(rows) > page.Limit {
 			rows = rows[:page.Limit]
 			next := base64.RawURLEncoding.EncodeToString([]byte("row " + strconv.Itoa(rows[len(rows)-1].Row)))

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -205,18 +206,25 @@ func (s *Service) pipelineDTOs(ctx context.Context, tx pgx.Tx, rows []model.User
 	return out, nil
 }
 
-// ListPipelines returns the caller's pipelines, newest first.
-func (s *Service) ListPipelines(ctx context.Context, caller common.Caller) (dto.PipelineList, error) {
+// ListPipelines returns a page of the caller's pipelines, newest updated first; API 1.92: q matches the title.
+func (s *Service) ListPipelines(ctx context.Context, caller common.Caller, page Page) (dto.PipelineList, error) {
 	out := dto.PipelineList{Pipelines: []dto.Pipeline{}}
 	if err := s.ready(); err != nil {
 		return out, err
 	}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[model.UserPipeline](ctx, tx, `SELECT `+model.UserPipelineCols+` FROM user_pipelines
-			ORDER BY updated_at DESC, id LIMIT $1`, MaxPipelines)
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `title`)
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[model.UserPipeline](ctx, tx, `SELECT `+model.UserPipelineCols+` FROM user_pipelines WHERE true`+match+tail,
+			args...)
 		if err != nil || len(rows) == 0 {
 			return err
 		}
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r model.UserPipeline) (time.Time, string) { return r.UpdatedAt, r.ID })
 		out.Pipelines, err = s.pipelineDTOs(ctx, tx, rows)
 		return err
 	})

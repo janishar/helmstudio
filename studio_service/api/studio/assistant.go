@@ -513,14 +513,21 @@ func putEntry(ctx context.Context, tx pgx.Tx, t threadRow, key string, turn int,
 
 // AssistantThreadList is GET /assistant/threads.
 type AssistantThreadList struct {
-	Status  AssistantStatus   `json:"status"`
-	Threads []AssistantThread `json:"threads"`
+	Status     AssistantStatus   `json:"status"`
+	Threads    []AssistantThread `json:"threads"`
+	NextCursor *string           `json:"next_cursor"` // API 1.92
 }
 
 // ListAssistantThreads is GET /assistant/threads: the caller's chats, newest first, and the status.
-func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller) (AssistantThreadList, error) {
+func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller, page Page) (AssistantThreadList, error) {
 	out := AssistantThreadList{Threads: []AssistantThread{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `title`) // API 1.92
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var err error
 		if out.Status, _, err = s.assistantConfig(ctx, tx); err != nil {
 			return err
@@ -528,8 +535,8 @@ func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller
 		if out.Status, err = s.statusFor(ctx, tx, caller, out.Status); err != nil {
 			return err
 		}
-		rows, err := collect[threadRow](ctx, tx, `SELECT `+threadCols+` FROM assistant_threads ORDER BY updated_at DESC, id DESC
-			LIMIT $1`, MaxAssistantThreads)
+		rows, err := collect[threadRow](ctx, tx, `SELECT `+threadCols+` FROM assistant_threads WHERE true`+match+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(t threadRow) (time.Time, string) { return t.UpdatedAt, t.ID })
 		for _, t := range rows {
 			out.Threads = append(out.Threads, t.dto())
 		}

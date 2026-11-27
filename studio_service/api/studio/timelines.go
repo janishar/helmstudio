@@ -681,15 +681,21 @@ func firstTarget(row gallerymodel.Take) timeline.Target {
 	return t
 }
 
-// ListTimelines is the caller's sequences, newest first.
-func (s *Service) ListTimelines(ctx context.Context, caller common.Caller) (dto.TimelineList, error) {
+// ListTimelines is a page of the caller's sequences, newest updated first; API 1.92: q matches the name.
+func (s *Service) ListTimelines(ctx context.Context, caller common.Caller, page Page) (dto.TimelineList, error) {
 	out := dto.TimelineList{Timelines: []dto.TimelineSummary{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE deleted_at IS NULL
-			ORDER BY updated_at DESC, id LIMIT 100`)
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `name`)
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE deleted_at IS NULL`+match+tail, args...)
 		if err != nil {
 			return err
 		}
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r timelineRow) (time.Time, string) { return r.UpdatedAt, r.ID })
 		var firsts []string
 		docs := make([]timeline.Doc, len(rows))
 		for i, row := range rows {

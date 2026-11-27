@@ -18,8 +18,10 @@ import (
 // mountTimelines registers the sequence, export, media-job and frame routes (API 1.17).
 func (c *controller) mountTimelines(group *gin.RouterGroup) {
 	group.GET("/timelines", func(ctx *gin.Context) {
-		out, err := c.service.ListTimelines(ctx.Request.Context(), common.MustCaller(ctx))
-		reply(ctx, http.StatusOK, out, err)
+		if page, ok := pageOr422(ctx, MaxTimelines); ok {
+			out, err := c.service.ListTimelines(ctx.Request.Context(), common.MustCaller(ctx), page)
+			reply(ctx, http.StatusOK, out, err)
+		}
 	})
 	group.POST("/timelines", func(ctx *gin.Context) { // an empty body is an empty sequence
 		body, err := optionalBody[dto.TimelineCreate](ctx)

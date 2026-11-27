@@ -118,14 +118,21 @@ func (s *Service) CreateSession(ctx context.Context, caller common.Caller, body 
 	return out, err
 }
 
-// ListSessions returns the caller's newest 100 sessions and how new ones are named (API 1.43).
-func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.SessionList, error) {
+// ListSessions returns a page of the caller's sessions, newest first, and how new ones are named (API 1.43); API 1.92:
+// q matches the title.
+func (s *Service) ListSessions(ctx context.Context, caller common.Caller, page Page) (dto.SessionList, error) {
 	out := dto.SessionList{Sessions: []dto.Session{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `s.title`)
+	tail, err := keysetSQL(page, &args, `s.created_at`, `s.id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		// API 1.81: a Magic board's own session is not listed (it is the board's)
 		rows, err := collect[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions s
-			WHERE NOT EXISTS (SELECT 1 FROM magic_boards b WHERE b.session_id = s.id)
-			ORDER BY created_at DESC LIMIT 100`)
+			WHERE NOT EXISTS (SELECT 1 FROM magic_boards b WHERE b.session_id = s.id)`+match+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r model.Session) (time.Time, string) { return r.CreatedAt, r.ID })
 		for _, row := range rows {
 			out.Sessions = append(out.Sessions, sessionDTO(row))
 		}
