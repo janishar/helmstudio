@@ -36,11 +36,12 @@ export const useAssistantApi = () => use(AssistantContext);
 /** Dock items: route, label, glyph and the tile's gradient. Hub and System follow for admins (plan 33), as a group. */
 const ITEMS = [
   { href: "/", label: "Create", Icon: Sparkles, tile: "linear-gradient(155deg,#a393ff,#4a2fe0)" },
+  // plan 39: lanes in time, right after Create (owner, 2026-11-27)
   {
-    href: "/pipelines",
-    label: "Pipelines",
-    Icon: Workflow,
-    tile: "linear-gradient(155deg,#6cc4ff,#1f5fe0)",
+    href: "/magic",
+    label: "Magic",
+    Icon: WandSparkles,
+    tile: "linear-gradient(155deg,#f2a8ff,#8a3fd6)",
   },
   {
     href: "/gallery",
@@ -54,12 +55,11 @@ const ITEMS = [
     Icon: Clapperboard,
     tile: "linear-gradient(155deg,#ffe07a,#f08a1c)",
   },
-  // plan 39: lanes in time, between Timeline and Models (MagicBoard)
   {
-    href: "/magic",
-    label: "Magic",
-    Icon: WandSparkles,
-    tile: "linear-gradient(155deg,#f2a8ff,#8a3fd6)",
+    href: "/pipelines",
+    label: "Pipelines",
+    Icon: Workflow,
+    tile: "linear-gradient(155deg,#6cc4ff,#1f5fe0)",
   },
   {
     href: "/models",
