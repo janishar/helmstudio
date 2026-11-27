@@ -49,6 +49,9 @@ COT_TOKENS = 600  # phase 1's cap (the repo's buffer: 500 over the codes it neve
 KEYS = {f"{n}{a} {m}" for n in "ABCDEFG" for a in ("", "#", "b") for m in ("major", "minor")}
 TIMES = {"2/4": "2", "3/4": "3", "4/4": "4", "6/8": "6"}  # param value -> the model's timesignature
 TIME_OF = {v: k for k, v in TIMES.items()}
+# the song stage's language enum less auto (model.yaml; tests/test_ace_step.py holds them equal)
+LANGUAGES = {"en", "zh", "ja", "ko", "es", "fr", "de", "it", "pt", "ru", "hi", "ar", "nl", "pl", "tr", "sv", "vi", "th",
+             "id", "yue"}  # fmt: skip
 TAG = re.compile(r"^\s*\[([^\]]+)\]\s*$")
 CROSSFADE_S = 0.01
 # lyric_alignment_common.py: the 2B's alignment heads (XL's are in its config.json)
@@ -296,7 +299,7 @@ def cot(metas: dict) -> str:
 
 def settle(song: Song, said: dict) -> dict:
     """The metas phase 2 reads: the song's set values, else the thought's when valid (BPM 30-300, length 10-600 s,
-    a known key and time), else none."""
+    a known key, time and language), else none."""
 
     def num(v, lo, hi):
         try:
@@ -307,12 +310,13 @@ def settle(song: Song, said: dict) -> dict:
 
     key = song.key if song.key != "auto" else said.get("keyscale", "")
     time = TIMES.get(song.time) or (said.get("timesignature", "").split("/")[0] or None)
+    lang = said.get("language", "").strip().lower()
     return {
         "bpm": song.bpm or num(said.get("bpm"), 30, 300),
         "caption": said.get("caption", "").strip(),
         "duration": int(song.seconds) or num(said.get("duration"), 10, 600),
         "keyscale": key if key in KEYS else "",
-        "language": song.language if song.language != "auto" else said.get("language", "").strip(),
+        "language": song.language if song.language != "auto" else lang if lang in LANGUAGES else "",
         "timesignature": int(time) if time in TIMES.values() else "",
     }
 

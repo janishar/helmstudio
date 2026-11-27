@@ -69,6 +69,7 @@ stages:
              help: "Beats per bar. Auto: the plan picks it."}
       language: {type: enum, label: Vocal language, default: auto,
                  enum: [auto, en, zh, ja, ko, es, fr, de, it, pt, ru, hi, ar, nl, pl, tr, sv, vi, th, id, yue],
+                 option_help: {auto: from the lyrics},
                  when: "instrumental == false", help: "The language the lyrics are sung in. Auto: the plan tells it from the lyrics."}
   plan:
     title: Plan

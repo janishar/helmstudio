@@ -7,9 +7,11 @@ import io
 import json
 import types
 import wave
+from pathlib import Path
 
 import numpy as np
 import pytest
+import yaml
 from conftest import CONTRACTS
 from fake_hub import FakeHub, Repo
 
@@ -332,6 +334,11 @@ def test_parse_and_settle_the_thought():
         "",
         "",
     )
+    # a language the pack does not offer is dropped (vocal_language "unknown"), a known one read as written
+    assert ace.settle(song(seconds=0.0, language="auto"), {"language": "klingon"})["language"] == ""
+    assert ace.settle(song(seconds=0.0, language="auto"), {"language": " EN "})["language"] == "en"
+    schema = yaml.safe_load((Path(ace.__file__).parent / "model.yaml").read_text())
+    assert set(schema["stages"]["song"]["params"]["language"]["enum"]) - {"auto"} == ace.LANGUAGES
     assert ace.cot(metas).startswith("<think>\nbpm: 96\ncaption: dreamy") and ace.cot(
         metas
     ).endswith("</think>")

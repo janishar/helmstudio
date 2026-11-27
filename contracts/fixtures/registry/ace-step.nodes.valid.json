@@ -179,6 +179,9 @@
             "yue"
           ],
           "when": "instrumental == false",
+          "option_help": {
+            "auto": "from the lyrics"
+          },
           "help": "The language the lyrics are sung in. Auto: the plan tells it from the lyrics."
         }
       ],
