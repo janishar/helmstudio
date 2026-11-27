@@ -297,6 +297,16 @@ function Body({
                       keys: est == null ? undefined : estText(est, true),
                       onPick: () => a.views?.(x.id, [v]),
                     })),
+                    {
+                      label: "Another view…",
+                      keys: est == null ? undefined : estText(est, true),
+                      onPick: () => {
+                        const v = prompt("A view or an expression", x.kind === "character" ? "Smile" : "Top")
+                          ?.trim()
+                          .slice(0, 40);
+                        if (v) a.views?.(x.id, [v]);
+                      },
+                    },
                     "-",
                     {
                       label: `Make ${want.length === VIEWS[x.kind].length ? "all" : "the missing"} ${want.length}`,

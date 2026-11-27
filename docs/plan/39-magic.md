@@ -319,3 +319,46 @@ the owner's behalf:
 - **Fix found:** Unpin sent no `pinned` (an absent key is no change in studio); it sends `null`.
 - **Not built yet (their phases):** board frames running (E), dialogue blocks running, Music and Sound (H), Compare
   takes, the dialog's Run on host pick, the Assistant's tools and ask card (F).
+
+**Phase E (2026-11-27, API 1.83; phase G took 1.82 while E was building).** Assets and the storyboard: the ops
+`asset_add`, `asset` and `take_add` in both implementations (`fixtures/magic/edits.json`, 7 more cases);
+`asset_delete` now also clears a first or last frame pick (left over from D) and writes the asset's prompt mentions
+as its name; board frames run on the image models (left over from D); Make views (`POST …/assets/{asset_id}/views`,
+`00061_magic_assets.sql`: `magic_runs.asset` and `label`); the web's Assets row, asset dialog, Import, @ picks,
+frame dialog and rough cut (`components/magic/asset-dialog.tsx`, `import.tsx`, `at-text.tsx`, `frame-dialog.tsx`,
+`rough-cut.tsx`, `lib/magic-assets.ts`). Decisions taken on the owner's behalf:
+
+- **Handles follow the Element rule** (`@red-umbrella`, not the board's "@red umbrella": a mention can't hold a
+  space); unique on the board whatever the case; kept from `asset_add` (Rename changes the name, so prompts that
+  mention the handle never break). The sample board's handles are now `red-umbrella` and `bus-stop`; a board kept
+  from before with a spaced handle still loads (the rule is checked on `asset_add`, not on a whole document).
+- **@ picks**: typing @ offers the board's assets and other blocks' pictures; an asset is written `@handle` and
+  joins the refs (a handle typed in full joins too), a picture joins the refs only (a block's name is no handle).
+  Studio writes each board asset's mention as its name, with its picture's row (`Mara <image1>`) when the model
+  takes references, so Create's resolver never reads a board handle as an Element; the user's own Elements still
+  expand as in Create. "Used in" counts refs, the first and last frame and a voice.
+- **Import is a copy of ids**: a take's id, or an Element's pictures, voice and words, onto the asset's sheet
+  (`imported_from` for the record). Takes are never changed in place, so later Gallery changes don't reach the board;
+  a take deleted from the Gallery leaves its sheet (as a deleted take leaves a block). Import from the Assets row
+  makes a new asset (a character named after the first take; an Element keeps its kind, location → place).
+- **Views have names** (`MagicAsset.views`, take id → "Front"). Make views runs the image kind's first model once per
+  view (character: Front, Side, Back, Full figure; prop: Front, Side, Back; place: Wide, Reverse angle; "Another
+  view…" for an expression), square for a character or prop, the first sheet take as the reference, the note in the
+  prompt; each take joins the sheet as a studio revision named by its view (undo, redo and restore keep it, as a
+  block's take). The first view is the picture an @ pick sends ("Make it the first" in a view's menu).
+- **A frame's prompt** is its style in words (Sketch: loose pencil lines, black and white; Rough: simple shapes, grey
+  shading; Full: full colour), its shot size and angle, what happens, then "With @x" for each picked asset its words
+  don't name. `framing.move` is the shot's ("The camera slowly pushes in"). Each frame run keeps its style
+  (`MagicBlockRun.style`), so the dialog groups takes as Sketch · 2, Rough · 1, and Yours for your own pictures.
+- **A frame's line** is `request.line`; the rough cut shows it, else the lines of the voice blocks under the frame,
+  and plays those voice takes at their place. It plays the frames back to back (gaps between frames are left out).
+- **Generate from board** is one edit: the frame's unsaved changes, then the shot under it on the Shots lane (in the
+  board's Insert or Overwrite mode, never covering a shot silently), named `Shot n`, with the frame's `shot_model`;
+  it then runs. With a shot already made from the frame it runs that shot (its model set to the frame's pick). A shot
+  with no prompt of its own takes the frame's framing, words and move; its inputs include the frame's request, so
+  editing the frame puts the shot out of date at once (the hash only grows for shots made from frames, so blocks run
+  before 1.83 keep their status).
+- **A frame added from Add opens in its dialog**; the frame dialog keeps its changes when it closes (the block
+  dialog keeps its Save and close).
+- **Not built (their phases or later):** dialogue blocks running; Compare takes; a handle rename that rewrites
+  prompts; Make views with a model pick (the image kind's first one runs; the request takes `model`).
