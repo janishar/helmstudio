@@ -174,6 +174,10 @@ func (s *Service) ListMagicBoards(ctx context.Context, caller common.Caller) (dt
 func (s *Service) CreateMagicBoard(ctx context.Context, caller common.Caller, body *dto.MagicBoardCreate) (dto.MagicBoard, error) {
 	var out dto.MagicBoard
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		// the cap holds for two creates at once (as the library's)
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('magic_boards:' || $1::text))`, caller.ID); err != nil {
+			return err
+		}
 		var n int
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM magic_boards WHERE deleted_at IS NULL`).Scan(&n); err != nil {
 			return err

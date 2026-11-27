@@ -166,6 +166,8 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       setDoc(next);
       pending.current++;
       queue(async () => {
+        // made on a board being left: dropped (the one opening is shown)
+        if (current.current !== id) return void (pending.current = Math.max(0, pending.current - 1));
         const r = await ok(
           api.POST("/v1/studio/magic/boards/{board_id}/edits", {
             ...board(id),
@@ -173,11 +175,14 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
             body: { base_revision: rev.current, ops: ops as unknown as S<"MagicOp">[] },
           }),
         );
-        pending.current--;
-        show(r.board);
+        // a failure before it zeroed the count
+        pending.current = Math.max(0, pending.current - 1);
+        if (current.current === id) show(r.board);
       });
     },
+    // nothing to go to is nothing to do (a key press), as in the fake mode
     undo: () =>
+      (wire.can_undo || pending.current > 0) &&
       queue(async () =>
         show(
           await ok(
@@ -190,6 +195,7 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
         ),
       ),
     redo: () =>
+      wire.can_redo &&
       queue(async () =>
         show(
           await ok(
