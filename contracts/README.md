@@ -918,6 +918,48 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
 
+## Search in lists (API 1.92; alpha.6 row 27, board docs/mock/Search.dc.html, owner 2026-11-27 "approved"; normative)
+
+One rule for every list that can grow, the Gallery's `q` (GET /v1/studio/takes) made general.
+
+- **Matching.** `q` is split on whitespace; every word must occur, case-insensitively, as a substring of one of the
+  list's searched fields, in any order (`rooftop mara` finds "Mara, rooftop"). Blank `q` filters nothing; more than
+  200 characters is 422 `q must be at most 200 characters`. The caller's own items only (row-level security): another
+  user's item never matches, whatever it is called.
+- **What each list searches.**
+
+  | List | `q` matches | Paging |
+  |---|---|---|
+  | `GET /v1/studio/sessions` | the title | `cursor` / `limit` (default 100), newest `created_at` first |
+  | `GET /v1/studio/magic/boards` | the name | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/timelines` | the name | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/assistant/threads` | the title (the first message, cut) | `cursor` / `limit` (default 200), newest `updated_at` first |
+  | `GET /v1/studio/pipelines` | the title | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/sessions/{id}/runs` | the workflow id and title, every text value of the inputs (the prompt) | `cursor` / `limit` (default 100), newest `created_at` first |
+  | `GET /v1/studio/batches` | the title, the pipeline title, the workflow title; `state` keeps one or more statuses | `cursor` / `limit` (default 60, as before) |
+  | `GET /v1/studio/batches/{id}/rows` | every text value of the inputs, the row's `status` | `cursor` / `limit` (default 60, as before), by row number |
+  | `GET /v1/studio/library` | `words` (not `q`): the name, the handle, the text, a voice's `speaker`, `design`, `style`, `language` (a word's leading `@` ignored) | none: the list is whole |
+
+- **Old callers.** Without `q`, `cursor` and `limit` every list answers its first page exactly as before: the same
+  order and the old cap as the default `limit`. Ties on the time now break by `id` descending everywhere.
+- **Pages.** Each page answers `next_cursor` (null on the last page); pass it back as `cursor` with the same `q` (and
+  `state`) for the next page. It is opaque (base64 of the last row's time and id, as batches' always was); a malformed
+  one is 422 `cursor is not a next_cursor`. Lists by `updated_at`: an item edited while you page moves to the first
+  page (it may be seen twice or skipped once); reload from the first page to be exact.
+- **Capped lists.** A user has at most 100 boards, 100 sequences, 100 pipelines and 200 chats (409 on create), so their
+  default page is the whole list; the cursor matters only with a smaller `limit`. Sessions and runs have no cap: past
+  the first page they are reached only by `cursor` or `q`.
+- **The library.** `q` stays the `@` menu's prefix match (a handle or a name starting with it; Mentions) for the menu,
+  `helm`, the MCP tools and the assistant's `library.read`; `words` is the pickers' search and does not change the
+  order. Own items are capped at 200 and the list answers up to 1000, so it has no cursor.
+- **Batches' `state`.** Repeat it for several: `state=queued&state=running`; each a `BatchStatus` (else 422 `state must
+  be one of queued, running, waiting, paused, done, failed, stopped`). It and `q` combine with AND, and the cursor pages
+  the matches, so `next_cursor` is true for every batch, not one page.
+- **Indexes.** None added: every search runs inside one owner's rows, reached by the existing owner indexes
+  (`(owner_id, created_at|updated_at DESC)`, a session's runs, a batch's rows), and these lists are hundreds of rows
+  per user (the capped ones at most 200). A `pg_trgm` GIN index (Postgres 18 ships it) is the step if one grows to tens
+  of thousands.
+
 ## Thumbnails (API 1.48; plan 22-thumbnails section 26; normative)
 
 Lists draw `thumb_url`; viewers, compare, export and every model input use `url` (the full file). A video player's

@@ -16,5 +16,6 @@
     "first_launch": false,
     "tools": []
   },
-  "threads": []
+  "threads": [],
+  "next_cursor": null
 }

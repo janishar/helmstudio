@@ -12,8 +12,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The caller's sessions, newest first (at most 100, not paginated)
+         * The caller's sessions, newest first (`created_at`, then `id`), paginated from 1.92
          * @description From 1.43 `naming` says how new sessions get their title (contracts/README.md, Sessions: titles and naming), so Create can say so before a prompt leaves the machine.
+         *     From 1.92 (contracts/README.md, Search in lists): `q` matches the title; `cursor` / `limit` page the list (default
+         *     100, so a caller with neither gets the newest 100 as before). `naming` is on every page.
          */
         get: operations["studioListSessions"];
         put?: never;
@@ -179,8 +181,10 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * The caller's pipelines, newest `updated_at` first (at most 100, not paginated)
+         * The caller's pipelines, newest `updated_at` first (then `id`), paginated from 1.92
          * @description Each with `workflow_titles` and `last_batch`; `problems` is never in a list (only `GET /v1/studio/pipelines/{pipeline_id}`).
+         *     From 1.92 (contracts/README.md, Search in lists): `q` matches the title; `cursor` / `limit` page the list
+         *     (default 100: a user has at most 100 pipelines, so the default page is all of them, as before).
          */
         get: operations["studioListPipelines"];
         put?: never;
@@ -321,6 +325,10 @@ export interface paths {
          *     whose handle equals it first, then by `handle` (code points; null handles last), then `name`; without `q`, own
          *     items newest `updated_at` first, then starter looks by `name` (code points), then `id`. `limit` cuts the list
          *     (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md, Elements).
+         *     From 1.92 `words` is the pickers' search (contracts/README.md, Search in lists): every whitespace-separated word
+         *     must occur, case-insensitively, anywhere in the item's `name`, `handle` (a leading `@` of the word ignored),
+         *     `text` or, for a voice, its `voice` line (`speaker`, `design`, `style`, `language`); it filters without changing
+         *     the order and combines with `q`. No cursor: a user has at most 200 items, so the list is always whole.
          *     `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
          *     it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
          *     (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
@@ -568,7 +576,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The session's runs, newest first (at most 100, not paginated) */
+        /**
+         * The session's runs, newest first (`created_at`, then `id`), paginated from 1.92
+         * @description From 1.92 (contracts/README.md, Search in lists): `q` matches the workflow id and title and every text value of
+         *     the run's inputs (the prompt among them); `cursor` / `limit` page the list (default 100, so a caller with
+         *     neither gets the newest 100 as before).
+         */
         get: operations["studioListRuns"];
         put?: never;
         /**
@@ -1210,7 +1223,12 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's batches, newest first (`created_at`, then `id`), paginated */
+        /**
+         * The caller's batches, newest first (`created_at`, then `id`), paginated
+         * @description From 1.92 (contracts/README.md, Search in lists): `q` matches the batch title, the pipeline title and the
+         *     workflow title; `state` (repeatable: `state=queued&state=running`) keeps the batches in one of those statuses.
+         *     They combine with AND and with the cursor, so every page and `next_cursor` count only the matches.
+         */
         get: operations["studioListBatches"];
         put?: never;
         /**
@@ -1291,7 +1309,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The batch's rows by row number, paginated */
+        /**
+         * The batch's rows by row number, paginated
+         * @description From 1.92 (contracts/README.md, Search in lists): `q` matches every text value of the row's inputs (the prompt among them) and its `status`; the cursor pages the matches.
+         */
         get: operations["studioListBatchRows"];
         put?: never;
         post?: never;
@@ -2136,6 +2157,9 @@ export interface paths {
          * @description At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
          *     model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
          *     you used today. When the admin has it off, `status.enabled` is false and the list is still served.
+         *     From 1.92 (contracts/README.md, Search in lists): `q` matches the chat's title (its first message, cut);
+         *     `cursor` / `limit` page the list (default 200: a user keeps at most 200 chats, so the default page is all of
+         *     them, as before). `status` is on every page.
          */
         get: operations["studioListAssistantThreads"];
         put?: never;
@@ -2702,7 +2726,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** The caller's sequences, newest `updated_at` first (at most 100, not paginated) */
+        /**
+         * The caller's sequences, newest `updated_at` first (then `id`), paginated from 1.92
+         * @description From 1.92 (contracts/README.md, Search in lists): `q` matches the name; `cursor` / `limit` page the list
+         *     (default 100: a user has at most 100 sequences, so the default page is all of them, as before).
+         */
         get: operations["studioListTimelines"];
         put?: never;
         /**
@@ -3208,7 +3236,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** From 1.80: the caller's Magic boards, newest `updated_at` first (at most 100, not paginated) */
+        /**
+         * From 1.80: the caller's Magic boards, newest `updated_at` first (then `id`), paginated from 1.92
+         * @description From 1.92 (contracts/README.md, Search in lists): `q` matches the name; `cursor` / `limit` page the list
+         *     (default 100: a user has at most 100 boards, so the default page is all of them, as before).
+         */
         get: operations["studioListMagicBoards"];
         put?: never;
         /**
@@ -3828,6 +3860,8 @@ export interface components {
         TitleSource: "default" | "prompt" | "user" | "model";
         SessionList: {
             sessions: components["schemas"]["StudioSession"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
             /** @description from 1.43: how an untitled session is named after its first run succeeds (the admin's setting, redacted) */
             naming?: {
                 /** @enum {string} */
@@ -4801,6 +4835,8 @@ export interface components {
         } & components["schemas"]["PipelineDoc"];
         PipelineList: {
             pipelines: components["schemas"]["Pipeline"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
         };
         /** @description a whole document (based_on optional), or `{based_on, title?}` to copy one of the caller's pipelines */
         PipelineCreate: ({
@@ -5060,6 +5096,8 @@ export interface components {
         };
         RunList: {
             runs: components["schemas"]["Run"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
         };
         Queue: {
             /** @description the caller's queued and running runs, every session: running first, then queued by host and position */
@@ -7503,6 +7541,8 @@ export interface components {
         AssistantThreadList: {
             status: components["schemas"]["AssistantStatus"];
             threads: components["schemas"]["AssistantThread"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
         };
         /** @description from 1.68 */
         AssistantThreadPatch: {
@@ -8727,6 +8767,8 @@ export interface components {
         };
         TimelineList: {
             timelines: components["schemas"]["TimelineSummary"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
         };
         /** @description where a New shot goes: an existing V1 slot (an empty slot is filled; a take's clip is redone: "from this clip"; a take action's "replace"), a new empty slot at the V1 cut nearest `at` (the playhead; from 1.19 also an extend before's insert, at the clip's `at`) of `length` seconds, or (from 1.19, a take action's "insert after") a new empty slot of `length` right after V1 clip `after` */
         TimelineSlot: {
@@ -9308,6 +9350,8 @@ export interface components {
         };
         MagicBoardList: {
             boards: components["schemas"]["MagicBoardSummary"][];
+            /** @description from 1.92: pass as `cursor` for the next page; null on the last page */
+            next_cursor: string | null;
         };
         MagicBoardCreate: {
             /** @description absent: Untitled board */
@@ -10271,6 +10315,10 @@ export interface components {
         /** @description from 1.61: a plugin's name (its folder; unknown or malformed = 404) */
         PluginName: string;
         Limit: number;
+        /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+        ListLimit: number;
+        /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+        Q: string;
         /** @description sequence UUID (malformed = 404) */
         TimelineId: string;
         /** @description media job UUID (malformed = 404) */
@@ -10292,7 +10340,14 @@ export type $defs = Record<string, never>;
 export interface operations {
     studioListSessions: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+                limit?: components["parameters"]["ListLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10309,6 +10364,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -10648,7 +10704,14 @@ export interface operations {
     };
     studioListPipelines: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+                limit?: components["parameters"]["ListLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -10665,6 +10728,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -10901,8 +10965,10 @@ export interface operations {
             query?: {
                 kind?: components["schemas"]["LibraryKind"];
                 group?: components["schemas"]["LibraryGroup"];
-                /** @description prefix of a handle or a name */
+                /** @description prefix of a handle or a name (the `@` menu) */
                 q?: string;
+                /** @description from 1.92: every word must occur, case-insensitively, in the name, handle, text or voice line (contracts/README.md, Search in lists); keeps the order */
+                words?: string;
                 source?: components["schemas"]["LibrarySource"];
                 /** @description items for this family: `family` null or equal */
                 family?: string;
@@ -11295,7 +11361,14 @@ export interface operations {
     };
     studioListRuns: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+                limit?: components["parameters"]["ListLimit"];
+            };
             header?: never;
             path: {
                 /** @description session UUID (malformed = 404) */
@@ -11316,6 +11389,7 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -11987,6 +12061,10 @@ export interface operations {
     studioListBatches: {
         parameters: {
             query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description from 1.92: only batches in one of these statuses (unknown = 422) */
+                state?: components["schemas"]["BatchStatus"][];
                 /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -12069,6 +12147,8 @@ export interface operations {
     studioListBatchRows: {
         parameters: {
             query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
                 /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -13275,7 +13355,14 @@ export interface operations {
     };
     studioListAssistantThreads: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size */
+                limit?: number;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -13292,6 +13379,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -14093,7 +14181,14 @@ export interface operations {
     };
     studioListTimelines: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+                limit?: components["parameters"]["ListLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14110,6 +14205,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
@@ -14850,7 +14946,14 @@ export interface operations {
     };
     studioListMagicBoards: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422 */
+                q?: components["parameters"]["Q"];
+                /** @description `next_cursor` of the previous page; opaque (malformed = 422) */
+                cursor?: components["parameters"]["Cursor"];
+                /** @description from 1.92: the page size; the default is the list's old cap, so a caller without `limit` gets what it got before */
+                limit?: components["parameters"]["ListLimit"];
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -14867,6 +14970,7 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+            422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
         };
     };
