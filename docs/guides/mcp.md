@@ -103,6 +103,8 @@ called, and your client's own ask is the Yes.
 | `run_blocks` | Runs named blocks, a lane's or every block not done; plans first and answers the plan and its GPU `seconds` with the runs | write |
 | `cancel_runs` | Stops a board's runs still going: of named blocks, a lane, the runs named (`run_blocks`' started) or `all`; a queued run drops at once, a running one at its next safe point | write |
 | `make_views` | One image run per view of an asset ("Front", "Side"); each take joins its sheet (no estimate over MCP: `seconds` is null) | write |
+| `design_voice` | Designs a character's voice from words (a designed voice named after the asset) and starts one run saying a line; `wait_run`, then `get_take` plays it | write |
+| `save_voice` | Keeps the take you picked as that voice's clip and sets the voice on the asset; needs `consent: true` (you have the right to use this voice) | write |
 | `send_to_timeline` | The board as a new sequence; the answer has the plan (what went, the bakes) | write |
 | `edit_board` | Applies the ops in order, all or nothing, on the `base_revision` (one Undo step, `via mcp` in History) | destructiveHint |
 | `restore_board` | Brings back a kept revision as a new one | destructiveHint |

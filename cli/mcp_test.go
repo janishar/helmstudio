@@ -588,6 +588,8 @@ func TestMCPMagicBoards(t *testing.T) {
 	f.extra["GET "+base+"/revisions"] = record(200, `{"revisions":[{"revision":5,"ops_summary":"add_block"}]}`)
 	f.extra["POST "+base+"/restore"] = record(200, `{"revision":6}`)
 	f.extra["POST "+base+"/run"] = record(202, `{"board":{"revision":6},"started":[{"block":"s1","run_id":"r9"}],"skipped":[]}`)
+	f.extra["POST "+base+"/assets/a1/voice/design"] = record(202, `{"revision":6,"voice_id":"v1","started":[{"run_id":"r7"}],"seconds":3}`)
+	f.extra["POST "+base+"/assets/a1/voice"] = record(200, `{"voice_id":"v1","revision":7,"summary":"asset"}`)
 	f.extra["POST "+base+"/send"] = record(202, `{"plan":{"bakes":1},"send":{"status":"baking"}}`)
 	ops := []any{map[string]any{"op": "delete", "ids": []any{"s1"}, "mode": "insert"}}
 	outs := map[string]map[string]any{}
@@ -607,6 +609,8 @@ func TestMCPMagicBoards(t *testing.T) {
 		{"make_views", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "views": []any{"Front"}}},
 		{"board_frame", map[string]any{"board_id": id, "at": 1.5}},
 		{"send_to_timeline", map[string]any{"board_id": id, "revision": 6}},
+		{"design_voice", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "design": "low, warm", "line": "Hello there."}},
+		{"save_voice", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "take_id": "tt", "consent": true}},
 	} {
 		res, out := call(t, cs, c.tool, c.in)
 		if res.IsError {
@@ -630,6 +634,8 @@ func TestMCPMagicBoards(t *testing.T) {
 		"POST " + base + "/assets/a1/views? map[revision:6 views:[Front]] mcp",
 		"GET " + base + "?view=agent map[] mcp",
 		"POST " + base + "/send? map[revision:6] mcp",
+		"POST " + base + "/assets/a1/voice/design? map[design:low, warm line:Hello there. revision:6] mcp",
+		"POST " + base + "/assets/a1/voice? map[consent:true revision:6 take_id:tt] mcp",
 	}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))

@@ -124,6 +124,16 @@ func (s *mcpServer) magicHandlers() map[string]toolFunc {
 			// seconds null (unknown): studio plans views in process, no route answers that estimate
 			return map[string]any{"revision": r.Board.Revision, "started": r.Started, "seconds": nil}, nil
 		}),
+		// alpha.6 (owner, 2026-11-28: "yes add voice tools to mcp as well"): no card here, so design_voice starts at
+		// once and save_voice takes the voice-rights OK as `consent: true` (studio refuses it without, saying why)
+		"design_voice": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, board(in)+"/assets/"+in.esc("asset")+"/voice/design",
+				in.pick("revision", "design", "line", "language", "voice_id"), http.StatusAccepted)
+		}),
+		"save_voice": plain(func(ctx context.Context, in args) (any, error) {
+			return s.send(ctx, http.MethodPost, board(in)+"/assets/"+in.esc("asset")+"/voice",
+				in.pick("revision", "take_id", "consent"), http.StatusOK)
+		}),
 		"board_frame": plain(func(ctx context.Context, in args) (any, error) {
 			var v agentView
 			if err := s.c.callCtx(ctx, http.MethodGet, "/v1/studio"+board(in)+"?view=agent", nil, http.StatusOK, &v); err != nil {

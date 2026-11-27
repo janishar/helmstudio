@@ -461,3 +461,38 @@ type MagicAgentView struct {
 	Revision int    `json:"revision"`
 	magic.Agent
 }
+
+// MagicVoiceDesign is POST …/assets/{asset_id}/voice/design (API 1.102): design_voice's input as a route's.
+type MagicVoiceDesign struct {
+	Revision int     `json:"revision"`
+	Design   string  `json:"design"`
+	Line     string  `json:"line"`
+	Language *string `json:"language,omitempty"`
+	VoiceID  *string `json:"voice_id,omitempty"`
+}
+
+// MagicVoiceSave is POST …/assets/{asset_id}/voice (API 1.102): save_voice's input with the voice-rights OK.
+type MagicVoiceSave struct {
+	Revision int    `json:"revision"`
+	TakeID   string `json:"take_id"`
+	Consent  bool   `json:"consent"`
+}
+
+// Validate requires the revision (design and line are design_voice's own checks).
+func (b *MagicVoiceDesign) Validate() string {
+	if b.Revision < 1 {
+		return "revision: required"
+	}
+	return ""
+}
+
+// Validate requires the revision and the take.
+func (b *MagicVoiceSave) Validate() string {
+	switch {
+	case b.Revision < 1:
+		return "revision: required"
+	case b.TakeID == "":
+		return "take_id: required"
+	}
+	return ""
+}

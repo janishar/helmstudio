@@ -3530,6 +3530,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice/design": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.102: design_voice for helm mcp: a designed voice named after the asset and one design run of the line
+         * @description contracts/README.md, Magic: the Assistant (design_voice). The Assistant's tool with no card (the MCP client's
+         *     own ask is the Yes): it starts at once whatever the estimate. 202 {revision, voice_id, started, seconds}. 409
+         *     when `revision` is not the current one or no voice design model is installed; 422 for an asset not on the board
+         *     or a design or line out of range.
+         */
+        post: operations["studioDesignMagicVoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.102: save_voice for helm mcp: the picked take becomes its designed voice's clip, set on the asset
+         * @description contracts/README.md, Magic: the Assistant (save_voice). `consent: true` is the voice-rights OK (the card's Yes in
+         *     the app); without it 422 `consent: say you have the right to use this voice (consent: true)`. 200 {voice_id,
+         *     revision, summary}, one board revision. 409 when `revision` is not the current one; 422 for a take not made by
+         *     design_voice or under 3 s.
+         */
+        post: operations["studioSaveMagicVoice"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/magic/boards/{board_id}/send": {
         parameters: {
             query?: never;
@@ -9784,6 +9830,43 @@ export interface components {
             /** Format: date-time */
             created_at: string;
         };
+        /** @description from 1.102: design_voice's input (contracts/tools/catalog.json) with the asset in the path */
+        MagicVoiceDesign: {
+            revision: number;
+            design: string;
+            line: string;
+            language?: string;
+            /**
+             * Format: uuid
+             * @description a voice made before: these words, no new voice
+             */
+            voice_id?: string;
+        };
+        MagicVoiceDesigned: {
+            revision: number;
+            /** Format: uuid */
+            voice_id: string;
+            started: {
+                /** Format: uuid */
+                run_id: string;
+            }[];
+            /** @description the estimate, GPU seconds (null: unknown) */
+            seconds: number | null;
+        };
+        /** @description from 1.102: save_voice's input with the asset in the path and the voice-rights OK */
+        MagicVoiceSave: {
+            revision: number;
+            /** Format: uuid */
+            take_id: string;
+            /** @description true: you have the right to use this voice (the card's Yes in the app) */
+            consent: boolean;
+        };
+        MagicVoiceSaved: {
+            /** Format: uuid */
+            voice_id: string;
+            revision: number;
+            summary: string;
+        };
         MagicViewsCreate: {
             /** @description the board's current revision (409 when stale) */
             revision: number;
@@ -15571,6 +15654,73 @@ export interface operations {
             409: components["responses"]["Conflict"];
             422: components["responses"]["Unprocessable"];
             503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDesignMagicVoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description a character of the board */
+                asset_id: components["schemas"]["MagicId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicVoiceDesign"];
+            };
+        };
+        responses: {
+            /** @description started */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicVoiceDesigned"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioSaveMagicVoice: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description a character of the board */
+                asset_id: components["schemas"]["MagicId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicVoiceSave"];
+            };
+        };
+        responses: {
+            /** @description kept */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicVoiceSaved"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
         };
     };
     studioSendMagicBoard: {

@@ -146,6 +146,23 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		}
 		reply(ctx, http.StatusAccepted, out, err)
 	})
+	// API 1.102: helm mcp's design_voice and save_voice (no card: the MCP client's ask is the Yes)
+	group.POST("/magic/boards/:id/assets/:asset_id/voice/design", func(ctx *gin.Context) {
+		body, err := strictBody[dto.MagicVoiceDesign](ctx, false)
+		var out any
+		if err == nil {
+			out, err = c.service.MagicVoiceDesign(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("asset_id"), body)
+		}
+		reply(ctx, http.StatusAccepted, out, err)
+	})
+	group.POST("/magic/boards/:id/assets/:asset_id/voice", func(ctx *gin.Context) {
+		body, err := strictBody[dto.MagicVoiceSave](ctx, false)
+		var out any
+		if err == nil {
+			out, err = c.service.MagicVoiceSave(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), ctx.Param("asset_id"), body)
+		}
+		reply(ctx, http.StatusOK, out, err)
+	})
 	group.DELETE("/magic/boards/:id/snapshots/:snapshot_id", func(ctx *gin.Context) {
 		noContent(ctx, c.service.DeleteMagicSnapshot(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"),
 			ctx.Param("snapshot_id")))

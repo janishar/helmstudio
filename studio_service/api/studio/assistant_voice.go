@@ -286,3 +286,33 @@ func apiRefused(err error, where string) message.ToolsReply {
 	log.Printf("studio.tools %s: %v", where, err)
 	return toolErr("internal", "internal error")
 }
+
+// MagicVoiceDesign is POST …/assets/{asset_id}/voice/design (API 1.102, helm mcp's design_voice): design_voice at
+// once, with no card (the MCP client's own ask is the Yes).
+func (s *Service) MagicVoiceDesign(ctx context.Context, caller common.Caller, id, asset string, body *dto.MagicVoiceDesign) (any, error) {
+	a := magicArgs{BoardID: id, Revision: body.Revision, Asset: asset, Design: &body.Design, Line: &body.Line,
+		Language: body.Language, VoiceID: body.VoiceID}
+	return toolAnswer(s.designVoice(ctx, caller, s.magicCaller(ctx, caller), magicBase(id), a, true, false))
+}
+
+// MagicVoiceSave is POST …/assets/{asset_id}/voice (API 1.102, helm mcp's save_voice): save_voice once `consent` is
+// true, the voice-rights OK that the card's Yes is in the app.
+func (s *Service) MagicVoiceSave(ctx context.Context, caller common.Caller, id, asset string, body *dto.MagicVoiceSave) (any, error) {
+	if !body.Consent {
+		return nil, network.NewUnprocessableError("consent: say you have the right to use this voice (consent: true)", nil)
+	}
+	a := magicArgs{BoardID: id, Revision: body.Revision, Asset: asset, TakeID: &body.TakeID}
+	return toolAnswer(s.saveVoice(ctx, caller, s.magicCaller(ctx, caller), magicBase(id), a, true))
+}
+
+func magicBase(id string) string { return "/v1/studio/magic/boards/" + url.PathEscape(id) }
+
+// toolAnswer is a tool's reply as a route's: its result, or its refusal as the status its code names.
+func toolAnswer(r message.ToolsReply) (any, error) {
+	if r.Error == "" {
+		return r.Result, nil
+	}
+	code := map[string]int{"invalid": http.StatusUnprocessableEntity, "not_found": http.StatusNotFound,
+		"conflict": http.StatusConflict, "forbidden": http.StatusForbidden, "cap": http.StatusConflict}[r.Code]
+	return nil, network.NewAPIError(cmp.Or(code, http.StatusInternalServerError), r.Error, nil)
+}

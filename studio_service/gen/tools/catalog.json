@@ -6039,7 +6039,8 @@
     "design_voice": {
       "description": "Design a character's voice from words: saves a designed voice named after the asset, then one voice design run says the line (await the run; get_take plays it). Above the user's limit or unestimated, the user's Yes on the card first. Keep it with save_voice.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -6048,7 +6049,8 @@
         "GET /v1/studio/magic/boards/{board_id}",
         "POST /v1/studio/library",
         "PUT /v1/studio/library/{item_id}",
-        "POST /v1/studio/sessions/{session_id}/runs"
+        "POST /v1/studio/sessions/{session_id}/runs",
+        "POST /v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice/design"
       ],
       "input": {
         "type": "object",
@@ -6146,12 +6148,14 @@
           }
         }
       },
-      "card": "magic_run"
+      "card": "magic_run",
+      "mcp_description": "Design a character's voice from words: saves a designed voice named after the asset and starts one voice design run of the line at once (wait_run, then get_take plays it). Keep the one you like with save_voice."
     },
     "save_voice": {
       "description": "Keep the take of design_voice the user picked: it becomes its voice's clip (Yes on the card is the right to use it) and the voice goes on the asset (voice_id), one board revision. Then dialogue can use it.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -6160,7 +6164,8 @@
         "GET /v1/studio/takes/{take_id}",
         "GET /v1/studio/library/{item_id}",
         "PUT /v1/studio/library/{item_id}",
-        "POST /v1/studio/magic/boards/{board_id}/edits"
+        "POST /v1/studio/magic/boards/{board_id}/edits",
+        "POST /v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice"
       ],
       "input": {
         "type": "object",
@@ -6185,6 +6190,10 @@
             "type": "string",
             "format": "uuid",
             "description": "the take design_voice made that the user picked"
+          },
+          "consent": {
+            "type": "boolean",
+            "description": "helm mcp only, required there: true is your OK that you have the right to use this voice (in the app the card's Yes is; ignored there)"
           }
         },
         "required": [
@@ -6217,7 +6226,8 @@
           }
         }
       },
-      "card": "board_edit"
+      "card": "board_edit",
+      "mcp_description": "Keep the take of design_voice you picked: it becomes its voice's clip and the voice goes on the asset (voice_id), one board revision. Needs consent: true, your OK that you have the right to use this voice (refused without it)."
     },
     "board_frame": {
       "description": "Look at a board at a time: what each picture lane shows there (the block, the take it shows and the second into it, its status), and the sound under it. Look at a take with look_at.",

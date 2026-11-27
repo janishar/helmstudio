@@ -242,3 +242,27 @@ def test_mcp_cancel_runs_stops_a_boards_runs(mcp):
         return v if all(b["status"] != "running" for b in v["blocks"]) else None
 
     wait_for(ended, timeout=60, what="the stopped runs ended")
+
+
+def test_mcp_designs_a_voice_and_keeps_it_with_consent(mcp):
+    """alpha.6 (owner, 2026-11-28: "yes add voice tools to mcp as well"): design_voice starts at once (no card over
+    MCP); save_voice needs consent: true (the voice-rights OK), refused without it, then sets the voice on the asset."""
+    tools = {t["name"]: t for t in mcp.rpc("tools/list", {})["tools"]}
+    assert {"design_voice", "save_voice"} <= set(tools)
+    assert "consent" in tools["save_voice"]["inputSchema"]["properties"]
+    bid = structured(mcp.tool("create_board", {"name": "Mcp voices"}))["board_id"]
+    add = {"op": "asset_add", "asset": {"id": "mara", "kind": "character", "handle": "mara", "name": "Mara"}}
+    rev = structured(mcp.tool("edit_board", {"board_id": bid, "base_revision": 1, "ops": [add]}))["revision"]
+    line = "Hello, I am Mara, and I have walked these hills for sixty long years."
+    made = structured(mcp.tool("design_voice", {"board_id": bid, "revision": rev, "asset": "mara",
+                                                "design": "Female, about 60, low and warm", "line": line}))  # fmt: skip
+    assert made["voice_id"] and len(made["started"]) == 1, made
+    done = structured(mcp.tool("wait_run", {"run_id": made["started"][0]["run_id"], "timeout_s": 120}))
+    assert done["run"]["status"] == "succeeded", done
+    keep = {"board_id": bid, "revision": rev, "asset": "mara", "take_id": done["run"]["outputs"][0]["take_id"]}
+    refused = mcp.tool("save_voice", keep)
+    assert refused.get("isError") and "consent" in refused["content"][0]["text"], refused
+    kept = structured(mcp.tool("save_voice", keep | {"consent": True}))
+    assert kept["voice_id"] == made["voice_id"] and kept["revision"] == rev + 1, kept
+    assets = structured(mcp.tool("show_board", {"board_id": bid}))["board"]["assets"]
+    assert assets[0]["voice_id"] == made["voice_id"]

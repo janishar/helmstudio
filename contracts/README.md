@@ -4339,8 +4339,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   `request`, `takes` and `pinned`; an asset's `used_in` counts what lib/magic.ts usedIn counts (refs, voice, a
   dialogue's speakers, first and last picks). run_blocks' and make_views' final reply carry `seconds` (the estimate
   of what started; null unknown).
-- **design_voice and save_voice** (alpha.6; owner, 2026-11-28: "Yes, build it"; the Assistant only, not on helm mcp
-  yet). `design_voice` {board_id, revision, asset, design, line, language?, voice_id?} is Create's Design a voice for a
+- **design_voice and save_voice** (alpha.6; owner, 2026-11-28: "Yes, build it"; from 1.102 on helm mcp too, owner:
+  "yes add voice tools to mcp as well"). `design_voice` {board_id, revision, asset, design, line, language?, voice_id?} is Create's Design a voice for a
   board's character: a designed voice named after the asset (`POST /library` {kind voice, group designed, voice
   {design, language?}}; with `voice_id`, a PUT of that one), then one run of the voice design template (an audio
   template whose voice param takes `design` only, a real one first; Echo's voice-over in fake mode) saying `line`
@@ -4352,6 +4352,11 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   (PUT with `consent: true`: the Yes on the card is the rights tick; a take under 3 s is the PUT's 422) and the asset
   `voice_id` (one edit, `asset` set voice_id). Card `board_edit`: the preview is the edit's dry run plus {ops,
   voice_id, name}; answers {voice_id, revision, summary}. ZONOS3 then clones that clip in dialogue.
+  Over helm mcp (1.102) there is no card: `design_voice` is `POST …/boards/{board_id}/assets/{asset}/voice/design`
+  {revision, design, line, language?, voice_id?}, started at once (202, the same answer); `save_voice` is `POST
+  …/assets/{asset}/voice` {revision, take_id, consent} and needs `consent: true`, the voice-rights OK (else the 422
+  `consent: say you have the right to use this voice (consent: true)`); the Assistant's `save_voice` ignores
+  `consent` (its card's Yes is the OK).
 - **cancel_runs** (1.95; owner, 2026-11-27: "yes build it", after the Assistant started 8 frame runs that only the
   Assistant's Stop could not end): {board_id, exactly one of blocks, lane, run_ids, all} stops the board's runs still
   queued or running, for the Assistant and helm mcp, with no card (stopping loses only work in flight): it reads the

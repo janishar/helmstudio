@@ -41,7 +41,7 @@ var magicTools = map[string][2][]string{
 	"run_blocks":       {{"board_id", "revision", "blocks", "lane", "stale"}, {"board_id", "revision"}},
 	"make_views":       {{"board_id", "revision", "asset", "views", "model", "width", "height", "advanced"}, {"board_id", "revision", "asset", "views"}},
 	"design_voice":     {{"board_id", "revision", "asset", "design", "line", "language", "voice_id"}, {"board_id", "revision", "asset", "design", "line"}},
-	"save_voice":       {{"board_id", "revision", "asset", "take_id"}, {"board_id", "revision", "asset", "take_id"}},
+	"save_voice":       {{"board_id", "revision", "asset", "take_id", "consent"}, {"board_id", "revision", "asset", "take_id"}},
 	"board_frame":      {{"board_id", "at"}, {"board_id", "at"}},
 	"send_to_timeline": {{"board_id", "revision", "name"}, {"board_id", "revision"}},
 }
@@ -77,6 +77,8 @@ type magicArgs struct {
 	Language *string `json:"language"`
 	VoiceID  *string `json:"voice_id"`
 	TakeID   *string `json:"take_id"`
+	// helm mcp's save_voice: the voice-rights OK the card's Yes is in the app (ignored there)
+	Consent *bool `json:"consent"`
 }
 
 // magicFramePreview is a board frame run_blocks started before asking.
@@ -113,16 +115,7 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 		return toolErr("invalid", "args: board_id must be a uuid")
 	}
 	base := "/v1/studio/magic/boards/" + url.PathEscape(a.BoardID)
-	call := func(method, path string, body any, out any) *message.ToolsReply {
-		got, refused := s.localCall(ctx, caller, method, path, body)
-		if refused == nil && out != nil {
-			if err := json.Unmarshal(got, out); err != nil {
-				r := toolErr("internal", "internal error")
-				return &r
-			}
-		}
-		return refused
-	}
+	call := s.magicCaller(ctx, caller)
 	pick := map[string]any{}
 	for key, v := range map[string]any{"blocks": a.Blocks, "lane": a.Lane, "stale": a.Stale} {
 		if _, ok := top[key]; ok {
@@ -296,6 +289,20 @@ func orRefused(refused *message.ToolsReply, result any) message.ToolsReply {
 }
 
 type magicCall = func(method, path string, body any, out any) *message.ToolsReply
+
+// magicCaller calls studio's own routes as caller, decoding the answer into out; a refusal is the tool's.
+func (s *Service) magicCaller(ctx context.Context, caller common.Caller) magicCall {
+	return func(method, path string, body any, out any) *message.ToolsReply {
+		got, refused := s.localCall(ctx, caller, method, path, body)
+		if refused == nil && out != nil {
+			if err := json.Unmarshal(got, out); err != nil {
+				r := toolErr("internal", "internal error")
+				return &r
+			}
+		}
+		return refused
+	}
+}
 
 // magicEditPreview is an edit's dry run as the Assistant reads it: revision, diff, warnings and summary; with estimate,
 // the plan of the blocks it adds or changes on the document it would make ({seconds, host, blocks}).
