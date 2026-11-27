@@ -28,10 +28,25 @@
   html {
     @apply font-sans;
   }
-  /* every scrollbar the theme's: thin, an accent thumb on no track (an s4 one vanished on the panels) */
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--a1) transparent;
+  /* every scrollbar the theme's: a 0.25rem square accent bar on no track. Chromium and Safari (the Mac app too) take
+     the ::-webkit-scrollbar rules, which they ignore once scrollbar-width / -color are set, so those are Firefox's only */
+  ::-webkit-scrollbar {
+    width: 0.25rem;
+    height: 0.25rem;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--a1);
+    border-radius: 0;
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--a1) transparent;
+    }
   }
   /* 14/20 text on the body, not the root: the root stays 16px, so Tailwind's rem units land on the mock's px */
   body {

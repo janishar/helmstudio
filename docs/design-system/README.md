@@ -41,7 +41,7 @@ The app speaks in short, plain words. It is a tool, not a host: no greetings, no
 
 **Motion.** Little and quick: popovers and menus appear without animation; the "named by …" hint beside Create's title, a sequence's name and (from alpha.6) a Magic board's name fades after a few seconds; spinners spin. Honour reduced motion: every animation and transition drops to 0.01ms.
 
-**Scrollbars.** Every scrolling area uses the thin themed bar: an `a1` (accent) thumb on no track (`scrollbar-width: thin; scrollbar-color: var(--a1) transparent`, set once for all elements), never the browser's grey bar.
+**Scrollbars.** Every scrolling area uses one bar: 0.25rem wide, a square `a1` (accent) thumb on no track (`::-webkit-scrollbar` rules, set once for all elements; Firefox gets `scrollbar-width: thin` in the accent), never the browser's grey bar.
 
 **Selection.** The app is an app, not a document: only fields and code select text. Menus are our own right-click menu, never the browser's (Shift + right-click still gives the browser's).
 

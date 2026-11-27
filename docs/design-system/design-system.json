@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T02:10:00Z",
+  "at": "2026-11-28T02:40:00Z",
   "via": "Claude Code",
-  "note": "Magic: New board asks the size (16:9 1280 x 720 or 1920 x 1080, 9:16 720 x 1280, 1:1 1024 x 1024) and fps (24, 25, 30), then the header chip is locked (MagicBlockDialog; owner, 2026-11-28: \"make the frame, fps setup while creation then lock it\"); Undo and Redo are icon buttons (Button; \"undo and redo use icon button\")"
+  "note": "Scrollbars: 0.25rem, a square accent (a1) thumb on no track, through ::-webkit-scrollbar (Chromium ignores those once scrollbar-width is set); Firefox keeps thin in the accent (owner, 2026-11-28: \"make scrollbar rectangular and thin\")"
  }
 }
