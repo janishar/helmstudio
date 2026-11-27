@@ -679,6 +679,15 @@ describe("Create's Music and Sound (frames 1-5)", () => {
     lyrics.setSelectionRange(10, 10);
     fireEvent.click(within(composer).getByRole("button", { name: "[chorus]" }));
     expect(lyrics.value).toBe("first line\n[chorus]\n");
+    // the lyrics scroll after 10 lines, and Expand opens them big, as the prompt (owner, 2026-11-27)
+    expect(lyrics.style.maxHeight).toBe("210px");
+    fireEvent.click(within(lyrics.parentElement!).getByRole("button", { name: "Expand" }));
+    const big = await screen.findByRole("dialog", { name: "Lyrics" });
+    const bigText = within(big).getByRole("textbox", { name: "Lyrics" }) as HTMLTextAreaElement;
+    expect(bigText.value).toBe("first line\n[chorus]\n");
+    fireEvent.change(bigText, { target: { value: "first line\n[chorus]\nsecond" } });
+    expect(lyrics.value).toBe("first line\n[chorus]\nsecond");
+    fireEvent.click(within(big).getByRole("button", { name: "Done" }));
     // Auto length and BPM share one chip ("Length · BPM"), its popup has one Auto for both
     const chip = within(composer).getByRole("button", { name: "Length · BPM" });
     fireEvent.click(chip);

@@ -492,6 +492,7 @@ export function LyricsBox({
   error?: string;
 }) {
   const ta = useRef<HTMLTextAreaElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
   const put = (tag: string) => {
     const el = ta.current;
     const s = el?.selectionStart ?? value.length;
@@ -558,9 +559,15 @@ export function LyricsBox({
         )}
       </div>
       {!hidden && (
-        <div className="relative">
-          {/* the tag lines in the accent: a layer under a see-through textarea, same font so the caret matches */}
-          <div aria-hidden className={`${text} pointer-events-none absolute inset-0 text-t1`}>
+        <div className="group relative">
+          {/* the tag lines in the accent: a layer under a see-through textarea, same font and gutter so the lines
+              wrap alike; it follows the textarea's scroll (up to 10 lines, then it scrolls; Expand opens it big) */}
+          <div
+            ref={layer}
+            aria-hidden
+            className={`${text} pointer-events-none absolute inset-0 overflow-hidden pr-9 text-t1`}
+            style={{ scrollbarGutter: "stable" }}
+          >
             {value.split("\n").map((l, i) => (
               <div key={i} className={/^\s*\[[^\]]+\]\s*$/.test(l) ? "text-a2" : undefined}>
                 {l || " "}
@@ -571,18 +578,37 @@ export function LyricsBox({
             ref={ta}
             id={id}
             aria-label={label}
-            // as tall as its text (field-sizing), so the layer under it never needs to scroll
+            // as tall as its text (field-sizing) up to 10 lines, then it scrolls and the layer follows
             rows={4}
             value={value}
             placeholder="[verse] the words, a line each"
             aria-invalid={!!error || undefined}
-            style={{ fieldSizing: "content", minHeight: 84 } as React.CSSProperties}
+            style={
+              {
+                fieldSizing: "content",
+                minHeight: 84,
+                maxHeight: 210,
+                scrollbarGutter: "stable",
+              } as React.CSSProperties
+            }
             onChange={(e) => onChange(e.target.value)}
+            onScroll={(e) => {
+              if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop;
+            }}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
                 e.currentTarget.form?.requestSubmit();
             }}
-            className={`${text} relative block w-full resize-none overflow-hidden border-0 bg-transparent p-0 text-transparent caret-t1 outline-0 placeholder:text-t2`}
+            className={`${text} relative block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 pr-9 text-transparent caret-t1 outline-0 placeholder:text-t2`}
+          />
+          <Expand
+            title={label}
+            value={value}
+            box={ta}
+            placeholder="[verse] the words, a line each"
+            editor={(p) => (
+              <textarea {...p} value={value} onChange={(e) => onChange(e.target.value)} />
+            )}
           />
         </div>
       )}
