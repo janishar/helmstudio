@@ -3,7 +3,7 @@
 [← Docs index](../README.md) · design: [plan 16](../plan/16-mcp.md)
 
 `helm mcp` is an MCP server over stdio. An agent uses it to do what you do in the studio: find a workflow, run it,
-wait, look at the takes, batch, pick, put takes on a Timeline and export. It calls the API as you, with your
+wait, look at the takes, batch, pick, put takes on a Timeline and export, and build Magic boards. It calls the API as you, with your
 `helm login`, so it sees only your things.
 
 ## Set up
@@ -88,6 +88,34 @@ Marked `destructiveHint` (the client asks before each one). The deletes cannot b
 | `delete_run` | A finished run (its takes stay) |
 | `delete_session` | A session with nothing running (its takes stay) |
 
+### Magic boards
+
+The same board tools the in-app Assistant has. There is no card over MCP: a write does what it says when it is
+called, and your client's own ask is the Yes.
+
+| Tool | Does | Kind |
+|---|---|---|
+| `list_boards`, `show_board` | Your boards; one for an agent (block ids, revision, lanes, every block with its request and status, assets and their sheets, the estimate for what is not done) | read |
+| `try_board_edit` | Tries edit ops without saving: the diff and warnings, or the op that fails and why | read |
+| `plan_board` | What running blocks would cost: GPU seconds per block, lane and in all, the machine, the run order | read |
+| `board_frame` | What each visible lane shows at a time (the block, its take and the second into it); `get_take` shows the picture | read |
+| `create_board` | A new empty board (name, size and rates) | write |
+| `run_blocks` | Runs named blocks, a lane's or every block not done; plans first and answers the plan with the runs | write |
+| `make_views` | One image run per view of an asset ("Front", "Side"); each take joins its sheet | write |
+| `send_to_timeline` | The board as a new sequence; the answer has the plan (what went, the bakes) | write |
+| `edit_board` | Applies the ops in order, all or nothing, on the `base_revision` (one Undo step, `via mcp` in History) | destructiveHint |
+| `restore_board` | Brings back a kept revision as a new one | destructiveHint |
+
+**Cost.** In the app the Assistant asks on a card before a run above your limit (Settings, ask above N GPU minutes).
+Over MCP there is no card, so it works like `run_workflow` and `plan_run`: call `plan_board` first and read the
+estimate (or `show_board`'s plan), then `run_blocks`. `run_blocks` plans again and puts that plan in its answer next to
+the runs it started. `make_views` and `send_to_timeline` say what they started in their answer. Your MCP client
+decides whether to ask you before each write; if it runs tools without asking, plan first yourself.
+
+Editing a board: `show_board`, `try_board_edit`, then `edit_board` with the same ops and revision. A stale revision is
+refused (`409 board changed since you opened it (now revision <n>)`): read again and plan again. Runs add their takes
+as studio revisions, so read the board again before the next edit or send.
+
 Editing a sequence: `show_timeline` (the clip ids and the revision), `try_timeline_edit`, then `edit_timeline` with
 the same ops and revision. A stale revision is refused (`409 … now revision <n>`): read again and plan again. Clips
 an op makes get ids from the server when the op leaves them out (in the answer's `diff.added`). Batch ops into one
@@ -107,3 +135,6 @@ tool call in the client stops its requests.
 Ask: "make a Qwen still of a lighthouse at dusk, then a short LTX clip from it, and put both on a new Timeline and
 export it to ~/Desktop/lighthouse.mp4". Then: "cut the clip at 1 s, drop the second half and show me the frame at
 0.5 s".
+
+Magic: "make a Magic board with two shots of a fox in the rain, show me what running them costs, run them, then send
+the board to the Timeline".

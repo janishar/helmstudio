@@ -3465,9 +3465,10 @@
       "destructive": true
     },
     "list_boards": {
-      "description": "Your Magic boards, newest first: name, revision, lanes, blocks, length.",
+      "description": "Your Magic boards, newest first: name, revision, lanes, blocks, length; q finds them by name.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3478,16 +3479,104 @@
       "input": {
         "type": "object",
         "additionalProperties": false,
-        "properties": {}
+        "properties": {
+          "q": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "words that must all occur in the name (any case)"
+          }
+        }
       },
       "output": {
         "$ref": "../openapi.yaml#/components/schemas/MagicBoardList"
       }
     },
-    "show_board": {
-      "description": "One Magic board for an agent: its revision, lanes, every block (frames and seconds, status, the take shown, its request, ties, badges), transitions, assets and notes, and the estimate to run what is not done. Block ids and the revision are what the edit tools take.",
+    "create_board": {
+      "description": "Make a new empty Magic board (no lanes yet), for building from a brief when no board fits; then open it with navigate /magic, query b, and fill it with edit_board.",
+      "mcp_description": "Make a new empty Magic board (no lanes yet), for building from a brief when no board fits; then fill it with edit_board (lane_add, then add).",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 80,
+            "description": "the board's name; absent: Untitled board (named from its first prompt)"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "width",
+              "height",
+              "fps",
+              "sample_rate"
+            ],
+            "description": "size and rates; absent: 1280 x 720, 24 fps, 48000 Hz",
+            "properties": {
+              "width": {
+                "type": "integer",
+                "minimum": 16,
+                "maximum": 8192
+              },
+              "height": {
+                "type": "integer",
+                "minimum": 16,
+                "maximum": 8192
+              },
+              "fps": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 120
+              },
+              "sample_rate": {
+                "type": "integer",
+                "minimum": 8000,
+                "maximum": 192000
+              }
+            }
+          }
+        }
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "board_id",
+          "name",
+          "revision"
+        ],
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      }
+    },
+    "show_board": {
+      "description": "One Magic board for an agent: revision, lanes, every block (times, status, error, the take shown, all take ids, pinned, request, dialogue turns, ties, badges), transitions, assets (sheet views, voice, note, used in), notes, and the estimate for what is not done.",
+      "surfaces": [
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3528,10 +3617,44 @@
         }
       }
     },
+    "magic_kinds": {
+      "description": "Magic's kinds and their models: per kind its fields, per model its workflow id (a request's model), the fields it fills, the ones greyed with why, its env (Run on needs a host with it) and its Advanced params (<node>.<param>). Read it before choosing a model or an Advanced value.",
+      "surfaces": [
+        "assistant",
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": true,
+      "roles": [],
+      "routes": [
+        "GET /v1/studio/magic/kinds"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "frame",
+              "image",
+              "video",
+              "voice",
+              "music",
+              "sound"
+            ],
+            "description": "only this kind"
+          }
+        }
+      },
+      "output": {
+        "$ref": "../openapi.yaml#/components/schemas/MagicKinds"
+      }
+    },
     "try_board_edit": {
       "description": "Try edits on a board without saving: the diff, the warnings and a summary, or the op that fails and why. Then propose the same ops with edit_board.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -3625,7 +3748,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                         },
                         "takes": {
                           "type": "array",
@@ -3937,7 +4060,7 @@
                     },
                     "request": {
                       "type": "object",
-                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                     },
                     "pinned": {
                       "oneOf": [
@@ -4095,7 +4218,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                         },
                         "pinned": {
                           "oneOf": [
@@ -4503,11 +4626,14 @@
     },
     "edit_board": {
       "description": "Propose edits on a board: drawn on it with Apply and Discard; the user's Apply saves them as one revision (one undo step, by Assistant in History). Try them first with try_board_edit.",
+      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. Try them first with try_board_edit.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
+      "destructive": true,
       "roles": [],
       "routes": [
         "POST /v1/studio/magic/boards/{board_id}/edits",
@@ -4599,7 +4725,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                         },
                         "takes": {
                           "type": "array",
@@ -4911,7 +5037,7 @@
                     },
                     "request": {
                       "type": "object",
-                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                      "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                     },
                     "pinned": {
                       "oneOf": [
@@ -5069,7 +5195,7 @@
                         },
                         "request": {
                           "type": "object",
-                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; GET /magic/kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value)"
+                          "description": "the standard request, whole (a block op's replaces the stored one: start from the block's request in show_board; models and fields: magic_kinds): kind, model (a workflow id; absent: the kind's default), prompt or line, refs, first, last (picks: {asset} or {block, part: first|last|take}), width, height, seed, count (1-4), voice (an asset id) or voice_id, lyrics, key, bpm, from (a shot id), style (sketch, rough, full), framing {size, angle, move}, shot_model, advanced (<node>.<param>: value), turns [{speaker: an asset id, text}] (a dialogue: kind voice with turns in place of line; each speaker an asset with a voice), host (Run on: a host from hosts; absent: Auto), loop (a sound: its take repeats to fill the block)"
                         },
                         "pinned": {
                           "oneOf": [
@@ -5478,11 +5604,14 @@
     },
     "restore_board": {
       "description": "Bring back a kept revision of a board as a new revision (the History list; nothing is lost), after the user's Apply.",
+      "mcp_description": "Bring back a kept revision of a board as a new revision (the History list; nothing is lost); revision is the current one.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
+      "destructive": true,
       "roles": [],
       "routes": [
         "POST /v1/studio/magic/boards/{board_id}/restore",
@@ -5533,7 +5662,8 @@
     "plan_board": {
       "description": "What running blocks would cost: per block its GPU seconds (yours, the pack's or unknown), machine and peak memory or why it can't run; per lane and in all; the run order; whether it asks you first.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -5582,8 +5712,10 @@
     },
     "run_blocks": {
       "description": "Run blocks: named ones, a lane's, or every block not done (exactly one of blocks, lane, stale). Storyboard frames and runs within the user's limit start at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs.",
+      "mcp_description": "Run blocks: named ones, a lane's, or every block not done (exactly one of blocks, lane, stale). No card over MCP: they start at once, and the answer has the plan (GPU seconds, machine) with the runs; read plan_board first. Then show_board shows their status.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,
@@ -5651,6 +5783,97 @@
           },
           "skipped": {
             "$ref": "../openapi.yaml#/components/schemas/MagicRunStarted/properties/skipped"
+          },
+          "seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the estimate of what started, GPU seconds (null: unknown)"
+          }
+        }
+      },
+      "card": "magic_run"
+    },
+    "make_views": {
+      "description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. Within the user's limit it starts at once; above it, or with no estimate, the user's Yes on the card first. Then await the runs and read the sheet in show_board.",
+      "mcp_description": "Make views of a board's asset: one image run per view (\"Front\", \"Side\"); each take joins its sheet with the view's name. No card over MCP: they start at once. Then read the sheet in show_board.",
+      "surfaces": [
+        "assistant",
+        "mcp"
+      ],
+      "served_by": "studio",
+      "read_only": false,
+      "roles": [],
+      "routes": [
+        "POST /v1/studio/magic/boards/{board_id}/assets/{asset_id}/views"
+      ],
+      "input": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "board_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "the board (list_boards)"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "the board's current revision"
+          },
+          "asset": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,40}$",
+            "description": "the asset's id (show_board assets)"
+          },
+          "views": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 6,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40
+            },
+            "description": "the views to make, one run each"
+          },
+          "model": {
+            "type": "string",
+            "maxLength": 80,
+            "description": "an image model's workflow id (magic_kinds); absent: the image kind's first"
+          }
+        },
+        "required": [
+          "board_id",
+          "revision",
+          "asset",
+          "views"
+        ]
+      },
+      "output": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "revision",
+          "started",
+          "seconds"
+        ],
+        "properties": {
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "started": {
+            "$ref": "../openapi.yaml#/components/schemas/MagicViewsStarted/properties/started"
+          },
+          "seconds": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "the estimate, GPU seconds (null: unknown)"
           }
         }
       },
@@ -5658,8 +5881,10 @@
     },
     "board_frame": {
       "description": "Look at a board at a time: what each picture lane shows there (the block, the take it shows and the second into it, its status), and the sound under it. Look at a take with look_at.",
+      "mcp_description": "Look at a board at a time: what each visible lane shows there (the block, the take it shows and the second into it, its status), the sound under it too. See a take with get_take.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": true,
@@ -5757,8 +5982,10 @@
     },
     "send_to_timeline": {
       "description": "Send the board as it is to the Timeline as a new sequence (shots on V1, lines and music on audio tracks, fades and wipes baked), after the user's Yes on the card. Baking ones answer 202: await nothing, the sends list shows it.",
+      "mcp_description": "Send the board as it is to the Timeline as a new sequence (shots on V1, lines and music on audio tracks, fades and wipes baked). No card over MCP: it sends at once; the answer has the plan (what went, the bakes). With bakes the sequence comes when they finish.",
       "surfaces": [
-        "assistant"
+        "assistant",
+        "mcp"
       ],
       "served_by": "studio",
       "read_only": false,

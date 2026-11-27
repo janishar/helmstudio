@@ -208,6 +208,9 @@ func (c *client) call(method, path string, in any, want int, out any) error {
 	return c.callCtx(context.Background(), method, path, in, want, out)
 }
 
+// anyOK as want takes any 2xx (a route that answers 201 or 202 by what it did).
+const anyOK = 0
+
 // callCtx is call under ctx, and at most apiTimeout.
 func (c *client) callCtx(ctx context.Context, method, path string, in any, want int, out any) error {
 	ctx, cancel := context.WithTimeout(ctx, apiTimeout)
@@ -217,7 +220,7 @@ func (c *client) callCtx(ctx context.Context, method, path string, in any, want 
 		return err
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != want {
+	if resp.StatusCode != want && (want != anyOK || resp.StatusCode/100 != 2) {
 		return readError(resp)
 	}
 	if out == nil {

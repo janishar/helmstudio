@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,7 @@ var toolCatalogJSON []byte // make gen: a copy of contracts/tools/catalog.json
 
 type catalogTool struct {
 	Description string          `json:"description"`
+	MCPDesc     string          `json:"mcp_description"` // plan 16 §20.8: in place of description (no card over MCP)
 	Surfaces    []string        `json:"surfaces"`
 	ReadOnly    bool            `json:"read_only"`
 	Destructive bool            `json:"destructive"`
@@ -117,7 +119,7 @@ func newMCPServer(c *client) *mcp.Server {
 	c.app = "mcp" // its timeline edits are labelled via mcp
 	s := &mcpServer{c: c, runs: map[string]bool{}}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "helmstudio", Version: "1"}, &mcp.ServerOptions{
-		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one. To edit a sequence: show_timeline (clip ids, revision), try_timeline_edit, then edit_timeline with the same ops and base_revision; timeline_frame to look at a time; restore_timeline goes back.",
+		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one. To edit a sequence: show_timeline (clip ids, revision), try_timeline_edit, then edit_timeline with the same ops and base_revision; timeline_frame to look at a time; restore_timeline goes back. Magic boards: list_boards or create_board, show_board (block ids, revision), try_board_edit then edit_board; plan_board shows the cost before run_blocks (no card here: plan first); board_frame looks at a time; send_to_timeline makes a sequence.",
 	})
 	handlers := s.handlers()
 	for name, t := range mcpCatalog() {
@@ -133,7 +135,11 @@ func newMCPServer(c *client) *mcp.Server {
 			destructive := t.Destructive
 			ann.DestructiveHint = &destructive // the spec's default is true: every other write says false
 		}
-		mcp.AddTool(srv, &mcp.Tool{Name: name, Description: t.Description, InputSchema: t.Input, Annotations: ann},
+		desc := t.Description
+		if t.MCPDesc != "" {
+			desc = t.MCPDesc
+		}
+		mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc, InputSchema: t.Input, Annotations: ann},
 			func(ctx context.Context, req *mcp.CallToolRequest, in map[string]any) (*mcp.CallToolResult, any, error) {
 				out, content, err := h(ctx, req, in)
 				if err != nil {
@@ -180,13 +186,15 @@ func (s *mcpServer) gets(ctx context.Context, paths ...string) (map[string]json.
 	return out, nil
 }
 
-func (s *mcpServer) handlers() map[string]toolFunc {
-	plain := func(f func(context.Context, args) (any, error)) toolFunc {
-		return func(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
-			out, err := f(ctx, in)
-			return out, nil, err
-		}
+// plain is a tool that answers JSON only.
+func plain(f func(context.Context, args) (any, error)) toolFunc {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+		out, err := f(ctx, in)
+		return out, nil, err
 	}
+}
+
+func (s *mcpServer) handlers() map[string]toolFunc {
 	del := func(path, key string) toolFunc {
 		return plain(func(ctx context.Context, in args) (any, error) {
 			if err := s.c.callCtx(ctx, http.MethodDelete, "/v1/studio"+path+in.esc(key), nil, http.StatusNoContent, nil); err != nil {
@@ -195,7 +203,7 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			return map[string]string{"deleted": in.str(key)}, nil
 		})
 	}
-	return map[string]toolFunc{
+	h := map[string]toolFunc{
 		"list_workflows": plain(func(ctx context.Context, _ args) (any, error) { return s.get(ctx, "/workflows") }),
 		"get_workflow":   plain(s.getWorkflow),
 		"plan_run": plain(func(ctx context.Context, in args) (any, error) {
@@ -309,6 +317,8 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 		"delete_run":      del("/runs/", "run_id"),
 		"delete_session":  del("/sessions/", "session_id"),
 	}
+	maps.Copy(h, s.magicHandlers())
+	return h
 }
 
 // editTimeline sends the ops to /edits (dry run: try_timeline_edit). An op that cannot apply is the API's 422

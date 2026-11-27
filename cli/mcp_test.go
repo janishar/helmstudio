@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -111,13 +112,16 @@ func TestMCPToolsAreTheCatalogs(t *testing.T) {
 		if fmt.Sprint(want) != fmt.Sprint(have) {
 			t.Errorf("%s: input schema %v, catalog %v", name, have, want)
 		}
+		if desc := cmp.Or(ct.MCPDesc, ct.Description); tl.Description != desc || strings.Contains(desc, "card") && !strings.Contains(desc, "No card over MCP") {
+			t.Errorf("%s: description %q", name, tl.Description)
+		}
 		a := tl.Annotations
 		destructive := a.DestructiveHint != nil && *a.DestructiveHint
 		if a.ReadOnlyHint != ct.ReadOnly || (!ct.ReadOnly && a.DestructiveHint == nil) || destructive != ct.Destructive {
 			t.Errorf("%s: annotations %+v, catalog read_only %v destructive %v", name, a, ct.ReadOnly, ct.Destructive)
 		}
 	}
-	for _, name := range []string{"delete_take", "delete_run", "delete_session", "edit_timeline", "restore_timeline"} {
+	for _, name := range []string{"delete_take", "delete_run", "delete_session", "edit_timeline", "restore_timeline", "edit_board", "restore_board"} {
 		if a := got[name].Annotations; a.ReadOnlyHint || !*a.DestructiveHint {
 			t.Errorf("%s: not destructive: %+v", name, a)
 		}
@@ -551,5 +555,108 @@ func TestMCPExportWaitEndsMidRead(t *testing.T) {
 	res, out := call(t, cs, "export_timeline", map[string]any{"timeline_id": id, "out": t.TempDir() + "/cut.mp4"})
 	if res.IsError || out["job"] == nil || out["saved"] != nil {
 		t.Fatalf("export: %s", text(res))
+	}
+}
+
+// The Magic tools (plan 16 §20.8): the board routes each makes, as mcp; no card, so edit_board applies at once and
+// run_blocks plans first, answering the plan with the runs; board_frame reads the agent view.
+func TestMCPMagicBoards(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "bbbbbbbb-0000-4000-8000-000000000001"
+	base := "/v1/studio/magic/boards/" + id
+	var got []string
+	record := func(status int, answer string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var b map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			got = append(got, fmt.Sprintf("%s %s?%s %v %s", r.Method, r.URL.Path, r.URL.RawQuery, b, r.Header.Get("X-Helm-Client")))
+			w.WriteHeader(status)
+			fmt.Fprint(w, answer)
+		}
+	}
+	view := `{"id":"` + id + `","revision":4,"target":{"fps":24},"lanes":[{"id":"shots","hidden":false},{"id":"x","hidden":true}],
+		"blocks":[{"id":"s1","lane":"shots","name":"Shot 1","kind":"video","at":0,"length":24,"take_id":null,"status":"draft"},
+		{"id":"s2","lane":"shots","name":"Shot 2","kind":"video","at":24,"length":24,"take_id":"t2","status":"done"},
+		{"id":"h1","lane":"x","name":"Hid","kind":"video","at":0,"length":48,"take_id":null,"status":"draft"}]}`
+	f.extra["GET /v1/studio/magic/boards"] = record(200, `{"boards":[]}`)
+	f.extra["POST /v1/studio/magic/boards"] = record(201, `{"id":"`+id+`","name":"Fox","revision":1,"doc":{}}`)
+	f.extra["GET /v1/studio/magic/kinds"] = record(200, `{"kinds":[{"kind":"video"},{"kind":"image"}]}`)
+	f.extra["POST "+base+"/assets/a1/views"] = record(202, `{"board":{"revision":7},"started":[{"view":"Front","run_id":"r8"}]}`)
+	f.extra["GET "+base] = record(200, view)
+	f.extra["POST "+base+"/plan"] = record(200, `{"seconds":12,"ask":true}`)
+	f.extra["POST "+base+"/edits"] = record(200, `{"revision":5,"dry_run":false,"board":{"doc":{}},"diff":{"blocks":{"added":["s3"]}},"warnings":[]}`)
+	f.extra["GET "+base+"/revisions"] = record(200, `{"revisions":[{"revision":5,"ops_summary":"add_block"}]}`)
+	f.extra["POST "+base+"/restore"] = record(200, `{"revision":6}`)
+	f.extra["POST "+base+"/run"] = record(202, `{"board":{"revision":6},"started":[{"block":"s1","run_id":"r9"}],"skipped":[]}`)
+	f.extra["POST "+base+"/send"] = record(202, `{"plan":{"bakes":1},"send":{"status":"baking"}}`)
+	ops := []any{map[string]any{"op": "delete", "ids": []any{"s1"}, "mode": "insert"}}
+	outs := map[string]map[string]any{}
+	for _, c := range []struct {
+		tool string
+		in   map[string]any
+	}{
+		{"list_boards", map[string]any{"q": "fox rain"}},
+		{"create_board", map[string]any{"name": "Fox"}},
+		{"magic_kinds", map[string]any{"kind": "image"}},
+		{"show_board", map[string]any{"board_id": id}},
+		{"try_board_edit", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}},
+		{"edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}},
+		{"restore_board", map[string]any{"board_id": id, "revision": 5, "to": 4}},
+		{"plan_board", map[string]any{"board_id": id}},
+		{"run_blocks", map[string]any{"board_id": id, "revision": 6, "lane": "shots"}},
+		{"make_views", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "views": []any{"Front"}}},
+		{"board_frame", map[string]any{"board_id": id, "at": 1.5}},
+		{"send_to_timeline", map[string]any{"board_id": id, "revision": 6}},
+	} {
+		res, out := call(t, cs, c.tool, c.in)
+		if res.IsError {
+			t.Fatalf("%s: %s", c.tool, text(res))
+		}
+		outs[c.tool] = out
+	}
+	want := []string{
+		"GET /v1/studio/magic/boards?q=fox+rain map[] mcp",
+		"POST /v1/studio/magic/boards? map[name:Fox] mcp",
+		"GET /v1/studio/magic/kinds? map[] mcp",
+		"GET " + base + "?view=agent map[] mcp",
+		"POST " + base + "/plan? map[stale:true] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:true ops:[map[ids:[s1] mode:insert op:delete]]] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:false ops:[map[ids:[s1] mode:insert op:delete]]] mcp",
+		"GET " + base + "/revisions?limit=1 map[] mcp",
+		"POST " + base + "/restore? map[revision:5 to:4] mcp",
+		"POST " + base + "/plan? map[stale:true] mcp",
+		"POST " + base + "/plan? map[lane:shots] mcp",
+		"POST " + base + "/run? map[lane:shots revision:6] mcp",
+		"POST " + base + "/assets/a1/views? map[revision:6 views:[Front]] mcp",
+		"GET " + base + "?view=agent map[] mcp",
+		"POST " + base + "/send? map[revision:6] mcp",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if o := outs["create_board"]; o["board_id"] != id || o["revision"] != float64(1) {
+		t.Errorf("create: %v", o)
+	}
+	if k := outs["magic_kinds"]["kinds"].([]any); len(k) != 1 || k[0].(map[string]any)["kind"] != "image" {
+		t.Errorf("kinds: %v", k)
+	}
+	if o := outs["make_views"]; o["revision"] != float64(7) || len(o["started"].([]any)) != 1 {
+		t.Errorf("views: %v", o)
+	}
+	if o := outs["try_board_edit"]; o["board"] != nil || o["summary"] != nil || o["revision"] != float64(5) {
+		t.Errorf("try: %v", o)
+	}
+	if o := outs["edit_board"]; o["summary"] != "add_block" {
+		t.Errorf("edit: %v", o)
+	}
+	if o := outs["run_blocks"]; o["revision"] != float64(6) || o["plan"].(map[string]any)["ask"] != true || len(o["started"].([]any)) != 1 {
+		t.Errorf("run: %v", o)
+	}
+	shown := outs["board_frame"]["shown"].([]any)
+	if s := shown[0].(map[string]any); len(shown) != 1 || s["block"] != "s2" || s["offset_s"] != 0.5 || s["take_id"] != "t2" || outs["board_frame"]["frame"] != float64(36) {
+		t.Errorf("frame: %v", outs["board_frame"])
+	}
+	if o := outs["send_to_timeline"]; o["send"].(map[string]any)["status"] != "baking" {
+		t.Errorf("send: %v", o)
 	}
 }
