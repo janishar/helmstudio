@@ -4172,7 +4172,7 @@
         "fields"
       ],
       "additionalProperties": false,
-      "description": "API 1.81: what Magic's standard request (MagicRequest) fills in this workflow. `fields` maps each shared field the workflow supports to the param it fills; a field it leaves out is greyed in Magic for this model; every other param is its Advanced. The fields: prompt and line (a text or string param), refs (a rows param whose items have an Image field: the @ picks' pictures, in order), first and last (an image param, or a rows param whose items have an Image field and a `position: seconds` field: a row at the clip's first or last frame; such a rows param left empty bypasses its node), length (a frames param: the block's length on the param's grid), width and height (int params: the board's size, or the request's), seed (a seed param), voice (a voice param). The kind must fit the workflow's media (image: image; video: video; voice: audio). Checked by the runner at start and by contracts-check.",
+      "description": "API 1.81: what Magic's standard request (MagicRequest) fills in this workflow. `fields` maps each shared field the workflow supports to the param it fills; a field it leaves out is greyed in Magic for this model; every other param is its Advanced. The fields: prompt and line (a text or string param), refs (a rows param whose items have an Image field: the @ picks' pictures, in order), first and last (an image param, or a rows param whose items have an Image field and a `position: seconds` field: a row at the clip's first or last frame; such a rows param left empty bypasses its node), length (a frames param: the block's length on the param's grid; from 1.85 also a float param: the block's seconds, music and sound), width and height (int params: the board's size, or the request's), seed (a seed param), voice (a voice param); from 1.85 (plan 39 phase H) lyrics (a text or string param), instrumental (a bool param: true when the lyrics are empty), key (an enum param: the request's key when it is one of its values), bpm (an int param) and from (a media param that accepts video: the shot's video take, MMAudio's video to sound). The kind must fit the workflow's media (image: image; video: video; voice, music and sound: audio). Checked by the runner at start and by contracts-check.",
       "properties": {
         "kind": {
           "enum": [
@@ -4243,6 +4243,31 @@
               "type": "string",
               "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
               "description": "<node id>.<param> of this workflow"
+            },
+            "lyrics": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "instrumental": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "bpm": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
             }
           }
         },
@@ -4259,6 +4284,10 @@
           "exclusiveMinimum": 0,
           "maximum": 100000,
           "description": "the pack's declared GPU seconds per unit, the estimate when the caller has no runs of it yet: an image at 1 megapixel (image), a second of video at 1280 × 720 (video), a second of speech (voice), a second of audio (music, sound)"
+        },
+        "default": {
+          "type": "boolean",
+          "description": "API 1.85: the kind's default model, first in Magic's picker (MiniMax Music 3, the owner's pick); absent: false. Without one the fastest declared model is first"
         }
       }
     }

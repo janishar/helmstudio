@@ -61,9 +61,63 @@
     },
     {
       "kind": "music",
-      "fields": [],
-      "models": [],
-      "off": "Comes with Create's Music and Sound"
+      "fields": [
+        "prompt",
+        "lyrics",
+        "length",
+        "key",
+        "bpm",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "minimax-music3",
+          "name": "MiniMax Music 3",
+          "title": "MiniMax Music 3",
+          "fields": [
+            "prompt",
+            "lyrics",
+            "length",
+            "seed"
+          ],
+          "greyed": {
+            "key": "MiniMax Music 3 can't take a key",
+            "bpm": "MiniMax Music 3 can't take a BPM"
+          },
+          "seconds": 4.9,
+          "advanced": []
+        }
+      ]
+    },
+    {
+      "kind": "sound",
+      "fields": [
+        "from",
+        "prompt",
+        "length",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "mmaudio-sound",
+          "name": "MMAudio",
+          "title": "MMAudio Sound",
+          "fields": [
+            "from",
+            "prompt",
+            "length",
+            "seed"
+          ],
+          "greyed": {},
+          "seconds": 0.5,
+          "advanced": [],
+          "video": {
+            "workflow_id": "mmaudio-video",
+            "title": "MMAudio Sound from a video",
+            "advanced": []
+          }
+        }
+      ]
     }
   ]
 }

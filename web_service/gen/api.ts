@@ -9105,7 +9105,7 @@ export interface components {
              * @enum {string}
              */
             style?: "sketch" | "rough" | "full";
-            /** @description a sound made from this shot's video */
+            /** @description a sound made from this shot's video (from 1.85: its shown take runs the model's `video` workflow, MMAudio's video to sound) */
             from?: components["schemas"]["MagicId"];
             refs?: components["schemas"]["MagicRef"][];
             /** @description from 1.81: the shot's first frame (a block's last frame, an image block's take, an asset's picture) */
@@ -9121,6 +9121,12 @@ export interface components {
             count?: number;
             /** @description from 1.81: a saved voice (library item of kind voice) when `voice` names no asset with one */
             voice_id?: string;
+            /** @description from 1.85: a music block's lyrics ([verse], [chorus] tags); empty or absent: an instrumental */
+            lyrics?: string;
+            /** @description from 1.85: a music block's key (`D minor`); absent: Auto. Sent only to a model whose key param has it as a value */
+            key?: string;
+            /** @description from 1.85: a music block's tempo; absent: Auto */
+            bpm?: number;
             /** @description the model's own params, `<node>.<param>` → value as a run's inputs (the shared fields win) */
             advanced?: Record<string, never>;
             /** @description from 1.83: a storyboard frame's shot size and angle (words of its prompt) and the move of the shot made from it */
@@ -9606,10 +9612,10 @@ export interface components {
             sends: components["schemas"]["MagicSend"][];
         };
         /**
-         * @description a shared field of the standard request (size = width and height)
+         * @description a shared field of the standard request (size = width and height; from 1.85 music's lyrics, key and bpm, sound's from: a shot's video)
          * @enum {string}
          */
-        MagicField: "prompt" | "line" | "refs" | "first" | "last" | "length" | "size" | "seed" | "voice";
+        MagicField: "prompt" | "line" | "refs" | "first" | "last" | "length" | "size" | "seed" | "voice" | "lyrics" | "key" | "bpm" | "from";
         /**
          * @description derived (contracts/README.md, Magic: runs): draft (no take), running (a run queued or running), done (its shown take was made from its inputs as they are), out of date (they changed since), failed (its last run failed and it has no take)
          * @enum {string}
@@ -9639,6 +9645,8 @@ export interface components {
              * @description the board's run that made it
              */
             run_id?: string | null;
+            /** @description from 1.85, kind audio only: its class (Take.sound): a music block shows an album cover, sound and voice an orb */
+            sound?: components["schemas"]["SoundClass"];
         };
         /** @description one run of a block (its run history) */
         MagicBlockRun: {
@@ -9724,6 +9732,12 @@ export interface components {
             /** @description the pack's declared GPU seconds per unit (`standard.seconds`) */
             seconds?: number | null;
             advanced: components["schemas"]["MagicParam"][];
+            /** @description from 1.85: the same model's workflow for a sound made from a shot's video (a request with `from`; MMAudio Sound from a video), with its own Advanced; absent: the model takes no video */
+            video?: {
+                workflow_id: string;
+                title?: string;
+                advanced: components["schemas"]["MagicParam"][];
+            };
         };
         MagicKindInfo: {
             kind: components["schemas"]["MagicKind"];
@@ -9731,7 +9745,7 @@ export interface components {
             fields: components["schemas"]["MagicField"][];
             /** @description the workflows that serve it, the registry's order; empty: none on any host */
             models: components["schemas"]["MagicModel"][];
-            /** @description why the kind cannot run yet (Music and Sound: `Comes with Create's Music and Sound`; before 1.83 a board frame: `Board frames come with the storyboard`) */
+            /** @description why the kind cannot run yet (before 1.83 a board frame: `Board frames come with the storyboard`; before 1.85 Music and Sound: `Comes with Create's Music and Sound`; from 1.85 a kind no model serves has no models and no off) */
             off?: string;
         };
         MagicKinds: {

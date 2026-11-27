@@ -119,6 +119,20 @@
         "labels": {
           "plan.bypass": "No rewrite"
         }
+      },
+      "standard": {
+        "kind": "music",
+        "model": "ACE-Step 1.5",
+        "fields": {
+          "prompt": "prompt.text",
+          "lyrics": "song.lyrics",
+          "instrumental": "song.instrumental",
+          "length": "song.seconds",
+          "key": "song.key",
+          "bpm": "song.bpm",
+          "seed": "seed.seed"
+        },
+        "seconds": 0.55
       }
     },
     {

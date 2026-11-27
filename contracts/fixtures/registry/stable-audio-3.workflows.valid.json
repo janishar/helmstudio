@@ -72,6 +72,16 @@
           "default": 4,
           "max": 8
         }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Stable Audio 3 Small-SFX",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "sound.seconds",
+          "seed": "seed.seed"
+        },
+        "seconds": 0.1
       }
     },
     {

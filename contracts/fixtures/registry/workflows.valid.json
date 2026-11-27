@@ -170,6 +170,19 @@
             ]
           }
         ]
+      },
+      "standard": {
+        "kind": "music",
+        "model": "Echo music",
+        "fields": {
+          "prompt": "prompt.text",
+          "lyrics": "music.lyrics",
+          "instrumental": "music.instrumental",
+          "length": "music.seconds",
+          "bpm": "music.bpm",
+          "seed": "music.seed"
+        },
+        "seconds": 0.3
       }
     },
     {
@@ -285,6 +298,16 @@
           "default": 4,
           "max": 8
         }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Echo sound",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "sound.seconds",
+          "seed": "sound.seed"
+        },
+        "seconds": 0.2
       }
     },
     {
@@ -324,6 +347,16 @@
             "media": "foley.video"
           }
         }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Echo sound",
+        "fields": {
+          "from": "foley.source",
+          "prompt": "prompt.text",
+          "seed": "foley.seed"
+        },
+        "seconds": 0.2
       }
     },
     {

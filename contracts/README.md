@@ -4034,21 +4034,21 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
 ### Magic: the standard request (API 1.81; plan 39 phase D; normative)
 
 - **A workflow serves a kind** by its registry entry's `standard` block (registry.schema.json `standard`): `kind`
-  (image, video, voice; music and sound with plan 38's packs), `model` (its name in the picker), `fields` (each
+  (image, video, voice; from 1.85 music and sound), `model` (its name in the picker), `fields` (each
   shared field it fills → the `<node>.<param>` it fills), `set` (inputs every standard run of it carries:
   `canvas.mode: fixed`) and `seconds` (the declared GPU seconds per unit, below). The runner checks it at start and
   `make contracts-check` checks the canonical ones: the kind fits the media, each field's param is unwired and of a
   type the field fills (prompt and line: text or string; refs: rows with an Image item; first and last: an image
   param, or rows with an Image item and a `position: seconds` field; length: frames; width and height: int; seed:
-  seed; voice: voice), each `set` key a param. Today: Qwen Image (`qwen-image`), MiniMax H3 Image, LTX 2.5
+  seed; voice: voice; from 1.85 Magic: music and sound, below), each `set` key a param. Today: Qwen Image (`qwen-image`), MiniMax H3 Image, LTX 2.5
   (`ltx-image-to-video`), MiniMax H3 (`minimax-h3-image-to-video`), Qwen3-TTS and ZONOS3 (their voice-overs); the
   fake host's Echo, Echo video, Echo keyframes and Echo voice.
 - **`GET /v1/studio/magic/kinds`**: per kind its shared fields in form order (image: prompt, refs, size, seed; video:
   prompt, first, last, length, size, seed; voice: line, voice, seed) and its models in registry order, each with the
   fields it fills, `greyed` (every other field of the kind → `<model> can't take a last frame`), `seconds`, and
   `advanced` (every other param of its workflow that a form can set: not rows, image, media, voice or span; not
-  wired; the workflow's value as `default`). Music and Sound carry `off` (`Comes with Create's Music and Sound`)
-  until a model serves them; before 1.83 a board frame carried `off` (`Board frames come with the storyboard`); from
+  wired; the workflow's value as `default`). Before 1.85 Music and Sound carried `off` (`Comes with Create's Music and
+  Sound`); before 1.83 a board frame carried `off` (`Board frames come with the storyboard`); from
   1.83 it is served by the image models.
 - **`MagicRequest`** (a block's `request`): `model` (a workflow id from the kinds; absent: the kind's first),
   `prompt` or `line`, `refs`, `first` and `last` (`MagicRef`s), `width` and `height` (absent: the board's), `seed`,
@@ -4177,6 +4177,29 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   goes **out of date** when the frame changes (its take or its words).
 - **The rough cut** is the web's: the board's frames in time order, each for its length, with its `line` (else the
   lines of the voice blocks under it), and the voice takes under them played; nothing is stored.
+
+### Magic: music and sound (API 1.85; plan 39 phase H; normative)
+
+- **The kinds.** Music's shared fields, in form order: prompt (the style), lyrics, length, key, bpm, seed; Sound's:
+  from, prompt, length, seed. A field a model can't fill is greyed as before (`MiniMax Music 3 can't take a key`,
+  `Stable Audio 3 Small-SFX can't take a shot's video`). Standard blocks: MiniMax Music 3 (`minimax-music3`,
+  `default: true`: the owner's default), ACE-Step 1.5 (`ace-step-music`; XL or 2B under Advanced, its variant),
+  Stable Audio 3 Small-SFX (`sa3-sound`), MMAudio (`mmaudio-sound` and `mmaudio-video`); the fake host's Echo music,
+  Echo sound and Echo sound from a video. A kind's models are listed default first, then the fastest declared.
+- **One model, two workflows.** Workflows of one kind with the same `standard.model` are one model in GET
+  /magic/kinds: the one without `from` is its `workflow_id`, the one with `from` its `video` (`{workflow_id, title,
+  advanced}`); its `fields` are both's. A request's `model` is the first's id; with `from` the `video` workflow runs.
+  A request with `from` and no `model` runs the kind's first model that takes a video.
+- **The resolver** (beside Magic: the standard request): `length` on a float param is the block's seconds on the
+  param's grid and bounds; `lyrics` goes as is and `instrumental` is true when they are empty; `key` only when the key
+  param has it as a value (else the model's Auto); `bpm` clamped to the param's bounds; `from` is the shot's shown
+  take as `{take_id}` (why a block can't run: `<model> can't take a shot's video`, `Shot 2 is not on the board`,
+  `Shot 2 has no take yet`, 422 on a named block). A music or sound block's units are its seconds.
+- **The block keeps the audio take.** A run's takes join a block only when they fit its kind (voice, music, sound:
+  audio; video: video; image and frame: image), so MMAudio's video with the sound stays in the Gallery and the run
+  history lists the audio take. `MagicTake.sound` is the take's class: the web draws a music take as an album cover
+  (its gradient from the prompt, a vinyl disc) and a sound or voice take as an orb (sky, amber), by the take's class
+  whatever its lane.
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 

@@ -444,8 +444,10 @@ def check_canonical_registries() -> None:
 
 # API 1.81: a workflow's `standard` block (registry.schema.json standard; README, Magic: the standard request)
 STANDARD_MEDIA = {"image": "image", "video": "video", "voice": "audio", "music": "audio", "sound": "audio"}
-STANDARD_TYPES = {"prompt": {"text", "string"}, "line": {"text", "string"}, "length": {"frames"}, "width": {"int"},
-                  "height": {"int"}, "seed": {"seed"}, "voice": {"voice"}}
+STANDARD_TYPES = {"prompt": {"text", "string"}, "line": {"text", "string"}, "length": {"frames", "float"},
+                  "width": {"int"}, "height": {"int"}, "seed": {"seed"}, "voice": {"voice"},
+                  # API 1.85 (plan 39 phase H): music and sound
+                  "lyrics": {"text", "string"}, "instrumental": {"bool"}, "key": {"enum"}, "bpm": {"int"}}
 
 
 def standard_errors(wf: dict, kinds: dict) -> list[str]:
@@ -478,6 +480,7 @@ def standard_errors(wf: dict, kinds: dict) -> list[str]:
         timed = any(isinstance(v, dict) and v.get("position") == "seconds" for v in item.values())
         ok = (p["type"] in STANDARD_TYPES[field] if field in STANDARD_TYPES
               else image_rows if field == "refs"
+              else p["type"] == "media" and "video" in (p.get("accepts") or []) if field == "from"
               else p["type"] == "image" or (image_rows and timed))
         if not ok:
             errs.append(f"standard.fields.{field}: {path} is a {p['type']} param")
