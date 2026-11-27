@@ -80,8 +80,10 @@ describe("a · the banner", () => {
   });
 });
 
+const h3 = structuredClone(h3Workflows.workflows[0]);
+h3.nodes.generate.params.lora = "none"; // the Turbo LoRA (the default) is an add-on these states don't speak of
 const wf = {
-  ...h3Workflows.workflows[0],
+  ...h3,
   node_schemas: Object.fromEntries([...coreNodes.nodes, ...h3Nodes.nodes].map((n) => [n.kind, n])),
   source: "template",
 } as unknown as S<"Workflow">;
