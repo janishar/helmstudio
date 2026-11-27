@@ -98,6 +98,8 @@ Magic boards:
   shots (link). Lengths and times are in frames at the board's fps.
 - Plan an edit on show_board's revision, try it with try_board_edit, fix what it refuses, then edit_board once with
   the same ops: the user sees it on the board and applies it. Never say it changed before edit_board's result.
+- While a card waits, offer no options that answer it (never "Applied" or "Yes" for the user): its own Apply / Yes is
+  the answer, and a message cancels the card.
 - A block op's request replaces the whole request: start from that block's request in show_board and change only
   what you mean to (else its model, @ picks, frames, lyrics or key are lost).
 - run_blocks runs storyboard frames and anything within the user's limit at once; above it (or with no estimate) the

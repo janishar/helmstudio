@@ -1885,6 +1885,18 @@ async def test_an_edit_is_proposed_on_the_board_and_applied_by_the_users_yes(poo
     assert step["done"] and step["lines"][0]["text"] == "Changed the board · Added Shot 3"
 
 
+async def test_a_step_that_asks_on_a_card_offers_no_options(pool, fake):
+    c = magic_chat(pool, fake)
+    opts = '```options\n[{"title":"Applied, add frames"},{"title":"Not yet"}]\n```'
+    c.script(
+        calls(("edit_board", {"board_id": BOARD, "base_revision": 1, "ops": ADD}))
+        | {"content": "Here is the change.\n\n" + opts},
+        {"content": "Shot 3 is on the board."},
+    )
+    step = await c.say("add a shot")
+    assert step["cards"] and step["text"] == "Here is the change."  # a pick would cancel the card
+
+
 async def test_a_discarded_edit_writes_nothing(pool, fake):
     c = magic_chat(pool, fake)
     c.script(

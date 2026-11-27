@@ -1248,7 +1248,8 @@ class Assistant:
         return True
 
     def _park(self, s: State, up: dict) -> State:
-        if up["pending"]["cards"]:  # the card's Apply / Yes is the answer: a picked option would cancel it
+        # the card's Apply / Yes is the answer: a picked option sends a message, which cancels the card
+        if up["pending"]["cards"]:
             up = up | {"text": answer.OPTIONS.sub("", up.get("text", s.get("text", ""))).strip()}
         step = self._step(s | up, done=False, pending=up["pending"])
         return up | {"step": step, "seq": step["seq"], "text": "", "lines": [], "to": "wait"}
