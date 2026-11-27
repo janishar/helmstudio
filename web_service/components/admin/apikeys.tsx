@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Copy, Trash2 } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { SystemTabs } from "@/components/admin/users";
 import { api, message, ok, type S } from "@/lib/api";
 import { CLIENT_NOTE, CREATE_COMMAND, keyCounts, keyOrder, lastUsed } from "@/lib/apikeys";
@@ -42,6 +43,13 @@ export function ApiKeysAdmin() {
     }
   }
   const counts = keyCounts(keys ?? []);
+  // revoked keys never leave the list: hidden unless Show revoked (Search.dc.html frame 7)
+  const [revoked, setRevoked] = useState(false);
+  const search = useSearch({
+    items: keyOrder(keys ?? []).filter((k) => revoked || !k.revoked_at),
+    text: (k) => [k.client, k.prefix],
+    id: (k) => k.id,
+  });
   const tile = "panel flex min-w-0 flex-col gap-1 px-4 py-3.5";
   const cell = "border-b border-s3 p-2.5";
   return (
@@ -78,6 +86,27 @@ export function ApiKeysAdmin() {
           </div>
         </div>
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
+        {(counts.revoked > 0 || search.show) && (
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {counts.revoked > 0 && (
+              <label className="flex items-center gap-2 text-[13px] text-t2">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={revoked}
+                  onClick={() => setRevoked(!revoked)}
+                  className={`flex h-[22px] w-[38px] shrink-0 rounded-full border bg-s1 p-0.5 ${revoked ? "justify-end border-a1" : "border-line"}`}
+                >
+                  <span className={`block size-4 rounded-full ${revoked ? "bg-a1" : "bg-t2"}`} />
+                </button>
+                Show revoked
+              </label>
+            )}
+            {search.show && (
+              <SearchField {...search.field} label="Search keys" className="w-72 max-md:w-full" />
+            )}
+          </div>
+        )}
         <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!keys && !error}>
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
             <thead>
@@ -94,7 +123,7 @@ export function ApiKeysAdmin() {
               </tr>
             </thead>
             <tbody className="[&>tr:last-child>td]:border-b-0">
-              {keyOrder(keys ?? []).map((k) => (
+              {search.shown.map((k) => (
                 <tr
                   key={k.id}
                   className="whitespace-nowrap"
@@ -121,10 +150,12 @@ export function ApiKeysAdmin() {
                   }
                 >
                   <td className={`${cell} font-semibold ${k.revoked_at ? "text-t2" : ""}`}>
-                    {k.client}
+                    <Marked text={k.client} q={search.q} />
                     {CLIENT_NOTE[k.client] && <Info>{CLIENT_NOTE[k.client]}</Info>}
                   </td>
-                  <td className={`${cell} mono text-[12px] text-t2`}>{k.prefix}…</td>
+                  <td className={`${cell} mono text-[12px] text-t2`}>
+                    <Marked text={k.prefix} q={search.q} />…
+                  </td>
                   <td className={`${cell} mono text-[12px] text-t2`}>
                     {hydrated ? when(k.created_at) : ""}
                   </td>
@@ -166,6 +197,15 @@ export function ApiKeysAdmin() {
               )}
             </tbody>
           </table>
+          {search.q && !search.shown.length && (
+            <NoMatch what="keys" onClear={() => search.setQ("")} />
+          )}
+          {!!keys?.length && (
+            <p className="mono m-0 px-2.5 py-1.5 text-[11px] text-t2">
+              {counts.active} active
+              {counts.revoked > 0 && !revoked && ` · ${counts.revoked} revoked hidden`}
+            </p>
+          )}
         </div>
       </main>
       <NewKeyPanel />

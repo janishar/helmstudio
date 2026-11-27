@@ -241,7 +241,7 @@ describe("ProvidersAdmin", () => {
       "Use deepseek-v4-pro",
       "Use deepseek-x0",
     ]);
-    fireEvent.change(screen.getByLabelText("Filter models"), { target: { value: "x1" } });
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search models" }), { target: { value: "x1" } });
     expect(screen.getByText("15 found · 5 match · chosen first")).toBeTruthy();
     expect(within(models()).getAllByRole("checkbox")).toHaveLength(5);
   });

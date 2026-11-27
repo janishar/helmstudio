@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 import { KeyRound, Power, ShieldCheck } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
 import { useHydrated } from "@/lib/hydrated";
@@ -48,6 +49,13 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
   }, [initialUsers, load]);
   const replace = (u: User) =>
     setUsers((list) => list?.map((x) => (x.id === u.id ? u : x)) ?? null);
+  // the API returns every account: the browser searches name and email (past 8 users)
+  const search = useSearch({
+    // the root admin first, as in the mock; the rest keep the API's order
+    items: users?.toSorted((a, b) => +b.roles.includes("admin") - +a.roles.includes("admin")),
+    text: (u) => [u.name, u.email],
+    id: (u) => u.id,
+  });
 
   if (me && !me.roles.includes("admin"))
     return (
@@ -65,6 +73,11 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
         </div>
         <SystemTabs current="users" />
         {error && <ErrorNote onRetry={load}>{error}</ErrorNote>}
+        {search.show && (
+          <div className="flex justify-end">
+            <SearchField {...search.field} label="Search users" className="w-72 max-md:w-full" />
+          </div>
+        )}
         <div className="panel min-h-0 overflow-auto px-2 py-1.5" aria-busy={!users && !error}>
           <table className="w-full min-w-[760px] border-collapse text-[13px]">
             <thead>
@@ -81,12 +94,9 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
               </tr>
             </thead>
             <tbody>
-              {/* the root admin first, as in the mock; the rest keep the API's order */}
-              {users
-                ?.toSorted((a, b) => +b.roles.includes("admin") - +a.roles.includes("admin"))
-                .map((u) => (
-                  <UserRow key={u.id} u={u} onChange={replace} onError={setError} />
-                ))}
+              {search.shown.map((u) => (
+                <UserRow key={u.id} u={u} q={search.q} onChange={replace} onError={setError} />
+              ))}
               {users?.length === 0 && (
                 <tr>
                   <td colSpan={6} className="p-2.5 text-t2">
@@ -96,6 +106,14 @@ export function UsersAdmin({ initialUsers }: { initialUsers?: User[] }) {
               )}
             </tbody>
           </table>
+          {search.q && !search.shown.length && (
+            <NoMatch what="users" onClear={() => search.setQ("")} />
+          )}
+          {search.q && !!search.shown.length && (
+            <p className="mono m-0 px-2.5 py-1.5 text-[11px] text-t2">
+              {search.shown.length} of {users?.length} users
+            </p>
+          )}
         </div>
       </main>
       <AddUser onAdded={(u) => setUsers((list) => [u, ...(list ?? [])])} />
@@ -131,10 +149,13 @@ export function SystemTabs({ current }: { current: "users" | "hosts" | "keys" })
 /** One account: the root admin's row is read-only. */
 function UserRow({
   u,
+  q = "",
   onChange,
   onError,
 }: {
   u: User;
+  /** the search words, marked */
+  q?: string;
   onChange: (u: User) => void;
   onError: (e: string) => void;
 }) {
@@ -178,9 +199,11 @@ function UserRow({
         })
       }
     >
-      <td className={`${cell} font-semibold`}>{u.name}</td>
+      <td className={`${cell} font-semibold`}>
+        <Marked text={u.name} q={q} />
+      </td>
       <td className={`${cell} mono max-w-[220px] truncate text-[12px] text-t2`} title={u.email}>
-        {u.email}
+        <Marked text={u.email} q={q} />
       </td>
       <td className={cell}>
         <span className="flex gap-1 leading-[13px]">

@@ -294,6 +294,8 @@ export type CreateInitial = {
   takes: Take[];
   /** how new sessions get their title (API 1.43): the session menu's remote-naming line */
   naming?: S<"SessionList">["naming"];
+  /** the session list's next page (API 1.92): the session menu's Load older */
+  sessionsNext?: string | null;
 };
 
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
@@ -326,6 +328,7 @@ export function Create({
 }) {
   const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(initial?.sessions ?? null);
   const [naming, setNaming] = useState(initial?.naming);
+  const [sessionsNext, setSessionsNext] = useState(initial?.sessionsNext ?? null);
   // the model that just named the open session: "named by Qwen3.8" under the title, once per browser
   const [hint, setHint] = useState("");
   useEffect(() => {
@@ -462,6 +465,7 @@ export function Create({
       .then(([s, w]) => {
         setError("");
         setSessions(s.sessions);
+        setSessionsNext(s.next_cursor ?? null);
         setNaming(s.naming);
         open(s.sessions.find((x) => x.id === initialSession)?.id ?? s.sessions[0]?.id ?? null);
         setWorkflows(w.workflows);
@@ -2106,6 +2110,12 @@ export function Create({
     <div className="flex flex-wrap items-center gap-3">
       <SessionMenu
         sessions={sessions}
+        next={sessionsNext}
+        onFound={(f) => setSessions((l) => [...(l ?? []), f])}
+        onOlder={(more, next) => {
+          setSessions((l) => [...(l ?? []), ...more.filter((m) => !l?.some((x) => x.id === m.id))]);
+          setSessionsNext(next);
+        }}
         current={sessionId}
         naming={naming}
         hint={hint}

@@ -314,10 +314,10 @@ function Picker({
           ? undefined
           : {
               id: "look-q",
-              label: "Search names",
-              placeholder: "Search names",
+              label: "Search looks",
               value: q,
               onChange: setQ,
+              count: shown.length,
               className: "flex-[1_1_200px]",
             }
       }

@@ -293,7 +293,7 @@ describe("the board", () => {
   it("a new board is empty, with a lane to start (frame 11)", () => {
     render(<MagicBoard local />);
     fireEvent.click(screen.getByRole("button", { name: "The Last Tide" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "New board" }));
+    fireEvent.click(screen.getByRole("button", { name: "New board", hidden: true }));
     expect(screen.getByRole("heading", { name: "A new board" })).toBeTruthy();
     expect(
       (screen.getByRole("button", { name: "Build from a brief" }) as HTMLButtonElement).disabled,

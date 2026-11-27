@@ -357,6 +357,8 @@ describe("Hub and System", () => {
     const writeText = vi.fn(() => Promise.resolve());
     Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
     render(<ApiKeysAdmin />);
+    // revoked keys hide until Show revoked (Search.dc.html frame 7)
+    fireEvent.click(await screen.findByRole("switch", { name: "Show revoked" }));
     rightClick((await screen.findByText("old")).closest("tr")!);
     expect(document.querySelector(".cm")).toBeNull();
     rightClick(screen.getByText("ci-runner").closest("tr")!);

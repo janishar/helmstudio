@@ -9,6 +9,7 @@ import { ErrorNote, Modal, UploadStatus } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
 import { useGridWindow } from "@/components/gallery/window";
 import { message, type S } from "@/lib/api";
+import { SearchField } from "@/components/search";
 import {
   AUDIO_ACCEPT,
   MAX_AUDIO_S,
@@ -211,20 +212,14 @@ export function Picker({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="pick-q" className="sr-only">
-          Search prompts
-        </label>
-        <input
+        <SearchField
           id="pick-q"
-          type="search"
-          placeholder="Search prompts and titles"
+          label="Search prompts and titles"
           value={q}
-          maxLength={200}
+          onChange={setQ}
+          busy={!!q.trim() && loading}
           autoFocus
-          onChange={(e) => setQ(e.target.value)}
-          // the picker sits inside the composer's form: Enter must not submit it
-          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-          className="h-9 flex-[1_1_220px] rounded-xl border border-s5 bg-s1 px-3 text-t1"
+          className="flex-[1_1_220px]"
         />
         <div role="group" aria-label="Filters" className="flex flex-wrap gap-1.5">
           <Chip

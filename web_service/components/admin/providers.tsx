@@ -11,6 +11,7 @@ import Link from "next/link";
 import { Fragment, useCallback, useEffect, useId, useRef, useState } from "react";
 import { MoreHorizontal, Pencil, Power, Trash2, Zap } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
+import { matches, SearchField } from "@/components/search";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { HubHead, hubHref } from "@/components/hub";
 import { useUser } from "@/components/shell";
@@ -990,8 +991,8 @@ function ModelsArea({
   const [typed, setTyped] = useState("");
   const offered = fetched ?? preset?.models ?? [];
   const rows = [...f.models, ...offered.filter((m) => !f.models.includes(m))];
-  const q = filter.trim().toLowerCase();
-  const shown = rows.filter((m) => m.toLowerCase().includes(q));
+  const q = filter.trim();
+  const shown = rows.filter((m) => matches(q, [m]));
   const apply = (r: { form: ProviderForm } | { error: string }) => {
     if ("error" in r) return setNote(r.error);
     setNote("");
@@ -1040,14 +1041,8 @@ function ModelsArea({
       {noKey && !fetched && (
         <span className="text-[12px] text-[#f2c14e]">Add the key to load the full list.</span>
       )}
-      {rows.length > 12 && (
-        <input
-          className="in h-[30px] text-[12px]"
-          aria-label="Filter models"
-          placeholder="Filter"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
+      {(rows.length > 8 || !!filter) && (
+        <SearchField value={filter} onChange={setFilter} label="Search models" />
       )}
       {note && <span className="text-[12px] text-bad">{note}</span>}
       {(shown.length > 0 || fetching) && (

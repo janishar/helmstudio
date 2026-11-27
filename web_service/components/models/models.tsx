@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { until, useDialogWait, useScreenTools } from "@/components/assistant/tools";
 import { modelsTools, type Row } from "@/components/models/assistant";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { openMenu, type Item } from "@/components/context-menu";
 import {
   Check,
@@ -113,7 +114,15 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   const bind = useCallback((r: Row | null) => {
     row.current = r;
   }, []);
-  const models = forHost(list?.models ?? [], host);
+  const all = forHost(list?.models ?? [], host);
+  // past 8 models, the browser searches them (all loaded): name, family, variants
+  const search = useSearch({
+    items: all,
+    text: (m) => [m.title, m.family, ...m.variants.map((v) => v.title)],
+    id: (m) => m.id,
+    onPick: (m) => setSel({ model: m.id, variant: m.variants[0]?.id ?? "" }),
+  });
+  const models = search.shown;
   const model = models.find((m) => m.id === sel?.model) ?? models[0];
   const variant = model?.variants.find((v) => v.id === sel?.variant) ?? model?.variants[0];
   useScreenTools(
@@ -253,6 +262,9 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
         ))}
       </select>
       {admin && <span className="tag tag-accent">Admin</span>}
+      {tab === "models" && search.show && (
+        <SearchField {...search.field} label="Search models" className="w-60 max-md:w-full" />
+      )}
     </div>
   );
 
@@ -288,12 +300,14 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
         </div>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {menuError && <ErrorNote>{menuError}</ErrorNote>}
-        {list && !models.length && <p className="text-t2">No host has published any model yet.</p>}
+        {list && !all.length && <p className="text-t2">No host has published any model yet.</p>}
+        {search.q && !models.length && <NoMatch what="models" onClear={() => search.setQ("")} />}
         {models.map((m) => (
           <ModelSection
             key={m.id}
             list={list}
             m={m}
+            q={search.q}
             selected={m.id === model?.id}
             picked={m.id === model?.id ? variant?.id : undefined}
             onPick={(v) => setSel({ model: m.id, variant: v })}
@@ -383,9 +397,12 @@ function ModelSection({
   onPick,
   onMenu,
   addons,
+  q = "",
 }: {
   list: List | null;
   m: Model;
+  /** the search words, marked */
+  q?: string;
   selected: boolean;
   picked: string | undefined;
   onPick: (variant: string) => void;
@@ -405,7 +422,9 @@ function ModelSection({
           className="tile size-[30px] rounded-[10px]"
           style={{ "--tile": cube(m) } as React.CSSProperties}
         />
-        <h2 className="m-0 font-display text-lg font-bold">{m.title}</h2>
+        <h2 className="m-0 font-display text-lg font-bold">
+          <Marked text={m.title} q={q} />
+        </h2>
         <span className="tag">{mediaText(m)}</span>
         {runtimeTags(m).map((r) => (
           <span key={r} className="tag">

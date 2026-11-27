@@ -416,6 +416,9 @@ test("a08 an API key made on the server shows up, and revoking it shuts it out",
   const dlg = admin.getByRole("dialog", { name: "Revoke this key?" });
   await expect(dlg).toContainText(`e2e-${t} key (${key!.slice(0, 12)}…)`);
   await dlg.getByRole("button", { name: "Revoke" }).click();
+  // a revoked key hides until Show revoked (Search.dc.html frame 7)
+  await expect(r).toHaveCount(0);
+  await admin.getByRole("switch", { name: "Show revoked" }).click();
   await expect(r).toContainText(/Revoked/);
   await expect(r.getByRole("button", { name: "Revoke" })).toHaveCount(0);
   await shot(admin, "a08-key-revoked");

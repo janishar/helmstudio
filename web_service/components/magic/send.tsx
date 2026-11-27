@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Clapperboard, Clock } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { DissolveIcon, FadeIcon, KIND_NAME, MorphIcon } from "@/components/magic/icons";
 import { LENGTHS, joinMenu, sendMenu, type Act } from "@/components/magic/menus";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
@@ -140,7 +141,10 @@ export function goesRows(p: SendPlan): { kind: string; text: string; note: strin
 }
 
 /** The joins grouped by what happens to them (frame 9's Joins): "Dissolve, Cut" kept as they are. */
-export function joinRows(p: SendPlan, cuts: number): { how: string; names: string; note: string }[] {
+export function joinRows(
+  p: SendPlan,
+  cuts: number,
+): { how: string; names: string; note: string }[] {
   const out: { how: string; names: string; note: string }[] = [];
   for (const [how, note] of HOW) {
     const names = [...new Set(p.joins.filter((j) => j.how === how).map((j) => JOIN_NAME[j.kind]))];
@@ -455,6 +459,8 @@ export function SendsChip({
     },
     remove: (s: Send) => sends?.remove(s.id).then(onChanged, (e) => setError(message(e))),
   };
+  // past 8 sends, the browser searches what was sent (all loaded)
+  const search = useSearch({ items: list, text: (s) => [s.name], id: (s) => s.id });
   return (
     <>
       <button
@@ -476,11 +482,17 @@ export function SendsChip({
         <div className="mg-side flex flex-col gap-2">
           {error && <ErrorNote>{error}</ErrorNote>}
           {!list.length && <span className="text-[13px] text-t2">Nothing sent yet</span>}
-          {list.map((s) => (
+          {search.show && <SearchField {...search.field} label="Search sends" autoFocus />}
+          {search.q && !search.shown.length && (
+            <NoMatch what="sends" onClear={() => search.setQ("")} />
+          )}
+          {search.shown.map((s) => (
             <div key={s.id} className="nr" onContextMenu={(e) => openMenu(e, sendMenu(act, s))}>
               <Clapperboard size={14} aria-hidden />
               <span className="min-w-0 truncate">
-                <b>{s.name}</b>
+                <b>
+                  <Marked text={s.name} q={search.q} />
+                </b>
               </span>
               <span className="mono">
                 rev {s.revision} ·{" "}
@@ -706,7 +718,11 @@ export function MorphDialog({
               onBlur={(e) => {
                 const prompt = e.target.value.trim();
                 if (prompt === (t.request?.prompt ?? "")) return;
-                const request: MagicRequest = { ...(t.request ?? { kind: "video" }), kind: "video", prompt };
+                const request: MagicRequest = {
+                  ...(t.request ?? { kind: "video" }),
+                  kind: "video",
+                  prompt,
+                };
                 if (!prompt) delete request.prompt;
                 set({ request });
               }}

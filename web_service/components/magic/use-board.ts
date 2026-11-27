@@ -34,11 +34,13 @@ import {
 import { artFor, emptyDoc, sampleBoard } from "@/lib/magic-fixture";
 import { studioSends, type SendApi } from "@/components/magic/send";
 
+export type BoardRow = { id: string; name: string; lanes?: number; updated_at?: string };
 export type Snapshot = { id: string; name: string; at: string; rev?: number; doc?: Doc };
 
 /** One open board and what the page does to it. */
 export type Board = {
-  boards: { id: string; name: string }[];
+  /** the boards, newest first; studio's carry when each was last edited and its lanes */
+  boards: BoardRow[];
   id: string;
   name: string;
   doc: Doc;
@@ -79,8 +81,10 @@ export type Board = {
   switchTo: (id: string) => void;
   newBoard: () => void;
   sampleBoard: () => void;
-  rename: (name: string) => void;
-  remove: () => void;
+  /** renames a board (absent: the open one) */
+  rename: (name: string, id?: string) => void;
+  /** deletes a board (absent: the open one; then the next opens) */
+  remove: (id?: string) => void;
   /** Send to Timeline (phase G): studio's sends of this board; null in the fake mode */
   sends: SendApi | null;
   /** studio's revision of the board (0 in the fake mode) */
@@ -136,7 +140,7 @@ function sampleDoc(): Doc {
 /** The boards in studio: null until the first one is open. */
 export function useApiBoard():
   (Board & { ready: true }) | { ready: false; error: string; retry: () => void } {
-  const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const [boards, setBoards] = useState<BoardRow[]>([]);
   const [wire, setWire] = useState<Wire | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -313,7 +317,7 @@ export function useApiBoard():
     () =>
       queue(async () => {
         const { boards: list } = await ok(api.GET("/v1/studio/magic/boards"));
-        setBoards(list.map(({ id, name }) => ({ id, name })));
+        setBoards(list.map(({ id, name, lanes, updated_at }) => ({ id, name, lanes, updated_at })));
         // the board the address names (the Assistant's navigate, API 1.87), else the one open last
         const asked = new URLSearchParams(location.search).get("b");
         const want =
@@ -511,19 +515,20 @@ export function useApiBoard():
     switchTo: (to) => queue(() => open(to)),
     newBoard: () => queue(() => create({})),
     sampleBoard: () => queue(() => create({ name: sampleBoard().name, doc: sampleDoc() as never })),
-    rename: (name) =>
+    rename: (name, which = id) =>
       queue(async () => {
         const w = await ok(
-          api.PATCH("/v1/studio/magic/boards/{board_id}", { ...board(id), body: { name } }),
+          api.PATCH("/v1/studio/magic/boards/{board_id}", { ...board(which), body: { name } }),
         );
-        setBoards((bs) => bs.map((b) => (b.id === id ? { id, name: w.name } : b)));
-        show(w);
+        setBoards((bs) => bs.map((b) => (b.id === which ? { ...b, name: w.name } : b)));
+        if (which === current.current) show(w);
       }),
-    remove: () =>
+    remove: (which = id) =>
       queue(async () => {
-        await ok(api.DELETE("/v1/studio/magic/boards/{board_id}", board(id)));
-        const rest = boards.filter((b) => b.id !== id);
+        await ok(api.DELETE("/v1/studio/magic/boards/{board_id}", board(which)));
+        const rest = boards.filter((b) => b.id !== which);
         setBoards(rest);
+        if (which !== current.current) return;
         if (rest.length) await open(rest[0].id);
         else await create({});
       }),
@@ -745,14 +750,15 @@ export function useLocalBoard(initial?: Store): Board {
       const b = sample();
       switchTo(b.id, { ...store, boards: [...store.boards, b] });
     },
-    rename: (name) =>
+    rename: (name, which = saved.id) =>
       setStore((s) => ({
         ...s,
-        boards: s.boards.map((b) => (b.id === saved.id ? { ...b, name } : b)),
+        boards: s.boards.map((b) => (b.id === which ? { ...b, name } : b)),
       })),
-    remove: () => {
-      const rest = store.boards.filter((b) => b.id !== saved.id);
-      if (rest.length) switchTo(rest[0].id, { ...store, boards: rest });
+    remove: (which = saved.id) => {
+      const rest = store.boards.filter((b) => b.id !== which);
+      if (which !== saved.id) setStore((s) => ({ ...s, boards: rest }));
+      else if (rest.length) switchTo(rest[0].id, { ...store, boards: rest });
     },
   };
 }

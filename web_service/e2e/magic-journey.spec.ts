@@ -32,7 +32,11 @@ test("Magic opens from the rail on a new board; the sample board is one pick awa
     .click();
   await expect(page).toHaveURL(/\/magic$/);
   await expect(page.getByRole("heading", { name: "A new board" })).toBeVisible();
+  // the name opens the boards popover (Search.dc.html frame 2); its right-click keeps the board's menu
   await page.getByRole("button", { name: "Untitled board" }).click();
+  await expect(page.getByRole("button", { name: "New board" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Untitled board" }).click({ button: "right" });
   await page.getByRole("menuitem", { name: "Sample board" }).click();
   for (const lane of ["Storyboard", "Shots", "Mara's lines", "Music", "Sound", "Lane 7"])
     await expect(page.getByRole("group", { name: `Lane ${lane}` })).toBeVisible();

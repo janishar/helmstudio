@@ -39,6 +39,7 @@ import { useLooks } from "@/lib/library";
 import { offerLabel } from "@/lib/source";
 import { remember, useTakes, useUses } from "@/lib/take-cache";
 import { api, message, ok, type S } from "@/lib/api";
+import { SearchField } from "@/components/search";
 import { mb, safeUrl } from "@/lib/format";
 import { useLoras } from "@/lib/lora-library";
 import { madeWithLine } from "@/lib/loras";
@@ -660,17 +661,13 @@ export function Gallery({
       >
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="m-0 font-display text-[22px] font-bold tracking-[0.02em]">Gallery</h1>
-          <label htmlFor="q" className="sr-only">
-            Search prompts
-          </label>
-          <input
+          <SearchField
             id="q"
-            type="search"
-            placeholder="Search prompts, elements, models"
+            label="Search prompts, elements, models"
             value={q}
-            maxLength={200}
-            onChange={(e) => setQ(e.target.value)}
-            className="h-10 flex-[1_1_260px] rounded-xl border border-s5 bg-s1 px-3.5 text-t1"
+            onChange={setQ}
+            busy={!!q.trim() && loading}
+            className="h-10 flex-[1_1_260px]"
           />
           <input
             ref={fileInput}

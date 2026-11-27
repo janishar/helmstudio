@@ -3,20 +3,13 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import {
-  Camera,
-  ChevronDown,
-  Clock3,
-  X,
-  Plus,
-  RefreshCw,
-  SlidersHorizontal,
-  Trash2,
-} from "lucide-react";
-import { mod, openMenu, type Item } from "@/components/context-menu";
+import { Camera, Clock3, X, Plus, RefreshCw, SlidersHorizontal } from "lucide-react";
+import { mod, openMenu } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
 import { AssetDialog } from "@/components/magic/asset-dialog";
+import { BoardSwitcher } from "@/components/magic/boards";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { BlockDialog, CompareDialog } from "@/components/magic/block-dialog";
 import { FrameDialog } from "@/components/magic/frame-dialog";
 import { ImportDialog } from "@/components/magic/import";
@@ -422,6 +415,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       if (t?.closest("input, textarea, select, [contenteditable], dialog[open]")) return;
       const cmd = e.metaKey || e.ctrlKey;
       const k = e.key.toLowerCase();
+      if (k === "escape" && openPopover()) return; // Esc closes the boards popover, not the selection
       let done = true;
       if (cmd && k === "z") (e.shiftKey ? board.redo : board.undo)();
       else if (cmd && k === "y") board.redo();
@@ -475,36 +469,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const over = overruns(doc).filter((o) => !kept.includes(o.block));
   const one = sel.length === 1 ? doc.blocks.find((b) => b.id === sel[0]) : undefined;
 
-  const boardsMenu = (e: React.MouseEvent) =>
-    openMenu(e, {
-      title: "Boards",
-      items: [
-        ...board.boards.map((b) => ({
-          label: b.name,
-          checked: b.id === board.id,
-          onPick: () => b.id !== board.id && board.switchTo(b.id),
-        })),
-        "-",
-        { label: "New board", icon: Plus, onPick: board.newBoard },
-        { label: "Sample board", onPick: board.sampleBoard },
-        {
-          label: "Rename",
-          onPick: () => {
-            const name = prompt("Board name", board.name)?.trim();
-            if (name && name !== board.name) board.rename(name);
-          },
-        },
-        "-",
-        {
-          label: "Delete board",
-          icon: Trash2,
-          danger: true,
-          off: board.boards.length > 1 ? undefined : "It's the only board",
-          onPick: board.remove,
-        },
-      ] as Item[],
-    });
-
   const snapshots = board.snapshots;
 
   const addLane = () =>
@@ -525,16 +489,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         <h1 className="sr-only">Magic: {board.name}</h1>
         {/* a long name (a board named from its prompt is up to 5 words) cuts short before the bar wraps (walk) */}
         <div className="flex flex-wrap items-center gap-3 md:flex-nowrap md:[&>*:not(:first-child)]:shrink-0">
-          <button
-            type="button"
-            aria-haspopup="menu"
-            onClick={boardsMenu}
-            title={board.name}
-            className="flex h-10 min-w-0 items-center gap-2 rounded-[10px] bg-transparent px-3 font-display text-lg font-bold tracking-[0.02em]"
-          >
-            <span className="truncate">{board.name}</span>
-            <ChevronDown size={16} className="shrink-0" aria-hidden />
-          </button>
+          <BoardSwitcher board={board} />
           {board.namedBy && (
             <span
               role="status"
@@ -1480,6 +1435,15 @@ function BlockPanel({
   );
 }
 
+/** Whether a popover is open (jsdom knows no :popover-open). */
+function openPopover() {
+  try {
+    return !!document.querySelector("[popover]:popover-open");
+  } catch {
+    return false;
+  }
+}
+
 /** Nothing selected: the board in numbers and its snapshots (frame 11). */
 function BoardPanel({
   d,
@@ -1507,6 +1471,13 @@ function BoardPanel({
 }) {
   const fps = d.target.fps;
   const by = (s: string) => d.blocks.filter((b) => statusOf(d, b, takes).s === s).length;
+  // past 8 snapshots, the browser searches their names (all loaded)
+  const search = useSearch({
+    items: snapshots,
+    text: (s) => [s.name],
+    id: (s) => s.id,
+    onPick: onRestore,
+  });
   return (
     <>
       <h2>Board</h2>
@@ -1569,10 +1540,14 @@ function BoardPanel({
         <Camera size={13} aria-hidden />
         Save snapshot
       </button>
-      {snapshots.map((s) => (
+      {search.show && <SearchField {...search.field} label="Search snapshots" />}
+      {search.q && !search.shown.length && (
+        <NoMatch what="snapshots" onClear={() => search.setQ("")} />
+      )}
+      {search.shown.map((s) => (
         <div
           key={s.id}
-          className="nr"
+          className={`nr ${search.rows[search.active] === s ? "sf-on" : ""}`}
           onContextMenu={(e) =>
             openMenu(
               e,
@@ -1584,7 +1559,9 @@ function BoardPanel({
             )
           }
         >
-          <b className="min-w-0 grow truncate">{s.name}</b>
+          <b className="min-w-0 grow truncate">
+            <Marked text={s.name} q={search.q} />
+          </b>
           <span className="mono">
             {s.rev !== undefined && `rev ${s.rev} · `}
             {new Date(s.at).toDateString() === new Date().toDateString()

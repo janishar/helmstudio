@@ -3,9 +3,10 @@
 // body for elements, LoRAs and looks: the info and the kind's "new / upload" action, search, group or source filters,
 // a thumbnail grid (arrow keys move between items), greyed items with the reason, and a footer. Each picker is a thin
 // configuration of it; `Tile` is the thumbnail card the LoRA and look grids share.
-import type { ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { ImageOff, Plus } from "lucide-react";
 import { ErrorNote, Info } from "@/components/kit";
+import { Marked, SearchField } from "@/components/search";
 import { safeUrl } from "@/lib/format";
 
 /** One row of filter buttons: tabs (`role=tab`, a group) or toggles (`aria-pressed`, a source). */
@@ -68,6 +69,15 @@ function gridKeys(e: React.KeyboardEvent<HTMLUListElement>) {
   all[to].focus();
 }
 
+/** The picker's search words, marked in its tiles. */
+const Words = createContext("");
+/** `text` with the picker's search words marked (a Tile does it itself). */
+export function Mark({ text }: { text: string }) {
+  return <Marked text={text} q={useContext(Words)} />;
+}
+/** The pickers' rule (contracts/README.md "Search in lists", `words`): a word's leading @ is ignored. */
+export const pickerWords = (q: string) => q.replace(/(^|\s)@/g, "$1");
+
 export function VisualPicker<A extends string, B extends string>({
   head,
   info,
@@ -87,13 +97,16 @@ export function VisualPicker<A extends string, B extends string>({
   info: ReactNode;
   /** the kind's "New element" / "Upload .safetensors" / "New look" button (and what it needs, a file input) */
   action?: ReactNode;
+  /** the SearchField (Search.dc.html frame 6): Enter picks the ringed item, ↑ ↓ move the ring */
   search?: {
     id: string;
+    /** "Search elements": the placeholder and the label */
     label: string;
-    placeholder: string;
     value: string;
     onChange: (q: string) => void;
     className: string;
+    /** the matches */
+    count?: number;
   };
   filters?: [Filter<A>?, Filter<B>?];
   error?: string;
@@ -106,6 +119,17 @@ export function VisualPicker<A extends string, B extends string>({
   children: ReactNode;
   footer: ReactNode;
 }) {
+  const list = useRef<HTMLUListElement>(null);
+  // the ringed item: the first match for each new query, moved by ↑ ↓ (kept in the DOM: the items are the children)
+  const [ring, setRing] = useState({ q: "", i: 0 });
+  const typed = !!search?.value.trim();
+  const at = ring.q === search?.value ? ring.i : 0;
+  const picks = () => [
+    ...(list.current?.querySelectorAll<HTMLButtonElement>("[data-pick]:not(:disabled)") ?? []),
+  ];
+  useEffect(() => {
+    picks().forEach((b, i) => b.classList.toggle("sf-on", typed && i === at));
+  });
   return (
     <div className={`flex flex-col gap-3.5 ${head ? "" : "max-h-[76dvh]"}`}>
       {head ?? (
@@ -117,23 +141,22 @@ export function VisualPicker<A extends string, B extends string>({
       {(search || filters[0]) && (
         <div className="flex flex-wrap items-center gap-2">
           {search && (
-            <>
-              <label htmlFor={search.id} className="sr-only">
-                {search.label}
-              </label>
-              <input
-                id={search.id}
-                type="search"
-                placeholder={search.placeholder}
-                value={search.value}
-                maxLength={80}
-                autoFocus
-                onChange={(e) => search.onChange(e.target.value)}
-                // the picker may sit inside the composer's form: Enter must not submit it
-                onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-                className={`h-9 rounded-xl border border-s5 bg-s1 px-3 text-t1 ${search.className}`}
-              />
-            </>
+            <SearchField
+              id={search.id}
+              label={search.label}
+              value={search.value}
+              onChange={search.onChange}
+              className={search.className}
+              count={search.count}
+              autoFocus
+              onEnter={() => typed && picks()[at]?.click()}
+              onMove={(by) =>
+                setRing({
+                  q: search.value,
+                  i: Math.min(picks().length - 1, Math.max(0, at + by)),
+                })
+              }
+            />
           )}
           {filters[0] && <Filters f={filters[0]} />}
           {filters[1] && <Filters f={filters[1]} />}
@@ -143,11 +166,12 @@ export function VisualPicker<A extends string, B extends string>({
       <div className={`p-0.5 ${head ? "" : "min-h-32 overflow-y-auto"}`}>
         {status}
         <ul
+          ref={list}
           aria-label={listLabel}
           onKeyDown={gridKeys}
           className={`m-0 grid list-none p-0 ${grid}`}
         >
-          {children}
+          <Words.Provider value={search?.value ?? ""}>{children}</Words.Provider>
         </ul>
       </div>
       {footer}
@@ -223,7 +247,9 @@ export function Tile({
       className={`flex w-full flex-col gap-1.5 text-left disabled:cursor-not-allowed disabled:opacity-50 ${reason ? "opacity-50" : ""}`}
     >
       {pic}
-      <b className="truncate text-[12px] font-semibold">{name}</b>
+      <b className="truncate text-[12px] font-semibold">
+        <Mark text={name} />
+      </b>
       <small
         className={`mono text-[10px] break-words text-t2 ${reason ? "line-clamp-3" : "truncate"}`}
       >

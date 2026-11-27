@@ -6,7 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { AtSign, Mic, Pencil, Trash2, UsersRound, X } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { VisualPicker } from "@/components/create/visual-picker";
+import { Mark, VisualPicker, pickerWords } from "@/components/create/visual-picker";
+import { matches } from "@/components/search";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
@@ -116,11 +117,9 @@ function Picker({
   const [editing, setEditing] = useState<Item | "new" | null>(null);
   const [deleting, setDeleting] = useState("");
   const [error, setError] = useState("");
-  const query = q.trim().replace(/^@/, "").toLowerCase();
+  // every word, in the name, the @handle or the text (Search.dc.html frame 6): the whole library is loaded
   const shown = (lib ?? []).filter(
-    (e) =>
-      (!group || e.group === group) &&
-      (!query || e.handle?.startsWith(query) || e.name.toLowerCase().startsWith(query)),
+    (e) => (!group || e.group === group) && matches(pickerWords(q), [e.name, e.handle, e.text]),
   );
   async function remove(e: Item) {
     try {
@@ -159,10 +158,10 @@ function Picker({
       }
       search={{
         id: "el-q",
-        label: "Search names and handles",
-        placeholder: "Search names and @handles",
+        label: "Search elements",
         value: q,
         onChange: setQ,
+        count: shown.length,
         className: "flex-[1_1_220px]",
       }}
       filters={[
@@ -258,11 +257,18 @@ function Picker({
                 </span>
               )}
               <span className="flex min-w-0 flex-col gap-0.5">
-                <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>@{e.handle}</b>
+                <b className={`mono truncate font-medium ${on ? "text-a1" : ""}`}>
+                  @<Mark text={e.handle ?? ""} />
+                </b>
                 <small className="truncate text-[12px] text-t2">
-                  {deleting === e.id
-                    ? `Delete @${e.handle}? Takes made with it keep it.`
-                    : `${e.name} · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
+                  {deleting === e.id ? (
+                    `Delete @${e.handle}? Takes made with it keep it.`
+                  ) : (
+                    <>
+                      <Mark text={e.name} />
+                      {` · ${groupLabel(e.group)}${on ? " · in this prompt" : ""}${n ? "" : " · its images were deleted"}`}
+                    </>
+                  )}
                 </small>
               </span>
             </button>

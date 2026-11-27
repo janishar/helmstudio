@@ -333,10 +333,10 @@ function Picker({
       }
       search={{
         id: "lora-q",
-        label: "Search names",
-        placeholder: "Search names",
+        label: "Search LoRAs",
         value: q,
         onChange: setQ,
+        count: shown.length,
         className: "flex-[1_1_260px]",
       }}
       filters={[

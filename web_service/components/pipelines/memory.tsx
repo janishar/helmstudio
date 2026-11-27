@@ -5,6 +5,7 @@
 // aside, or in a dialog from the editor's Judge panel and the pipelines list (MemoryDialog).
 import { useCallback, useEffect, useState } from "react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl, when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
@@ -82,7 +83,13 @@ export function MemoryPanel({
     }
   }
 
-  const items = list?.items ?? [];
+  // past 8 items, the browser searches the note and example text (all loaded)
+  const search = useSearch({
+    items: list?.items,
+    text: (m) => [m.text, m.key],
+    id: (m) => m.id,
+  });
+  const items = search.shown;
   const total = (list?.counts.judge_example ?? 0) + (list?.counts.note ?? 0);
   const section = (kind: S<"MemoryItem">["kind"], heading: string) => {
     const xs = items.filter((m) => m.kind === kind);
@@ -100,7 +107,9 @@ export function MemoryPanel({
         )}
         {xs.map((m) => (
           <div key={m.id} className="set flex flex-col gap-1.5 text-[13px]">
-            <span>“{m.text}”</span>
+            <span>
+              “<Marked text={m.text} q={search.q} />”
+            </span>
             {(m.kept.length > 0 || m.rejected.length > 0) && (
               <span
                 className="flex flex-wrap gap-1"
@@ -160,6 +169,8 @@ export function MemoryPanel({
       {(error || failed) && (
         <ErrorNote onRetry={error ? load : undefined}>{error || failed}</ErrorNote>
       )}
+      {search.show && <SearchField {...search.field} label="Search memory" />}
+      {search.q && !items.length && <NoMatch what="items" onClear={() => search.setQ("")} />}
       {list && section("judge_example", "Judge examples")}
       {list && section("note", "Notes")}
       <label htmlFor={`mem-note-${pipelineId}`} className="heading">

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { api, message, ok, type S } from "@/lib/api";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { mediaOf } from "@/lib/media";
 
 type Workflow = S<"Workflow">;
@@ -68,8 +69,15 @@ export function WorkflowPicker({
   const [deleting, setDeleting] = useState<Workflow | null>(null);
   const [busy, setBusy] = useState(false);
   const hide = () => document.getElementById("workflows")?.hidePopover();
-  const templates = workflows.filter((w) => w.source !== "mine");
-  const mine = workflows.filter((w) => w.source === "mine");
+  // past 8 workflows, the browser searches their titles (all loaded)
+  const search = useSearch({
+    items: workflows,
+    text: (w) => [w.title],
+    id: (w) => w.id,
+    onPick: (w) => (hide(), onPick(w.id)),
+  });
+  const templates = search.shown.filter((w) => w.source !== "mine");
+  const mine = search.shown.filter((w) => w.source === "mine");
   const act = async (f: () => Promise<void>) => {
     setBusy(true);
     try {
@@ -86,14 +94,16 @@ export function WorkflowPicker({
         type="button"
         role="menuitemradio"
         aria-checked={w.id === current?.id}
-        className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"}`}
+        className={`flex min-w-0 flex-1 items-center gap-2 rounded-[10px] px-3 py-2 text-left text-[13px] hover:bg-s3 aria-checked:bg-s4 aria-checked:font-semibold ${available(w) ? "" : "text-t2"} ${search.rows[search.active] === w ? "sf-on" : ""}`}
         onClick={() => {
           hide();
           onPick(w.id);
         }}
       >
         <WorkflowIcon w={w} />
-        <span className="truncate">{w.title}</span>
+        <span className="truncate">
+          <Marked text={w.title} q={search.q} />
+        </span>
       </button>
     );
     if (available(w)) return pick;
@@ -137,14 +147,20 @@ export function WorkflowPicker({
         }
       >
         <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto [&>*]:shrink-0">
-          <span className="heading px-3 pt-1">Templates</span>
+          {search.show && <SearchField {...search.field} label="Search workflows" />}
+          {search.q && !search.shown.length && (
+            <NoMatch what="workflows" onClear={() => search.setQ("")} />
+          )}
+          {(!search.q || templates.length > 0) && (
+            <span className="heading px-3 pt-1">Templates</span>
+          )}
           {templates.map((w) => (
             <div key={w.id} className="flex">
               {item(w)}
             </div>
           ))}
-          <span className="heading px-3 pt-3">Mine</span>
-          {!mine.length && (
+          {(!search.q || mine.length > 0) && <span className="heading px-3 pt-3">Mine</span>}
+          {!search.q && !mine.length && (
             <span className="px-3 py-1 text-[12px] text-t2">
               None yet: edit a template in Graph to make your own.
             </span>

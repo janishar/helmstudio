@@ -58,6 +58,7 @@ import {
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { FullScreen } from "@/components/media";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
@@ -1360,8 +1361,15 @@ function ChatsList({
 }) {
   const [older, setOlder] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // the whole list is loaded (at most 200 chats a user): the browser searches it
+  const search = useSearch({
+    items: a.chats,
+    text: (t) => [t.title],
+    id: (t) => t.id,
+    onPick: (t) => pick(t.id),
+  });
   useEffect(() => {
-    ref.current?.querySelector("button")?.focus();
+    ref.current?.querySelector<HTMLElement>("input[type=search], button")?.focus();
     const out = (e: PointerEvent) => {
       const t = e.target as Node;
       if (!ref.current?.contains(t) && !btn.current?.contains(t)) close();
@@ -1369,7 +1377,7 @@ function ChatsList({
     document.addEventListener("pointerdown", out);
     return () => document.removeEventListener("pointerdown", out);
   }, [btn, close]);
-  const list = a.chats ?? [];
+  const list = search.shown;
   const cur = a.view?.thread.id;
   return (
     <div
@@ -1395,20 +1403,31 @@ function ChatsList({
         <span>Chats</span>
         <span className="mono">newest first</span>
       </div>
+      {search.show && (
+        <SearchField
+          {...search.field}
+          label="Search chats"
+          onClose={() => (close(), btn.current?.focus())}
+        />
+      )}
       <button type="button" role="menuitem" className="new" onClick={() => pick(null)}>
         <Plus size={14} strokeWidth={2} aria-hidden />
         New chat
       </button>
-      {(older ? list : list.slice(0, SHOWN)).map((t) => (
+      {search.q && !list.length && <NoMatch what="chats" onClear={() => search.setQ("")} />}
+      {(older || search.q ? list : list.slice(0, SHOWN)).map((t) => (
         <button
           key={t.id}
           type="button"
           role="menuitemradio"
           aria-checked={t.id === cur}
+          className={search.rows[search.active] === t ? "sf-on" : undefined}
           onClick={() => pick(t.id)}
         >
           <span className="cht">
-            <span>{t.title}</span>
+            <span>
+              <Marked text={t.title} q={search.q} />
+            </span>
             <small>{chatTime(t.updated_at)}</small>
           </span>
           {t.id === cur ? (
@@ -1421,7 +1440,7 @@ function ChatsList({
           )}
         </button>
       ))}
-      {!older && list.length > SHOWN && (
+      {!older && !search.q && list.length > SHOWN && (
         <button type="button" role="menuitem" className="un" onClick={() => setOlder(true)}>
           Show older
         </button>
@@ -1932,7 +1951,13 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
       );
       setItems((l) => l?.filter((y) => y.id !== id) ?? null);
     });
-  const shown = (items ?? []).filter((x) => x.kind === kind);
+  // past 8 items of a kind, the browser searches their text (all loaded)
+  const search = useSearch({
+    items: items?.filter((x) => x.kind === kind),
+    text: (x) => [x.text],
+    id: (x) => x.id,
+  });
+  const shown = search.shown;
   return (
     <div className="thr justify-start! overflow-y-auto [mask-image:none]!">
       <div role="tablist" aria-label="Memory" className="flex gap-1 rounded-xl bg-s3 p-[3px]">
@@ -1949,8 +1974,11 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
           </button>
         ))}
       </div>
+      {search.show && <SearchField {...search.field} label="Search memory" />}
       {items === null && !error ? (
         <p className="note">Reading what it remembers…</p>
+      ) : search.q && !shown.length ? (
+        <NoMatch what="items" onClear={() => search.setQ("")} />
       ) : shown.length === 0 ? (
         <p className="note">Nothing here yet.</p>
       ) : (
@@ -2002,7 +2030,9 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
               // the text takes the full width, 3 lines then More; Edit and Delete in ⋯ (item 5, board frame 14a)
               <li key={x.id} className="mrow">
                 <div>
-                  <Clamp k={x.text}>{x.text}</Clamp>
+                  <Clamp k={x.text}>
+                    <Marked text={x.text} q={search.q} />
+                  </Clamp>
                   <small>
                     chat · {x.thread?.title || "deleted"} · {ago(x.updated_at)}
                   </small>

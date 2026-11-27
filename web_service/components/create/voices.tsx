@@ -10,7 +10,7 @@ import { ChevronRight, Mic, MoreVertical, Pause, Play, Scissors, Wand2 } from "l
 import { Check, Pencil, Trash2, X } from "lucide-react";
 import { openMenu, type Item as Entry } from "@/components/context-menu";
 import { ErrorNote, Info, Modal, UploadStatus } from "@/components/kit";
-import { VisualPicker } from "@/components/create/visual-picker";
+import { Mark, VisualPicker } from "@/components/create/visual-picker";
 import { TileWords, tileClass } from "@/components/create/elements";
 import { usePlayer } from "@/components/create/audio";
 import { RangeBar } from "@/components/create/source";
@@ -554,8 +554,12 @@ function VoiceList({
             {badge}
           </span>
         )}
-        <b className="truncate text-[13px] font-semibold">{x.name}</b>
-        <small className="truncate text-[12px] leading-4 text-t2">{line}</small>
+        <b className="truncate text-[13px] font-semibold">
+          <Mark text={x.name} />
+        </b>
+        <small className="truncate text-[12px] leading-4 text-t2">
+          <Mark text={line} />
+        </small>
         {r ? (
           <em id={why} className="mono truncate text-[11px] text-t2 not-italic">
             {r}
@@ -650,7 +654,6 @@ function VoiceList({
       search={{
         id: "voice-q",
         label: "Search voices",
-        placeholder: "Search names and styles",
         value: q,
         onChange: setQ,
         className: "flex-[1_1_260px]",
