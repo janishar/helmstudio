@@ -12,7 +12,7 @@ import { LinkGlyph } from "@/components/magic/icons";
 import { STATUS, refText } from "@/components/magic/lanes";
 import { turnMenu } from "@/components/magic/menus";
 import { useVoices } from "@/lib/library";
-import { machines, pinnedMachine } from "@/lib/run-on";
+import { machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
 import { secs, type Block, type Doc, type MagicRequest, type Ref, type Status } from "@/lib/magic";
 import { estText } from "@/lib/magic-fixture";
 import {
@@ -102,7 +102,9 @@ function RunOnField({
   env?: string;
   set: (p: Partial<MagicRequest>) => void;
 }) {
-  const list = machines(useHosts());
+  const hosts = useHosts();
+  const list = machines(hosts);
+  const chosen = pinnedMachine(list, req.host ?? "");
   return (
     <div className="fld">
       <span className="lb">Run on</span>
@@ -110,9 +112,11 @@ function RunOnField({
         <RunOnChip
           id="magic-run-on"
           list={list}
-          chosen={pinnedMachine(list, req.host ?? "")}
+          chosen={chosen}
           env={env}
           picks={[]}
+          // ErrorStates b2: the warn look when no runner for its env is on
+          why={chosen && !chosen.live ? undefined : runnerWhy(hosts, env, chosen)?.line}
           onPick={(host) => set({ host: host || undefined })}
         />
       </span>

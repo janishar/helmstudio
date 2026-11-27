@@ -2,7 +2,8 @@
 // machines a run may be set to, why one cannot take it, and what a version needs. Everything comes from what the
 // hosts publish (GET /v1/studio/hosts: online, device; GET /v1/studio/models: variants, devices, presence).
 import type { S } from "@/lib/api";
-import { deviceNote, variantDevices } from "@/lib/models";
+import { deviceNote, foldersOf, variantDevices } from "@/lib/models";
+import { startHint } from "@/lib/runs";
 import { graphOrder, type Field } from "@/lib/workflow";
 
 type Host = S<"Host">;
@@ -20,6 +21,10 @@ export type Machine = {
   live: boolean;
   /** its envs with a live hosts key (as studio's eligibility: an offline runner cannot take the run) */
   envs: string[];
+  /** every env it has published, offline ones too ("mlx runner stopped") */
+  known?: string[];
+  /** an env of it is running something now ("Mac · busy", docs/mock/ErrorStates.dc.html e) */
+  busy?: boolean;
 };
 
 const LABELS: Record<string, string> = { mps: "Mac", cuda: "NVIDIA" };
@@ -50,6 +55,8 @@ export function machines(hosts: Host[] | null | undefined): Machine[] {
       device: dev?.kind ?? (accel ? ACCEL[accel] : null) ?? null,
       live: envs.some((e) => e.state !== "offline"),
       envs: envs.filter((e) => e.state !== "offline").map((e) => e.env),
+      known: envs.map((e) => e.env),
+      busy: envs.some((e) => e.state === "busy"),
     };
   });
   for (const r of rows) {
@@ -61,13 +68,46 @@ export function machines(hosts: Host[] | null | undefined): Machine[] {
   return rows.sort((a, b) => rank(a) - rank(b));
 }
 
+/** A chosen variant: its model and, per host whose only copies are on a drive not connected, that drive's name. */
+export type VariantPick = { m: Model; v: Variant; drives?: Record<string, string> };
+
+/** The drive (its folder's name, "T9") of each host whose copies of v are all in a folder not connected now. */
+export function drivesOf(list: S<"ModelList">, v: Variant): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const h of v.hosts) {
+    if (h.state !== "unplugged") continue;
+    const c = h.copies?.find((x) => x.state === "unplugged");
+    out[h.host] = foldersOf(list, h.host).find((f) => f.id === c?.folder)?.name ?? "its drive";
+  }
+  return out;
+}
+
+/** The drive the family's model is on when every copy on a live host is unplugged (board f: "On T9 · not
+ * connected"); null when a copy is present on a live host or none is unplugged. */
+export function unpluggedDrive(list: S<"ModelList"> | null, family: string | null | undefined) {
+  const ms = list?.models.filter((m) => m.family === family) ?? [];
+  const live = new Set(list?.hosts.filter((h) => h.live).map((h) => h.host));
+  if (
+    ms.some((m) =>
+      m.variants.some((v) => v.hosts.some((h) => h.state === "present" && live.has(h.host))),
+    )
+  )
+    return null;
+  for (const m of ms)
+    for (const v of m.variants) {
+      const d = Object.entries(drivesOf(list!, v)).find(([h]) => live.has(h));
+      if (d) return d[1];
+    }
+  return null;
+}
+
 /** The model variants the form has chosen: each model node's variant field (its value, else the workflow's) with
  * its model in the list. */
 export function chosenVariants(
   fields: readonly Field[],
   raws: Record<string, unknown>,
   list: S<"ModelList"> | null,
-): { m: Model; v: Variant }[] {
+): VariantPick[] {
   if (!list) return [];
   return fields
     .filter((f) => f.model && f.param.name === "variant")
@@ -75,7 +115,7 @@ export function chosenVariants(
       const id = String(raws[f.key] ?? f.initial ?? "");
       for (const m of list.models.filter((x) => x.family === f.family)) {
         const v = m.variants.find((x) => x.id === id);
-        if (v) return [{ m, v }];
+        if (v) return [{ m, v, drives: drivesOf(list, v) }];
       }
       return [];
     });
@@ -87,10 +127,13 @@ export function misfit(
   mc: Machine,
   m: Model,
   v: Variant,
+  drives?: Record<string, string>,
 ): { device: boolean; text: string } | null {
   // only the devices a variant's note speaks of (a CPU runner, the fake one, is decided by what it has on disk)
   if (mc.device && LABELS[mc.device] && !variantDevices(m, v).includes(mc.device))
     return { device: true, text: `${v.title} is ${deviceNote(m, v) ?? `not on ${mc.label}`}` };
+  // its copies are on a drive that is unplugged (board f: "on T9 · not connected")
+  if (drives?.[mc.host]) return { device: false, text: `on ${drives[mc.host]} · not connected` };
   if (v.hosts.find((h) => h.host === mc.host)?.state !== "present")
     return { device: false, text: `not downloaded on ${mc.host}` };
   return null;
@@ -102,13 +145,19 @@ export function misfit(
 export function machineReason(
   mc: Machine,
   env: string | undefined,
-  picks: { m: Model; v: Variant }[],
+  picks: VariantPick[],
   needs: AddonNeed[] = [],
 ): string | null {
   if (!mc.live) return "offline";
-  if (env && !mc.envs.includes(env)) return "cannot run this workflow";
-  for (const { m, v } of picks) {
-    const why = misfit(mc, m, v);
+  // board b1's rows: its runner of the env stopped, a Mac-only env on another machine, else it has none
+  if (env && !mc.envs.includes(env))
+    return mc.known?.includes(env)
+      ? `${env} runner stopped`
+      : env === "mlx" && mc.device && mc.device !== "mps"
+        ? "mlx runs on a Mac only"
+        : "cannot run this workflow";
+  for (const { m, v, drives } of picks) {
+    const why = misfit(mc, m, v, drives);
     if (why) return why.text;
   }
   const miss = needs.find((n) => lacks(n, mc));
@@ -142,7 +191,7 @@ const lacks = (n: AddonNeed, mc: Machine) =>
 
 /** Whether a run with the form's chosen variants, with references or not, needs the add-on (API 1.40: its
  * `variants`, absent = every one; its `refs`, absent = both: Qwen's PE-T2I is text to image's, PE-I2I an edit's). */
-export function needed(n: AddonNeed, picks: { m: Model; v: Variant }[], refs = false): boolean {
+export function needed(n: AddonNeed, picks: VariantPick[], refs = false): boolean {
   const pick = picks.find((p) => p.m.family === n.family);
   return (
     (!n.variants || !pick || n.variants.includes(pick.v.id)) && (n.refs == null || n.refs === refs)
@@ -266,7 +315,7 @@ export function valueBlock(
   wired: (name: string) => boolean,
   can: Machine[],
   mc?: Machine,
-  picks: { m: Model; v: Variant }[] = [],
+  picks: VariantPick[] = [],
 ): string | null {
   const at = valueNeedsAt(needs, field, o, wired);
   for (const x of at) {
@@ -363,4 +412,43 @@ export function versionRow(
       };
   }
   return null;
+}
+
+// ---- no runner (docs/mock/ErrorStates.dc.html b1-b3): Generate knows before you press it
+
+/** Why nothing can take a run of `env` (Run on `mc`, else Auto), from the hosts as they are now: `key` for under
+ * Generate ("No runner for mlx", "Mac is offline"), `line` for the visible line under the composer; null when a
+ * runner for it is up (or the hosts are not read yet). */
+export function runnerWhy(
+  hosts: Host[] | null | undefined,
+  env: string | undefined,
+  mc?: Machine,
+): { key: string; line: string } | null {
+  if (mc && !mc.live)
+    return {
+      key: `${mc.label} is offline`,
+      line: `${mc.host} is offline. Pick Auto, or wait for it to come back.`,
+    };
+  // an env no host has published (an empty list too) is left to the plan's reason (planWhy): a workflow served
+  // some other way is never greyed by the hosts list
+  if (!env || !hosts?.some((h) => h.env === env)) return null;
+  const up = hosts.some(
+    (h) => h.env === env && h.state !== "offline" && (!mc || h.host === mc.host),
+  );
+  return up ? null : noRunner(env);
+}
+
+/** "No runner for mlx" and its line. */
+export const noRunner = (env: string) => ({
+  key: `No runner for ${env}`,
+  line: `No runner for ${env} is on. ${startHint(env)}, or pick another model.`,
+});
+
+/** The plan call's reason (POST …/runs/plan, the text the run would fail with) as Generate's words: "no live host
+ * for env mlx" is noRunner's; any other reason is said as it is. */
+export function planWhy(reason: string | null | undefined): { key: string; line: string } | null {
+  if (!reason) return null;
+  const m = /^no live host for env (\S+)$/.exec(reason);
+  if (m) return noRunner(m[1]);
+  return { key: "Can’t run now", line: `${reason[0].toUpperCase()}${reason.slice(1)}.` };
 }

@@ -49,6 +49,9 @@ let boards: Wire[] = [];
 let calls: { method: string; path: string; body?: unknown }[] = [];
 let refuseNext = 0;
 let onEvent: ((e: { type: string }) => void) | null = null;
+// ErrorStates a3 and b2: the boards list answers 503 while `outage`; the hosts the block dialog reads
+let outage = false;
+let hostsList: unknown[] = [];
 const KINDS = {
   kinds: [
     {
@@ -58,6 +61,7 @@ const KINDS = {
         {
           workflow_id: "echo-image-to-video",
           name: "Echo keyframes",
+          env: "fake",
           title: "Echo image to video",
           fields: ["prompt", "first", "last", "length", "size"],
           greyed: { seed: "Echo keyframes can't take a seed" },
@@ -129,7 +133,10 @@ vi.mock("@/lib/api", async (orig) => ({
     GET: async (path: string, o?: { params?: { path?: { board_id?: string } } }) => {
       calls.push({ method: "GET", path });
       if (path === "/v1/studio/magic/boards")
-        return res(200, { boards: boards.map((b) => ({ id: b.id, name: b.name })) });
+        return outage
+          ? res(503, undefined)
+          : res(200, { boards: boards.map((b) => ({ id: b.id, name: b.name })) });
+      if (path === "/v1/studio/hosts") return res(200, { hosts: hostsList });
       if (path.endsWith("/snapshots")) return res(200, { snapshots: [] });
       if (path === "/v1/studio/magic/kinds") return res(200, KINDS);
       if (path === "/v1/studio/magic/settings") return res(200, { ask_above_gpu_minutes: 5 });
@@ -272,6 +279,8 @@ beforeEach(() => {
   calls = [];
   refuseNext = 0;
   onEvent = null;
+  outage = false;
+  hostsList = [];
 });
 afterEach(() => {
   act(closeMenu);
@@ -350,6 +359,39 @@ async function withShots() {
   return boards[0];
 }
 
+describe("error states (docs/mock/ErrorStates.dc.html)", () => {
+  it("a3: the board didn't load while the studio isn't answering; Retry loads it", async () => {
+    outage = true;
+    render(<MagicBoard />);
+    const note = await screen.findByRole("alert");
+    expect(note.textContent).toContain("The board didn’t load: the studio isn’t answering.");
+    outage = false;
+    fireEvent.click(within(note).getByRole("button", { name: "Retry" }));
+    expect(await screen.findByRole("heading", { name: "A new board" })).toBeTruthy();
+  });
+
+  it("b2: no runner for the block's model greys Generate, with the line under it (not hover-only)", async () => {
+    const b = await withShots();
+    fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Next" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Generate" }));
+    await waitFor(() => expect(b.runs?.length).toBe(1));
+    hostsList = [
+      { host: "mac", env: "fake", state: "offline", updated_at: "2026-11-27T05:00:00Z" },
+    ];
+    fireEvent.doubleClick(await screen.findByRole("button", { name: /Video block Shot 1/ }));
+    const dlg = await screen.findByRole("dialog", { name: "Video · Shot 1" });
+    const gen = await within(dlg).findByRole("button", { name: /^Generate/ });
+    await waitFor(() => expect((gen as HTMLButtonElement).disabled).toBe(true));
+    expect(gen.textContent).toContain("No runner for fake");
+    expect(
+      within(dlg).getByText(
+        "No runner for fake is on. Start a runner for fake, or pick another model.",
+      ),
+    ).toBeTruthy();
+  });
+});
+
 describe("runs in studio (plan 39 phase D)", () => {
   it("the board's name cuts short (a name from a prompt is up to 5 words) instead of wrapping the bar", async () => {
     await withShots();
@@ -369,9 +411,9 @@ describe("runs in studio (plan 39 phase D)", () => {
     expect(within(dlg).getByText("Echo keyframes can't take a seed")).toBeTruthy();
     expect(within(dlg).getByRole("spinbutton", { name: "Seed" }).matches(":disabled")).toBe(true);
     // the Seed + "N seeds" pair is wider than one column: it takes two (walk: it ran under Loop's box)
-    expect(within(dlg).getByRole("spinbutton", { name: "Seed" }).closest(".fld")?.className).toContain(
-      "sm:col-span-2",
-    );
+    expect(
+      within(dlg).getByRole("spinbutton", { name: "Seed" }).closest(".fld")?.className,
+    ).toContain("sm:col-span-2");
     // the other model greys the frames, each with why
     pickModel(dlg, "Echo video");
     expect(within(dlg).getByText("Echo video can't take a last frame")).toBeTruthy();

@@ -92,7 +92,12 @@ describe("reasons", () => {
   it("a host row: offline, another env, a device-only version, not downloaded, else pickable", () => {
     const off: Machine = { ...gcp, live: false };
     expect(machineReason(off, "torch", [{ m: model, v: base }])).toBe("offline");
-    expect(machineReason(gcp, "mlx", [])).toBe("cannot run this workflow");
+    // ErrorStates b1: a Mac-only env on another machine, an env whose runner stopped, else none
+    expect(machineReason(gcp, "mlx", [])).toBe("mlx runs on a Mac only");
+    expect(machineReason({ ...gcp, known: ["torch", "native"] }, "native", [])).toBe(
+      "native runner stopped",
+    );
+    expect(machineReason(gcp, "native", [])).toBe("cannot run this workflow");
     expect(machineReason(mac, "torch", [{ m: model, v: fp8 }])).toBe("Base fp8 is NVIDIA only");
     expect(machineReason(gcp, "torch", [{ m: model, v: turbo }])).toBe("not downloaded on gcp");
     expect(machineReason(gcp, "torch", [{ m: model, v: base }])).toBeNull();
@@ -418,11 +423,15 @@ describe("an add-on per value (API 1.41)", () => {
     } as S<"ModelList">;
     const needs = valueNeeds(w, scoped);
     const [base, fp8] = m.variants.map((v, i) => ({ ...v, id: ["base", "base-fp8"][i] }));
-    expect(valueBlock(needs, "generate.lora", "turbo", none, [gcp], undefined, [{ m, v: fp8 }])).toBe(
-      "Turbo LoRA does not run on Base fp8",
-    );
-    expect(valueBlock(needs, "generate.lora", "none", none, [gcp], undefined, [{ m, v: fp8 }])).toBeNull();
+    expect(
+      valueBlock(needs, "generate.lora", "turbo", none, [gcp], undefined, [{ m, v: fp8 }]),
+    ).toBe("Turbo LoRA does not run on Base fp8");
+    expect(
+      valueBlock(needs, "generate.lora", "none", none, [gcp], undefined, [{ m, v: fp8 }]),
+    ).toBeNull();
     // the Mac's Base is unchanged
-    expect(valueBlock(needs, "generate.lora", "turbo", none, [mac], mac, [{ m, v: base }])).toBeNull();
+    expect(
+      valueBlock(needs, "generate.lora", "turbo", none, [mac], mac, [{ m, v: base }]),
+    ).toBeNull();
   });
 });

@@ -5,7 +5,11 @@
 // marked, a running one with its progress) and Pin. Takes and runs have their right-click menus. API 1.89: a
 // dialogue's lines with their statuses, Run on, the tie with Unlink, and Compare takes (two side by side).
 import { useState } from "react";
-import { Columns2, Pin } from "lucide-react";
+import { Columns2, Pin, TriangleAlert } from "lucide-react";
+import { useHosts } from "@/components/create/memory-chip";
+import { machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
+import { DOWN_KEY, useHealth } from "@/lib/health";
+import { failWords } from "@/lib/runs";
 import { openMenu } from "@/components/context-menu";
 import { Modal } from "@/components/kit";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
@@ -205,6 +209,15 @@ function Body({
   const stage = picked ? a.takes[picked] : undefined;
   const n = (id?: string) => (id ? b.takes.indexOf(id) + 1 : 0);
   const model = modelOf(kinds, req);
+  // why Generate is greyed, a visible line under it (docs/mock/ErrorStates.dc.html b2): the studio down, no model of
+  // the kind on any host, no runner for its env (the hosts now) or its Run on host offline
+  const hosts = useHosts();
+  const down = useHealth().down;
+  const why = down
+    ? null
+    : !model
+      ? { key: "No model", line: "No model for this kind on any host. Download one in Models." }
+      : runnerWhy(hosts, model.env, pinnedMachine(machines(hosts), req.host ?? ""));
   const form = FORM_KINDS.includes(b.kind);
   const refs: { r: Ref; why: string }[] = [
     ...(req.first ? [{ r: req.first, why: "first frame of this shot" }] : []),
@@ -321,6 +334,8 @@ function Body({
                       className="flex flex-col rounded-[10px] bg-s2 px-2.5 py-1.5 text-[12px]"
                       role="group"
                       aria-label={line.title}
+                      // ErrorStates c2: a failed run's plain words (the raw text in its menu's details)
+                      title={r.status === "failed" ? `${failWords(r.error)} ${r.error ?? ""}`.trim() : undefined}
                       onContextMenu={(e) => openMenu(e, runMenu(a, b, r, i + 1))}
                     >
                       <b className="text-t1">{line.title}</b>
@@ -362,15 +377,25 @@ function Body({
                 <button
                   type="button"
                   className="key h-9 rounded-xl px-3.5 text-[13px]"
-                  disabled={!!a.runOff || !model}
-                  title={a.runOff ?? (model ? undefined : "No model for this kind on any host")}
+                  disabled={!!a.runOff || !model || !!why || down}
+                  title={a.runOff}
                   onClick={generate}
                 >
                   Generate
-                  {/* "≈ 1:50" from your own recent runs (MagicBoard frame 3) */}
-                  {seconds != null && <small className="ml-1.5 font-normal opacity-75">{estText(seconds, true)}</small>}
+                  {down || (why && model) ? (
+                    <small className="ml-1.5 font-normal opacity-75">{down ? DOWN_KEY : why!.key}</small>
+                  ) : (
+                    /* "≈ 1:50" from your own recent runs (MagicBoard frame 3) */
+                    seconds != null && <small className="ml-1.5 font-normal opacity-75">{estText(seconds, true)}</small>
+                  )}
                 </button>
               </div>
+              {why && !a.runOff && (
+                <p className="why" role="status">
+                  <TriangleAlert size={14} aria-hidden />
+                  {why.line}
+                </p>
+              )}
             </>
           ) : (
             <p className="m-0 text-[13px] text-t2">

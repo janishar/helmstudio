@@ -91,6 +91,7 @@
     "chevron-up.svg",
     "chevrons-left.svg",
     "chevrons-right.svg",
+    "circle-check.svg",
     "circle-exclamation-point.svg",
     "circle-minus.svg",
     "circle-slash.svg",
@@ -149,10 +150,12 @@
     "plus.svg",
     "power.svg",
     "redo-2.svg",
+    "refresh-cw.svg",
     "repeat.svg",
     "rotate-ccw.svg",
     "scissors.svg",
     "search.svg",
+    "server-crash.svg",
     "server.svg",
     "settings.svg",
     "shield-check.svg",
@@ -175,6 +178,7 @@
     "volume-2.svg",
     "volume-x.svg",
     "wand-sparkles.svg",
+    "wifi-off.svg",
     "workflow.svg",
     "x.svg",
     "zap.svg",
@@ -853,6 +857,30 @@
      "blob": "14aed824cdb44d64f09589f4a09af3cc",
      "size": 337,
      "type": "image/svg+xml"
+    },
+    "server-crash.svg": {
+     "name": "server-crash.svg",
+     "blob": "24cc7ba265247435eff9858662b305ee",
+     "size": 444,
+     "type": "image/svg+xml"
+    },
+    "wifi-off.svg": {
+     "name": "wifi-off.svg",
+     "blob": "abb2fe5c314092e53ab7be8074309dad",
+     "size": 462,
+     "type": "image/svg+xml"
+    },
+    "refresh-cw.svg": {
+     "name": "refresh-cw.svg",
+     "blob": "f36e5bc3c4c6d9fc1850c03a5e240a71",
+     "size": 372,
+     "type": "image/svg+xml"
+    },
+    "circle-check.svg": {
+     "name": "circle-check.svg",
+     "blob": "4a7c3c70a6dce1bb49e38129249906b2",
+     "size": 266,
+     "type": "image/svg+xml"
     }
    }
   }
@@ -863,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T08:20:00Z",
+  "at": "2026-11-27T15:00:00Z",
   "via": "Claude Code",
-  "note": "Create's kind tabs: the picked one has a thin a1 ring, its orb and label at full strength, the others' orbs dimmed until hover or focus; tabs 63px at the least, stretching with a taller composer. The composer's main text box (prompt, script, lyrics) takes its free height: KindTabs, PromptBox, LyricsBox (owner, 2026-11-27: make selected one more differentiated; text only in two line it waster bottom empty area)"
+  "note": "Error states (docs/mock/ErrorStates.dc.html, web app): StatusBanner (Studio isn’t answering · Retry now, Back online), StatusTile and its popover (Runner down, No runner, Studio down), RunFailedCard (This run stopped in plain words, Show details, Retry; the failed tile's Retry, Show details, Copy error rows), RunWaiting (trying again 2 of 2, Waiting · N ahead, Live updates paused · retrying, the why line under a greyed Generate); icons server-crash, wifi-off, refresh-cw, circle-check (owner, 2026-11-27: \"Approved, build it\")"
  }
 }

@@ -2972,3 +2972,54 @@ outline-offset: 2px;
 /* a video take made with its sound, paired in the strip */
 .tt.pair { justify-content: flex-end; border-color: var(--s5); background: linear-gradient(160deg, var(--s4), var(--s2)); color: var(--t1); }
 .tt.pair[aria-pressed="true"] { border: 2px solid var(--a2); }
+/* error states (docs/mock/ErrorStates.dc.html; web_service/app/globals.css, components/status.tsx, create/create.tsx) */
+/* a1, a2: the page-level banner at the top of the page column; .ok is Back online, fading after 3 s */
+.ban { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 6px 8px 6px 14px; border-radius: 14px 14px 14px 6px; background: color-mix(in srgb, var(--bad) 11%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 55%, transparent); font-size: 13px; }
+.ban > svg { color: var(--bad); flex: 0 0 auto; }
+.ban .grow { flex: 1; }
+.ban.ok { background: color-mix(in srgb, var(--a1) 11%, var(--s2)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a1) 55%, transparent); }
+.ban.ok > svg { color: var(--a1); }
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+/* b, f: why the key is greyed, a visible line under the composer (never hover-only) */
+.why { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--t1b); }
+.why > svg { flex: 0 0 auto; color: var(--bad); }
+.why a { color: var(--t1); text-decoration: underline; }
+/* c1, e: a progress piece that waits (amber) */
+.step.wait { background: color-mix(in srgb, #f2c14e 12%, var(--s1)); box-shadow: inset 0 0 0 1px color-mix(in srgb, #f2c14e 70%, transparent); color: #f2c14e; font-weight: 500; }
+/* a run tile that tries again or waits (amber), or failed (red) */
+.rtile { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 112px; height: 63px; border-radius: 8px; border: 1px solid var(--s5); background: var(--s1); color: var(--t2); font: 11px/15px var(--font-mono); text-align: center; box-shadow: var(--shadow-bevel); }
+.rtile.wait { color: #f2c14e; font-family: var(--font-sans); font-weight: 600; border-color: #f2c14e; }
+.rtile.failed { color: var(--bad); font-family: var(--font-sans); font-weight: 600; border-color: var(--bad); background: color-mix(in srgb, var(--bad) 8%, var(--s1)); }
+.rtile .mono { font-weight: 400; }
+/* c2: the run-failed card on the stage, its raw error under Show details */
+.fpanel { width: 560px; max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px; padding: 18px 20px; border-radius: 18px 18px 18px 8px; background: var(--s2); text-align: left; }
+.fpanel .ft { font-family: var(--font-display); font-size: 18px; font-weight: 700; color: var(--bad); }
+.fpanel p { margin: 0; font-size: 14px; line-height: 21px; color: var(--t1); }
+.fpanel .fbt { display: flex; justify-content: flex-end; gap: 8px; }
+.fpanel .raw { display: flex; align-items: flex-start; gap: 8px; padding: 10px 12px; border-radius: 10px; background: var(--in); }
+.fpanel .raw pre { margin: 0; flex: 1; font: 11px/16px var(--font-mono); color: var(--t2); white-space: pre-wrap; user-select: text; }
+/* d: Live updates paused · retrying (a click tries the stream now) */
+.live { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 999px; background: color-mix(in srgb, #f2c14e 12%, var(--s2)); color: #f2c14e; font-size: 12px; font-weight: 500; }
+/* g: the status tile under the rail (its own small panel, like the logo's) and its popover */
+.rail-health { position: relative; width: 76px; box-sizing: border-box; padding: 12px 4px 10px; border: 0; border-radius: 24px 24px 24px 10px; background: var(--s1); display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 10px; font-weight: 600; line-height: 12px; text-align: center; box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent); }
+.rail-health > svg { width: 36px; height: 36px; padding: 8px; box-sizing: border-box; border-radius: 12px; color: #fff; background: linear-gradient(155deg, #ffb0a8, #d6453a); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5), 0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent); }
+.rail-health.bad { color: var(--bad); }
+.rail-health .hdot { position: absolute; right: 16px; top: 9px; width: 9px; height: 9px; border-radius: 50%; background: var(--bad); box-shadow: 0 0 0 2px var(--s1); }
+.rail-health .hl { max-width: 64px; }
+.hpop { width: 400px; max-width: calc(100vw - 32px); box-sizing: border-box; padding: 12px; border-radius: 18px 18px 18px 8px; background: var(--s2); box-shadow: var(--shadow-pop); display: flex; flex-direction: column; gap: 2px; }
+.hpop .hh { display: flex; justify-content: space-between; align-items: baseline; padding: 2px 6px 6px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); }
+.hpop .hh .mono { font-size: 11px; font-weight: 400; letter-spacing: 0; }
+.hpop .hrw { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 9px; font-size: 13px; }
+.hpop .hrw:hover { background: var(--s4); }
+.hpop .hn { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.hpop .hn small { font: 11px var(--font-mono); color: var(--t2); }
+.hpop .sd { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+.hpop .sd.ok { background: var(--a1); box-shadow: 0 0 8px var(--a1); }
+.hpop .sd.bad { background: var(--bad); }
+.hpop .sd.off { background: var(--t2); }
+.hpop .hs { font-size: 12px; color: var(--t2); white-space: nowrap; }
+.hpop .hs.bad { color: var(--bad); font-weight: 500; }
+.hpop .hft { display: flex; gap: 8px; padding: 8px 4px 2px; border-top: 1px solid var(--s5); margin-top: 6px; }
+.hpop .hint { margin: 6px 6px 0; font-size: 12px; color: var(--t2); }

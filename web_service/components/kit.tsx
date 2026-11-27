@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { ChevronLeft, X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
 import { progressText, type UploadProgress } from "@/lib/takes";
+import { OUTAGE_TEXT, useHealth } from "@/lib/health";
 
 /** Logo A's mark (docs/brand/logo/a-as-drawn), 24 grid: `arch`, then `stem` for the stem and the playhead flag. */
 export function MarkPaths({
@@ -117,6 +118,9 @@ export function Info({
 
 /** An error message with an optional retry. */
 export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
+  // the banner says it once (docs/mock/ErrorStates.dc.html a1): a note for the same cause is held back meanwhile
+  const down = useHealth().down;
+  if (down && children === OUTAGE_TEXT) return null;
   return (
     <p
       role="alert"

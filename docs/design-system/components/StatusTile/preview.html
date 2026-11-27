@@ -1,0 +1,20 @@
+<!-- @dsCard group="Status" height=330 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>StatusTile · preview</title></head>
+<body>
+<div class="hs-row" style="align-items:flex-start;gap:14px">
+  <button class="rail-health bad" type="button" aria-expanded="true" title="Status: Runner down"><span class="hdot" aria-hidden="true"></span><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><path d="M6 14H4a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2h-2"/><path d="M6 6h.01"/><path d="M6 18h.01"/><path d="m13 6-4 6h6l-4 6"/></svg><span class="hl">Runner down</span></button>
+  <div class="hpop" role="dialog" aria-label="Status">
+    <span class="hh">Status<span class="mono">checked 2 s ago</span></span>
+    <div class="hrw"><span class="sd ok" aria-hidden="true"></span><span class="hn">Studio</span><span class="hs">Answering</span></div>
+    <div class="hrw"><span class="sd ok" aria-hidden="true"></span><span class="hn">torch runner<small>mac-studio</small></span><span class="hs">Ready</span></div>
+    <div class="hrw"><span class="sd bad" aria-hidden="true"></span><span class="hn">mlx runner<small>mac-studio</small></span><span class="hs bad">Stopped</span></div>
+    <div class="hrw"><span class="sd ok" aria-hidden="true"></span><span class="hn">native runner<small>mac-studio</small></span><span class="hs">Ready</span></div>
+    <div class="hrw"><span class="sd off" aria-hidden="true"></span><span class="hn">NVIDIA<small>gcp · RTX PRO 6000</small></span><span class="hs">Offline since 10:12</span></div>
+    <p class="hint">Runners on a Mac restart from helmstudio there.</p>
+    <div class="hft"><button class="chip" type="button" style="height:32px;background:var(--s4)">Open Models</button></div>
+  </div>
+</div>
+</body>
+</html>

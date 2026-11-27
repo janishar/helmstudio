@@ -4,6 +4,7 @@
 // can't be held).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   ArrowRight,
   AtSign,
@@ -13,7 +14,12 @@ import {
   Film,
   Clapperboard,
   Columns2,
+  Copy,
   Eye,
+  LoaderCircle,
+  RefreshCw,
+  TriangleAlert,
+  WifiOff,
   Image as ImageIcon,
   Info as InfoIcon,
   Maximize,
@@ -139,6 +145,9 @@ import {
   clock,
   deleteRuns,
   etaText,
+  GENERIC_FAIL,
+  failDetails,
+  failWords,
   failedCount,
   followSession,
   fraction,
@@ -153,8 +162,10 @@ import {
   seedOf,
   segments,
   track,
+  waitText,
   type RunTrack,
 } from "@/lib/runs";
+import { onBack, OUTAGE_TEXT, useHealth } from "@/lib/health";
 import { rememberProject, soundOf, soundTakeOf, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
@@ -168,6 +179,9 @@ import {
   machineReason,
   machines,
   pinnedMachine,
+  planWhy,
+  runnerWhy,
+  unpluggedDrive,
   valueBlock,
   valueNeeds,
   valueNeedsAt,
@@ -245,16 +259,28 @@ function usePalette(when: string | null) {
   return p;
 }
 
-/** Calls `onEvent` for each new event of the session (see followSession). */
+/** Calls `onEvent` for each new event of the session (see followSession); returns "Live updates paused" (its
+ * polling failed for 5 s, docs/mock/ErrorStates.dc.html d) with the call that tries the stream now. */
 function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) => void) {
   const handler = useRef(onEvent);
+  const [paused, setPaused] = useState<(() => void) | null>(null);
   useEffect(() => {
     handler.current = onEvent;
   });
-  useEffect(
-    () => (sessionId ? followSession(sessionId, (e) => handler.current(e)) : undefined),
-    [sessionId],
-  );
+  useEffect(() => {
+    if (!sessionId) return;
+    const stop = followSession(
+      sessionId,
+      (e) => handler.current(e),
+      undefined,
+      (on, now) => setPaused(on ? () => now : null),
+    );
+    return () => {
+      stop();
+      setPaused(null);
+    };
+  }, [sessionId]);
+  return paused;
 }
 
 /** What the page read on the server: the sessions and workflows, the open session (null: none yet) and its runs and
@@ -607,7 +633,7 @@ export function Create({
   );
   const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(listTimer.current), []);
-  useSessionEvents(runs === null ? null : sessionId, (e) => {
+  const livePaused = useSessionEvents(runs === null ? null : sessionId, (e) => {
     if (e.type === "session") {
       // the namer's title (API 1.43); the replay brings it again on open, so the hint shows the first time only
       setSessions((l) => l && l.map((x) => (x.id === sessionId ? { ...x, ...e.data } : x)));
@@ -1366,7 +1392,7 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (workflow && !blocked && !notDownloaded && !runOnOffline && !heldBlock)
+    if (workflow && !blocked && !notDownloaded && !runOnOffline && !heldBlock && !noRunner && !down)
       await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
@@ -1522,6 +1548,76 @@ export function Create({
   };
   /** ✕, Clear and a text answer's Delete (API 1.43 DELETE /runs/{id}; plan 21 25.3). */
   const removeRuns = (ids: string[]) => deleteRuns(ids, dropRun).catch((e) => setError(message(e)));
+  /** A host as Run on names it ("Mac"). */
+  const hostLabel = (h: string) => machineList.find((x) => x.host === h)?.label ?? h;
+  /** Retry a failed run (docs/mock/ErrorStates.dc.html c2): a new run with the same request and seed (Run on as
+   * the chip is now), whose tile takes the failed one's place; the failed run is deleted. */
+  async function retryRun(r: Run) {
+    const w = workflows?.find((x) => x.id === r.workflow_id);
+    const key = seedKeyOf(w);
+    const seed = r.resolved?.seed;
+    try {
+      const n = await ok(
+        api.POST("/v1/studio/sessions/{session_id}/runs", {
+          params: { path: { session_id: r.session_id } },
+          body: {
+            workflow_id: r.workflow_id,
+            inputs: { ...r.inputs, ...(key && seed != null && { [key]: seed }) },
+            ...(r.looks?.length && { looks: r.looks }),
+            ...(runOn && { host: runOn.host }),
+          },
+        }),
+      );
+      if (r.session_id === sessionRef.current)
+        put(runsRef.current.map((x) => (x.id === r.id ? n : x)));
+      setSelected(n.id);
+      setLastRun(n.id);
+      await deleteRuns([r.id], () => undefined);
+    } catch (err) {
+      setError(message(err));
+    }
+  }
+  /** A failed run's right-click menu (ErrorStates c2): Retry, Show details, Copy error, then Delete. */
+  const failMenu = (e: React.MouseEvent, r: Run, title: string) =>
+    openMenu(e, {
+      title,
+      items: [
+        { label: "Retry", icon: RefreshCw, onPick: () => void retryRun(r) },
+        {
+          label: "Show details",
+          icon: Eye,
+          onPick: () => {
+            setSelected(r.id);
+            setSourceView(false);
+            showDetails(r.id);
+          },
+        },
+        {
+          label: "Copy error",
+          icon: Copy,
+          onPick: () => void navigator.clipboard?.writeText(failDetails(r)),
+        },
+        "-",
+        { label: "Delete", icon: Trash2, danger: true, onPick: () => void removeRuns([r.id]) },
+      ],
+    });
+  // the studio is back (lib/health.ts, ErrorStates a2): read again what the page shows
+  const reload = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    reload.current = () => {
+      if (!sessions || !workflows) return load();
+      if (error === OUTAGE_TEXT) setError("");
+      const id = sessionRef.current;
+      if (id) {
+        void loadRuns(id);
+        void loadTakes(id);
+      }
+    };
+  });
+  useEffect(() => {
+    const off = onBack(() => reload.current());
+    return () => off();
+  }, []);
   /** A take's Delete: the Gallery's call; its run keeps no output for it, so no run tile takes its place. */
   async function removeTake(t: Take) {
     try {
@@ -1565,6 +1661,13 @@ export function Create({
   const shown = inGrid
     ? gridRuns.find((r) => r.id === (gridTake?.run_id ?? sel))
     : (picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id));
+  // a queued run's place in line is read on each fetch (Run.position, ErrorStates e): read it again every 5 s
+  const queuedId = shown?.status === "queued" ? shown.id : null;
+  useEffect(() => {
+    if (!queuedId) return;
+    const t = setInterval(() => void refetchRun(queuedId), 5000);
+    return () => clearInterval(t);
+  }, [queuedId, refetchRun]);
   // music and sound takes (docs/mock/CreateMusicSound.dc.html): the strip's Repaint, Cover or Vary, Extend from the
   // take's offers (by `action`), greyed with why where none is offered; a sound from a video beside the video made
   // with it (5b: one run, two takes)
@@ -1933,11 +2036,19 @@ export function Create({
           ...(runOn && { host: runOn.host }),
         }
       : null,
+    liveHosts,
   );
   const took =
     workflow && runs
       ? lastDuration(runs, workflow.id, bypass, runOn?.host ?? plan.host ?? undefined)
       : null;
+  // docs/mock/ErrorStates.dc.html: the studio down (a1), no runner for the workflow's env (b1: the hosts now, else
+  // the plan's reason), its model only on a drive not connected (f)
+  const down = useHealth().down;
+  const noRunner = runOnOffline
+    ? null
+    : (runnerWhy(hosts, workflow?.env, runOn) ?? planWhy(plan.reason));
+  const drive = notDownloaded ? unpluggedDrive(modelList, workflow?.family) : null;
   // a song's time is per 30 s of it (2b: "≈ 2:30 per 30 s · 26.6 GB"), from this workflow's last take; music and
   // sound show the planned peak to one decimal, as the drawer's Memory
   const perSong = (() => {
@@ -1948,7 +2059,7 @@ export function Create({
     );
     return t ? (t.made_with!.render_s! / t.audio!.duration_s) * 30 : null;
   })();
-  const estimate = musical
+  const estimated = musical
     ? [
         perSong != null
           ? `≈ ${clock(perSong)} per 30 s`
@@ -1958,6 +2069,12 @@ export function Create({
         .filter(Boolean)
         .join(" · ") || null
     : estimateText(took != null ? clock(took) : null, plan.gb, Object.values(bypass).some(Boolean));
+  // ErrorStates e: the machine it would go to is busy with runs of this session ahead: "≈ 2:40 · after 2"
+  const lineHost = runOn?.host ?? plan.host;
+  const ahead = machineList.find((m) => m.host === lineHost)?.busy
+    ? (runs ?? []).filter((r) => isActive(r.status) && r.host === lineHost).length
+    : 0;
+  const estimate = estimated && ahead ? `${estimated} · after ${ahead}` : estimated;
   const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
   // with several hosts of the env: the host an active run is lined up on, else the shown run's (contracts "Several hosts")
   const host = hostMemory(
@@ -2062,11 +2179,17 @@ export function Create({
               ? "pick a voice first"
               : badLine
                 ? `fix line ${badLine} first`
-                : notDownloaded
-                  ? "not downloaded · Models"
-                  : runOnOffline
-                    ? `${runOn.label} is offline`
-                    : null;
+                : down
+                  ? "Studio isn’t answering"
+                  : notDownloaded
+                    ? drive
+                      ? `On ${drive} · not connected · Models`
+                      : "not downloaded · Models"
+                    : runOnOffline
+                      ? `${runOn.label} is offline`
+                      : noRunner
+                        ? noRunner.key
+                        : null;
   // what Run on's rows are greyed by: the chosen variants and the add-ons of the nodes that run
   const runOnPicks = chosenVariants(all, raws, modelList);
   const runOnNeeds = [
@@ -2215,7 +2338,9 @@ export function Create({
           </ErrorNote>
         )}
         {workflows?.length === 0 && (
-          <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
+          <ErrorNote onRetry={load}>
+            No workflows yet: no runner is on. Start helmstudio on your Mac, then Retry.
+          </ErrorNote>
         )}
         {added && <AddedNote {...added} />}
 
@@ -2391,6 +2516,10 @@ export function Create({
               })
             }
             onDrop={refField && intoRefs}
+            onRetry={
+              shown?.status === "failed" && !shown.batch_id ? () => void retryRun(shown) : undefined
+            }
+            hostLabel={hostLabel}
             compare={
               comparing &&
               shownTake &&
@@ -2443,6 +2572,7 @@ export function Create({
             workflow={shownWorkflow}
             track={tracks[shown.id]}
             onCancel={() => void cancel(shown.id)}
+            paused={livePaused}
           />
         )}
         {/* music and sound show the plan in the drawer (docs/mock/CreateMusicSound.dc.html frame 1) */}
@@ -2461,6 +2591,8 @@ export function Create({
               const seed = it.take ? it.take.made_with?.seed : seedOf(it.run);
               const name = seed != null ? `seed ${seed}` : `take ${items.length - i}`;
               const menu = it.take || (it.run.status === "succeeded" && !it.run.batch_id); // a batch's run goes with its batch
+              // a failed run of Create's own (ErrorStates c2): Retry, Show details, Copy error, Delete
+              const failed = !it.take && it.run.status === "failed" && !it.run.batch_id;
               return (
                 <div
                   key={id}
@@ -2474,7 +2606,9 @@ export function Create({
                             `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
                             true,
                           )
-                      : undefined
+                      : failed
+                        ? (e) => failMenu(e, it.run, `Run · ${name}`)
+                        : undefined
                   }
                 >
                   {it.take ? (
@@ -2500,17 +2634,23 @@ export function Create({
                       }}
                     />
                   )}
-                  {menu && (
+                  {(menu || failed) && (
                     <TileMenu
-                      label={`${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`}
+                      label={
+                        failed
+                          ? `Run · ${name}`
+                          : `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`
+                      }
                       current={it === picked}
                       onMenu={(e) =>
-                        takeMenu(
-                          e,
-                          it,
-                          `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
-                          true,
-                        )
+                        failed
+                          ? failMenu(e, it.run, `Run · ${name}`)
+                          : takeMenu(
+                              e,
+                              it,
+                              `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
+                              true,
+                            )
                       }
                     />
                   )}
@@ -2881,13 +3021,27 @@ export function Create({
             {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
               <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
             )}
-            {workflow &&
-              hosts &&
-              !hosts.some((h) => h.env === workflow.env && h.state !== "offline") && (
-                <p role="status" className="text-[12px] text-t2">
-                  No runner for {workflow.env} is online; runs wait until one is.
+            {/* why Generate is greyed, as a line (ErrorStates b1, f); the banner says the studio's own */}
+            {!down && drive ? (
+              <p role="status" className="why">
+                <TriangleAlert size={14} aria-hidden />
+                <span>
+                  On {drive} · not connected ·{" "}
+                  <Link href="/models" className="text-t1">
+                    Models
+                  </Link>
+                </span>
+              </p>
+            ) : (
+              !down &&
+              !notDownloaded &&
+              noRunner && (
+                <p role="status" className="why">
+                  <TriangleAlert size={14} aria-hidden />
+                  {noRunner.line}
                 </p>
-              )}
+              )
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {empty && refsAndMentions}
               {plusAt && (
@@ -2952,6 +3106,7 @@ export function Create({
                     env={workflow?.env}
                     picks={runOnPicks}
                     needs={runOnNeeds}
+                    why={noRunner?.line}
                     onPick={(h) => {
                       setRunOnHost(h);
                       setRunNote("");
@@ -3023,6 +3178,8 @@ export function Create({
                   badLine > 0 ||
                   notDownloaded ||
                   runOnOffline ||
+                  !!noRunner ||
+                  down ||
                   noPrompt ||
                   !!heldBlock
                 }
@@ -3031,12 +3188,14 @@ export function Create({
                   {busy
                     ? "Sending…"
                     : notDownloaded
-                      ? "Not downloaded"
+                      ? drive
+                        ? "Not connected"
+                        : "Not downloaded"
                       : blocked
                         ? `${blocked} problem${blocked === 1 ? "" : "s"}`
                         : noVoice
                           ? "Pick a voice"
-                          : badLine
+                          : badLine || down || noRunner
                             ? "Generate"
                             : noPrompt && rules.length === 0 && !runOnOffline && !heldBlock
                               ? "Write a prompt"
@@ -3052,6 +3211,13 @@ export function Create({
                   </span>
                 ) : heldBlock && !busy && !runOnOffline ? (
                   <span className="mono text-[11px] font-medium">{heldBlock}</span>
+                ) : down && !busy ? (
+                  // ErrorStates a1, f, b1: why the key is greyed
+                  <span className="mono text-[11px] font-medium">Studio isn’t answering</span>
+                ) : drive && !busy ? (
+                  <span className="mono text-[11px] font-medium">On {drive} · not connected</span>
+                ) : noRunner && !busy && !notDownloaded ? (
+                  <span className="mono text-[11px] font-medium">{noRunner.key}</span>
                 ) : runOnOffline && !busy ? (
                   <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
                 ) : pinned && !busy ? (
@@ -3216,9 +3382,15 @@ function Stage({
   onMenu,
   tabs,
   autoPlay,
+  onRetry,
+  hostLabel,
 }: {
   /** a right-click on the take: its menu */
   onMenu?: (e: React.MouseEvent) => void;
+  /** a failed run's Retry (docs/mock/ErrorStates.dc.html c2): a new run, same request and seed, in its place */
+  onRetry?: () => void;
+  /** a host as Run on names it ("Mac"), for a failure's plain words */
+  hostLabel?: (host: string) => string;
   /** a run that gave a sound and the video with it (docs/mock/CreateMusicSound.dc.html 5b): Sound / Video with sound */
   tabs?: { label: string; on: boolean; onPick: () => void }[];
   /** the take menu's Play: the sound starts once shown */
@@ -3277,13 +3449,17 @@ function Stage({
         : ""
       : node && p
         ? [`${node} · step ${p.step} of ${p.of}`, p.phase].filter(Boolean).join(" · ")
-        : {
-            queued: "Queued",
-            running: "Starting",
-            succeeded: "Take",
-            failed: "Failed",
-            cancelled: "Stopped",
-          }[run.status];
+        : run.status === "queued" && waitText(run)
+          ? waitText(run)!.retry
+            ? "Waiting for a runner…"
+            : waitText(run)!.line
+          : {
+              queued: "Queued",
+              running: "Starting",
+              succeeded: "Take",
+              failed: "Failed",
+              cancelled: "Stopped",
+            }[run.status];
   // a finished take's render time, low text (API 1.60; docs/mock/Main.dc.html "A finished take"): its own only, none
   // until the take is in (a run of several outputs has one per take)
   const took = label === "Take" || audioBadge ? renderTime(take?.made_with?.render_s) : "";
@@ -3461,10 +3637,7 @@ function Stage({
             style={{ aspectRatio: size ? `${size.w} / ${size.h}` : "16 / 9" }}
           >
             {run.status === "failed" ? (
-              <>
-                <span className="text-[15px] font-medium text-bad">Failed</span>
-                <span className="mono text-[12px] break-words text-t1">{run.error}</span>
-              </>
+              <FailCard run={run} onRetry={onRetry} hostLabel={hostLabel} />
             ) : (
               <span className="text-[15px] font-medium text-t1">
                 {isActive(run.status)
@@ -3481,6 +3654,69 @@ function Stage({
   );
 }
 
+/** Show details of the failed run whose card or menu asked for it (one at a time). */
+const detailsStore = { id: "", subs: new Set<() => void>() };
+const showDetails = (id: string) => {
+  detailsStore.id = detailsStore.id === id ? "" : id;
+  detailsStore.subs.forEach((f) => f());
+};
+const useDetails = () =>
+  useSyncExternalStore(
+    (f) => (detailsStore.subs.add(f), () => detailsStore.subs.delete(f)),
+    () => detailsStore.id,
+    () => "",
+  );
+
+/** A failed run on the stage (docs/mock/ErrorStates.dc.html c2): "This run stopped", one plain sentence from the raw
+ * error, Show details (the raw text, mono, selectable, Copy) and Retry. */
+function FailCard({
+  run,
+  onRetry,
+  hostLabel,
+}: {
+  run: Run;
+  onRetry?: () => void;
+  hostLabel?: (host: string) => string;
+}) {
+  const open = useDetails() === run.id;
+  const raw = failDetails(run);
+  return (
+    <div className="fpanel" role="alert">
+      <b className="ft">This run stopped</b>
+      <p>{failWords(run.error, hostLabel)}</p>
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          className="chip h-8 border border-s5 bg-transparent"
+          aria-expanded={open}
+          onClick={() => showDetails(run.id)}
+        >
+          Show details
+        </button>
+        {onRetry && (
+          <button type="button" className="chip h-8 bg-a1 text-[var(--on1)]" onClick={onRetry}>
+            <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+            Retry
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="raw">
+          <pre className="mono">{raw}</pre>
+          <button
+            type="button"
+            className="chip h-7 bg-s4"
+            onClick={() => void navigator.clipboard?.writeText(raw)}
+          >
+            <Copy size={14} strokeWidth={1.75} aria-hidden />
+            Copy
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The run's progress: one piece per working node (done with its time, active with its bar, pending), the time
  * left and Stop. */
 function RunStrip({
@@ -3488,19 +3724,35 @@ function RunStrip({
   workflow,
   track,
   onCancel,
+  paused,
 }: {
   run: Run;
   workflow: S<"Workflow">;
   track?: RunTrack;
   onCancel: () => void;
+  /** live updates paused (ErrorStates d): the chip, a click tries the stream now; hidden while the banner shows */
+  paused?: (() => void) | null;
 }) {
   const p = run.progress;
+  const wait = waitText(run);
+  const down = useHealth().down;
   return (
     <div
       role="group"
       aria-label="Run progress"
       className="flex shrink-0 flex-wrap items-center gap-2 text-[13px]"
     >
+      {/* c1, e: the run waits (its runner stopped and it tries again, or others are ahead of it) */}
+      {wait && (
+        <span className="step wait" role="status">
+          {wait.retry ? (
+            <LoaderCircle size={14} className="spin" aria-hidden />
+          ) : (
+            <TriangleAlert size={14} aria-hidden />
+          )}
+          {wait.line}
+        </span>
+      )}
       {segments(workflow, run, track).map((s) =>
         s.state === "done" ? (
           <span key={s.key} className="step">
@@ -3553,6 +3805,18 @@ function RunStrip({
         ),
       )}
       <div className="grow" />
+      {paused && !down && isActive(run.status) && (
+        <button
+          type="button"
+          className="live"
+          role="status"
+          title="Progress may be behind. It catches up when the connection is back."
+          onClick={paused}
+        >
+          <WifiOff size={14} aria-hidden />
+          Live updates paused · retrying
+        </button>
+      )}
       {etaText(run) && <span className="mono text-t2">{etaText(run)}</span>}
       {isActive(run.status) && (
         <button
@@ -3710,6 +3974,7 @@ function RunTile({
   const asked = seedKey ? run.inputs[seedKey] : undefined;
   const seed = seedOf(run) ?? (typeof asked === "number" && asked >= 0 ? asked : undefined);
   const label = seed == null ? `take ${n}` : seedLabel(seed);
+  const wait = waitText(run);
   const state =
     run.status === "running"
       ? progressText(run)
@@ -3718,6 +3983,8 @@ function RunTile({
         : run.status === "cancelled"
           ? "stopped"
           : run.status;
+  // ErrorStates c1, c2, e: "Trying again · 2 of 2", "Waiting · 2 ahead", "Failed · seed 44"
+  const look = wait ? "rtile wait" : run.status === "failed" ? "rtile failed" : "";
   return (
     <button
       type="button"
@@ -3727,18 +3994,22 @@ function RunTile({
       aria-pressed={current}
       // a failed tile's title is its error; a going one has no ✕ (plan 21 25.3)
       title={
-        run.status === "failed" && run.error
-          ? run.error
-          : isActive(run.status)
-            ? "Stop it first"
-            : seed != null
-              ? `seed ${seed}`
-              : undefined
+        run.status === "failed"
+          ? failWords(run.error) === GENERIC_FAIL
+            ? `This run stopped: ${run.error ?? "no error text"}`
+            : `This run stopped. ${failWords(run.error)}`
+          : wait
+            ? wait.line
+            : isActive(run.status)
+              ? "Stop it first"
+              : seed != null
+                ? `seed ${seed}`
+                : undefined
       }
       onClick={onPick}
       className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] ${
         current ? "border-2 border-a1" : "border border-s5"
-      } ${run.status === "failed" ? "text-bad" : "text-t2"}`}
+      } ${run.status === "failed" ? "text-bad" : "text-t2"} ${look}`}
     >
       {out ? (
         <>
@@ -3759,8 +4030,22 @@ function RunTile({
         </>
       ) : (
         <span className="flex flex-col items-center">
-          <span>{label}</span>
-          {state && <span>{state}</span>}
+          {wait ? (
+            <>
+              <span>{wait.tile[0]}</span>
+              {wait.tile[1] && <span className="mono font-normal">{wait.tile[1]}</span>}
+            </>
+          ) : run.status === "failed" ? (
+            <>
+              <span>Failed</span>
+              <span className="mono font-normal">{label}</span>
+            </>
+          ) : (
+            <>
+              <span>{label}</span>
+              {state && <span>{state}</span>}
+            </>
+          )}
         </span>
       )}
     </button>

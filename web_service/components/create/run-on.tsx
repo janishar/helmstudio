@@ -2,8 +2,7 @@
 // The Run on chip (docs/mock/RunOn.dc.html): right after the model chip on every Create composer. Auto is today's
 // placement; a host row is greyed with why it cannot take the run; a chosen host that went offline warns.
 import { Monitor, TriangleAlert } from "lucide-react";
-import { machineReason, type AddonNeed, type Machine } from "@/lib/run-on";
-import type { S } from "@/lib/api";
+import { machineReason, type AddonNeed, type Machine, type VariantPick } from "@/lib/run-on";
 
 export function RunOnChip({
   id = "run-on",
@@ -12,6 +11,7 @@ export function RunOnChip({
   env,
   picks,
   needs = [],
+  why,
   onPick,
 }: {
   id?: string;
@@ -21,14 +21,22 @@ export function RunOnChip({
   chosen: Machine | undefined;
   /** the workflow's env and chosen variants: what a host row is greyed by */
   env: string | undefined;
-  picks: { m: S<"Model">; v: S<"ModelVariant"> }[];
+  picks: VariantPick[];
   /** the add-ons the nodes that run need (API 1.36): a host without one is greyed ("enhancer not downloaded on gcp") */
   needs?: AddonNeed[];
+  /** why no runner can take it (docs/mock/ErrorStates.dc.html b1): the chip warns, its tooltip says it */
+  why?: string;
   /** "" = Auto */
   onPick: (host: string) => void;
 }) {
   const offline = !!chosen && !chosen.live;
-  const label = chosen?.label ?? "Auto";
+  const warn = offline || !!why;
+  const reasons = new Map(list.map((x) => [x.host, machineReason(x, env, picks, needs)]));
+  const able = list.filter((x) => !reasons.get(x.host));
+  // board e: "Mac · busy"; under Auto only when every machine that can take it is busy
+  const busy = chosen ? !!chosen.busy && chosen.live : able.length > 0 && able.every((x) => x.busy);
+  const anyBusy = able.some((x) => x.busy);
+  const label = `${chosen?.label ?? "Auto"}${busy && !warn ? " · busy" : ""}`;
   const pick = (host: string) => {
     onPick(host);
     document.getElementById(id)?.hidePopover?.();
@@ -38,19 +46,21 @@ export function RunOnChip({
       <button
         type="button"
         popoverTarget={id}
-        className={`chip bevel rounded-[10px] ${offline ? "warn" : "bg-s4"}`}
+        className={`chip bevel rounded-[10px] ${warn ? "warn" : "bg-s4"}`}
         // the chip says only the machine ("Auto", "NVIDIA"); its name and tooltip say Run on
         aria-label={`Run on ${label}`}
         title={
           offline
             ? `${chosen.host} is offline. Pick Auto, or wait for it to come back.`
-            : chosen
-              ? `Run on: ${chosen.sub}`
-              : "Run on: Auto picks a free machine"
+            : why
+              ? `Run on: ${chosen?.label ?? "Auto"}. ${why}`
+              : chosen
+                ? `Run on: ${chosen.sub}`
+                : "Run on: Auto picks a free machine"
         }
         style={{ anchorName: `--${id}` } as React.CSSProperties}
       >
-        {offline ? (
+        {warn ? (
           <TriangleAlert size={14} aria-hidden />
         ) : (
           <Monitor size={14} strokeWidth={1.75} aria-hidden />
@@ -83,9 +93,15 @@ export function RunOnChip({
             <span>
               Auto<small>picks a free machine</small>
             </span>
+            {/* board b1: "no runner for mlx"; e: the busy machine Auto would wait for */}
+            {env && list.length > 0 && !list.some((x) => x.envs.includes(env)) ? (
+              <em>no runner for {env}</em>
+            ) : (
+              busy && <em>{able.map((x) => x.host).join(", ")} busy</em>
+            )}
           </button>
           {list.map((x) => {
-            const why = machineReason(x, env, picks, needs);
+            const why = reasons.get(x.host);
             return (
               <button
                 key={x.host}
@@ -100,7 +116,7 @@ export function RunOnChip({
                   {x.label}
                   <small>{x.sub}</small>
                 </span>
-                {why && <em>{why}</em>}
+                {why ? <em>{why}</em> : anyBusy && <em>{x.busy ? "busy" : "free"}</em>}
               </button>
             );
           })}

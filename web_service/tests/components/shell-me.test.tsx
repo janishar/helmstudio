@@ -44,13 +44,14 @@ describe("sign-in check retry", () => {
     const spy = answer("GET", { "/auth/me": () => ({ status: 503, error: { detail: "down" } }) });
     render(<AppShell user={null}>page</AppShell>);
     await act(() => vi.advanceTimersByTimeAsync(60000));
-    expect(spy).toHaveBeenCalledTimes(5); // 1, 2, 4, 8, 16 s
+    // 1, 2, 4, 8, 16 s (the status tile reads the hosts on its own)
+    expect(spy.mock.calls.filter((c) => c[0] === "/auth/me")).toHaveLength(5);
     cleanup();
     spy.mockClear();
     const gone = answer("GET", { "/auth/me": () => ({ status: 401, error: { detail: "no" } }) });
     render(<AppShell user={null}>page</AppShell>);
     await act(() => vi.advanceTimersByTimeAsync(60000));
-    expect(gone).toHaveBeenCalledTimes(1);
+    expect(gone.mock.calls.filter((c) => c[0] === "/auth/me")).toHaveLength(1);
   });
   it("asks nothing when the layout had the user", () => {
     const spy = vi.spyOn(api, "GET");

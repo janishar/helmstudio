@@ -4,14 +4,15 @@
 // with the sequence's defaults (the cast typed into the prompt as mentions, the looks sent as RunRequest.looks) and
 // offers start/end keyframes only when the workflow (or its family's image-to-video template) has them.
 import Link from "next/link";
-import { Minus, Plus, X } from "lucide-react";
+import { Minus, Plus, TriangleAlert, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
 import { frameTake } from "@/components/create/frame-in";
 import { useHosts } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
-import { chosenVariants, machines, pinnedMachine } from "@/lib/run-on";
+import { chosenVariants, machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
+import { DOWN_KEY, useHealth } from "@/lib/health";
 import { useLibrary } from "@/lib/library";
 import { api, message, ok, type S } from "@/lib/api";
 import { mediaOf, snapFrames, gridOf } from "@/lib/media";
@@ -161,6 +162,10 @@ export function ShotComposer({
   }, [redoTake, workflows]);
 
   const workflow = video.find((w) => w.id === workflowId);
+  // docs/mock/ErrorStates.dc.html b3: no runner for its env (or its Run on host offline) greys Generate, with the
+  // line under it; the studio down greys it too (the banner says why)
+  const down = useHealth().down;
+  const why = down ? null : runnerWhy(hosts, workflow?.env, runOn);
   const fields = useMemo(() => (workflow ? fieldsOf(workflow) : []), [workflow]);
   const promptField = fields.find((f) => f.param.type === "text");
   const framesField = fields.find((f) => f.param.type === "frames");
@@ -214,6 +219,8 @@ export function ShotComposer({
   async function generate(): Promise<Started> {
     if (!workflow) return { error: "no video workflow is installed" };
     if (runOnOffline) return { error: `${runOn.label} is offline` };
+    if (why) return { error: why.key };
+    if (down) return { error: DOWN_KEY };
     setBusy(true);
     setError("");
     try {
@@ -432,6 +439,7 @@ export function ShotComposer({
           chosen={runOn}
           env={workflow?.env}
           picks={chosenVariants(fields, raws, modelList)}
+          why={runOnOffline ? undefined : why?.line}
           onPick={setRunOnHost}
         />
         {framesField && nFrames && (
@@ -495,21 +503,27 @@ export function ShotComposer({
         <button
           type="button"
           className="key ml-auto h-12 rounded-xl px-[22px] text-sm"
-          disabled={busy || !workflow || runOnOffline}
+          disabled={busy || !workflow || runOnOffline || !!why || down}
           onClick={() => void generate()}
         >
           {busy ? (
             "Starting…"
-          ) : runOnOffline ? (
+          ) : why || down ? (
             <span className="flex flex-col items-center gap-px">
               Generate shot
-              <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
+              <span className="mono text-[11px] font-medium">{why?.key ?? DOWN_KEY}</span>
             </span>
           ) : (
             "Generate shot"
           )}
         </button>
       </div>
+      {why && (
+        <p className="why" role="status">
+          <TriangleAlert size={14} aria-hidden />
+          {why.line}
+        </p>
+      )}
       {!video.length && <p className="m-0 text-[13px] text-t2">No video workflow is installed.</p>}
       {error && <ErrorNote>{error}</ErrorNote>}
     </section>

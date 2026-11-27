@@ -38,6 +38,8 @@ export function applyEvent(
         status: e.data.status,
         attempt: e.data.attempt ?? 1,
         error: e.data.error,
+        // the host that stopped, so "Runner on mac-studio stopped" shows before the run is read again
+        lost_host: run.host ?? run.lost_host,
         host: null,
         progress: null,
         outputs: [],
@@ -328,14 +330,22 @@ export function followSession(
   sessionId: string,
   onEvent: (e: S<"SessionEvent">) => void,
   page: (since: number) => Promise<S<"EventPage">> = (since) => eventPage(sessionId, since),
+  onPaused?: Paused,
 ): () => void {
   return followEvents(
     `/api/v1/studio/sessions/${encodeURIComponent(sessionId)}/events`,
     ["status", "progress", "output", "session"],
     onEvent,
     page,
+    onPaused,
   );
 }
+
+/** Live updates paused (docs/mock/ErrorStates.dc.html d): true once the stream closed and its ?since= polling has
+ * failed for 5 s, false when a page or a stream answers; `now` tries the stream at once. */
+export type Paused = (paused: boolean, now: () => void) => void;
+/** How long polling fails before "Live updates paused" shows. */
+const PAUSE_AFTER = 5_000;
 
 /** followSession for any event log of the API: `url` serves SSE (`?since=`) with the named event types, `page`
  * its JSON form. */
@@ -344,6 +354,7 @@ export function followEvents<E extends { seq: number }>(
   types: string[],
   onEvent: (e: E) => void,
   page: (since: number) => Promise<{ events: E[] }>,
+  onPaused?: Paused,
 ): () => void {
   // ponytail: replays the whole log on open (cheap for M0 sessions); keep a cursor per session if logs grow long
   let last = 0;
@@ -355,6 +366,27 @@ export function followEvents<E extends { seq: number }>(
   let delay = POLL_MIN;
   let streamDelay = POLL_MIN;
   let streamAt = 0; // when a new stream may be tried
+  let failing = false; // polling's pages fail
+  let paused = false;
+  let pauseTimer: ReturnType<typeof setTimeout> | undefined;
+  const now = () => {
+    if (stop) return;
+    clearTimeout(poll);
+    poll = undefined;
+    delay = POLL_MIN;
+    connect();
+    if (polling) void tick();
+  };
+  const setPaused = (on: boolean) => {
+    if (on === paused || stop) return;
+    paused = on;
+    onPaused?.(on, now);
+  };
+  const answered = () => {
+    failing = false;
+    clearTimeout(pauseTimer);
+    setPaused(false);
+  };
   const take = (e: E) => {
     if (stop || e.seq <= last) return;
     last = e.seq;
@@ -376,6 +408,11 @@ export function followEvents<E extends { seq: number }>(
     if (stop || !polling) return;
     p?.events.forEach(take);
     delay = p ? POLL_MIN : Math.min(delay * 2, POLL_MAX);
+    if (p) answered();
+    else if (!failing) {
+      failing = true;
+      pauseTimer = setTimeout(() => failing && setPaused(true), PAUSE_AFTER);
+    }
     if (p && Date.now() >= streamAt) {
       streamAt = Date.now() + streamDelay;
       streamDelay = Math.min(streamDelay * 2, POLL_MAX);
@@ -396,6 +433,7 @@ export function followEvents<E extends { seq: number }>(
       streamDelay = POLL_MIN;
       clearTimeout(poll);
       poll = undefined;
+      answered();
     };
     s.onerror = () => {
       if (s.readyState !== EventSource.CLOSED || stop || s !== es || polling) return;
@@ -411,6 +449,7 @@ export function followEvents<E extends { seq: number }>(
     stop = true;
     es?.close();
     clearTimeout(poll);
+    clearTimeout(pauseTimer);
     if (typeof document !== "undefined")
       document.removeEventListener("visibilitychange", onVisible);
   };
@@ -440,4 +479,62 @@ export async function deleteRuns(ids: string[], gone: (id: string) => void) {
     await okOr(api.DELETE("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }), 404);
     gone(id);
   }
+}
+
+// ---- error states (docs/mock/ErrorStates.dc.html c1, c2, e)
+
+/** A run's tries: attempt 2 is the last (studio requeues a lost run once, dispatcher.go lose). */
+export const MAX_ATTEMPTS = 2;
+
+/** What to do for a runner of `env`: "Start helmstudio on your Mac" (mlx), else "Start a runner for torch". */
+export const startHint = (env: string) =>
+  env === "mlx" ? "Start helmstudio on your Mac" : `Start a runner for ${env}`;
+
+/** A failed run in plain words (board c2), from studio's raw error; `label` names a host as Run on does ("Mac").
+ * The raw text stays under Show details. */
+export function failWords(
+  error: string | null | undefined,
+  label: (host: string) => string = (h) => h,
+) {
+  const e = error ?? "";
+  let m: RegExpExecArray | null;
+  if ((m = /runner on host (\S+) stopped responding; gave up after \d+ attempts/.exec(e)))
+    return `The runner on ${m[1]} stopped twice. Retry starts it again.`;
+  if ((m = /runner on host (\S+) stopped responding; no other live host for env (\S+)/.exec(e)))
+    return `The runner on ${m[1]} stopped and no other runner for ${m[2]} is on. ${startHint(m[2])}, then Retry.`;
+  if ((m = /host (\S+) went offline; a run set to \S+ never moves/.exec(e)))
+    return `${m[1]} went offline. A run set to ${label(m[1])} never moves to another machine. Pick Auto, or Retry when it’s back.`;
+  if ((m = /^no live host for env (\S+)$/.exec(e)))
+    return `No runner for ${m[1]} was on when this run started. ${startHint(m[1])}, then Retry.`;
+  return GENERIC_FAIL;
+}
+/** failWords for an error it has no plain words for. */
+export const GENERIC_FAIL = "This run stopped with an error.";
+
+/** The raw error under Show details: "run 7f3c2a · attempt 2 of 2" over studio's text. */
+export const failDetails = (r: Pick<Run, "id" | "attempt" | "error">) =>
+  `run ${r.id.slice(0, 6)} · attempt ${r.attempt} of ${MAX_ATTEMPTS}\n${r.error ?? "no error text"}`;
+
+/** A queued run that waits (board c1, e): the progress line, the tile's two lines, and `retry` for the amber
+ * trying-again look; null when it is not waiting on anything to say. */
+export function waitText(r: Run): { line: string; tile: [string, string]; retry: boolean } | null {
+  if (r.status !== "queued") return null;
+  if (r.attempt >= 2)
+    return {
+      line: `Runner${r.lost_host ? ` on ${r.lost_host}` : ""} stopped · trying again (${r.attempt} of ${MAX_ATTEMPTS})`,
+      tile: ["Trying again", `${r.attempt} of ${MAX_ATTEMPTS}`],
+      retry: true,
+    };
+  if (!r.host) return null;
+  const ahead = (r.position ?? 1) - 1;
+  if (ahead > 0)
+    return {
+      line: `Waiting · ${ahead} ahead on ${r.host}`,
+      tile: ["Waiting", `${ahead} ahead`],
+      retry: false,
+    };
+  // first in line but a model unloads first; else it is about to start: plain "Queued"
+  return r.unloads_pinned?.length
+    ? { line: `Waiting for ${r.host}`, tile: ["Waiting", ""], retry: false }
+    : null;
 }

@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { followSession } from "@/lib/runs";
+import { isOutage, onBack, OUTAGE_TEXT, whenUp } from "@/lib/health";
 import { firstHint } from "@/components/create/sessions";
 import {
   FAKE_KINDS,
@@ -133,7 +134,8 @@ function sampleDoc(): Doc {
 }
 
 /** The boards in studio: null until the first one is open. */
-export function useApiBoard(): (Board & { ready: true }) | { ready: false; error: string } {
+export function useApiBoard():
+  (Board & { ready: true }) | { ready: false; error: string; retry: () => void } {
   const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
   const [wire, setWire] = useState<Wire | null>(null);
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -175,17 +177,31 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     },
     [open],
   );
-  /** one call after another; a failure says why and reads the board again */
+  /** one call after another; a failure says why and reads the board again. The studio not answering (docs/mock/
+   * ErrorStates.dc.html a3) holds the call instead: the banner says it (a board not loaded yet says it didn't load),
+   * and the call is made again once the studio answers, so an edit is not lost (at most 5 times) */
   const queue = useCallback(
     (f: () => Promise<void>) => {
-      chain.current = chain.current.then(f).then(
-        () => setError(""),
-        async (e) => {
-          setError(message(e));
-          pending.current = 0;
-          if (current.current) await open(current.current).catch(() => undefined);
-        },
-      );
+      const held = async (n = 0): Promise<void> => {
+        try {
+          await f();
+        } catch (e) {
+          if (!isOutage(e) || n >= 5) throw e;
+          if (!current.current) setError(OUTAGE_TEXT);
+          await whenUp();
+          return held(n + 1);
+        }
+      };
+      chain.current = chain.current
+        .then(() => held())
+        .then(
+          () => setError(""),
+          async (e) => {
+            setError(message(e));
+            pending.current = 0;
+            if (current.current) await open(current.current).catch(() => undefined);
+          },
+        );
     },
     [open],
   );
@@ -209,6 +225,11 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       setBoards((bs) => bs.map((b) => (b.id === id ? { id, name: w.name } : b)));
     }
   }, [show]);
+  // the studio is back (ErrorStates a2): the board as it is now
+  useEffect(() => {
+    const off = onBack(() => void refresh().catch(() => undefined));
+    return () => off();
+  }, [refresh]);
   // API 1.91: an untitled board is named from its first prompt, then perhaps by the namer: its session says so
   const [namedBy, setNamedBy] = useState("");
   useEffect(() => {
@@ -284,24 +305,28 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
       });
   }, [named, queue, open]);
 
-  useEffect(() => {
-    queue(async () => {
-      const { boards: list } = await ok(api.GET("/v1/studio/magic/boards"));
-      setBoards(list.map(({ id, name }) => ({ id, name })));
-      // the board the address names (the Assistant's navigate, API 1.87), else the one open last
-      const asked = new URLSearchParams(location.search).get("b");
-      const want =
-        list.find((b) => b.id === asked) ?? list.find((b) => b.id === remembered()) ?? list[0];
-      if (want) await open(want.id);
-      else await create({});
-    });
-  }, [queue, open, create]);
+  /** the boards, then the one to show (a first visit makes one); again from Retry (ErrorStates a3) */
+  const start = useCallback(
+    () =>
+      queue(async () => {
+        const { boards: list } = await ok(api.GET("/v1/studio/magic/boards"));
+        setBoards(list.map(({ id, name }) => ({ id, name })));
+        // the board the address names (the Assistant's navigate, API 1.87), else the one open last
+        const asked = new URLSearchParams(location.search).get("b");
+        const want =
+          list.find((b) => b.id === asked) ?? list.find((b) => b.id === remembered()) ?? list[0];
+        if (want) await open(want.id);
+        else await create({});
+      }),
+    [queue, open, create],
+  );
+  useEffect(start, [start]);
 
   const takes = useMemo(
     () => (wire ? takesOf(wire.doc as Doc, wire.runs ?? [], wire.takes ?? {}) : {}),
     [wire],
   );
-  if (!wire || !doc) return { ready: false, error };
+  if (!wire || !doc) return { ready: false, error, retry: start };
   const id = wire.id;
   /** a call made on a revision studio has written past since (a run's take joined its block): made again, once, on
    * the revision as it is now */

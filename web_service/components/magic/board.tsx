@@ -3,7 +3,16 @@
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { Camera, ChevronDown, Clock3, X, Plus, SlidersHorizontal, Trash2 } from "lucide-react";
+import {
+  Camera,
+  ChevronDown,
+  Clock3,
+  X,
+  Plus,
+  RefreshCw,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
 import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote } from "@/components/kit";
 import { AddDialog, type AddAt } from "@/components/magic/add";
@@ -56,6 +65,7 @@ import {
 import { EST_HOST, EST_S, estText } from "@/lib/magic-fixture";
 import { FORM_KINDS, type Estimate } from "@/lib/magic-standard";
 import { LoadingBoard } from "@/components/magic/loading";
+import { OUTAGE_TEXT, retryNow } from "@/lib/health";
 import { useScreenTools } from "@/components/assistant/tools";
 import { HistoryChip, ProposalBar, magicTools, useProposal } from "@/components/magic/assistant";
 import {
@@ -108,7 +118,27 @@ function LocalBoard({ initial }: { initial?: Store }) {
 function StudioBoard() {
   const board = useApiBoard();
   if (!board.ready)
-    return board.error ? (
+    return board.error === OUTAGE_TEXT ? (
+      // ErrorStates a3: over empty lanes, with Retry (the board loads by itself once the studio answers)
+      <LoadingBoard
+        failed={
+          <>
+            <p className="m-0">The board didn’t load: the studio isn’t answering.</p>
+            <button
+              type="button"
+              className="chip h-8 bg-s4 text-t1"
+              onClick={() => {
+                retryNow();
+                board.retry();
+              }}
+            >
+              <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+              Retry
+            </button>
+          </>
+        }
+      />
+    ) : board.error ? (
       <main id="main" className="mg flex-1 px-5 pt-4">
         <ErrorNote>{board.error}</ErrorNote>
       </main>

@@ -23,6 +23,7 @@ import {
 } from "@/components/assistant/assistant";
 import { ToolsContext } from "@/components/assistant/tools";
 import { MarkPaths } from "@/components/kit";
+import { Banner, StatusTile } from "@/components/status";
 import { ApiError, api, ok, type S } from "@/lib/api";
 
 /** The signed-in user (null when auth can't be reached). */
@@ -247,13 +248,24 @@ export function AppShell({
                   Settings
                 </Link>
               </nav>
+              {/* the status tile (docs/mock/ErrorStates.dc.html g): only while something is down; md+ only (a phone
+                  gets the banner) */}
+              <div className="hidden md:contents">
+                <StatusTile admin={admin} />
+              </div>
             </div>
             {/* md+: the window never scrolls (overflow-clip: not even a focus or scrollIntoView moves it; owner, alpha.5
                 item 9), the rail stays put. 60rem (the Mac app's narrowest window, 960 px) and up: the side panel sits
                 beside <main> and each scrolls on its own; narrower, the side panel wraps under <main> and the page
                 area scrolls as one */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start md:overflow-y-auto min-[60rem]:flex-nowrap min-[60rem]:overflow-hidden min-[60rem]:[&>.aside]:max-h-[calc(100dvh-28px)] min-[60rem]:[&>.aside]:shrink-0 min-[60rem]:[&>.aside]:overflow-y-auto min-[60rem]:[&>main]:min-h-0 min-[60rem]:[&>main]:overflow-y-auto">
-              {children}
+            {/* the page column: the banner on top pushes the page down (ErrorStates a1) */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="empty:hidden shrink-0 px-3.5 pt-3.5 md:pr-3.5 md:pl-0">
+                <Banner />
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start md:overflow-y-auto min-[60rem]:flex-nowrap min-[60rem]:overflow-hidden min-[60rem]:[&>.aside]:max-h-[calc(100dvh-28px)] min-[60rem]:[&>.aside]:shrink-0 min-[60rem]:[&>.aside]:overflow-y-auto min-[60rem]:[&>main]:min-h-0 min-[60rem]:[&>main]:overflow-y-auto">
+                {children}
+              </div>
             </div>
           </div>
           {a.ready && <AssistantDrawer a={a} />}

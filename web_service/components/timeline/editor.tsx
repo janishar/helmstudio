@@ -72,7 +72,7 @@ import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@
 import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
-import { followSession, renderTime } from "@/lib/runs";
+import { failWords, followSession, renderTime } from "@/lib/runs";
 import { firstHint } from "@/components/create/sessions";
 import { Preview } from "@/lib/timeline-preview";
 import {
@@ -2400,7 +2400,11 @@ function AudioClip({
     return (
       c.shot?.status === "failed" && (
         <div className="flex flex-col gap-2">
-          <span className="mono text-[12px] text-bad">{c.shot.error ?? "The run failed."}</span>
+          {/* ErrorStates c2: plain words first, the raw text under them */}
+          <span className="text-[13px] text-bad">{failWords(c.shot.error)}</span>
+          <span className="mono text-[11px] break-words text-t2 select-text">
+            {c.shot.error ?? "The run failed."}
+          </span>
           <div className="flex gap-2">
             {c.shot.run_id && (
               <button type="button" className="chip bevel" onClick={() => void retry()}>

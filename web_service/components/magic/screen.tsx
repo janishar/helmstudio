@@ -6,7 +6,7 @@ import { LoadingBoard } from "@/components/magic/loading";
 
 const Board = dynamic(() => import("@/components/magic/board").then((m) => m.MagicBoard), {
   ssr: false,
-  loading: LoadingBoard,
+  loading: () => <LoadingBoard />,
 });
 
 export function MagicScreen() {
