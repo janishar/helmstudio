@@ -23,7 +23,9 @@ differs is dropped). Plain nodes, like agent_loop.py, no prebuilt agent:
   with a risk flag asks first on a `plugin` card, one without runs at once: POST <url>/tools/<tool> with a
   short-lived pass for that owner and call (providers.plugin_tool), the reply a line and a result fenced as data.
 - `wait` only calls interrupt() (a resumed node runs again from its start, so nothing with an effect sits before
-  it). Each park and each end of a turn is one evt.assistant.step (seq per thread; a republish replaces).
+  it). Each park and each end of a turn is one evt.assistant.step (seq per thread; a republish replaces). From API
+  1.97 a call that runs at once also sends progress steps (the next step's seq, nothing pending): its line running
+  before it, the lines done after the calls, so the drawer shows each step live.
 
 Everything but the user's own messages is data in the <<< >>> fence: the screen summary, tool and action results,
 memory items, web results. Nothing but memory writes reaches the server without the user's click."""
@@ -76,6 +78,29 @@ MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "make_views", "send_
 MAGIC_RUNS = ("run_blocks", "make_views")
 # API 1.96: the built-in skill read on every Magic board, once per chat, without the model asking
 MAGIC_SKILL = "magic-director"
+# API 1.97: a call's line while it runs (short, present tense); done, the same words without the dots
+STEPS = {
+    "sessions": "Reading your sessions…", "list_workflows": "Reading the workflows…",
+    "get_workflow": "Reading a workflow…", "get_run": "Checking a run…", "plan_run": "Planning a run…",
+    "models": "Reading the models…", "hosts": "Checking the machines…", "search_takes": "Searching the Gallery…",
+    "get_take": "Reading a take…", "list_library": "Reading the library…", "pipelines": "Reading the pipelines…",
+    "batch_status": "Checking the batches…", "list_timelines": "Reading the sequences…",
+    "show_timeline": "Reading the sequence…", "timeline_revisions": "Reading the history…",
+    "custom_nodes": "Reading the custom nodes…", "model_sources": "Reading the model sources…",
+    "model_jobs": "Checking the model jobs…", "use_skill": "Reading a skill…",
+    "read_skill_file": "Reading a skill file…", "read_model_guide": "Reading a model guide…",
+    "remember": "Remembering…", "recall": "Recalling…", "save_shots": "Saving the shot list…",
+    "shot_list": "Reading the shot lists…", "list_boards": "Finding boards…", "create_board": "Making the board…",
+    "show_board": "Reading the board…", "magic_kinds": "Reading Magic's kinds…",
+    "try_board_edit": "Trying the edits…", "plan_board": "Planning the runs…", "cancel_runs": "Stopping runs…",
+    "board_frame": "Looking at the board…",
+}  # fmt: skip
+
+
+def step_label(name: str) -> str:
+    return STEPS.get(name) or name.replace("_", " ").capitalize() + "…"
+
+
 ACK_WAIT = 60  # seconds; a long turn sends in_progress every BEAT
 BEAT = 20
 RECURSION = 400  # graph steps per invocation: about 10 per model call
@@ -1041,6 +1066,7 @@ class Assistant:
                 "lines": lines,
                 "to": "steer",
             }
+        served = None  # the last call served at once: its lines go out as a progress step
         while q:
             c = q[0]
             if c["kind"] == "action" and (again := _again(chat, c, msg)):
@@ -1106,10 +1132,18 @@ class Assistant:
                                                "lines": lines, "pending": pending})  # fmt: skip
                 chat.append(_entry(c, "failed", error=error))
                 continue
+            label = step_label(c["name"])
+            run = {"id": c["id"], "status": "running", "text": label, "undo": False}
+            if await self.progress(s, f"{c['id']}:start", [*lines, run]):
+                lines = []
+            served = c["id"]
             result, error, line = await self.serve(s, c, caps)
             chat.append(_entry(c, "failed" if error else "done", result, error))
-            if line:
-                lines.append(line)
+            lines.append(
+                line or run | {"status": "failed" if error else "done", "text": label.rstrip("…")}
+            )
+        if served and await self.progress(s, f"{served}:end", lines):
+            lines = []
         return up | {
             "queue": [],
             "chat": chat[-CHAT_KEEP:],
@@ -1174,6 +1208,22 @@ class Assistant:
                 "text": s.get("text", "")[:4000], "lines": (s.get("lines") or [])[:30],
                 "actions": (pending or {}).get("actions", []), "cards": (pending or {}).get("cards", []),
                 "done": done, "caps": s.get("caps") or dict(ZERO), "error": s.get("error") if done else None}  # fmt: skip
+
+    async def progress(self, s: State, tag: str, lines: list) -> bool:
+        """A progress step (API 1.97): the lines so far, sent now with the next step's seq; studio keeps the lines
+        only. False (the lines then go with the next step) when there are none or it could not be sent."""
+        if not lines:
+            return False
+        seq, tid = s.get("seq", 0) + 1, s["thread_id"]
+        step = self._step(s | {"text": "", "lines": lines}, done=False)
+        try:
+            await self._send(
+                "evt.assistant.step", f"evt.assistant.{tid}.step", f"{tid}:{seq}:{tag}", step, s
+            )
+        except Exception as e:  # noqa: BLE001 (the step is only news: the turn goes on)
+            log.warning("assistant %s: no progress step: %s", tid, e)
+            return False
+        return True
 
     def _park(self, s: State, up: dict) -> State:
         step = self._step(s | up, done=False, pending=up["pending"])

@@ -237,9 +237,22 @@ func TestAssistantChat(t *testing.T) {
 	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "working" {
 		t.Fatal(got)
 	}
+	// API 1.97: a progress step (the next step's seq, nothing pending) stores its running line, the state stays
+	running := json.RawMessage(fmt.Sprintf(`{"id": %q, "status": "running", "text": "Remembering…", "undo": false}`, call(3)))
+	progress := message.AssistantStep{ThreadID: id, Turn: 1, Seq: 1, Lines: []json.RawMessage{running}}
+	e.step(userA, progress)
+	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "working" || len(got["entries"].([]any)) != 2 {
+		t.Fatal(got)
+	}
 	e.step(userA, parked)
-	e.step(userA, parked) // a republish: nothing twice
+	e.step(userA, parked)   // a republish: nothing twice
+	e.step(userA, progress) // a late progress step: dropped, its line stays done
 	got := e.call(userA, "GET", threads+"/"+id, nil, 200)
+	for _, x := range got["entries"].([]any) {
+		if l, ok := x.(map[string]any)["line"].(map[string]any); ok && l["status"] != "done" {
+			t.Fatal(got)
+		}
+	}
 	pending := got["pending"].(map[string]any)
 	if got["state"] != "waiting" || pending["turn"] != float64(1) || len(pending["actions"].([]any)) != 2 ||
 		pending["cards"].([]any)[0] != call(2) || len(got["entries"].([]any)) != 4 {

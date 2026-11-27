@@ -4451,7 +4451,12 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
 - **One input = one command.** Studio stores the input and writes `cmd.assistant.turn` (owner from its thread row,
   roles from the token, `tools` = `offered_tools`, `actions` = the screen's registered ones, the settings) in one
   transaction; pipelines answers with `evt.assistant.step`s; studio stores their text, lines and cards as entries and
-  sets the thread's `state`, `client_id` and `pending`. Only the tab `client_id` runs pending actions; its drawer
+  sets the thread's `state`, `client_id` and `pending`. From 1.97 a working turn also sends progress steps (done
+  false, nothing pending, no text): before each tool call that runs at once, its line `running` with a short present
+  label ("Making the board…"), and after the calls, their lines `done`; seq is the next step's, so studio stores the
+  lines (by id: a running line becomes its done line), leaves the thread's seq and state, and drops a progress step
+  once that seq is applied. The drawer's `Thinking… N s` starts again at each new line and hides under a running
+  one. Only the tab `client_id` runs pending actions; its drawer
   posts their `results`. A message to a chat parked on a tab that went away first resumes it with each pending
   action `did_not_run` (`the tab was closed`).
 - **Ids.** A call (a tool call, a screen action, a card) is `<thread_id>:<turn>:<n>`: `turn` counts the chat's

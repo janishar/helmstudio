@@ -2461,8 +2461,13 @@ function Drawer({ a }: { a: AssistantApi }) {
   const entries = a.view?.entries ?? [];
   const count = entries.length + Object.keys(a.local).length + (a.asking ? 1 : 0);
   // the Thinking start, kept here (above the closed-drawer return) so closing and reopening keeps the count; a new
-  // thread, actions running or the state leaving working start it again
-  const thinkId = a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
+  // thread, actions running, the state leaving working or a new step (API 1.97: a line starting or ending) start it
+  // again; under a running line it hides (the line's own spinner shows the step)
+  const lastLine = entries.at(-1)?.line;
+  const thinkId =
+    a.view?.thread.state === "working" && !a.running && lastLine?.status !== "running"
+      ? `${a.view.thread.id}:${entries.length}:${lastLine?.status ?? ""}`
+      : null;
   const [since, setSince] = useState<{ id: string; at: number } | null>(null);
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));

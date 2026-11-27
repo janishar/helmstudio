@@ -68,6 +68,10 @@ class Tools:
         return {"tool": req["tool"], "result": res}
 
 
+def is_progress(step: dict) -> bool:
+    return not step["done"] and not step["actions"] and not step["cards"]
+
+
 class Chat:
     """One chat: send inputs as studio would (the turn counter), read the steps as studio's projector would."""
 
@@ -154,11 +158,23 @@ class Chat:
         return await self.send({"kind": "answer", "card_id": card_id, "answer": answer})
 
     async def send(self, inp: dict, **kw) -> dict:
+        """The input's last step, with the lines of the progress steps before it as studio keeps them (by id)."""
         c = self.cmd(inp, **kw)
         await self.a.turn(c)
-        return self.steps()[-1] if self.steps() else {}
+        steps = self.steps(progress=True)
+        if not steps:
+            return {}
+        *before, last = steps
+        lines: dict = {}
+        for x in reversed(before):
+            if not is_progress(x):
+                break
+            lines = {**{line["id"]: line for line in x["lines"]}, **lines}
+        lines |= {line["id"]: line for line in last["lines"]}
+        return last | {"lines": list(lines.values())}
 
-    def steps(self) -> list[dict]:
+    def steps(self, progress: bool = False) -> list[dict]:
+        """The published steps; progress steps (API 1.97) only when asked."""
         out = [
             json.loads(d)
             for s, d, _ in self.js.sent
@@ -166,7 +182,7 @@ class Chat:
         ]
         for m in out:
             assert not schemas.message_errors(m), schemas.message_errors(m)
-        return [m["data"] for m in out]
+        return [m["data"] for m in out if progress or not is_progress(m["data"])]
 
     def asked(self) -> list[dict]:
         return [r["body"] for r in self.fake.requests if r["body"]]
@@ -573,10 +589,13 @@ async def test_the_per_message_caps(pool, fake):
     ]  # at most 4 calls an answer (providers.chat)
     c.script(*four, calls(("remember", {"kind": "project", "text": "nine"})), {"content": "Saved."})
     step = await c.say("remember these")
+    # API 1.97: the ninth's line ends failed
     assert step["caps"]["memory_writes"] == 8 and [ln["text"] for ln in step["lines"]] == [
-        f"Remembered: likes {i}" for i in range(8)
+        *(f"Remembered: likes {i}" for i in range(8)),
+        "Remembering",
     ]
-    assert all(ln["undo"] and ln["memory_id"] for ln in step["lines"])
+    assert all(ln["undo"] and ln["memory_id"] for ln in step["lines"][:8])
+    assert step["lines"][8]["status"] == "failed"
     assert "at most 8 memory writes" in c.asked()[-1]["messages"][1]["content"]
 
 
@@ -1358,7 +1377,10 @@ async def test_the_magic_director_is_read_after_a_magic_tool_elsewhere(pool, fak
     c = director_chat(pool, fake)
     c.script(calls(("show_board", {"board_id": BOARD})), {"content": "Read it."})
     step = await c.say("what is on my board?")
-    assert [x["text"] for x in step["lines"]] == ["Using skill: Magic director"]
+    assert [x["text"] for x in step["lines"]] == [
+        "Reading the board",
+        "Using skill: Magic director",
+    ]
     assert "Characters, props and settings first." in c.asked()[1]["messages"][1]["content"]
 
 
@@ -1429,7 +1451,9 @@ async def test_an_unknown_family_is_a_plain_error_to_the_model(pool, fake):
     c.tools.errors = {"read_model_guide": {"error": "no guide for nope", "code": "not_found"}}
     c.script(calls(("read_model_guide", {"family": "nope"})), {"content": "No such model."})
     step = await c.say("nope?")
-    assert step["error"] is None and not step["lines"]
+    assert step["error"] is None and [(x["status"], x["text"]) for x in step["lines"]] == [
+        ("failed", "Reading a model guide")
+    ]
     assert "no guide for nope" in json.dumps(c.asked()[1]["messages"])
 
 
@@ -1987,3 +2011,21 @@ async def test_cancel_runs_stops_at_once_with_its_line(pool, fake):
     }
     assert [r["tool"] for r in c.tools.asked] == ["cancel_runs"]
     assert not [e for e in step.get("cards") or []]
+
+
+async def test_a_call_that_runs_at_once_shows_its_line_running_then_done(pool, fake):
+    # API 1.97 (owner, 2026-11-28: "yes show each step in the panel"): progress steps with the next step's seq
+    c = Chat(pool, fake)
+    c.script(calls(("hosts", {})), {"content": "Two machines."})
+    await c.say("which machines?")
+    steps = c.steps(progress=True)
+    ids = [h["Nats-Msg-Id"] for s, _, h in c.js.sent if s.endswith(".step")]
+    assert [is_progress(x) for x in steps] == [True, True, False]
+    assert [x["seq"] for x in steps] == [1, 1, 1] and len(set(ids)) == 3
+    assert [(x["status"], x["text"]) for x in steps[0]["lines"]] == [
+        ("running", "Checking the machines…")
+    ]
+    assert [(x["status"], x["text"]) for x in steps[1]["lines"]] == [
+        ("done", "Checking the machines")
+    ]
+    assert steps[2]["done"] and not steps[2]["lines"]

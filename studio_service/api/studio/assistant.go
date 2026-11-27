@@ -1186,6 +1186,9 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 		if step.Seq <= t.StepSeq {
 			return nil
 		}
+		// API 1.97: a progress step (nothing pending, not done) carries the next step's seq: its lines only, the
+		// thread's seq and state stay
+		progress := !step.Done && len(step.Actions) == 0 && len(step.Cards) == 0
 		key := fmt.Sprintf("step:%d", step.Seq)
 		if text := strings.TrimSpace(step.Text); text != "" {
 			if _, err := putEntry(ctx, tx, t, key, step.Turn, "assistant", &step.Text, nil, nil, nil); err != nil {
@@ -1211,6 +1214,9 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 			if _, err := putEntry(ctx, tx, t, lineKey, step.Turn, "line", nil, raw, nil, nil); err != nil {
 				return err
 			}
+		}
+		if progress {
+			return nil
 		}
 		cardIDs := []string{}
 		for _, raw := range step.Cards {
