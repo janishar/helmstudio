@@ -3058,6 +3058,30 @@
   justify-content: center;
   gap: 4px;
 }
+/* the picked kind: a thin accent ring inside, as Magic's picked chips (the focus ring stays the outline outside); the
+   other tabs' orbs dimmed until hover or focus, their label at --t2, the dimmest text that keeps AA in every theme
+   (owner, 2026-11-27: "make selected one more differentiated from on active ones") */
+.ktab[aria-selected="true"] {
+  box-shadow:
+    inset 0 0 0 1px var(--a1),
+    0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent);
+}
+.ktab[aria-selected="false"] .ki {
+  opacity: 0.4;
+  filter: saturate(0.45);
+}
+.ktab .ki {
+  transition:
+    opacity 0.12s,
+    filter 0.12s;
+}
+.ktab[aria-selected="false"]:is(:hover, :focus-visible) {
+  color: var(--t1);
+}
+.ktab[aria-selected="false"]:is(:hover, :focus-visible) .ki {
+  opacity: 1;
+  filter: none;
+}
 .ki {
   width: 28px;
   height: 28px;

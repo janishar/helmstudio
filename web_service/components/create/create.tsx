@@ -2682,13 +2682,15 @@ export function Create({
               // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width; the cards of a
               // video or audio workflow too, one width per line however they wrap (alpha.2 item 16)
               <div
-                className={
+                // empty:hidden: a row whose tiles all render nothing (a song's, until the prompt has an @mention) takes
+                // no place and no gap (owner, 2026-11-27: "switch between audio, video etc make blank spaces")
+                className={`empty:hidden ${
                   empty
                     ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
                     : card
                       ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:max-w-none [&>*]:min-w-0"
                       : "flex flex-wrap items-center gap-2"
-                }
+                }`}
               >
                 {scriptField && linesKey && (
                   <CastTile
@@ -3795,8 +3797,11 @@ export function KindOrb({ kind }: { kind: Kind }) {
 }
 
 /** The kind tabs beside the composer (docs/mock/TextToVideo.dc.html "Output kind", CreateMusicSound.dc.html: Image,
- * Video, Voice, Music, Sound): which kind's workflows the model chip offers. One fixed size (the owner, 2026-11-25:
- * the Image composer's), so switching kinds never resizes it. */
+ * Video, Voice, Music, Sound): which kind's workflows the model chip offers. At least the Image composer's height (the
+ * owner, 2026-11-25), so switching kinds never resizes a short composer; a taller one (a script, many tiles) stretches
+ * the tabs as the boards do, leaving no blank under them. The picked tab: a thin accent ring, its orb and label at full
+ * strength, the others' orbs dimmed until hover or focus (owner, 2026-11-27: "make selected one more differentiated";
+ * .ktab in globals.css). */
 function MediaSwitch({
   kinds,
   kind,
@@ -3810,7 +3815,7 @@ function MediaSwitch({
     <div
       role="tablist"
       aria-label="Output kind"
-      className="panel flex shrink-0 flex-col gap-1.5 self-start p-1.5"
+      className="panel flex shrink-0 flex-col gap-1.5 p-1.5"
     >
       {kinds.map((m) => (
         <button
@@ -3819,7 +3824,7 @@ function MediaSwitch({
           role="tab"
           aria-selected={m === kind}
           onClick={() => m !== kind && onPick(m)}
-          className="bevel ktab h-[63px] w-16 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+          className="bevel ktab min-h-[63px] w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:font-bold aria-selected:text-t1"
         >
           <KindOrb kind={m} />
           {KIND_LABEL[m]}

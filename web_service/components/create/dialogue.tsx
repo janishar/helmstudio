@@ -201,8 +201,9 @@ function Chip({ s, bad, onClick }: { s: Speaker; bad: boolean; onClick?: () => v
   );
 }
 
-/** The script's fixed height, as the prompt keeps its own (owner, 2026-11-27: "same is the case with voice"): 8 lines
- * of 22px, in both views; more scrolls inside (the hint rows too) and Expand opens it big. */
+/** The script's least height, as the prompt keeps its own (owner, 2026-11-27: "same is the case with voice"): 8 lines
+ * of 22px, in both views, then the composer's free height (grow; never its text); more scrolls inside (the hint rows
+ * too) and Expand opens it big. */
 export const SCRIPT_HEIGHT = 176;
 
 /** The script: the board's lines while not editing (click to edit), a mentions textarea while editing. `errors` are
@@ -244,6 +245,7 @@ export function ScriptEditor({
           id={id}
           expand="Script"
           autoFocus={editing}
+          wrapClassName="flex grow flex-col"
           style={{ height: SCRIPT_HEIGHT }}
           maxLength={f.param.max}
           placeholder={
@@ -260,7 +262,7 @@ export function ScriptEditor({
               e.currentTarget.form?.requestSubmit();
             if (e.key === "Escape") setEditing(false);
           }}
-          className="mono w-full resize-none border-0 bg-transparent text-[14px] leading-[22px] text-t1 outline-0 placeholder:text-t2"
+          className="mono w-full shrink-0 grow resize-none border-0 bg-transparent text-[14px] leading-[22px] text-t1 outline-0 placeholder:text-t2"
         />
         {f.param.help && !value.trim() && (
           <span className="text-[12px] text-t2">{f.param.help}</span>
@@ -271,11 +273,11 @@ export function ScriptEditor({
   const nums = new Map<number, number>();
   for (const ln of lines) if (!("blank" in ln)) nums.set(ln.line, nums.size + 1);
   return (
-    <div className="group relative min-w-0">
+    <div className="group relative flex min-w-0 grow flex-col">
       <ol
         ref={list}
         aria-label="Script"
-        className="m-0 flex list-none flex-col gap-1.5 overflow-y-auto py-1 pr-9 pl-1.5 text-[15px] leading-[22px] [&>li]:shrink-0"
+        className="m-0 flex shrink-0 grow list-none flex-col gap-1.5 overflow-y-auto py-1 pr-9 pl-1.5 text-[15px] leading-[22px] [&>li]:shrink-0"
         style={{ height: SCRIPT_HEIGHT, scrollbarGutter: "stable" }}
         onClick={(e) => {
           if (!(e.target as HTMLElement).closest("button")) setEditing(true);

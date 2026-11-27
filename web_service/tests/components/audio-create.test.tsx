@@ -679,8 +679,11 @@ describe("Create's Music and Sound (frames 1-5)", () => {
     lyrics.setSelectionRange(10, 10);
     fireEvent.click(within(composer).getByRole("button", { name: "[chorus]" }));
     expect(lyrics.value).toBe("first line\n[chorus]\n");
-    // the lyrics keep a fixed 6 lines and scroll, and Expand opens them big, as the prompt (owner, 2026-11-27)
+    // the lyrics keep 6 lines the least and scroll, and Expand opens them big, as the prompt (owner, 2026-11-27);
+    // they take the composer's free height (grow, never their text's)
     expect(lyrics.style.height).toBe("126px");
+    expect(lyrics.className).toMatch(/\bgrow\b/);
+    expect(lyrics.className).toMatch(/\bshrink-0\b/);
     fireEvent.click(within(lyrics.parentElement!).getByRole("button", { name: "Expand" }));
     const big = await screen.findByRole("dialog", { name: "Lyrics" });
     const bigText = within(big).getByRole("textbox", { name: "Lyrics" }) as HTMLTextAreaElement;
@@ -715,6 +718,69 @@ describe("Create's Music and Sound (frames 1-5)", () => {
       "music.instrumental": true,
     });
     expect(bodies[0].inputs).not.toHaveProperty("music.lyrics");
+  });
+
+  it("every kind: the main text box takes the composer's free height, no empty rows; the picked tab stands out", async () => {
+    // owner, 2026-11-27: "text only in two line it waster bottom empty area", "switch between audio, video etc make
+    // blank spaces due to other modes", "make selected one more differentiated from on active ones"
+    serveMusic();
+    open([], [run({ status: "queued" })]);
+    const tabs = screen.getByRole("tablist", { name: "Output kind" });
+    // the tabs fill the column beside the composer (63px the least each), so a taller composer leaves no blank
+    expect(tabs.className).not.toContain("self-start");
+    const composer = screen.getByRole("form", { name: "Composer" });
+    const grows = (el: Element) =>
+      el.classList.contains("grow") && el.classList.contains("shrink-0");
+    /** the composer's direct child that holds `el` */
+    const row = (el: Element) => {
+      let n = el;
+      while (n.parentElement !== composer) n = n.parentElement!;
+      return n;
+    };
+    for (const [kind, box] of [
+      ["Image", () => within(composer).getByRole("combobox", { name: /Prompt|text/i })],
+      ["Voice", () => within(composer).getByPlaceholderText("Type the words to speak")],
+      ["Music", () => within(composer).getByRole("textbox", { name: "Lyrics" })],
+      ["Sound", () => within(composer).getByPlaceholderText("Describe the sound")],
+    ] as const) {
+      fireEvent.click(within(tabs).getByRole("tab", { name: kind }));
+      await waitFor(() =>
+        expect(within(tabs).getByRole("tab", { name: kind }).getAttribute("aria-selected")).toBe(
+          "true",
+        ),
+      );
+      const el = await waitFor(box);
+      // the box grows from its fixed height (never shrinks below it), and so does every box up to the composer
+      expect(grows(el), kind).toBe(true);
+      for (let n = el.parentElement!; n !== composer; n = n.parentElement!)
+        expect(/\b(grow|grow-\[2\]|flex-1)\b/.test(n.className), `${kind}: ${n.className}`).toBe(
+          true,
+        );
+      expect(row(el).className).toMatch(/\bflex-col\b/);
+      // a tiles row with nothing in it takes no place (Music has none until an @mention)
+      for (const c of composer.children)
+        if (!c.childNodes.length && c.tagName === "DIV")
+          expect(c.className, kind).toContain("empty:hidden");
+      // the picked tab: bold, the ring is CSS on aria-selected (globals.css .ktab); every tab at least 63px, growing
+      for (const t of within(tabs).getAllByRole("tab")) {
+        expect(t.className).toContain("min-h-[63px]");
+        expect(t.className).toContain("flex-1");
+        expect(t.getAttribute("aria-selected")).toBe(String(t.textContent === kind));
+      }
+    }
+    // Music: the style keeps its share (flex-1), the lyrics take twice it
+    fireEvent.click(within(tabs).getByRole("tab", { name: "Music" }));
+    const lyricsBox = await within(composer).findByRole("textbox", { name: "Lyrics" });
+    expect(row(lyricsBox).className).toContain("grow-[2]");
+    const style = within(composer).getByPlaceholderText("Style: genre, instruments, voice, mood");
+    expect(row(style).className).toContain("flex-1");
+    // Instrumental hides the lyrics: their box no longer grows
+    fireEvent.click(within(composer).getByRole("switch", { name: "Instrumental" }));
+    await waitFor(() =>
+      expect(within(composer).queryByRole("textbox", { name: "Lyrics" })).toBeNull(),
+    );
+    const bar = within(composer).getByRole("group", { name: "Lyrics tags" });
+    expect(bar.parentElement!.className).not.toContain("grow-[2]");
   });
 
   it("a song on the stage: its badge, sections, the cover tile; Repaint picks a range, Extend runs from its popup", async () => {

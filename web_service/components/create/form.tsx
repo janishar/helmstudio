@@ -75,7 +75,9 @@ function FieldError({ k, errors }: { k: string; errors: Record<string, string> }
   ) : null;
 }
 
-/** The multi-line text params (the prompt), borderless inside the composer, as in the mock; ⌘/Ctrl+Enter submits the form. */
+/** The multi-line text params (the prompt), borderless inside the composer, as in the mock; ⌘/Ctrl+Enter submits the form.
+ * Each keeps its 2 lines as the least and takes the composer's free height (grow), so a short form leaves no empty
+ * area under it (owner, 2026-11-27: "text only in two line it waster bottom empty area"); its text scrolls inside. */
 export function TextFields({
   fields,
   raws,
@@ -115,6 +117,7 @@ export function TextFields({
               : (f.param.label ?? f.param.name)
           }
           rows={2}
+          wrapClassName="flex grow flex-col"
           expand={
             f.param.name === "text"
               ? spoken
@@ -122,7 +125,7 @@ export function TextFields({
                 : "Prompt"
               : (f.param.label ?? f.param.name)
           }
-          className="w-full resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 outline-0 placeholder:text-t2"
+          className="w-full shrink-0 grow resize-none border-0 bg-transparent text-[15px] leading-[22px] text-t1 outline-0 placeholder:text-t2"
           value={String(rawOf(f, raws))}
           aria-invalid={!!errors[f.key] || undefined}
           aria-describedby={errors[f.key] ? idOf(f.key) + "-err" : undefined}

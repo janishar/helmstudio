@@ -447,7 +447,10 @@ test("j15 make a song: Music, a style and tagged lyrics, Generate; its sections 
   await expect(page.getByText(/· 0:10 · 48 kHz stereo/).first()).toBeVisible();
   const sections = page.getByRole("group", { name: "Sections" });
   await expect(sections.getByRole("button")).toHaveCount(2);
-  // the drawer shows the plan the run wrote
+  // the drawer shows the plan the run wrote. j14 closed it and this browser remembers a closed drawer (alpha.5 item
+  // 11), as a person's would: open it with All settings, as they would
+  const sliders = composer().getByRole("button", { name: "All settings" });
+  if ((await sliders.getAttribute("aria-expanded")) === "false") await sliders.click();
   await expect(
     page.getByRole("complementary", { name: "Inspector" }).getByText(/90 BPM/),
   ).toBeVisible();

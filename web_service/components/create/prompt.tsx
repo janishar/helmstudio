@@ -518,7 +518,11 @@ export function LyricsBox({
   };
   const text = "text-[14px] leading-[21px] whitespace-pre-wrap break-words";
   return (
-    <div className="flex flex-col gap-1.5 rounded-[10px] border border-s4 bg-s1 px-2.5 py-2">
+    // the lyrics take twice the style's share of the composer's free height (grow-2), 6 lines the least; not while
+    // Instrumental hides them
+    <div
+      className={`flex flex-col gap-1.5 rounded-[10px] border border-s4 bg-s1 px-2.5 py-2 ${hidden ? "" : "grow-[2]"}`}
+    >
       <div
         role="group"
         aria-label={`${label} tags`}
@@ -561,7 +565,7 @@ export function LyricsBox({
         )}
       </div>
       {!hidden && (
-        <div className="group relative">
+        <div className="group relative flex grow flex-col">
           {/* the tag lines in the accent: a layer under a see-through textarea, same font and gutter so the lines
               wrap alike; it follows the textarea's scroll (up to 10 lines, then it scrolls; Expand opens it big) */}
           <div
@@ -580,7 +584,7 @@ export function LyricsBox({
             ref={ta}
             id={id}
             aria-label={label}
-            // a fixed 6 lines, as the prompt: more scrolls (the layer follows) and Expand opens it big
+            // 6 lines the least, then the composer's free height: more scrolls (the layer follows), Expand opens it big
             rows={6}
             value={value}
             placeholder="[verse] the words, a line each"
@@ -599,7 +603,7 @@ export function LyricsBox({
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
                 e.currentTarget.form?.requestSubmit();
             }}
-            className={`${text} relative block w-full resize-none overflow-y-auto border-0 bg-transparent p-0 pr-9 text-transparent caret-t1 outline-0 placeholder:text-t2`}
+            className={`${text} relative block w-full shrink-0 grow resize-none overflow-y-auto border-0 bg-transparent p-0 pr-9 text-transparent caret-t1 outline-0 placeholder:text-t2`}
           />
           <Expand
             title={label}

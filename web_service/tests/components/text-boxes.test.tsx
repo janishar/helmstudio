@@ -62,6 +62,11 @@ describe("the dialogue script keeps a fixed height", () => {
     expect(SCRIPT_HEIGHT).toBe(176);
     expect(list.style.height).toBe("176px");
     expect(list.className).toContain("overflow-y-auto");
+    // 176px the least: it takes the composer's free height (grow), never its text's (owner, 2026-11-27: "text only in
+    // two line it waster bottom empty area")
+    expect(list.className).toMatch(/\bshrink-0\b/);
+    expect(list.className).toMatch(/\bgrow\b/);
+    expect(list.parentElement!.className).toMatch(/\bgrow\b/);
     // the hint row scrolls inside the same box
     expect(within(list).getByText(/^Line 3: write @name/)).toBeTruthy();
     const big = expand(list.parentElement!, "Script");
@@ -79,6 +84,8 @@ describe("the dialogue script keeps a fixed height", () => {
     const box = screen.getByRole("combobox", { name: "Script" }) as HTMLTextAreaElement;
     expect(box.style.height).toBe("176px");
     expect(box.getAttribute("rows")).toBeNull();
+    expect(box.className).toMatch(/\bgrow\b/);
+    expect(box.parentElement!.className).toMatch(/\bgrow\b/);
   });
 
   it("the @ colour layer is as tall as the box (a block textarea, no inline gap), so it scrolls as far", () => {

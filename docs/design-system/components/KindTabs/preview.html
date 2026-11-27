@@ -4,8 +4,12 @@
 <head><meta charset="utf-8"><title>KindTabs · preview</title>
 <style>
 .kts{display:flex;flex-direction:column;gap:6px;padding:6px;width:max-content}
-.kts .ktab{height:63px;width:64px;padding:0;border-radius:12px;border:0;background:transparent;color:var(--t2);font:600 12px Inter,sans-serif}
-.kts .ktab[aria-selected="true"]{background:var(--s5);color:var(--t1)}
+.kts .ktab{min-height:63px;width:64px;padding:0;border-radius:12px;border:0;background:transparent;color:var(--t2);font:600 12px Inter,sans-serif}
+.kts .ktab[aria-selected="true"]{background:var(--s5);color:var(--t1);font-weight:700;box-shadow:inset 0 0 0 1px var(--a1),0 3px 6px color-mix(in srgb,var(--shd) 35%,transparent)}
+.kts .ktab[aria-selected="false"] .ki{opacity:.4;filter:saturate(.45)}
+.kts .ktab .ki{transition:opacity .12s,filter .12s}
+.kts .ktab[aria-selected="false"]:is(:hover,:focus-visible){color:var(--t1)}
+.kts .ktab[aria-selected="false"]:is(:hover,:focus-visible) .ki{opacity:1;filter:none}
 .ktab{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 0}
 .ktab .ki{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto;background:radial-gradient(circle at 34% 30%,color-mix(in srgb,var(--k) 30%,#fff) 0,var(--k) 42%,color-mix(in srgb,var(--k) 45%,#000) 100%);box-shadow:0 0 0 3px color-mix(in srgb,var(--k) 16%,transparent),0 0 14px 2px color-mix(in srgb,var(--k) 40%,transparent)}.ktab .ki svg{width:14px;height:14px}.ktab .ki.k-video{--k:#ff9a6e}.ktab .ki.k-image{--k:#b8abff}.ktab .ki.k-board{--k:#e8d88a}.ktab .ki.k-voice,.ktab .ki.k-dialogue{--k:#f2b84b}.ktab .ki.k-sound{--k:#7cc7f2}.ktab .ki.k-music{--k:#d59bf6;border-radius:50%;background:radial-gradient(circle,#e9e2f0 0 3px,#0d0b10 3px 4px,transparent 4px),repeating-radial-gradient(circle,#141018 0 1.5px,#2a2236 1.5px 2.5px);box-shadow:0 0 0 3px #d59bf633,0 0 14px 2px #d59bf666}.ktab .ki.k-music svg{display:none}
 </style></head>

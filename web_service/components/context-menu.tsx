@@ -137,13 +137,19 @@ function MenuRoot({ o }: { o: Open }) {
     (o.kbd && first ? first : (list ?? m)).focus({ preventScroll: true });
     const outside = (e: Event) => !o.el.contains(e.target as Node) && closeMenu();
     const gone = () => closeMenu();
+    // a scroll queued before the menu opened (the strip scrolled to the tile right-clicked) is dispatched in the next
+    // frame, ahead of its animation callbacks: only a scroll after that closes the menu
+    let armed = false;
+    const arm = requestAnimationFrame(() => (armed = true));
+    const scrolled = (e: Event) => armed && outside(e);
     addEventListener("pointerdown", outside, true);
-    addEventListener("scroll", outside, true);
+    addEventListener("scroll", scrolled, true);
     addEventListener("blur", gone);
     addEventListener("resize", gone);
     return () => {
+      cancelAnimationFrame(arm);
       removeEventListener("pointerdown", outside, true);
-      removeEventListener("scroll", outside, true);
+      removeEventListener("scroll", scrolled, true);
       removeEventListener("blur", gone);
       removeEventListener("resize", gone);
     };

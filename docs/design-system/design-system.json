@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T10:30:00Z",
+  "at": "2026-11-27T08:20:00Z",
   "via": "Claude Code",
-  "note": "The @ colour layer under the prompt and the script is as tall as its textarea (display: block), so it scrolls as far; PromptBox (owner, 2026-11-27: check all the prompt and text section in create)"
+  "note": "Create's kind tabs: the picked one has a thin a1 ring, its orb and label at full strength, the others' orbs dimmed until hover or focus; tabs 63px at the least, stretching with a taller composer. The composer's main text box (prompt, script, lyrics) takes its free height: KindTabs, PromptBox, LyricsBox (owner, 2026-11-27: make selected one more differentiated; text only in two line it waster bottom empty area)"
  }
 }
