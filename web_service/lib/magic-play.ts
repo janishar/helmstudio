@@ -9,7 +9,16 @@ export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
   const pieces = b.request.turns ? turnTakes(b, takes, d) : [shown(b, takes)];
   // a sound made from a shot's video follows the shot: no Loop (API 1.90)
   const loop = !!b.request.loop && !b.request.turns && !b.request.from;
-  const out: { id: string; take_id: string; in: number; out: number; at: number }[] = [];
+  const out: {
+    id: string;
+    take_id: string;
+    in: number;
+    out: number;
+    at: number;
+    gain_db?: number;
+  }[] = [];
+  // the block's level is each clip's gain, as studio's Send (API 1.101)
+  const gain = b.gain_db ? { gain_db: b.gain_db } : {};
   let at = b.at;
   const stop = end(b);
   for (let i = 0; i < pieces.length && at < stop; i++) {
@@ -18,7 +27,14 @@ export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
     // a take of unknown length fills the block, as before
     const n = Math.min(stop - at, t.duration ? Math.floor(t.duration * fps + 1e-6) : stop - at);
     if (n < 1) break;
-    out.push({ id: out.length ? `${b.id}.${out.length}` : b.id, take_id: t.id, in: 0, out: n / fps, at: at / fps });
+    out.push({
+      id: out.length ? `${b.id}.${out.length}` : b.id,
+      take_id: t.id,
+      in: 0,
+      out: n / fps,
+      at: at / fps,
+      ...gain,
+    });
     at += n;
     if (loop && out.length < 100) i = -1; // ponytail: 100 clips a block, as studio's Send
   }
@@ -33,7 +49,9 @@ export function pictures(d: Doc): Block[] {
     return l ? inLane(d, l.id) : [];
   };
   const shots = lane("shots");
-  const frames = lane("storyboard").filter((f) => !shots.some((s) => s.at < end(f) && f.at < end(s)));
+  const frames = lane("storyboard").filter(
+    (f) => !shots.some((s) => s.at < end(f) && f.at < end(s)),
+  );
   return [...shots, ...frames].sort((a, b) => a.at - b.at);
 }
 
@@ -72,7 +90,12 @@ export function toSequence(d: Doc, takes: Takes, dissolves = true) {
       const all = b.request.turns ? turnTakes(b, takes, d) : [shown(b, takes)];
       return all.flatMap((take) =>
         take
-          ? [[take.id, { kind, duration_s: Math.max(s(b.length), take.duration ?? 0), has_audio: false }]]
+          ? [
+              [
+                take.id,
+                { kind, duration_s: Math.max(s(b.length), take.duration ?? 0), has_audio: false },
+              ],
+            ]
           : [],
       );
     }),

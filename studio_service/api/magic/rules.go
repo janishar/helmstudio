@@ -25,7 +25,9 @@ var (
 	uuidPattern = regexp.MustCompile(`^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`)
 	// Kinds are a block's kinds; Roles a lane's.
 	Kinds = []string{"frame", "image", "video", "voice", "music", "sound"}
-	Roles = []string{"storyboard", "shots", "voice", "music", "sound", "free"}
+	// AudioKinds are the kinds that may carry a level (gain_db, API 1.101)
+	AudioKinds = []string{"voice", "music", "sound"}
+	Roles      = []string{"storyboard", "shots", "voice", "music", "sound", "free"}
 	// requestFields are a MagicRequest's
 	requestFields = []string{"kind", "model", "prompt", "line", "turns", "voice", "style", "from", "refs", "advanced", "first",
 		"last", "width", "height", "seed", "count", "voice_id", // API 1.81: first … voice_id
@@ -124,6 +126,14 @@ func Check(d Doc) string {
 		}
 		if b.Pinned != nil && !slices.Contains(b.Takes, *b.Pinned) {
 			return where + ": pinned is one of its takes"
+		}
+		if b.GainDB != nil {
+			switch {
+			case !slices.Contains(AudioKinds, b.Kind):
+				return where + ": gain_db is for voice, music and sound blocks"
+			case *b.GainDB < -60 || *b.GainDB > 12:
+				return where + ": gain_db is -60 to 12"
+			}
 		}
 		if k, _ := b.Request["kind"].(string); !slices.Contains(Kinds, k) {
 			return where + ": request.kind must be one of " + strings.Join(Kinds, ", ")
@@ -387,6 +397,7 @@ type AgentBlock struct {
 	TiedTo    []string     `json:"tied_to"`
 	Effects   []string     `json:"effects"`
 	FromFrame *string      `json:"from_frame,omitempty"`
+	GainDB    float64      `json:"gain_db,omitempty"` // API 1.101: an audio block's level
 	// Request is its standard request as stored (API 1.88): a block op's request replaces it whole, so an agent sends
 	// it back with its changes
 	Request map[string]any `json:"request"`
@@ -483,6 +494,9 @@ func AgentView(d Doc) Agent {
 		ab.Line, _ = b.Request["line"].(string)
 		if b.Note != nil {
 			ab.Note = *b.Note
+		}
+		if b.GainDB != nil {
+			ab.GainDB = *b.GainDB
 		}
 		for _, l := range d.Links {
 			if l.Block == b.ID {

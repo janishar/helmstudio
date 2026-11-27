@@ -28,6 +28,7 @@ import {
   inLane,
   joins,
   secs,
+  dbText,
   sectionsOf,
   shown,
   snap,
@@ -809,6 +810,12 @@ function BlockView({
         {b.kind === "voice" || b.kind === "music" ? null : chips}
         {fx}
         {(b.kind === "voice" || b.kind === "music" || b.kind === "sound") && tieMark}
+        {/* API 1.101: a level that is not 0 dB */}
+        {!!b.gain_db && (
+          <span className="mono text-[10px] text-t2" title="Level">
+            {dbText(b.gain_db)}
+          </span>
+        )}
         {(b.kind === "music" || (b.kind === "sound" && b.request.model)) && (
           <span className="text-[10px] text-t2">
             {act.modelName?.(b.kind, b.request.model) ?? b.request.model}

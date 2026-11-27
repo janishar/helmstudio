@@ -19,6 +19,7 @@ import { EstimateLine, RequestForm, useVariant } from "@/components/magic/reques
 import { SoundMark, soundLook } from "@/components/magic/sound-mark";
 import { estText } from "@/lib/magic-fixture";
 import {
+  AUDIO_KINDS,
   clock,
   end,
   shown,
@@ -198,6 +199,51 @@ function CompareBody({ a, b }: { a: Act; b: Block }) {
   );
 }
 
+/** An audio block's level (API 1.101): a dB slider and its number, -60 to 12 as a Timeline clip's gain; Play and
+ * Send use it. Saved when let go. */
+function Level({ a, b }: { a: Act; b: Block }) {
+  const [db, setDb] = useState(b.gain_db ?? 0);
+  const commit = (v: number) => {
+    const n = Math.min(12, Math.max(-60, Number.isFinite(v) ? v : 0));
+    setDb(n);
+    if (n !== (b.gain_db ?? 0)) a.edit({ op: "block", id: b.id, set: { gain_db: n } });
+  };
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h3 className="m-0 text-[13px]">Level</h3>
+      <div className="flex items-center gap-2">
+        <input
+          type="range"
+          aria-label="Level in decibels"
+          className="grow"
+          min={-60}
+          max={12}
+          step={1}
+          value={db}
+          onChange={(e) => setDb(Number(e.target.value))}
+          onPointerUp={(e) => commit(Number(e.currentTarget.value))}
+          onKeyUp={(e) => commit(Number(e.currentTarget.value))}
+        />
+        <span className="mono flex items-baseline gap-1 text-[13px]">
+          <input
+            type="number"
+            aria-label="Level, dB"
+            className="in mono w-14 px-1.5 py-0.5 text-right"
+            min={-60}
+            max={12}
+            step={0.5}
+            value={db}
+            onChange={(e) => setDb(Number(e.target.value))}
+            onBlur={(e) => commit(Number(e.target.value))}
+            onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+          />
+          dB
+        </span>
+      </div>
+    </div>
+  );
+}
+
 function Body({
   act: a,
   b,
@@ -338,6 +384,7 @@ function Body({
               }
             />
           </div>
+          {AUDIO_KINDS.includes(b.kind) && <Level a={a} b={b} />}
           <div className="flex flex-col gap-1.5">
             <h3 className="m-0 text-[13px]">Run history</h3>
             {runs.length ? (

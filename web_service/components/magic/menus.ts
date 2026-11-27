@@ -45,6 +45,8 @@ import {
   Timer,
   Trash2,
   Unlink,
+  Volume1,
+  Volume2,
   WandSparkles,
   X,
   type LucideIcon,
@@ -62,6 +64,7 @@ import {
 } from "@/components/magic/icons";
 import {
   clock,
+  dbText,
   end,
   freshId,
   inLane,
@@ -267,6 +270,26 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
     onPick: () => a.edit({ op: "unlink", block: b.id }),
   };
   const title = b.name;
+  // API 1.101: an audio block's level, 3 dB a step, -60 to 12 as a Timeline clip's gain
+  const db = b.gain_db ?? 0;
+  const gain = (v: number) => () => a.edit({ op: "block", id: b.id, set: { gain_db: v } });
+  const level: Item[] = [
+    "-",
+    {
+      label: "Louder (+3 dB)",
+      icon: Volume2,
+      keys: db ? dbText(db) : undefined,
+      off: db >= 12 ? "At +12 dB" : undefined,
+      onPick: gain(Math.min(12, db + 3)),
+    },
+    {
+      label: "Quieter (−3 dB)",
+      icon: Volume1,
+      off: db <= -60 ? "At −60 dB" : undefined,
+      onPick: gain(Math.max(-60, db - 3)),
+    },
+    { label: "Reset level", icon: RotateCcw, off: db ? undefined : "At 0 dB", onPick: gain(0) },
+  ];
   if (b.kind === "voice")
     return {
       title,
@@ -293,6 +316,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
                 })),
               off: d.assets.some((x) => x.voice_id) ? undefined : "No asset has a voice yet",
             },
+        ...level,
         "-",
         tiedTo
           ? {
@@ -332,6 +356,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
           })),
           off: a.models?.("music").length ? undefined : "No music model on any host",
         },
+        ...level,
         "-",
         tie,
         !!link && { label: "Fit to shots", icon: MoveHorizontal, onPick: () => fit(a, b) },
@@ -393,6 +418,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
               set: { request: { ...b.request, loop: b.request.loop ? undefined : true } },
             }),
         },
+        ...level,
         "-",
         tie,
         unlink,

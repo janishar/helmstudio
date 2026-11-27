@@ -131,6 +131,10 @@ describe("a block's menu, by kind", () => {
       "Play",
       "Voice",
       "-",
+      "Louder (+3 dB)",
+      "Quieter (−3 dB)",
+      "Reset level",
+      "-",
       "Go to Shot 2",
       "Fit to shot",
       "Unlink",
@@ -155,6 +159,10 @@ describe("a block's menu, by kind", () => {
       "Run",
       "Play",
       "Model",
+      "-",
+      "Louder (+3 dB)",
+      "Quieter (−3 dB)",
+      "Reset level",
       "-",
       "Tie to",
       "Fit to shots",
@@ -446,6 +454,17 @@ describe("the gaps' menus", () => {
     a.takes[s2.takes[1]] = { ...a.takes[s2.takes[0]], id: s2.takes[1] };
     item(blockMenu(a, s2).items, "Compare takes").onPick!();
     expect(compare).toHaveBeenCalledWith("s2");
+  });
+  it("an audio block's level: Louder, Quieter 3 dB a step, Reset (API 1.101)", () => {
+    const a = actOn();
+    const x2 = block(a.doc, "x2");
+    expect(item(blockMenu(a, x2).items, "Reset level").off).toBe("At 0 dB");
+    item(blockMenu(a, x2).items, "Quieter (−3 dB)").onPick!();
+    expect(a.edit).toHaveBeenLastCalledWith({ op: "block", id: "x2", set: { gain_db: -3 } });
+    x2.gain_db = 12;
+    expect(item(blockMenu(a, x2).items, "Louder (+3 dB)").off).toBe("At +12 dB");
+    item(blockMenu(a, x2).items, "Reset level").onPick!();
+    expect(a.edit).toHaveBeenLastCalledWith({ op: "block", id: "x2", set: { gain_db: 0 } });
   });
   it("a sound's Loop toggles it; off for a sound from a shot's video", () => {
     const a = actOn();

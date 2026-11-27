@@ -54,6 +54,10 @@ export type Framing = {
   angle?: "eye" | "low" | "high";
   move?: "still" | "push_in" | "pan" | "follow";
 };
+/** The kinds that carry a level (gain_db, API 1.101). */
+export const AUDIO_KINDS: readonly Kind[] = ["voice", "music", "sound"];
+/** A level as the block's badge and menu say it: "−6 dB", "+3 dB" (a true minus sign). */
+export const dbText = (db: number) => `${db > 0 ? "+" : db < 0 ? "−" : ""}${Math.abs(db)} dB`;
 /** An effect badge; baked when sent. */
 export type Effect = { name: string; params?: Record<string, number | string>; off?: boolean };
 export type Block = {
@@ -71,6 +75,8 @@ export type Block = {
   effects: Effect[];
   /** a shot made from a storyboard frame */
   from_frame?: string;
+  /** an audio block's level in dB (API 1.101; -60..12, absent = 0), sent onto its Timeline clips */
+  gain_db?: number;
 };
 /** A voice or music block tied to a shot, or to a run of shots (music stretches with the run). */
 export type Link = { block: string; to: string[] };
@@ -138,7 +144,10 @@ export type Op =
       op: "block";
       id: string;
       /** pinned null unpins (an absent key is no change once sent as JSON) */
-      set: Partial<Pick<Block, "name" | "note" | "request">> & { pinned?: string | null };
+      set: Partial<Pick<Block, "name" | "note" | "request">> & {
+        pinned?: string | null;
+        gain_db?: number | null;
+      };
     }
   | { op: "lane_add"; lane: Omit<Lane, "id"> & { id?: string }; after?: string }
   | { op: "lane"; id: string; set: Partial<Omit<Lane, "id">> }
@@ -484,6 +493,7 @@ export function apply(doc: Doc, op: Op): Applied {
       if (!b) return { error: "That block is gone." };
       Object.assign(b, structuredClone(op.set));
       if ("pinned" in op.set && !op.set.pinned) delete b.pinned;
+      if ("gain_db" in op.set && !op.set.gain_db) delete b.gain_db; // 0 or null: no level
       return { doc: d };
     }
     case "lane_add": {

@@ -212,3 +212,31 @@ func TestBuildSendTurnsAndLoop(t *testing.T) {
 func ftoa(f float64) string {
 	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", f), "0"), ".")
 }
+
+// API 1.101: an audio block's level goes onto its clips' gain; the board rules keep it to audio kinds and -60..12 dB.
+func TestBlockLevel(t *testing.T) {
+	d := sendBoard()
+	for _, b := range d.Blocks {
+		b.Request = map[string]any{"kind": b.Kind}
+	}
+	r := Apply(d, Op{Name: "block", Raw: []byte(`{"op":"block","id":"v1","set":{"gain_db":-6}}`)})
+	if r.Error != "" || Check(r.Doc) != "" {
+		t.Fatalf("set: %q %q", r.Error, Check(r.Doc))
+	}
+	out := BuildSend(r.Doc, sendTakes(), nil, nil, true)
+	if c := out.Doc.Tracks[1].Clips[0]; c.GainDB == nil || *c.GainDB != -6 {
+		t.Fatalf("clip gain: %v", c.GainDB)
+	}
+	if av := AgentView(r.Doc); av.Blocks[5].GainDB != -6 {
+		t.Fatalf("agent view: %v", av.Blocks[5])
+	}
+	for raw, want := range map[string]string{
+		`{"op":"block","id":"s1","set":{"gain_db":-6}}`: "gain_db is for voice, music and sound blocks",
+		`{"op":"block","id":"v1","set":{"gain_db":20}}`: "gain_db is -60 to 12",
+	} {
+		r := Apply(d, Op{Name: "block", Raw: []byte(raw)})
+		if r.Error != "" || !strings.Contains(Check(r.Doc), want) {
+			t.Errorf("%s: %q %q", raw, r.Error, Check(r.Doc))
+		}
+	}
+}

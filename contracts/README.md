@@ -4064,7 +4064,10 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   block), `delete` (insert closes the gap), `duplicate` (copies after the group, unpinned, `<name> copy`), `split`
   (the join after it follows the second part), `link` / `unlink`, `transition` (exactly one of `between`, `start`,
   `end`; `cut` takes it away; a new one's length is 0.5 s for a dissolve or wipe and 1 s for a fade or morph, in whole
-  frames), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins),
+  frames), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins; from
+  1.101 `gain_db`, a voice, music or sound block's level, -60 to 12 dB as a Timeline clip's gain, 0 or null takes it off;
+  another kind is the board rules' 422 `blocks[<i>]: gain_db is for voice, music and sound blocks`; Play applies it and
+  Send to Timeline puts it on the block's clips' `gain_db`; the agent view shows it),
   `lane_add` (after `after`, else last), `lane` (`set` name, role, hidden, kind), `lane_move` (`by` -1 or 1),
   `lane_delete` (its blocks go), `asset_delete` (its @ picks go: refs and, from 1.83, a first or last frame; its
   mentions in a prompt become its name), and from 1.83 `asset_add`, `asset` and `take_add` (Magic: assets and the

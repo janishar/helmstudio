@@ -3804,6 +3804,12 @@
                           "type": "string",
                           "pattern": "^[A-Za-z0-9_-]{1,40}$",
                           "description": "a shot made from this storyboard frame"
+                        },
+                        "gain_db": {
+                          "type": "number",
+                          "minimum": -60,
+                          "maximum": 12,
+                          "description": "a voice, music or sound block only: its level in dB (absent: 0)"
                         }
                       }
                     },
@@ -4232,11 +4238,24 @@
                             }
                           ],
                           "description": "null unpins"
+                        },
+                        "gain_db": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": -60,
+                              "maximum": 12
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: its level in dB, -60 to 12 (0 or null: none); keep music and ambience under the voices (music -8, ambience -12)"
                         }
                       }
                     }
                   },
-                  "description": "block: set a block's name, note, request (the standard request) or pinned take (null unpins)"
+                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) or an audio block's level (gain_db)"
                 },
                 {
                   "type": "object",
@@ -4627,7 +4646,7 @@
     },
     "edit_board": {
       "description": "Propose edits on a board: drawn on it with Apply and Discard; the user's Apply saves them as one revision (one undo step, by Assistant in History). Try them first with try_board_edit.",
-      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. Try them first with try_board_edit.",
+      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. A block op's gain_db sets an audio block's level. Try them first with try_board_edit.",
       "surfaces": [
         "assistant",
         "mcp"
@@ -4781,6 +4800,12 @@
                           "type": "string",
                           "pattern": "^[A-Za-z0-9_-]{1,40}$",
                           "description": "a shot made from this storyboard frame"
+                        },
+                        "gain_db": {
+                          "type": "number",
+                          "minimum": -60,
+                          "maximum": 12,
+                          "description": "a voice, music or sound block only: its level in dB (absent: 0)"
                         }
                       }
                     },
@@ -5209,11 +5234,24 @@
                             }
                           ],
                           "description": "null unpins"
+                        },
+                        "gain_db": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": -60,
+                              "maximum": 12
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: its level in dB, -60 to 12 (0 or null: none); keep music and ambience under the voices (music -8, ambience -12)"
                         }
                       }
                     }
                   },
-                  "description": "block: set a block's name, note, request (the standard request) or pinned take (null unpins)"
+                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) or an audio block's level (gain_db)"
                 },
                 {
                   "type": "object",

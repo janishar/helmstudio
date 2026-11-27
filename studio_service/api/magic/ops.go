@@ -52,6 +52,8 @@ type Block struct {
 	Note      *string        `json:"note,omitempty"`
 	Effects   []Effect       `json:"effects"`
 	FromFrame *string        `json:"from_frame,omitempty"`
+	// GainDB is an audio block's level (API 1.101; -60..12 dB, absent = 0), carried onto its Timeline clips
+	GainDB *float64 `json:"gain_db,omitempty"`
 }
 
 func (b *Block) end() int { return b.At + b.Length }
@@ -485,6 +487,7 @@ type BlockNew struct {
 	Note      *string        `json:"note"`
 	Effects   []Effect       `json:"effects"`
 	FromFrame *string        `json:"from_frame"`
+	GainDB    *float64       `json:"gain_db"`
 }
 
 // LaneNew is a lane as lane_add gives it.
@@ -806,7 +809,7 @@ func apply(doc Doc, op Op) Applied {
 			return refused("That id is taken.")
 		}
 		b := Block{Lane: nb.Lane, At: nb.At, Length: nb.Length, Kind: nb.Kind, Name: nb.Name, Request: nb.Request,
-			Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame}
+			Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame, GainDB: nb.GainDB}
 		if nb.ID != nil {
 			b.ID = *nb.ID
 		} else {
@@ -1051,6 +1054,7 @@ func apply(doc Doc, op Op) Applied {
 			Note    *string         `json:"note"`
 			Request *map[string]any `json:"request"`
 			Pinned  *string         `json:"pinned"`
+			GainDB  *float64        `json:"gain_db"`
 		}
 		if err := strict(f.Set, &set); err != nil {
 			return refused("set: " + err.Error())
@@ -1065,6 +1069,12 @@ func apply(doc Doc, op Op) Applied {
 		}
 		if set.Request != nil {
 			b.Request = *set.Request
+		}
+		if _, ok := keys["gain_db"]; ok { // API 1.101: 0 or null is no level; the board rules check kind and range
+			b.GainDB = set.GainDB
+			if b.GainDB != nil && *b.GainDB == 0 {
+				b.GainDB = nil
+			}
 		}
 		if _, ok := keys["pinned"]; ok { // null or "" unpins
 			b.Pinned = set.Pinned

@@ -654,6 +654,14 @@ func TestMCPMagicBoards(t *testing.T) {
 	if _, o := call(t, cs, "edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}); o["summary"] != nil {
 		t.Errorf("edit, newer revision: %v", o)
 	}
+	// API 1.101: a block op's gain_db (an audio block's level) passes the tool's schema and goes as given
+	level := []any{map[string]any{"op": "block", "id": "m1", "set": map[string]any{"gain_db": -6}}}
+	if res, _ := call(t, cs, "edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": level}); res.IsError {
+		t.Fatalf("edit, gain_db: %s", text(res))
+	}
+	if !slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, "set:map[gain_db:-6]") }) {
+		t.Errorf("edit, gain_db not sent: %v", got)
+	}
 	if o := outs["run_blocks"]; o["revision"] != float64(6) || o["plan"].(map[string]any)["ask"] != true || len(o["started"].([]any)) != 1 || o["seconds"] != float64(12) {
 		t.Errorf("run: %v", o)
 	}

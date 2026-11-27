@@ -393,6 +393,8 @@ describe("dialogue, Loop and sections", () => {
     expect(soundClips(rain, takes, S).map((c) => c.out)).toEqual([1.5, 1.5, 1]);
     // API 1.90: no Loop on a sound made from a shot's video
     expect(soundClips({ ...rain, request: { ...rain.request, from: "s1" } }, takes, S)).toHaveLength(1);
+    // API 1.101: the block's level is each clip's gain, so Play sounds as Send
+    expect(soundClips({ ...rain, gain_db: -6 }, takes, S).map((c) => c.gain_db)).toEqual([-6, -6, -6]);
   });
   it("a song's sections: its take's, else its lyrics' tags by their lines", () => {
     const b = { ...dialogue(), kind: "music" as const, request: { kind: "music" as const, lyrics: "[verse]\na\nb\nc\n[chorus]\nd" } };

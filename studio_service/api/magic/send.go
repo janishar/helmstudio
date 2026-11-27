@@ -484,6 +484,9 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 					cid = b.ID + "." + strconv.Itoa(made)
 				}
 				c := timeline.Clip{ID: cid, TakeID: &take, In: f64(0), Out: f64(s(n)), At: f64(s(at)), Alternatives: []string{}}
+				if b.GainDB != nil { // API 1.101: the block's level is its clips' gain
+					c.GainDB = f64(*b.GainDB)
+				}
 				if to, ok := links[b.ID]; ok && made == 0 {
 					c.Link = &to
 					linked++

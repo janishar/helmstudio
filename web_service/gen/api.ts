@@ -9228,6 +9228,11 @@ export interface components {
             effects: components["schemas"]["MagicEffect"][];
             /** @description a shot made from this storyboard frame */
             from_frame?: components["schemas"]["MagicId"];
+            /**
+             * @description from 1.101, a voice, music or sound block only (another kind is 422 by the board rules): its level in dB, the Timeline clip gain's range; Play applies it and Send puts it on its clips' `gain_db`; 0 is stored as absent
+             * @default 0
+             */
+            gain_db?: number;
         };
         /** @description a block on a lane (MagicBlockNew with its id) */
         MagicBlock: WithRequired<components["schemas"]["MagicBlockNew"], "id">;
@@ -9439,6 +9444,8 @@ export interface components {
                 request?: components["schemas"]["MagicRequest"];
                 /** @description null unpins */
                 pinned?: string | null;
+                /** @description from 1.101, an audio block only: its level in dB; 0 or null takes it off */
+                gain_db?: number | null;
             };
         } | {
             /** @constant */
@@ -9941,6 +9948,8 @@ export interface components {
             from_frame?: components["schemas"]["MagicId"];
             /** @description from 1.88: its standard request as stored (a block op's `request` replaces it whole: send this one back with your changes) */
             request?: components["schemas"]["MagicRequest"];
+            /** @description from 1.101, an audio block with a level only: its dB (a block op's `gain_db` sets it) */
+            gain_db?: number;
         };
         /** @description GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links */
         MagicAgentView: {

@@ -140,6 +140,8 @@ Once the user says yes:
 - Sound: ambience per place (a sound that loops to fill its block), effects on the shots that need them. A sound
   made from a shot's video (MMAudio) follows that shot; make it once the shot's final is pinned.
 - LTX shots come with sound; keep it for effects, or make the block's own sound when you want to replace it.
+- Levels: keep music and ambience under the voices (e.g. music −8 dB, ambience −12 dB under dialogue); set them
+  with a block op's `gain_db` (`{"op": "block", "id": "m1", "set": {"gain_db": -8}}`).
 
 ## 9. Review like a director
 
