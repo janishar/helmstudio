@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-// Add's From Gallery (MagicBoard frame 2a, owner 2026-11-27): the step-1 footer's ghost button hands the point and the
+// Add's From Gallery (MagicBoard frame 2a, owner 2026-11-27): the kind grid's From Gallery tile hands the point and the
 // Place picked to the same From Gallery the empty lane's menu has (menus.ts fromGallery), and closes Add.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
@@ -40,14 +40,14 @@ describe("Add's From Gallery", () => {
     const onClose = vi.fn();
     open(onGallery, onClose);
     fireEvent.click(screen.getByRole("button", { name: "Overwrite" }));
-    fireEvent.click(screen.getByRole("button", { name: "From Gallery" }));
+    fireEvent.click(screen.getByRole("button", { name: /From Gallery/ }));
     expect(onGallery).toHaveBeenCalledWith(where, "overwrite");
     expect(onClose).toHaveBeenCalled();
   });
 
   it("is greyed with no Gallery", () => {
     open(null);
-    const b = screen.getByRole("button", { name: "From Gallery" });
+    const b = screen.getByRole("button", { name: /From Gallery/ });
     expect(b).toHaveProperty("disabled", true);
     expect(b.getAttribute("title")).toBe("The Gallery is in studio");
   });

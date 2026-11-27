@@ -863,8 +863,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T12:00:00Z",
+  "at": "2026-11-27T07:30:00Z",
   "via": "Claude Code",
-  "note": "Magic gaps and follow-ups: MagicBlockDialog (kind badge, Model select, Loop, Run on, Tied, Dialogue lines, Compare takes, Morph prompt, Make views model), section markers and menus; Magic is built"
+  "note": "Magic's Add: From Gallery is a kind tile with its own orb, no longer a footer button (owner, 2026-11-27: better icon similar to others)"
  }
 }

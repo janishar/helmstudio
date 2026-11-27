@@ -1075,6 +1075,9 @@
 .mg-add .kio.k-sound {
   --k: #7cc7f2;
 }
+.mg-add .kio.k-gallery {
+  --k: #f59a8c;
+}
 .mg-add .kio.k-music {
   --k: #d59bf6;
   background:

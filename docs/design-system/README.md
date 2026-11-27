@@ -62,7 +62,7 @@ The app speaks in short, plain words. It is a tool, not a host: no greetings, no
 
 The components here are static renditions of the app's own classes in `components/bundle.css`; there is no JavaScript bundle. Load `tokens.css`, then `bundle.css`, and use the class names each component's guideline gives.
 
-- **Magic** (built, alpha.6, plan 39): MagicBlockDialog (the block dialog's kind badge, Model select and hint, Loop, Run on, Tied · Unlink, Dialogue lines, Compare takes, Morph prompt, Make views model, section markers), TransitionMarker and RangeBar's markers, the Add dialog's From Gallery ghost button (Button) and a board's "named by" hint.
+- **Magic** (built, alpha.6, plan 39): MagicBlockDialog (the block dialog's kind badge, Model select and hint, Loop, Run on, Tied · Unlink, Dialogue lines, Compare takes, Morph prompt, Make views model, section markers), TransitionMarker and RangeBar's markers, the Add dialog's From Gallery kind tile (its own orb, `#f59a8c`, with the images glyph, like the kind orbs) and a board's "named by" hint.
 - **Navigation**: Rail (Create, Magic, Gallery, Timeline, Pipelines, Models), KindTabs and ContextMenu.
 - **Timeline**: TimelineLanes (ruler, lane heads, playhead `tl-ph`), TimelineClip (`tl-clip` and its looks: `a1` image, `a2` video, sky audio, dashed empty or offline), TimelineTools (`tl-bar`, the five tools, Snapping, Zoom, the shortcuts sheet) and TimelineOverlays (`tl-tag`, snap, blade, trim and slip). Overlays never take the pointer.
 - **Assistant**: AssistantDrawer (`ast drw`; `ast sheet` on a phone), AssistantCard (`cf`, Pick one `opts`), AssistantChats, AssistantMinBar (`ast-min`) and MentionsPicker (the @ lists). Anything that uses the GPU waits for a card.

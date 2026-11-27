@@ -4,7 +4,7 @@
 // and Generate; a dialogue (API 1.89) its lines. A board frame is added as a draft. A line or a cue added under a shot
 // is tied to it (2e, 2f: "Tied to Shot 2 · Unlink").
 import { useEffect, useRef, useState } from "react";
-import { Link2 } from "lucide-react";
+import { Images, Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { KindTitle } from "@/components/magic/block-dialog";
 import { KIND_ICON } from "@/components/magic/icons";
@@ -297,6 +297,24 @@ function Form({
             </button>
           );
         })}
+        <button
+          type="button"
+          className="kt"
+          disabled={!onGallery}
+          title={onGallery ? "A take you already have, at its own length" : SOON.gallery}
+          onClick={() => {
+            onGallery?.(where, mode);
+            onClose();
+          }}
+        >
+          <span className="kn">
+            <i className="kio k-gallery">
+              <Images size={15} strokeWidth={2} aria-hidden />
+            </i>
+            From Gallery
+          </span>
+          <small>a copy, or drop a file</small>
+        </button>
       </div>
       <div className="fld">
         <span className="lb">Length</span>
@@ -381,18 +399,6 @@ function Form({
         </div>
       )}
       <div className="flex items-center gap-2">
-        <button
-          type="button"
-          className="h-9 rounded-[10px] px-3.5 text-[13px] font-medium text-t2 disabled:opacity-50"
-          disabled={!onGallery}
-          title={onGallery ? "A take you already have, at its own length" : SOON.gallery}
-          onClick={() => {
-            onGallery?.(where, mode);
-            onClose();
-          }}
-        >
-          From Gallery
-        </button>
         <span className="grow" />
         <button
           type="button"
