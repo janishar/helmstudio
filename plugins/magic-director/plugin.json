@@ -1,0 +1,14 @@
+{
+  "name": "magic-director",
+  "title": "Magic director",
+  "version": "0.1.0",
+  "kind": "skill",
+  "format": 1,
+  "description": "Teaches the Assistant to plan and run a Magic board like a director: style, characters, props, settings and beats first, a plan you OK before any GPU time, then frames, shots and sound. Built in: always on for Magic.",
+  "author": "helmstudio",
+  "source": "plugins/magic-director",
+  "may_do": [
+    "Teach the Assistant how to plan and run a Magic board (text it reads)"
+  ],
+  "when": "Working on a Magic board: planning characters, props, settings, beats, frames, shots and sound in order, running blocks within the GPU limit, reviewing takes, Send. Always used on Magic."
+}

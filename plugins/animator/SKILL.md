@@ -11,6 +11,10 @@ Extra files you can read with read_skill_file:
 - `camera-moves.md`: camera moves and the prompt words for them.
 - `edit-checklist.md`: Timeline assembly, sound and export.
 
+On a Magic board, follow the Magic director skill for where things live: characters, props and places are board
+assets (not Elements), the board is the shot list (not save_shots), and Send to Timeline assembles the cut. This
+guide's craft (style, model sheets, timing) still holds there.
+
 ## 0. The order of work
 
 Do the steps in this order. Each one feeds the next, and a mistake found early is cheap.
