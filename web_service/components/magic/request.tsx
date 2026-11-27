@@ -2,6 +2,7 @@
 // The standard request of a block (MagicBoard frames 2c-2h and 3's middle; contracts/README.md "Magic: the standard
 // request"): the model, the kind's shared fields (the same few for every model), each one the picked model can't
 // fill greyed with the reason, the model's own params under Advanced, and the GPU-time estimate before Generate.
+import { useEffect, useState } from "react";
 import { Clock3, Plus, X } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
 import { RunOnChip } from "@/components/create/run-on";
@@ -11,6 +12,7 @@ import { AtText, BOX } from "@/components/magic/at-text";
 import { LinkGlyph } from "@/components/magic/icons";
 import { STATUS, refText } from "@/components/magic/lanes";
 import { turnMenu } from "@/components/magic/menus";
+import { api, ok, type S } from "@/lib/api";
 import { useVoices } from "@/lib/library";
 import { machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
 import { secs, type Block, type Doc, type MagicRequest, type Ref, type Status } from "@/lib/magic";
@@ -22,6 +24,9 @@ import {
   kindOf,
   modelOf,
   packSeconds,
+  VARIANT,
+  variantChoices,
+  variantOf,
   type Estimate,
   type Field,
   type Kinds,
@@ -48,17 +53,21 @@ function picks(d: Doc, self: string): Ref[] {
   return out;
 }
 
-/** The estimate line: studio's for the block when it has one, else the pack's. */
+/** The estimate line: studio's for the block when it has one, else the pack's; both follow the variant (API 1.94),
+ * named last ("≈ 6 s each · mac-studio · Turbo", MagicBoard 7). */
 export function EstimateLine({
   est,
   model,
   block,
   doc,
+  variant,
 }: {
   est?: Estimate;
   model?: Model;
   block: Pick<Block, "kind" | "length" | "request">;
   doc: Doc;
+  /** the variant's title */
+  variant?: string;
 }) {
   const seconds = est?.seconds ?? packSeconds(model, block, doc);
   return (
@@ -66,14 +75,94 @@ export function EstimateLine({
       className="est"
       title={
         est?.source === "yours"
-          ? "From your own recent runs of this model"
-          : "From the model's declared rate (no runs of yours yet)"
+          ? `From your own recent runs of this model${variant ? ` at ${variant}` : ""}`
+          : seconds == null
+            ? `No runs of yours${variant ? ` at ${variant}` : ""} yet, and the model declares no rate for it`
+            : "From the model's declared rate (no runs of yours yet)"
       }
     >
       <Clock3 size={13} aria-hidden />
       <b>{seconds == null ? "Time unknown" : estText(seconds)}</b>
       {est?.host ? ` · ${est.host}` : ""}
+      {variant ? ` · ${variant}` : ""}
     </span>
+  );
+}
+
+// GET /models, shared by the dialogs' Variant fields for 30 s (titles, devices, which host has which variant)
+let models: { at: number; p: Promise<S<"ModelList"> | null> } | null = null;
+
+/** The models list (null before it comes and without studio). */
+function useModelList() {
+  const [list, setList] = useState<S<"ModelList"> | null>(null);
+  useEffect(() => {
+    if (!models || Date.now() - models.at > 30_000)
+      models = { at: Date.now(), p: ok(api.GET("/v1/studio/models")).catch(() => null) };
+    let live = true;
+    void models.p.then((l) => live && setList(l));
+    return () => {
+      live = false;
+    };
+  }, []);
+  return list;
+}
+
+/** A request's variant (API 1.94): the choice, the picked one's title and why one cannot run (the picked one's
+ * first). */
+export function useVariant(model: Model | undefined, req: MagicRequest) {
+  const list = useModelList();
+  const mcs = machines(useHosts());
+  const choices = variantChoices(model, req, list, mcs, pinnedMachine(mcs, req.host ?? ""));
+  const cur = variantOf(model, req);
+  const picked = choices.find((c) => c.id === cur);
+  return {
+    choices,
+    cur,
+    title: picked?.title,
+    why: picked?.why ?? choices.find((c) => c.why)?.why,
+  };
+}
+
+/** Variant beside Model (MagicBoard 3 and 7, API 1.94): the model's variants, one that cannot run greyed with why;
+ * the pick is the request's Advanced model.variant (absent: the workflow's own). */
+export function VariantField({
+  model,
+  req,
+  set,
+}: {
+  model?: Model;
+  req: MagicRequest;
+  set: (p: Partial<MagicRequest>) => void;
+}) {
+  const { choices, cur, why } = useVariant(model, req);
+  if (!choices.length) return null;
+  const own = variantOf(model, { ...req, advanced: undefined });
+  const pick = (id: string) => {
+    const adv = { ...req.advanced };
+    if (id === own) delete adv[VARIANT];
+    else adv[VARIANT] = id;
+    set({ advanced: Object.keys(adv).length ? adv : undefined });
+  };
+  return (
+    <div className="fld">
+      <span className="lb">Variant</span>
+      <div className="seg flex-wrap" role="group" aria-label="Variant">
+        {choices.map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            aria-pressed={cur === c.id}
+            disabled={!!c.why && cur !== c.id}
+            className="disabled:opacity-45"
+            title={c.why}
+            onClick={() => pick(c.id)}
+          >
+            {c.title}
+          </button>
+        ))}
+      </div>
+      {why && <span className="text-[11px] text-t2">{why}</span>}
+    </div>
   );
 }
 
@@ -546,7 +635,9 @@ export function RequestForm({
   const fields = (kind?.fields ?? []).filter((f) => !req.turns || (f !== "line" && f !== "voice"));
   return (
     <div className="flex flex-col gap-3">
-      <div className={runOn ? "grid grid-cols-2 gap-3" : "contents"}>
+      <div
+        className={runOn ? "grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3" : "contents"}
+      >
         <div className="fld">
           <span className="lb">Model</span>
           {models.length ? (
@@ -581,6 +672,7 @@ export function RequestForm({
             <span className="text-[12px] text-t2">No model for this kind on any host</span>
           )}
         </div>
+        <VariantField model={model} req={req} set={set} />
         {runOn && <RunOnField req={req} env={model?.env} set={set} />}
       </div>
       <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-3">

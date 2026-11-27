@@ -11,7 +11,7 @@ import { ErrorNote, Modal } from "@/components/kit";
 import { AtText } from "@/components/magic/at-text";
 import { StatusChip } from "@/components/magic/lanes";
 import { takeMenu, type Act } from "@/components/magic/menus";
-import { EstimateLine } from "@/components/magic/request";
+import { EstimateLine, VariantField, useVariant } from "@/components/magic/request";
 import { message } from "@/lib/api";
 import {
   clock,
@@ -24,7 +24,14 @@ import {
   type Op,
   type Ref,
 } from "@/lib/magic";
-import { kindOf, modelOf, type BlockRun, type Estimate, type Kinds } from "@/lib/magic-standard";
+import {
+  kindOf,
+  madeBy,
+  modelOf,
+  type BlockRun,
+  type Estimate,
+  type Kinds,
+} from "@/lib/magic-standard";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
 
 const STYLES = [
@@ -148,11 +155,31 @@ function Body({
   const styleOf = new Map(
     runs.flatMap((r) => r.takes.map((t) => [t, r.style ?? "sketch"] as const)),
   );
-  const groups = [...STYLES, ["yours", "Yours"] as const]
-    .map(([k, label]) => ({ k, label, ids: done.filter((t) => (styleOf.get(t) ?? "yours") === k) }))
-    .filter((g) => g.ids.length);
+  // API 1.94: and by the variant it ran on ("Sketch · 2 · Turbo")
+  const variantOfTake = (t: string) => a.takes[t]?.variant ?? "";
+  const groups = [...STYLES, ["yours", "Yours"] as const].flatMap(([k, label]) => {
+    const ids = done.filter((t) => (styleOf.get(t) ?? "yours") === k);
+    return [...new Set(ids.map(variantOfTake))].map((variant) => ({
+      k: `${k}:${variant}`,
+      label,
+      variant,
+      ids: ids.filter((t) => variantOfTake(t) === variant),
+    }));
+  });
   const models = kindOf(kinds, "frame")?.models ?? [];
   const model = modelOf(kinds, req);
+  const variant = useVariant(model, req).title;
+  // the model line under the picture: "Sketch 2 · Qwen Image 2.1 · Turbo · seed 42"
+  const stageLine =
+    picked && stage
+      ? [
+          `${[...STYLES, ["yours", "Yours"] as const].find(([k]) => k === (styleOf.get(picked) ?? "yours"))?.[1]} ${n(picked)}`,
+          madeBy(kinds, runs, picked),
+          stage.seed != null && stage.seed >= 0 ? `seed ${stage.seed}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · ")
+      : "";
   const shotModels = kindOf(kinds, "video")?.models ?? [];
   const shotModel = shotModels.find((m) => m.workflow_id === req.shot_model) ?? shotModels[0];
   const made = d.blocks.find((x) => x.from_frame === b.id);
@@ -292,8 +319,10 @@ function Body({
               model={model}
               block={{ ...b, request: req }}
               doc={d}
+              variant={variant}
             />
           </div>
+          {stageLine && <span className="mono text-[11px] text-t2">{stageLine}</span>}
           {running.map((t) => (
             <span key={t.id} className="mst run self-start">
               Drawing · {Math.round(t.progress ?? 0)}%
@@ -303,8 +332,13 @@ function Body({
             <div key={g.k} className="flex flex-col gap-1">
               <span className="text-[11px] text-t2">
                 {g.label} · <span className="mono">{g.ids.length}</span>
+                {g.variant && ` · ${g.variant}`}
               </span>
-              <div className="flex flex-wrap gap-1.5" role="list" aria-label={`${g.label} takes`}>
+              <div
+                className="flex flex-wrap gap-1.5"
+                role="list"
+                aria-label={`${g.label}${g.variant && ` ${g.variant}`} takes`}
+              >
                 {g.ids.map((id) => (
                   <button
                     key={id}
@@ -459,25 +493,29 @@ function Body({
               />
             </label>
           </div>
-          <div className="fld">
-            <span className="lb">Model</span>
-            {models.length ? (
-              <div className="seg flex-wrap" role="group" aria-label="Model">
-                {models.map((m) => (
-                  <button
-                    key={m.workflow_id}
-                    type="button"
-                    aria-pressed={model?.workflow_id === m.workflow_id}
-                    title={m.title}
-                    onClick={() => set({ model: m.workflow_id })}
-                  >
-                    {m.name}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <span className="text-[12px] text-t2">No image model on any host</span>
-            )}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="fld">
+              <span className="lb">Model</span>
+              {models.length ? (
+                <div className="seg flex-wrap" role="group" aria-label="Model">
+                  {models.map((m) => (
+                    <button
+                      key={m.workflow_id}
+                      type="button"
+                      aria-pressed={model?.workflow_id === m.workflow_id}
+                      title={m.title}
+                      // its variant is the model's own (API 1.94): another's Advanced goes
+                      onClick={() => set({ model: m.workflow_id, advanced: undefined })}
+                    >
+                      {m.name}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-[12px] text-t2">No image model on any host</span>
+              )}
+            </div>
+            <VariantField model={model} req={req} set={set} />
           </div>
           <div className="fld">
             <span className="lb">Shot model</span>

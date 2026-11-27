@@ -773,6 +773,8 @@ export type TakeInfo = {
   duration?: number;
   sections?: { label: string; start_s: number; end_s: number }[];
   turn?: number;
+  /** API 1.94: the model variant its run loaded, its title ("Turbo") */
+  variant?: string;
 };
 export type Takes = Record<string, TakeInfo>;
 
@@ -858,7 +860,9 @@ export function turnStatuses(d: Doc, b: Block, takes: Takes): Status[] {
     const t = shownOf[i];
     if (!t) {
       const last = mine.at(-1);
-      return last?.status === "failed" ? { s: "failed", error: last.error ?? "failed" } : { s: "draft" };
+      return last?.status === "failed"
+        ? { s: "failed", error: last.error ?? "failed" }
+        : { s: "draft" };
     }
     return t.inputs === inputsOf(d, turnBlock(b, i), takes) ? { s: "done" } : { s: "old" };
   });
@@ -871,7 +875,10 @@ function dialogueStatus(turns: Status[]): Status {
   if (running) return running;
   const failed = turns.findIndex((t) => t.s === "failed");
   if (failed >= 0)
-    return { s: "failed", error: `Line ${failed + 1}: ${(turns[failed] as { error: string }).error}` };
+    return {
+      s: "failed",
+      error: `Line ${failed + 1}: ${(turns[failed] as { error: string }).error}`,
+    };
   if (turns.every((t) => t.s === "draft")) return { s: "draft" };
   return turns.some((t) => t.s !== "done") ? { s: "old" } : { s: "done" };
 }

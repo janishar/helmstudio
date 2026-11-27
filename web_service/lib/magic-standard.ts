@@ -2,6 +2,8 @@
 // runs"): the kinds studio serves (GET /v1/studio/magic/kinds), a model's greyed fields, the pack's estimate before a
 // block has its own, and the board's takes and run placeholders made from studio's answer (MagicBoard runs, takes).
 import type { S } from "@/lib/api";
+import { variantDevices } from "@/lib/models";
+import { drivesOf, misfit, type Machine } from "@/lib/run-on";
 import { coverFor } from "@/lib/takes";
 import {
   inputsOf,
@@ -41,9 +43,72 @@ export function modelOf(kinds: Kinds | null, req: MagicRequest): Model | undefin
   return (req.from && ms.find((m) => m.fields.includes("from"))) || ms[0];
 }
 
-/** A model's Advanced for a request: its video workflow's when the request is made from a shot's video. */
-export const advancedOf = (m: Model | undefined, req: MagicRequest) =>
+/** Every Advanced param of a model for a request: its video workflow's when the request is made from a shot's video. */
+const allAdvanced = (m: Model | undefined, req: MagicRequest) =>
   (req.from && m?.video ? m.video.advanced : m?.advanced) ?? [];
+
+/** The model variant's param (API 1.94: every standard workflow's model node is `model`). */
+export const VARIANT = "model.variant";
+
+/** A model's Advanced for a request, less its variant (the form's Variant beside Model, API 1.94). */
+export const advancedOf = (m: Model | undefined, req: MagicRequest) =>
+  allAdvanced(m, req).filter((p) => p.path !== VARIANT);
+
+/** The variant param of a model for a request, when it has more than one value. */
+export function variantParam(m: Model | undefined, req: MagicRequest) {
+  const p = allAdvanced(m, req).find((x) => x.path === VARIANT)?.param;
+  return p?.enum && p.enum.length > 1 ? p : undefined;
+}
+
+/** The variant a request runs (API 1.94, as studio's): its Advanced value when one of the param's, else the
+ * workflow's own; undefined for a model without one. */
+export function variantOf(m: Model | undefined, req: MagicRequest): string | undefined {
+  const p = allAdvanced(m, req).find((x) => x.path === VARIANT)?.param;
+  if (!p) return undefined;
+  const v = req.advanced?.[VARIANT];
+  return typeof v === "string" && p.enum?.includes(v) ? v : String(p.default ?? "");
+}
+
+/** One value of the Variant choice: its title (GET /models's, the id without) and why it cannot run. */
+export type VariantChoice = { id: string; title: string; why?: string };
+
+/** The Variant choice of a request (API 1.94; MagicBoard 3 and 7): the param's values with their titles; one that runs
+ * only on a device no connected host has (fp8: NVIDIA) left out unless picked; one that cannot run where the request
+ * may go greyed with why: its Run on host's reason, under Auto when no live host that runs the model has it. */
+export function variantChoices(
+  m: Model | undefined,
+  req: MagicRequest,
+  list: S<"ModelList"> | null,
+  mcs: Machine[],
+  pinned?: Machine,
+): VariantChoice[] {
+  const p = variantParam(m, req);
+  if (!p) return [];
+  const cur = variantOf(m, req);
+  const ms = list?.models.filter((x) => x.family === m?.family) ?? [];
+  const devices = new Set(mcs.map((x) => x.device));
+  const live = mcs.filter((x) => x.live && (!m?.env || x.envs.includes(m.env)));
+  return (p.enum ?? []).flatMap((id) => {
+    const fm = ms.find((x) => x.variants.some((v) => v.id === id));
+    const v = fm?.variants.find((x) => x.id === id);
+    if (!fm || !v) return [{ id, title: id }];
+    if (id !== cur && mcs.length && !variantDevices(fm, v).some((d) => devices.has(d))) return [];
+    const drives = drivesOf(list!, v);
+    const miss = (mc: Machine) => misfit(mc, fm, v, drives);
+    const off = pinned
+      ? miss(pinned)
+      : live.length && live.every((mc) => miss(mc))
+        ? { device: false, text: "not downloaded" }
+        : null;
+    return [
+      {
+        id,
+        title: v.title,
+        why: off ? (off.device ? off.text : `${v.title} ${off.text}`) : undefined,
+      },
+    ];
+  });
+}
 
 /** A field's label in the form. */
 export const FIELD_LABEL: Record<Field, string> = {
@@ -72,13 +137,15 @@ export function units(b: Pick<Block, "kind" | "length" | "request">, d: Doc): nu
   return s;
 }
 
-/** The pack's estimate of a block on its model (its declared seconds per unit × units × count), null without. */
+/** The pack's estimate of a block on its model (its declared seconds per unit × units × count), null without; the
+ * pack measured its workflow's own variant, so another one is unknown (API 1.94, as studio's plan). */
 export function packSeconds(
   m: Model | undefined,
   b: Pick<Block, "kind" | "length" | "request">,
   d: Doc,
 ) {
   if (!m?.seconds) return null;
+  if (variantOf(m, b.request) !== variantOf(m, { ...b.request, advanced: undefined })) return null;
   return m.seconds * units(b, d) * Math.min(4, Math.max(1, b.request.count ?? 1));
 }
 
@@ -97,6 +164,7 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
         inputs: r.current ? CURRENT : `old:${r.run_id}`,
         seed: r.seed ?? undefined,
         turn: r.turn ?? undefined,
+        variant: r.variant,
       };
     if (r.takes.length) continue;
     if (r.status === "queued" || r.status === "running")
@@ -145,12 +213,26 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
   for (const t of Object.values(out))
     if (t.inputs === CURRENT) {
       const b = doc.blocks.find((x) => x.id === t.block);
-      t.inputs = !b ? "" : t.turn != null ? inputsOf(doc, turnBlock(b, t.turn), out) : inputsOf(doc, b, out);
+      t.inputs = !b
+        ? ""
+        : t.turn != null
+          ? inputsOf(doc, turnBlock(b, t.turn), out)
+          : inputsOf(doc, b, out);
     }
   return out;
 }
 
-/** "Run 3 · seed 46 · by Assistant · 1:52 · 10:42": a run history row's parts. */
+/** What made a take, from its run: its model's name and variant ("LTX 2.5 · Distilled"); "" without a run. */
+export function madeBy(kinds: Kinds | null, runs: BlockRun[], take: string): string {
+  const r = runs.find((x) => x.takes.includes(take));
+  if (!r) return "";
+  const m = kinds?.kinds
+    .flatMap((k) => k.models)
+    .find((x) => x.workflow_id === r.workflow_id || x.video?.workflow_id === r.workflow_id);
+  return [m?.name, r.variant].filter(Boolean).join(" · ");
+}
+
+/** "Run 3 · Distilled · seed 46 · by Assistant · 1:52 · 10:42": a run history row's parts. */
 export function runLine(r: BlockRun, n: number): { title: string; sub: string } {
   const seed = r.seed != null && r.seed >= 0 ? `seed ${r.seed}` : "random seed";
   const took =
@@ -162,11 +244,24 @@ export function runLine(r: BlockRun, n: number): { title: string; sub: string } 
   const at = new Date(r.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   return {
     title: `Run ${n}`,
-    sub: [r.turn != null ? `line ${r.turn + 1}` : "", seed, r.by === "assistant" ? "by Assistant" : "", took, at]
+    sub: [
+      r.turn != null ? `line ${r.turn + 1}` : "",
+      r.variant ?? "",
+      seed,
+      r.by === "assistant" ? "by Assistant" : "",
+      took,
+      at,
+    ]
       .filter(Boolean)
       .join(" · "),
   };
 }
+
+// the fake mode's Qwen Image variants (API 1.94; MagicBoard 7)
+const QWEN_VARIANT = {
+  path: VARIANT,
+  param: { name: "variant", type: "enum" as const, default: "base", enum: ["base", "turbo"] },
+};
 
 /** The fake mode's kinds (MagicBoard frame 2's models; nothing runs them but the fake runs). */
 export const FAKE_KINDS: Kinds = {
@@ -203,10 +298,11 @@ export const FAKE_KINDS: Kinds = {
           workflow_id: "qwen-image",
           name: "Qwen Image 2.1",
           title: "Qwen Image",
+          family: "qwen-image",
           fields: ["prompt", "refs", "size", "seed"],
           greyed: {},
           seconds: 6,
-          advanced: [],
+          advanced: [QWEN_VARIANT],
         },
       ],
     },
@@ -289,10 +385,11 @@ export const FAKE_KINDS: Kinds = {
           workflow_id: "qwen-image",
           name: "Qwen Image 2.1",
           title: "Qwen Image",
+          family: "qwen-image",
           fields: ["prompt", "refs", "size", "seed"],
           greyed: {},
           seconds: 6,
-          advanced: [],
+          advanced: [QWEN_VARIANT],
         },
       ],
     },

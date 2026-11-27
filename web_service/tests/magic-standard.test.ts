@@ -5,14 +5,22 @@ import { describe, expect, it } from "vitest";
 import { statusOf, type Doc } from "@/lib/magic";
 import { emptyDoc } from "@/lib/magic-fixture";
 import { soundLook } from "@/components/magic/sound-mark";
+import type { S } from "@/lib/api";
+import type { Machine } from "@/lib/run-on";
 import {
   advancedOf,
+  madeBy,
   modelOf,
   packSeconds,
   runLine,
   takesOf,
+  variantChoices,
+  variantOf,
+  variantParam,
   FAKE_KINDS,
   type BlockRun,
+  type Kinds,
+  type Model,
 } from "@/lib/magic-standard";
 
 const T = "11111111-1111-4111-8111-111111111111";
@@ -121,7 +129,117 @@ describe("phase H: music and sound", () => {
     const m = modelOf(FAKE_KINDS, { kind: "sound", from: "s2" });
     expect(m?.workflow_id).toBe("mmaudio-sound");
     expect(modelOf(FAKE_KINDS, { kind: "sound", model: "mmaudio-video" })).toBe(m);
-    expect(advancedOf(m, { kind: "sound", from: "s2" })).toBe(sound.models[1].video!.advanced);
+    expect(advancedOf(m, { kind: "sound", from: "s2" })).toEqual(sound.models[1].video!.advanced);
     expect(modelOf(FAKE_KINDS, { kind: "music" })?.name).toBe("MiniMax Music 3");
+  });
+});
+
+// API 1.94 (owner, 2026-11-27: "yes add them"; MagicBoard 3 and 7): the variant on runs and takes, the Variant
+// choice and the estimate following it.
+describe("variants", () => {
+  const variant = {
+    path: "model.variant",
+    param: { name: "variant", type: "enum", default: "base", enum: ["base", "turbo", "turbo-fp8"] },
+  } as Model["advanced"][number];
+  const qwen: Model = {
+    ...FAKE_KINDS.kinds[1].models[0],
+    family: "qwen-image",
+    env: "torch",
+    advanced: [
+      variant,
+      { ...variant, path: "sample.steps", param: { name: "steps", type: "int", default: 40 } },
+    ],
+  };
+  const kinds: Kinds = { kinds: [{ kind: "frame", fields: [], models: [qwen] }] };
+  const v = (id: string, title: string, hosts: string[], devices?: ("cuda" | "mps")[]) => ({
+    id,
+    title,
+    devices,
+    precisions: ["int8"],
+    dir: id,
+    licence: null,
+    gated: false,
+    download_bytes: null,
+    components: [],
+    hosts: hosts.map((host) => ({ host, state: "present" as const, bytes: 1, job: null })),
+  });
+  const list = {
+    hosts: [],
+    licences: [],
+    models: [
+      {
+        id: "qwen-image-2.1",
+        family: "qwen-image",
+        title: "Qwen Image 2.1",
+        media: ["image"],
+        runtimes: [{ runtime: "torch", env: "torch", devices: ["mps", "cuda"] }],
+        variants: [
+          v("base", "Base", ["mac"]),
+          v("turbo", "Turbo", ["mac"]),
+          v("turbo-fp8", "Turbo fp8", [], ["cuda"]),
+        ],
+        addons: [],
+      },
+    ],
+  } as unknown as S<"ModelList">;
+  const mc = (host: string, device: string): Machine => ({
+    host,
+    label: host,
+    sub: host,
+    device,
+    live: true,
+    envs: ["torch"],
+  });
+
+  it("the param is lifted out of Advanced; the request's variant is its value, else the workflow's own", () => {
+    const req = { kind: "frame" as const, advanced: { "model.variant": "turbo" } };
+    expect(advancedOf(qwen, req).map((p) => p.path)).toEqual(["sample.steps"]);
+    expect(variantParam(qwen, req)?.enum).toHaveLength(3);
+    expect(variantOf(qwen, req)).toBe("turbo");
+    expect(variantOf(qwen, { kind: "frame", advanced: { "model.variant": "nope" } })).toBe("base");
+    expect(variantOf(FAKE_KINDS.kinds[0].models[0], { kind: "video" })).toBeUndefined();
+  });
+
+  it("the choice: titles, fp8 only where a host has the GPU, greyed with why", () => {
+    const mac = mc("mac", "mps");
+    // a Mac alone: no fp8
+    expect(variantChoices(qwen, { kind: "frame" }, list, [mac])).toEqual([
+      { id: "base", title: "Base", why: undefined },
+      { id: "turbo", title: "Turbo", why: undefined },
+    ]);
+    // an NVIDIA host too: Turbo fp8 shows, greyed (on no live host); under Run on gcp Base is not downloaded there
+    const both = [mac, mc("gcp", "cuda")];
+    expect(variantChoices(qwen, { kind: "frame" }, list, both).at(-1)).toEqual({
+      id: "turbo-fp8",
+      title: "Turbo fp8",
+      why: "Turbo fp8 not downloaded",
+    });
+    expect(variantChoices(qwen, { kind: "frame" }, list, both, both[1])[0].why).toBe(
+      "Base not downloaded on gcp",
+    );
+    // without the models list: the ids, nothing greyed
+    expect(variantChoices(qwen, { kind: "frame" }, null, []).map((c) => c.title)).toEqual([
+      "base",
+      "turbo",
+      "turbo-fp8",
+    ]);
+  });
+
+  it("runs, takes and the model line say the variant; the pack's rate is only the workflow's own variant's", () => {
+    const d = doc(["t1"]);
+    const r = run({ takes: [T], variant: "Turbo", workflow_id: "qwen-image" });
+    expect(runLine(r, 1).sub).toMatch(/^Turbo · seed 7 · /);
+    expect(takesOf(d, [r], {})[T].variant).toBe("Turbo");
+    expect(madeBy(kinds, [r], T)).toBe("Qwen Image 2.1 · Turbo");
+    expect(madeBy(kinds, [r], "other")).toBe("");
+    const b = { kind: "frame" as const, length: 96, request: { kind: "frame" as const } };
+    expect(packSeconds(qwen, b, d)).not.toBeNull();
+    expect(
+      packSeconds(
+        qwen,
+        { ...b, request: { kind: "frame", advanced: { "model.variant": "turbo" } } },
+        d,
+      ),
+    ).toBeNull();
   });
 });

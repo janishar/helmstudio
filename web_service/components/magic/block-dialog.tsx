@@ -15,7 +15,7 @@ import { Modal } from "@/components/kit";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
 import { StatusChip, refText } from "@/components/magic/lanes";
 import { runMenu, takeMenu, type Act } from "@/components/magic/menus";
-import { EstimateLine, RequestForm } from "@/components/magic/request";
+import { EstimateLine, RequestForm, useVariant } from "@/components/magic/request";
 import { SoundMark, soundLook } from "@/components/magic/sound-mark";
 import { estText } from "@/lib/magic-fixture";
 import {
@@ -30,6 +30,7 @@ import {
 } from "@/lib/magic";
 import {
   FORM_KINDS,
+  madeBy,
   modelOf,
   runLine,
   type BlockRun,
@@ -243,6 +244,7 @@ function Body({
   const tied = d.links.filter((l) => l.block === b.id || l.to.includes(b.id));
   const link = d.links.find((l) => l.block === b.id);
   const seconds = (changed ? undefined : estimate?.seconds) ?? undefined;
+  const variant = useVariant(model, req).title;
   const save = () => changed && a.edit({ op: "block", id: b.id, set: { request: req } });
   const generate = () => {
     save();
@@ -394,6 +396,7 @@ function Body({
                   model={model}
                   block={{ ...b, request: req }}
                   doc={d}
+                  variant={variant}
                 />
                 <span className="grow" />
                 <button
@@ -437,6 +440,8 @@ function Body({
             <span className="text-[12px] text-t2">
               Take {n(picked)}
               {b.pinned === picked ? " · pinned" : ""}
+              {/* the model line (API 1.94): what made it, "LTX 2.5 · Distilled" */}
+              {madeBy(kinds, runs, picked!) && ` · ${madeBy(kinds, runs, picked!)}`}
             </span>
           )}
           <h3 className="m-0 text-[13px]">
@@ -450,7 +455,7 @@ function Body({
             ))}
             {[...takes].reverse().map((id) => {
               const t = a.takes[id];
-              const label = `Take ${n(id)}${t.seed != null && t.seed >= 0 ? ` · seed ${t.seed}` : ""}`;
+              const label = `Take ${n(id)}${t.seed != null && t.seed >= 0 ? ` · seed ${t.seed}` : ""}${t.variant ? ` · ${t.variant}` : ""}`;
               return (
                 <button
                   key={id}
