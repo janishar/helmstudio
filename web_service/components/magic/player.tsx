@@ -32,7 +32,7 @@ export function Player({
   const stage = useRef<HTMLDivElement>(null);
   const pv = useRef<Preview | null>(null);
   const [playing, setPlaying] = useState(false);
-  const [box, setBox] = useState({ right: 14, top: 150, w: 220, h: 158 });
+  const [box, setBox] = useState({ right: 14, bottom: 14, w: 220, h: 158 });
   const [small, setSmall] = useState(false);
   const fps = doc.target.fps;
   const total = duration(doc);
@@ -91,7 +91,7 @@ export function Player({
       setBox((b) => ({
         ...b,
         right: Math.max(0, start.right - (m.clientX - start.x)),
-        top: Math.max(0, start.top + m.clientY - start.y),
+        bottom: Math.max(0, start.bottom - (m.clientY - start.y)),
       }));
     const stop = () => {
       el.removeEventListener("pointermove", move);
@@ -110,6 +110,7 @@ export function Player({
         w: Math.max(180, start.w + m.clientX - start.x),
         h: Math.max(120, start.h + m.clientY - start.y),
         right: Math.max(0, start.right - (m.clientX - start.x)),
+        bottom: Math.max(0, start.bottom - (m.clientY - start.y)),
       }));
     const stop = () => {
       el.removeEventListener("pointermove", move);
@@ -124,7 +125,7 @@ export function Player({
       className="fp"
       role="region"
       aria-label="Player, floating"
-      style={{ right: box.right, top: box.top, width: box.w, height: small ? 56 : box.h }}
+      style={{ right: box.right, bottom: box.bottom, width: box.w, height: small ? 56 : box.h }}
     >
       <div className="bar" title="Drag to move" onPointerDown={dragBar}>
         <span>Player</span>

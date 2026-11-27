@@ -190,7 +190,7 @@ function Form({
   const next = inLane(doc, lane.id).find((b) => b.at >= where.at);
   const prev = inLane(doc, lane.id).findLast((b) => end(b) <= where.at);
   const gap = next && next.at > where.at ? next.at - where.at : 0;
-  const [len, setLen] = useState<number>(4 * fps);
+  const [len, setLen] = useState<number>(5 * fps);
   const [custom, setCustom] = useState(false);
   const [mode, setMode] = useState<Mode>(mode0);
   const shotKind = kind === "video";
@@ -275,7 +275,7 @@ function Form({
       <div className="fld">
         <span className="lb">Length</span>
         <div className="seg" role="group" aria-label="Length">
-          {[4, 8].map((s) => (
+          {[5, 10].map((s) => (
             <button
               key={s}
               type="button"

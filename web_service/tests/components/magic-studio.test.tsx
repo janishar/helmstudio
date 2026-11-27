@@ -361,7 +361,7 @@ describe("runs in studio (plan 39 phase D)", () => {
     fireEvent.change(within(dlg).getByRole("textbox", { name: "Prompt" }), {
       target: { value: "a fox in the rain" },
     });
-    expect(within(dlg).getByText("≈ 2 s")).toBeTruthy(); // the pack's 0.5 s a second, 4 s at 720p
+    expect(within(dlg).getByText("≈ 3 s")).toBeTruthy(); // the pack's 0.5 s a second, 5 s at 720p
     fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
     await waitFor(() => expect(calls.some((c) => c.path.endsWith("/run"))).toBe(true));
     const add = calls.find((c) => c.path.endsWith("/edits") && c !== calls[0])!;

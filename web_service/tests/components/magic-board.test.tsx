@@ -92,7 +92,7 @@ describe("the board", () => {
       "true",
     );
     fireEvent.click(within(dlg).getByRole("button", { name: /Image/ }));
-    fireEvent.click(within(dlg).getByRole("button", { name: "8 s" }));
+    fireEvent.click(within(dlg).getByRole("button", { name: "10 s" }));
     // step 2 (frame 2h): the standard request for an image, then Generate adds it and runs it
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
     const two = screen.getByRole("dialog", { name: "Image · Still 1" });
@@ -102,7 +102,7 @@ describe("the board", () => {
       target: { value: "a title card" },
     });
     fireEvent.click(within(two).getByRole("button", { name: "Generate" }));
-    const still = blockEl(/Image block Still 1, 8 s/);
+    const still = blockEl(/Image block Still 1, 10 s/);
     expect(still.textContent).toMatch(/\d+%/);
     expect(screen.getByRole("group", { name: "Lane Lane 7" }).textContent).toContain("1 block");
   });
@@ -128,7 +128,7 @@ describe("the board", () => {
       target: { value: "D minor" },
     });
     fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
-    expect(blockEl(/Music block Cue 2, 4 s/).textContent).toMatch(/\d+%/);
+    expect(blockEl(/Music block Cue 2, 5 s/).textContent).toMatch(/\d+%/);
   });
 
   it("phase H: a sound added under Shot 2 starts from its video, on MMAudio (frame 2g)", () => {
