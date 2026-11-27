@@ -14,6 +14,12 @@ export type PlayerApi = {
   seek: (f: number) => void;
 };
 
+/** The player full screen, or back. */
+function toggleFull(el: HTMLElement | null) {
+  if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+  else void el?.requestFullscreen?.().catch(() => undefined);
+}
+
 export function Player({
   doc,
   takes,
@@ -30,6 +36,25 @@ export function Player({
   apiRef: React.RefObject<PlayerApi | null>;
 }) {
   const stage = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const [full, setFull] = useState(false);
+  // full screen (MagicBoard frame 1): ⛶ or F; Esc (the browser's) comes back
+  useEffect(() => {
+    const on = () => setFull(document.fullscreenElement === root.current);
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== "f" || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (t?.closest("input, textarea, select, [contenteditable=true], dialog")) return;
+      e.preventDefault();
+      toggleFull(root.current);
+    };
+    document.addEventListener("fullscreenchange", on);
+    window.addEventListener("keydown", key);
+    return () => {
+      document.removeEventListener("fullscreenchange", on);
+      window.removeEventListener("keydown", key);
+    };
+  }, []);
   const pv = useRef<Preview | null>(null);
   const [playing, setPlaying] = useState(false);
   const [box, setBox] = useState({ right: 14, bottom: 14, w: 220, h: 158 });
@@ -122,6 +147,7 @@ export function Player({
 
   return (
     <div
+      ref={root}
       className="fp"
       role="region"
       aria-label="Player, floating"
@@ -145,6 +171,15 @@ export function Player({
           }
         >
           ▢
+        </button>
+        <button
+          type="button"
+          aria-label={full ? "Leave full screen" : "Full screen"}
+          aria-keyshortcuts="F"
+          title={full ? "Leave full screen (Esc)" : "Full screen (F)"}
+          onClick={() => toggleFull(root.current)}
+        >
+          ⛶
         </button>
       </div>
       <div

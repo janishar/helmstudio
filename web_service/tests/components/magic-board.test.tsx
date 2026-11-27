@@ -193,18 +193,29 @@ describe("the board", () => {
       expect(within(dlg).getByText("Dialogue", { selector: ".kb" })).toBeTruthy();
       const lines = within(dlg).getByRole("list", { name: "Lines" });
       expect(within(lines).getAllByRole("listitem")).toHaveLength(2);
-      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 1" }), { target: { value: "Hi." } });
-      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), { target: { value: "Yo." } });
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 1" }), {
+        target: { value: "Hi." },
+      });
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), {
+        target: { value: "Yo." },
+      });
       fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
       expect(blockEl(/Voice block Dialogue \d/).textContent).toMatch(/\d+%/);
       act(() => vi.advanceTimersByTime(6000));
       expect(within(blockEl(/Voice block Dialogue \d/)).getByText("Done")).toBeTruthy();
       fireEvent.doubleClick(blockEl(/Voice block Dialogue \d/));
       dlg = screen.getByRole("dialog", { name: /^Voice · Dialogue \d/ });
-      const rows = within(within(dlg).getByRole("list", { name: "Lines" })).getAllByRole("listitem");
-      expect(rows.map((r) => within(r).getByText(/Done|Draft/).textContent)).toEqual(["Done", "Done"]);
+      const rows = within(within(dlg).getByRole("list", { name: "Lines" })).getAllByRole(
+        "listitem",
+      );
+      expect(rows.map((r) => within(r).getByText(/Done|Draft/).textContent)).toEqual([
+        "Done",
+        "Done",
+      ]);
       // one line changed: only it is out of date
-      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), { target: { value: "Yo, later." } });
+      fireEvent.change(within(dlg).getByRole("textbox", { name: "Line 2" }), {
+        target: { value: "Yo, later." },
+      });
       expect(within(rows[1]).getByText("Out of date")).toBeTruthy();
       fireEvent.click(within(dlg).getByRole("button", { name: "Close" }));
       fireEvent(dlg, new Event("close")); // jsdom's close() fires none
@@ -218,7 +229,11 @@ describe("the board", () => {
       const left = within(cmp).getByRole("combobox", { name: "Left take" }) as HTMLSelectElement;
       const right = within(cmp).getByRole("combobox", { name: "Right take" }) as HTMLSelectElement;
       expect(left.value).not.toBe(right.value);
-      fireEvent.click(within(within(cmp).getByRole("region", { name: "Right" })).getByRole("button", { name: /Pin take/ }));
+      fireEvent.click(
+        within(within(cmp).getByRole("region", { name: "Right" })).getByRole("button", {
+          name: /Pin take/,
+        }),
+      );
       expect(within(cmp).getByText(/is pinned/)).toBeTruthy();
     } finally {
       vi.useRealTimers();
@@ -237,6 +252,17 @@ describe("the board", () => {
     expect(blockEl(/Voice block Line 1, 3.4 s/)).toBeTruthy();
   });
 
+  it("the player goes full screen from ⛶ (frame 1)", () => {
+    const req = vi.fn(() => Promise.resolve());
+    Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
+      value: req,
+      configurable: true,
+    });
+    render(<MagicBoard local />);
+    const fp = screen.getByRole("region", { name: "Player, floating" });
+    fireEvent.click(within(fp).getByRole("button", { name: "Full screen" }));
+    expect(req).toHaveBeenCalledTimes(1);
+  });
   it("the side panel's toggle is remembered in this browser", () => {
     const { unmount } = render(<MagicBoard local />);
     const toggle = screen.getByRole("button", { name: "Side panel" });

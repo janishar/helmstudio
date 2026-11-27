@@ -862,6 +862,18 @@
   min-height: 0;
   background: #000 center / cover no-repeat;
 }
+:is(.mg, .mg-side) .fp:fullscreen {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+:is(.mg, .mg-side) .fp:fullscreen .bar {
+  cursor: default;
+}
+:is(.mg, .mg-side) .fp:fullscreen .vid {
+  background-size: contain;
+}
 :is(.mg, .mg-side) .fp .ctl {
   display: flex;
   align-items: center;
