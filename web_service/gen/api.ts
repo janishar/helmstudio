@@ -592,7 +592,10 @@ export interface paths {
          *     voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; from 1.31 a voice with a clip
          *     sends its clip, resolved like a media value even after its take was deleted (`speak.voice: the clip of voice
          *     <name> is gone` when its object is missing); in a workflow whose media is
-         *     audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
+         *     audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. From
+         *     1.91 a media param of a workflow with a sound class takes only an audio take of that class, unless it accepts
+         *     video (the offers' rule, contracts/README.md, Music and sound: offers by class): `repaint.source: take <id> is
+         *     voice; this workflow takes music only` (`a video` for a video's sound); a rows item takes any class. When no host is eligible (none live with the env and the workflow),
          *     the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
          *     From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
          *     planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility. From 1.35 a
@@ -5126,7 +5129,7 @@ export interface components {
             ts: string;
             data: components["schemas"]["RunOutput"];
         };
-        /** @description from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from */
+        /** @description from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from (from 1.91 a Magic board's session named from a block's prompt: the board id) */
         TitleEvent: {
             seq: number;
             /**
@@ -9285,6 +9288,10 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description from 1.91: who wrote `name`, as a sequence's (contracts/README.md, Magic: Names) */
+            title_source?: components["schemas"]["TitleSource"];
+            /** @description from 1.91: the model that wrote the name while `title_source` is model; null otherwise */
+            named_by?: string | null;
         };
         MagicBoardSummary: {
             /** Format: uuid */

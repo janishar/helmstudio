@@ -35,7 +35,7 @@
         },
         "run_id": {
           "$ref": "defs.schema.json#/$defs/uuid",
-          "description": "the succeeded run whose prompt is named"
+          "description": "the succeeded run whose prompt is named; from API 1.91, a Magic board's naming (contracts/README.md, Magic: Names): the board id"
         },
         "prompt": {
           "type": "string",

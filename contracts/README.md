@@ -1750,7 +1750,10 @@ kinds of their own: `TakeKind` stays `image | video | audio`. `check.py` holds t
   Audio only on sound takes; a voice take gets neither). A video into a param that accepts video is no sound
   (MMAudio's video workflow is offered on videos). Rows params (references) take any class. `POST …/use` holds the
   same rule, a `param` named too: a take of another class is 422 `take <id> is <class>; workflow <id> takes <class>
-  only` (`a video` for a video's sound).
+  only` (`a video` for a video's sound). From 1.91 so does every run (`POST …/runs`, a batch's rows, a Magic run: the run's media
+  rules): `<node>.<param>: take <id> is <class>; this workflow takes <class> only` (`repaint.source: take <id> is
+  voice; this workflow takes music only`), the one rule (studio `gallery.ByClass`) offers, Use and runs share. The
+  screens never send such a run: they fill media params from offers and Magic's requests.
 - **Span on audio.** A `span` may sit on a node whose workflow's media source accepts audio: offers fill it with the
   whole take (a Timeline range: the range), studio snaps it to whole milliseconds. ltx's extend room (`extend_room`)
   is a video source's rule only: an audio extend is capped by the 600 s take limit.
@@ -3988,6 +3991,18 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   Every take id a document names that the stored one did not must be the caller's (unknown, deleted or another
   user's: 422 `take <id> not found`). A broken rule is a 422 `{detail}` (`blocks[2]: it overlaps the block before it
   on its lane`).
+- **Names** (API 1.91; owner, 2026-11-27: "auto naming here as well"), as Timeline: names: `MagicBoard.title_source`
+  (`default` for "Untitled board", `prompt`, `user` for a typed name and any rename, `model` with `named_by`). Boards
+  made before 1.91: "Untitled board" is `default`, any other name `user`. While it is `default` and never asked, the
+  first stored document (a create with `doc`, an edit, an undo, redo or restore; the Assistant's edits from a brief
+  too) whose blocks hold a prompt (the first block, lane then time order, with a `prompt`, else a `line`, else a
+  dialogue's first line with words; `<imageN>` tags removed, spaces collapsed, 2000 characters) names it once: the
+  prompt's first 5 words at once (`prompt`; the board's own session is made then if it has none, and is marked asked,
+  so its runs never ask again), then `cmd.pipeline.name` for the board's session with the board id as `run_id`, when
+  the admin's setting is not off. The answer renames the board whose session it is while its `title_source` is
+  `default` or `prompt` (a rename wins), and that session, with one `session` event (`TitleEvent`, `run_id` the board
+  id) in its log. The board's session is never named from its first run (it is made `user`). The Magic page reads the
+  board again on that event and shows "named by <model>" under the board's name once per browser, as the Timeline.
 
 ### Magic: edits by ops (API 1.80; normative)
 
