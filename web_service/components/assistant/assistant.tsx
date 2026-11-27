@@ -1554,6 +1554,10 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         {used.map((u) => (
           <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
         ))}
+        {/* the steps it took, then its answer, then the choices (owner, 2026-11-28: "why the action comes before the
+            steps") */}
+        {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
+        {rest.length > 0 && <Lines lines={rest} a={a} />}
         {parts.some((x) => x.text) && (
           // one clamp for the whole reply (board frame 17): every note of the turn and the answer, never per paragraph
           <Clamp
@@ -1586,8 +1590,6 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             )
           );
         })()}
-        {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
-        {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines
           .filter((l) => l.sources?.length)
           .map((l) => (

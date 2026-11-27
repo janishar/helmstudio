@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T07:20:00Z",
+  "at": "2026-11-28T08:00:00Z",
   "via": "Claude Code",
-  "note": "AssistantDrawer: a step's reply chips are off (hint: Answer the card first) while a card after them waits, so a chip never cancels the card (owner, 2026-11-28: \"Yes, fix it\"); frame style Film the default"
+  "note": "AssistantDrawer: a reply shows its steps first, then the answer, then the choices (owner, 2026-11-28: \"why the action comes before the steps\")"
  }
 }
