@@ -3,7 +3,7 @@
 Create's composer (create.tsx, the form "Composer"): the prompt, its references, the quick chips and the Generate key.
 
 - A `panel` on `s2` with `shadow-composer`, `space-composer-y` / `space-composer-x` padding, rows `space-composer-gap` apart, basis `size-composer`.
-- Prompt: a borderless textarea, two rows, `prompt` (15/22) in `t1`, placeholder `t2` ("Describe what you want to see"; for speech "Type the words to speak"). ⌘ or Ctrl + Enter generates. It keeps its two rows and scrolls; Expand opens it big.
+- Prompt: a borderless textarea, two rows, `prompt` (15/22) in `t1`, placeholder `t2` ("Describe what you want to see"; for speech "Type the words to speak"). ⌘ or Ctrl + Enter generates. It keeps its two rows and scrolls; Expand opens it big. The textarea is `display: block`, so the `@` colour layer under it is exactly as tall and scrolls as far (an inline textarea left a 5px gap and the colours drifted at the bottom).
 - Dialogue script (Voice, a dialogue model): a fixed 8 lines (176px) in both views, the numbered lines with their speaker chips and the editor; more lines, and each line's hint row ("Line 3: write @name: text or @name (style): text"), scroll inside it. Expand opens the script as text with `@` mentions, from either view (owner, 2026-11-27: "same is the case with voice").
 - Mentions: `@handle` names an element; known ones are highlighted on `s5` (`mention-chip`), unknown ones get a 22% `bad` tint and a wavy `bad` underline (`mention-unknown`).
 - Chip row, `space-chip-row` apart: + (add image, video or audio), @ (insert element), the quick chips (each a ChipPopup), the seeds stepper (n / 4), All settings, then the key at the end, bottom right even when the row wraps.

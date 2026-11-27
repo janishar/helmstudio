@@ -242,6 +242,8 @@ export function PromptArea({
         style={{
           ...rest.style,
           position: "relative",
+          // block: an inline textarea leaves a gap under it, which made the colour layer 5px taller and drift
+          display: "block",
           background: "transparent",
           scrollbarGutter: "stable",
         }}

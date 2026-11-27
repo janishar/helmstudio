@@ -80,6 +80,13 @@ describe("the dialogue script keeps a fixed height", () => {
     expect(box.style.height).toBe("176px");
     expect(box.getAttribute("rows")).toBeNull();
   });
+
+  it("the @ colour layer is as tall as the box (a block textarea, no inline gap), so it scrolls as far", () => {
+    render(<Host />);
+    fireEvent.click(screen.getByText("Line 1."));
+    const box = screen.getByRole("combobox", { name: "Script" }) as HTMLTextAreaElement;
+    expect(box.style.display).toBe("block");
+  });
 });
 
 describe("a take's Cover / Vary style", () => {
