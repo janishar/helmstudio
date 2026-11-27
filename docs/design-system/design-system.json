@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T20:25:00Z",
+  "at": "2026-11-28T01:10:00Z",
   "via": "Claude Code",
-  "note": "Magic variants, review fixes (docs/mock/MagicBoard.dc.html frames 3 and 7; web app): MagicBlockDialog's take on stage model line ends with the seed (\"LTX 2.5 · Distilled · seed 43\"); the Variant choice lists every variant on a host with no Mac or NVIDIA GPU, each greyed by what it has on disk, fp8 still only where a host has the GPU (owner, 2026-11-27: \"yes add them\")"
+  "note": "AssistantDrawer live steps: each tool call gets a running line that turns into a done tick, and Thinking restarts per model call (owner, 2026-11-28: \"yes show each step in the panel\"); Scrollbars: every scrolling area the thin themed bar, an s4 thumb on no track (README Visual foundations)"
  }
 }
