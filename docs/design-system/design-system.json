@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T08:00:00Z",
+  "at": "2026-11-28T08:40:00Z",
   "via": "Claude Code",
-  "note": "AssistantDrawer: a reply shows its steps first, then the answer, then the choices (owner, 2026-11-28: \"why the action comes before the steps\")"
+  "note": "MagicBlockDialog: a Level (dB) field on voice, music and sound blocks and a -6 dB badge on the block; ContextMenu: Louder (+3 dB), Quieter (-3 dB), Reset level (owner, 2026-11-28: \"Yes, add it\")"
  }
 }
