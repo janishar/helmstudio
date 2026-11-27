@@ -261,3 +261,27 @@ and Sound lanes take placed audio takes (an upload or a gallery take) and their 
 ## Decided by the owner (2026-11-27)
 
 Owner: "approved magic, build it": MagicBoard (11 frames) is approved, and the seven open points in 45.14 take their recommended defaults (bake fade and wipe; ask above 5 GPU minutes, set in Magic's settings; unlimited named snapshots; target from the first shot; the board's session hidden from Create's list; any kind on any lane; Dialogue as a Voice block with turns). Contract numbers: plan 40 (model folders) took 1.78.0 and plan 38 takes 1.79.0, so Magic starts at 1.80.0.
+
+## Built
+
+**Phase C (2026-11-27, API 1.80.0; contract steps 1 and 2 in one version, as the owner's run asked).** Boards in
+studio: `magic_boards` and `magic_board_revisions` (`00058_magic_boards.sql`), `magic_snapshots`
+(`00059_magic_snapshots.sql`), owner-scoped by `app_can_see`; the routes of contracts/README.md "Magic" (boards, edits
+by ops with `base_revision` and `dry_run`, revisions, undo, redo, restore, snapshots, `view=agent`). The web's editor
+(`components/magic/use-board.ts`) applies each edit locally and sends the same ops to studio one call after another;
+undo, redo and snapshots are studio's. Decisions taken on the owner's behalf:
+
+- **One set of ops, two implementations kept equal**: `web_service/lib/magic.ts` and `studio_service/api/magic`,
+  replayed from `contracts/fixtures/magic/edits.json` in `make contracts-check` (40 cases). Porting found four gaps in
+  phase B's ops, fixed in both: a split made while an op holds blocks off the board could reuse a held block's id;
+  `add` and `lane_add` with an id in use are refused (`That id is taken.`); a `transition` names exactly one join
+  (`Pick a join.`); a new transition's default length is whole frames.
+- **Not built yet (their phases)**: the board's session, `magic_runs`, `magic_settings`, the standard request and runs
+  (phase D), so the page's Run items are off with "Runs come with the standard request" and the fake estimates are
+  hidden; the agent view's status is draft or done until runs come.
+- **Snapshot rename** (`PATCH …/snapshots/{id}`): the approved snapshot menu has Rename.
+- **Takes a document names** must be the caller's ready ones (422 `take <id> not found`, the same answer as for an id
+  nobody has).
+- **First visit**: a user with no boards gets an "Untitled board" (frame 11's empty state); the sample board is in the
+  boards menu, its blocks as drafts (its takes are pictures in the browser). The browser fake mode stays for the tests
+  (`<MagicBoard local />`).
