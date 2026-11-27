@@ -8,3 +8,5 @@ A composer chip that opens its one setting in a popup under it (Create, alpha.5 
 - Escape or a press outside closes it; Escape puts focus back on the chip.
 
 The consumer provides the chip's value text, the popup's `aria-label` (the setting's name) and its controls (choices, a slider, a field).
+
+A confirm the user just asked for from a toolbar key (Magic's "Run the board?" above the limit, "Stop 3 runs?") is the same `pop`, opened at once under its own key (`bottom span-left`) as an `alertdialog`: a bold question, one line of why, then the keys right-aligned (Cancel / Not now, then the act as `chip on`, focused). Escape or a press outside is Cancel. It never shows as a bar that pushes the page.

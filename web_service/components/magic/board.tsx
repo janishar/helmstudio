@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   SlidersHorizontal,
+  TriangleAlert,
   Undo2,
   Redo2,
 } from "lucide-react";
@@ -683,33 +684,93 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 {playing ? <Pause10 /> : <Play10 />}
                 {playing ? "Pause" : "Play"}
               </button>
+              {/* the board's estimate is the key's short suffix, its words in the tooltip (owner, 2026-11-28) */}
               <button
                 type="button"
                 className="chip bevel"
                 disabled={!runnable.length || !board.run}
                 onClick={() => void runBoard()}
-                title={board.run ? "Runs every block that isn't done" : RUNS_LATER}
+                style={{ anchorName: "--magic-runboard" } as React.CSSProperties}
+                title={
+                  !board.run
+                    ? RUNS_LATER
+                    : boardEst != null && runnable.length
+                      ? `About ${estText(boardEst)}${boardHost ? ` on ${boardHost}` : ""}, from your own recent runs of these models`
+                      : "Runs every block that isn't done"
+                }
               >
                 <Play10 />
                 Run board
+                {boardEst != null && runnable.length > 0 && board.run && (
+                  <span className="mono text-t2">· ≈ {clockEst(boardEst)}</span>
+                )}
               </button>
-              {runnable.length > 0 && board.run && (
-                <span className="est" title="From your own recent runs of these models">
-                  <Clock3 size={13} aria-hidden />
-                  <b>{boardEst == null ? "Time unknown" : estText(boardEst)}</b>
-                  {boardHost && ` · ${boardHost}`}
-                </span>
+              {asking && (
+                <AskPop
+                  anchor="--magic-runboard"
+                  label="Run the board?"
+                  onClose={() => setAsking(null)}
+                >
+                  <b>Run the board?</b>
+                  <span>{asking}</span>
+                  <span className="flex justify-end gap-2">
+                    <button type="button" className="chip" onClick={() => setAsking(null)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className="chip on"
+                      onClick={() => {
+                        setAsking(null);
+                        run("stale");
+                      }}
+                    >
+                      Run
+                    </button>
+                  </span>
+                </AskPop>
               )}
               {board.going.length > 0 && (
                 <button
                   type="button"
                   className="chip bevel"
                   title="Stops the board's queued and running runs (asks first)"
+                  style={{ anchorName: "--magic-stopruns" } as React.CSSProperties}
                   onClick={() => setStopAsk(true)}
                 >
                   <Square size={13} aria-hidden />
                   Stop runs ({board.going.length})
                 </button>
+              )}
+              {stopAsk && board.going.length > 0 && (
+                <AskPop
+                  anchor="--magic-stopruns"
+                  label="Stop runs?"
+                  onClose={() => setStopAsk(false)}
+                >
+                  <b>
+                    Stop {board.going.length} run{board.going.length > 1 ? "s" : ""}?
+                  </b>
+                  <span>
+                    Queued ones drop at once; running ones stop at their next safe point. Takes
+                    already made stay.
+                  </span>
+                  <span className="flex justify-end gap-2">
+                    <button type="button" className="chip" onClick={() => setStopAsk(false)}>
+                      Not now
+                    </button>
+                    <button
+                      type="button"
+                      className="chip on"
+                      onClick={() => {
+                        setStopAsk(false);
+                        stop();
+                      }}
+                    >
+                      Stop runs
+                    </button>
+                  </span>
+                </AskPop>
               )}
               <span className="grow" />
               <div
@@ -792,107 +853,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 </button>
               </div>
             </div>
-            {over.slice(0, 1).map((o) => {
-              const b = doc.blocks.find((x) => x.id === o.block)!;
-              const shot = doc.blocks.find((x) => x.id === o.shot)!;
-              const fitLen = end(shot) - b.at;
-              return (
-                <div key={o.block} className="warn" role="alert">
-                  <b>Doesn&apos;t fit</b>
-                  <span>
-                    {b.name} runs {secs(o.by, fps)} past {shot.name.split(" · ")[0]}
-                  </span>
-                  <span className="grow" />
-                  <button
-                    type="button"
-                    className="chip"
-                    disabled={fitLen < 1}
-                    onClick={() =>
-                      edit([
-                        { op: "trim", id: b.id, length: fitLen },
-                        {
-                          op: "effect",
-                          ids: [b.id],
-                          effect: {
-                            name: `Speed · ${+(b.length / fitLen).toFixed(2)}×`,
-                            params: { rate: +(b.length / fitLen).toFixed(2) },
-                          },
-                        },
-                      ])
-                    }
-                  >
-                    Speed up
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    disabled={fitLen < 1}
-                    onClick={() => edit({ op: "trim", id: b.id, length: fitLen })}
-                  >
-                    Trim
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => edit({ op: "unlink", block: b.id })}
-                  >
-                    Unlink
-                  </button>
-                  <button
-                    type="button"
-                    className="chip"
-                    onClick={() => setKept((k) => [...k, b.id])}
-                  >
-                    Keep
-                  </button>
-                </div>
-              );
-            })}
-            {asking && (
-              <div className="warn" role="alert">
-                <b>Run the board?</b>
-                <span>{asking}</span>
-                <span className="grow" />
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() => {
-                    setAsking(null);
-                    run("stale");
-                  }}
-                >
-                  Run
-                </button>
-                <button type="button" className="chip" onClick={() => setAsking(null)}>
-                  Cancel
-                </button>
-              </div>
-            )}
-            {stopAsk && board.going.length > 0 && (
-              <div className="warn" role="alert">
-                <b>
-                  Stop {board.going.length} run{board.going.length > 1 ? "s" : ""}?
-                </b>
-                <span>
-                  Queued ones drop at once; running ones stop at their next safe point. Takes
-                  already made stay.
-                </span>
-                <span className="grow" />
-                <button
-                  type="button"
-                  className="chip"
-                  onClick={() => {
-                    setStopAsk(false);
-                    stop();
-                  }}
-                >
-                  Stop runs
-                </button>
-                <button type="button" className="chip" onClick={() => setStopAsk(false)}>
-                  Not now
-                </button>
-              </div>
-            )}
             {error && <ErrorNote>{error}</ErrorNote>}
             <AssetsRow
               doc={doc}
@@ -954,15 +914,22 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             {proposed.card && (
               <ProposalBar card={proposed.card} why={proposed.why} onAnswer={proposed.answer} />
             )}
-            <button
-              type="button"
-              className="chip bevel self-start"
-              style={{ marginLeft: phone ? 64 : 120 }}
-              onClick={addLane}
-            >
-              <Plus size={13} aria-hidden />
-              Lane
-            </button>
+            {/* bottom left (MagicBoard frame 11): a fixed slot under the lane heads, so the icon showing moves nothing */}
+            <div className="flex items-center self-start">
+              <span className="flex" style={{ width: phone ? 64 : 120 }}>
+                <FixButton
+                  doc={doc}
+                  takes={takes}
+                  act={act}
+                  over={over}
+                  onKeep={(id) => setKept((k) => [...k, id])}
+                />
+              </span>
+              <button type="button" className="chip bevel" onClick={addLane}>
+                <Plus size={13} aria-hidden />
+                Lane
+              </button>
+            </div>
             <Player
               doc={doc}
               takes={takes}
@@ -997,7 +964,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 Add
               </button>
             </div>
-            <StateBars doc={doc} takes={takes} act={act} />
             {one && phone && (
               <div className="flex items-center gap-2 rounded-xl bg-s2 px-3 py-2.5 text-[13px]">
                 <span className={`kb k-${one.kind}`}>{KIND_NAME[one.kind]}</span>
@@ -1278,75 +1244,269 @@ function EmptyBoard({ onLane, onAsset }: { onLane: () => void; onAsset: () => vo
 
 // ------------------------------------------------------------------------------------------------ the side panel
 
-/** What to do about a failed or out-of-date block (frame 11): a bar under the toolbar, up to three (at the bottom the
- * floating player covered its Run). */
-function StateBars({ doc, takes, act }: { doc: Doc; takes: Takes; act: Act }) {
+/** A confirm the user just asked for (Run the board?, Stop runs?): a small popover on its own button, so no bar
+ * pushes the board. Escape or a press outside is Cancel. */
+function AskPop({
+  anchor,
+  label,
+  onClose,
+  children,
+}: {
+  anchor: string;
+  label: string;
+  onClose: () => void;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  useEffect(() => {
+    const el = ref.current;
+    try {
+      el?.showPopover?.();
+    } catch {
+      /* already open */
+    }
+    el?.querySelector<HTMLButtonElement>(".chip.on")?.focus();
+    const onToggle = (e: Event) => (e as ToggleEvent).newState === "closed" && close.current();
+    el?.addEventListener("toggle", onToggle);
+    return () => el?.removeEventListener("toggle", onToggle);
+  }, []);
+  return (
+    <div
+      ref={ref}
+      popover="auto"
+      role="alertdialog"
+      aria-label={label}
+      className="pop flex w-[min(320px,calc(100vw-32px))] flex-col gap-2 text-[12px]"
+      style={
+        {
+          positionAnchor: anchor,
+          positionArea: "bottom span-left",
+          marginTop: 6,
+        } as React.CSSProperties
+      }
+    >
+      {children}
+    </div>
+  );
+}
+
+/** What to fix on the board (frame 11): one warning icon at the board's bottom left with a count (amber; red once
+ * any failed), hidden when there is none. It opens the list upward: every failed, out-of-date or overrunning block
+ * with its fix, and Run all. A row's name selects the block; a right-click gives the block's menu. */
+function FixButton({
+  doc,
+  takes,
+  act,
+  over,
+  onKeep,
+}: {
+  doc: Doc;
+  takes: Takes;
+  act: Act;
+  over: ReturnType<typeof overruns>;
+  onKeep: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const pop = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = pop.current;
+    const onToggle = (e: Event) => setOpen((e as ToggleEvent).newState === "open");
+    el?.addEventListener("toggle", onToggle);
+    return () => el?.removeEventListener("toggle", onToggle);
+  }, []);
+  const fps = doc.target.fps;
   const rows = doc.blocks
     .map((b) => ({ b, st: statusOf(doc, b, takes) }))
     .filter((x) => x.st.s === "failed" || x.st.s === "old")
-    .sort((x, y) => Number(y.st.s === "failed") - Number(x.st.s === "failed"))
-    .slice(0, 3);
-  return rows.map(({ b, st }) => {
+    .sort((x, y) => Number(y.st.s === "failed") - Number(x.st.s === "failed"));
+  const failed = rows.filter((x) => x.st.s === "failed").length;
+  const n = rows.length + over.length;
+  const why = [
+    failed && `${failed} failed`,
+    rows.length - failed && `${rows.length - failed} out of date`,
+    over.length && `${over.length} doesn't fit`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  const hide = () => document.getElementById("magic-fix")?.hidePopover?.();
+  const go = (id: string) => {
+    act.select([id]);
+    document.querySelector(`[data-block="${id}"]`)?.scrollIntoView?.({
+      block: "nearest",
+      inline: "center",
+    });
+  };
+  const chip = (
+    label: string,
+    onClick: () => void,
+    extra?: Partial<React.ComponentProps<"button">>,
+  ) => (
+    <button type="button" className="chip" onClick={onClick} {...extra}>
+      {label}
+    </button>
+  );
+  const row = (b: Block, text: string, bad: boolean, acts: React.ReactNode) => {
     const take = shown(b, takes);
-    const name = b.name.split(" · ")[0];
     return (
       <div
         key={b.id}
-        className={`warn ${st.s === "failed" ? "bad" : ""}`}
-        role="alert"
-        style={{ order: -1 }}
+        role="listitem"
+        tabIndex={0}
+        className="fixr"
+        onContextMenu={(e) => {
+          act.select([b.id]);
+          openMenu(e, blockMenu({ ...act, sel: [b.id] }, b));
+        }}
       >
-        <b>{st.s === "failed" ? `${name} failed` : `${name} out of date`}</b>
-        {st.s === "failed" && <span>{st.error}</span>}
-        <span className="grow" />
-        <button type="button" className="chip" onClick={() => act.run([b.id])}>
-          {st.s === "failed" ? "Retry" : "Run"}
+        <span className="fixt" style={{ backgroundImage: take?.art }}>
+          {!take?.art && <span className={`kb k-${b.kind}`}>{KIND_NAME[b.kind]}</span>}
+        </span>
+        <button
+          type="button"
+          className="fixn"
+          title="Show it on the board"
+          onClick={() => go(b.id)}
+        >
+          <b>{b.name.split(" · ")[0]}</b>
+          <span className={bad ? "text-bad" : "fixo"}>{text}</span>
         </button>
-        {st.s === "failed" ? (
-          <button type="button" className="chip" onClick={() => act.open(b.id)}>
-            Open
-          </button>
-        ) : b.pinned ? (
-          // a pin keeps an old take showing: pin the newest take made from the block's current inputs, else unpin
-          (() => {
-            const fresh = [...b.takes]
-              .reverse()
-              .map((id) => takes[id])
-              .find((t) => t?.status === "done" && t.inputs === inputsOf(doc, b, takes));
-            return fresh && fresh.id !== b.pinned ? (
-              <button
-                type="button"
-                className="chip"
-                title="Show the newest take, made from the current words"
-                onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: fresh.id } })}
-              >
-                Pin newest
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="chip"
-                title="Take the pin off: the newest take shows"
-                onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: null } })}
-              >
-                Unpin
-              </button>
-            );
-          })()
-        ) : (
-          take && (
-            <button
-              type="button"
-              className="chip"
-              onClick={() => act.edit({ op: "block", id: b.id, set: { pinned: take.id } })}
-            >
-              Pin take
-            </button>
-          )
-        )}
+        <span className="flex flex-wrap justify-end gap-1">{acts}</span>
       </div>
     );
-  });
+  };
+  return (
+    <>
+      {n > 0 && (
+        <button
+          type="button"
+          className={`fixb ${failed ? "bad" : ""}`}
+          aria-label={`${n} block${n > 1 ? "s" : ""} to fix: ${why}`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          title={why}
+          popoverTarget="magic-fix"
+          style={{ anchorName: "--magic-fix" } as React.CSSProperties}
+        >
+          <TriangleAlert size={16} strokeWidth={2} aria-hidden />
+          <span className="fixc">{n}</span>
+        </button>
+      )}
+      <div
+        ref={pop}
+        id="magic-fix"
+        popover="auto"
+        role="dialog"
+        aria-label="Blocks to fix"
+        className="pop w-[min(420px,calc(100vw-32px))] p-2"
+        style={
+          {
+            positionAnchor: "--magic-fix",
+            positionArea: "top span-right",
+            marginBottom: 6,
+          } as React.CSSProperties
+        }
+      >
+        {n > 0 && (
+          <>
+            <div className="flex items-center gap-2 px-1.5 pt-0.5 pb-1.5">
+              <b className="text-[13px]">Blocks to fix</b>
+              <span className="text-[11px] text-t2">{why}</span>
+            </div>
+            <div
+              role="list"
+              className="flex max-h-[min(60vh,400px)] flex-col gap-0.5 overflow-y-auto"
+            >
+              {rows.map(({ b, st }) => {
+                const take = shown(b, takes);
+                const isFailed = st.s === "failed";
+                // a pin keeps an old take showing: pin the newest take made from the block's current inputs, else unpin
+                const fresh =
+                  b.pinned &&
+                  [...b.takes]
+                    .reverse()
+                    .map((id) => takes[id])
+                    .find((t) => t?.status === "done" && t.inputs === inputsOf(doc, b, takes));
+                return row(
+                  b,
+                  isFailed ? `failed: ${st.s === "failed" ? st.error : ""}` : "out of date",
+                  isFailed,
+                  <>
+                    {chip(isFailed ? "Retry" : "Run", () => act.run([b.id]))}
+                    {isFailed
+                      ? chip("Open", () => (hide(), act.open(b.id)))
+                      : b.pinned
+                        ? fresh && fresh.id !== b.pinned
+                          ? chip(
+                              "Pin newest",
+                              () => act.edit({ op: "block", id: b.id, set: { pinned: fresh.id } }),
+                              { title: "Show the newest take, made from the current words" },
+                            )
+                          : chip(
+                              "Unpin",
+                              () => act.edit({ op: "block", id: b.id, set: { pinned: null } }),
+                              { title: "Take the pin off: the newest take shows" },
+                            )
+                        : take &&
+                          chip("Pin take", () =>
+                            act.edit({ op: "block", id: b.id, set: { pinned: take.id } }),
+                          )}
+                  </>,
+                );
+              })}
+              {over.map((o) => {
+                const b = doc.blocks.find((x) => x.id === o.block)!;
+                const shot = doc.blocks.find((x) => x.id === o.shot)!;
+                const fitLen = end(shot) - b.at;
+                const rate = +(b.length / fitLen).toFixed(2);
+                return row(
+                  b,
+                  `doesn't fit: runs ${secs(o.by, fps)} past ${shot.name.split(" · ")[0]}`,
+                  false,
+                  <>
+                    {chip(
+                      "Speed up",
+                      () =>
+                        act.edit([
+                          { op: "trim", id: b.id, length: fitLen },
+                          {
+                            op: "effect",
+                            ids: [b.id],
+                            effect: { name: `Speed · ${rate}×`, params: { rate } },
+                          },
+                        ]),
+                      { disabled: fitLen < 1 },
+                    )}
+                    {chip("Trim", () => act.edit({ op: "trim", id: b.id, length: fitLen }), {
+                      disabled: fitLen < 1,
+                    })}
+                    {chip("Unlink", () => act.edit({ op: "unlink", block: b.id }))}
+                    {chip("Keep", () => onKeep(b.id))}
+                  </>,
+                );
+              })}
+            </div>
+            {rows.length > 0 && (
+              <div className="mt-1 flex items-center justify-end border-t border-s4 px-1.5 pt-1.5">
+                <button
+                  type="button"
+                  className="chip on"
+                  disabled={!!act.runOff}
+                  title={act.runOff}
+                  onClick={() => act.run(rows.map((x) => x.b.id))}
+                >
+                  Run all ({rows.length})
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </>
+  );
 }
 
 /** One block's details (frame 1's side panel), with what to do when it failed or is out of date (frame 11). */
@@ -1716,3 +1876,9 @@ function BoardPanel({
     </>
   );
 }
+
+/** A board estimate as a short clock: 95 s is "1:35", under a minute "40 s". */
+const clockEst = (sec: number) => {
+  const s = Math.round(sec);
+  return s < 60 ? `${s} s` : `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+};

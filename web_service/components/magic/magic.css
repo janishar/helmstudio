@@ -1186,7 +1186,90 @@
     0 0 30px 4px color-mix(in srgb, var(--k) 45%, transparent);
 }
 
-/* the toolbar stays first; the failed / out-of-date bars (order -1) come right under it, clear of the floating player */
-:is(.mg, .mg-side) .mb > .btools {
-  order: -2;
+/* what to fix (frame 11): the warning icon at the board's bottom left, its count, and the list's rows */
+:is(.mg, .mg-side) .fixb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--s4);
+  color: #e8c468;
+  box-shadow: inset 0 0 0 1px #e8c468;
+}
+:is(.mg, .mg-side) .fixb.bad {
+  color: #ff8a80;
+  box-shadow: inset 0 0 0 1px #ff8a80;
+}
+:is(.mg, .mg-side) .fixb[aria-expanded="true"] {
+  background: var(--s5);
+}
+:is(.mg, .mg-side) .fixc {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e8c468;
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+:is(.mg, .mg-side) .fixb.bad .fixc {
+  background: #ff8a80;
+}
+#magic-fix .fixr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 10px;
+}
+#magic-fix .fixr:hover,
+#magic-fix .fixr:focus-visible {
+  background: var(--s3);
+}
+#magic-fix .fixt {
+  flex: 0 0 40px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--s3) center / cover;
+}
+#magic-fix .fixn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  font-size: 12px;
+  line-height: 16px;
+}
+#magic-fix .fixn > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 15px;
+}
+#magic-fix .fixo {
+  color: #e8c468;
+}
+#magic-fix .chip {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  background: var(--s4);
+}
+#magic-fix .chip.on {
+  box-shadow: inset 0 0 0 1px var(--a1);
 }

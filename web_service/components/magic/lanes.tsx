@@ -726,6 +726,7 @@ function BlockView({
     <div
       role="button"
       tabIndex={0}
+      data-block={b.id}
       aria-label={`${KIND_NAME[b.kind]} block ${b.name}, ${secs(b.length, fps)}`}
       aria-pressed={cls.includes("sel")}
       className={["blk", st.s === "old" && "old", st.s === "failed" && "fl", ...cls]

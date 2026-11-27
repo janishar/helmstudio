@@ -49,6 +49,8 @@ afterEach(() => {
   cleanup();
 });
 
+/** a popover by its label (popovers are not shown in jsdom, so role queries skip them) */
+const popOf = (label: string) => document.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
 const blockEl = (name: RegExp) => screen.getByRole("button", { name });
 /** a click on a block: down on it, up on the window (the board's drag listens there) */
 function click(el: Element, init: PointerEventInit = {}) {
@@ -258,11 +260,36 @@ describe("the board", () => {
     const b = s.boards[0];
     b.doc.blocks.find((x) => x.id === "s1")!.length = 4 * 24;
     render(<MagicBoard initial={s} />);
-    const warn = screen.getByText("Doesn't fit").closest('[role="alert"]') as HTMLElement;
-    expect(warn.textContent).toContain("Line 1 runs 3.1 s past Shot 1");
-    fireEvent.click(within(warn).getByRole("button", { name: "Trim" }));
-    expect(screen.queryByText("Doesn't fit")).toBeNull();
+    // the bottom-left warning icon counts it; its list holds the row with the fixes
+    expect(screen.getByRole("button", { name: /to fix: .*1 doesn't fit/ })).toBeTruthy();
+    const list = popOf("Blocks to fix");
+    const row = within(list)
+      .getAllByRole("listitem", { hidden: true })
+      .find((r) => /runs 3.1 s past Shot 1/.test(r.textContent ?? ""))!;
+    fireEvent.click(within(row).getByText("Trim", { selector: "button" }));
+    expect(screen.queryByText(/doesn't fit: runs/)).toBeNull();
     expect(blockEl(/Voice block Line 1, 3.4 s/)).toBeTruthy();
+  });
+
+  it("what to fix is one warning icon at the bottom left, its list upward with each fix (frame 11)", () => {
+    render(<MagicBoard local />);
+    const icon = screen.getByRole("button", { name: "1 block to fix: 1 out of date" });
+    expect(icon.getAttribute("aria-expanded")).toBe("false");
+    // no bar under the toolbar any more
+    expect(screen.queryByText("Shot 3 out of date")).toBeNull();
+    const list = popOf("Blocks to fix");
+    const [row] = within(list).getAllByRole("listitem", { hidden: true });
+    expect(row.textContent).toContain("Shot 3");
+    expect(row.textContent).toContain("out of date");
+    expect(within(row).getByText("Run", { selector: "button" })).toBeTruthy();
+    expect(within(row).getByText("Pin take", { selector: "button" })).toBeTruthy();
+    expect(within(list).getByText("Run all (1)", { selector: "button" })).toBeTruthy();
+    // its name selects the block; a right-click gives the block's menu
+    fireEvent.click(within(row).getByText("Shot 3").closest("button")!);
+    expect(blockEl(/Video block Shot 3/).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.contextMenu(row, { button: 2, clientX: 10, clientY: 10 });
+    expect(popOf("Shot 3 · puddle").getAttribute("role")).toBe("menu");
+    closeMenu();
   });
 
   it("Play beside Run board plays the board from the playhead and turns into Pause (frame 1)", () => {

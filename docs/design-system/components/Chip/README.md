@@ -11,3 +11,4 @@ A chip is a short setting or action: 36px tall, 13px/500 text, `space-chip-x` si
 - A chip the picked model cannot use stays in place, greyed (`aria-disabled="true"`, 0.45, not-allowed), with "Not on <model>" in its `title` ("Not on MiniMax Music 3"). It is not removed, so the row never jumps when the model changes. The group chip "90 BPM · A minor" opens TempoKey.
 
 The consumer provides the value text, `aria-expanded` when it opens something, and an `aria-label` when it is icon only.
+- A key's estimate is its short suffix, not a loose label beside it: "Run board · ≈ 1:35" (the suffix in mono `t2` after a dot), the words in its tooltip ("About 1 min 35 s on mac, from your own recent runs of these models"); with no estimate, just "Run board".

@@ -153,8 +153,10 @@ describe("the board's Stop runs", () => {
   it("says Stopping, then Stopped once none of them is going (it stayed on for good)", () => {
     render(<MagicBoard local />);
     fireEvent.click(screen.getByRole("button", { name: /^Stop runs/ }));
-    const ask = screen.getAllByRole("alert").find((x) => /^Stop \d/.test(x.textContent ?? ""))!;
-    fireEvent.click(within(ask).getByRole("button", { name: "Stop runs" }));
+    // a small confirm on its own button, not a bar that pushes the board
+    const ask = document.querySelector<HTMLElement>('[aria-label="Stop runs?"]')!;
+    expect(ask.textContent).toMatch(/^Stop \d/);
+    fireEvent.click(within(ask).getByText("Stop runs", { selector: "button" }));
     expect(screen.getAllByRole("status").map((s) => s.textContent)).toContain("Stopped 1 run");
   });
 });
