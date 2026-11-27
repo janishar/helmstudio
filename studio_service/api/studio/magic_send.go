@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5"
 
@@ -88,10 +89,21 @@ func buildSend(d magic.Doc, rules map[string]timeline.Take, status map[string]st
 		if _, probs := timeline.Normalize(out.Doc, rules, nil); probs == nil {
 			return out, nil
 		} else if !keep {
-			return out, fmt.Errorf("the send breaks the Timeline's rules: %v", probs)
+			log.Printf("magic send: %v", probs)
+			return out, network.NewUnprocessableError("The board can't be a sequence: it breaks the Timeline's rules.", nil)
 		}
 	}
 	return magic.Send{}, nil
+}
+
+// sendName is the default name of a board's nth send, "<board> · send <n>", the board's name cut so it stays within
+// the Timeline's 80 characters.
+func sendName(board string, n int) string {
+	suffix := fmt.Sprintf(" · send %d", n)
+	if r, keep := []rune(board), 80-utf8.RuneCountInString(suffix); len(r) > keep {
+		board = strings.TrimSpace(string(r[:keep]))
+	}
+	return board + suffix
 }
 
 // bakeEstimate is the seconds the bakes take: the caller's recent bakes per frame (the median of the last 5), else
@@ -165,7 +177,7 @@ func (s *Service) SendMagicBoard(ctx context.Context, caller common.Caller, id s
 		if err := tx.QueryRow(ctx, `SELECT count(*) FROM magic_sends WHERE board_id = $1`, row.ID).Scan(&n); err != nil {
 			return err
 		}
-		name := fmt.Sprintf("%s · send %d", row.Name, n+1)
+		name := sendName(row.Name, n+1)
 		if body.Name != nil {
 			name = strings.TrimSpace(*body.Name)
 		}

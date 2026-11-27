@@ -405,6 +405,9 @@ graph `studio_service/api/timeline/bake.go` (`BuildBake`, the export's picture s
   (a slot after it).
 - **Not built (left for later):** the Assistant's `send_to_timeline` tool (phase F); sound fades; a morph's own prompt
   field in its dialog (its request keeps one when set through the op).
+- **Review (2026-11-27):** a send's default name `<board> · send <n>` cuts the board's name so it stays within the
+  Timeline's 80 characters (an 80-character board made an 89-character sequence name, which the dialog then could not
+  send); a board the Timeline's rules refuse even with every join baked is a 422, not a 500.
 
 **Phase H (2026-11-27, API 1.85; 1.86 a README wording fix).** Music and Sound kinds: `standard` blocks on MiniMax
 Music 3 (`minimax-music3`), ACE-Step 1.5 (`ace-step-music`), Stable Audio 3 Small-SFX (`sa3-sound`) and MMAudio
