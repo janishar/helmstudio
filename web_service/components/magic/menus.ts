@@ -259,17 +259,21 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
         b.request.turns
           ? { label: "Voice", icon: Mic, off: "Each line has its speaker: Open" }
           : {
-          label: "Voice",
-          icon: Mic,
-          items: d.assets
-            .filter((x) => x.voice_id)
-            .map((x) => ({
-              label: `@${x.handle}`,
-              checked: b.request.voice === x.id,
-              onPick: () =>
-                a.edit({ op: "block", id: b.id, set: { request: { ...b.request, voice: x.id } } }),
-            })),
-          off: d.assets.some((x) => x.voice_id) ? undefined : "No asset has a voice yet",
+              label: "Voice",
+              icon: Mic,
+              items: d.assets
+                .filter((x) => x.voice_id)
+                .map((x) => ({
+                  label: `@${x.handle}`,
+                  checked: b.request.voice === x.id,
+                  onPick: () =>
+                    a.edit({
+                      op: "block",
+                      id: b.id,
+                      set: { request: { ...b.request, voice: x.id } },
+                    }),
+                })),
+              off: d.assets.some((x) => x.voice_id) ? undefined : "No asset has a voice yet",
             },
         "-",
         tiedTo
@@ -722,6 +726,41 @@ export function nextLaneName(d: Doc): string {
   return `Lane ${n}`;
 }
 
+/** From Gallery (the empty lane's menu, Add's step 1: MagicBoard frame 2a): a Gallery take placed on the lane at the
+ * point, at its own length, Insert or Overwrite (`mode`, else the board's). An audio lane picks audio. */
+export function fromGallery(a: Act, lane: Lane, at: number, mode: Mode = a.mode) {
+  const k = defaultKind(lane);
+  const kind = k === "voice" || k === "music" || k === "sound" ? "audio" : null;
+  a.gallery?.({
+    kind,
+    max: 1,
+    title: `From Gallery · ${lane.name} at ${clock(at, a.doc.target.fps, true)}`,
+    onPick: ([t]) => {
+      if (!t) return;
+      const bk: Kind =
+        t.kind === "audio" ? (kind ? k : "voice") : t.kind === "video" ? "video" : "image";
+      const fps = a.doc.target.fps;
+      a.edit({
+        op: "add",
+        mode,
+        block: {
+          lane: lane.id,
+          at,
+          length: Math.max(1, Math.round((t.duration ?? 4) * fps)),
+          kind: bk,
+          name:
+            (t.title ?? "").slice(0, 60) ||
+            `${KIND_LABEL[bk]} ${a.doc.blocks.filter((x) => x.kind === bk).length + 1}`,
+          request: { kind: bk },
+          takes: [t.id],
+          pinned: t.id,
+          effects: [],
+        },
+      });
+    },
+  });
+}
+
 /** The empty lane at a time. */
 export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; items: Item[] } {
   return {
@@ -744,38 +783,7 @@ export function emptyMenu(a: Act, lane: Lane, at: number): { title: string; item
         label: "From Gallery",
         icon: Images,
         off: a.gallery ? undefined : SOON.gallery,
-        onPick: () => {
-          const k = defaultKind(lane);
-          const kind = k === "voice" || k === "music" || k === "sound" ? "audio" : null;
-          a.gallery?.({
-            kind,
-            max: 1,
-            title: `From Gallery · ${lane.name} at ${clock(at, a.doc.target.fps, true)}`,
-            onPick: ([t]) => {
-              if (!t) return;
-              const bk: Kind =
-                t.kind === "audio" ? (kind ? k : "voice") : t.kind === "video" ? "video" : "image";
-              const fps = a.doc.target.fps;
-              a.edit({
-                op: "add",
-                mode: a.mode,
-                block: {
-                  lane: lane.id,
-                  at,
-                  length: Math.max(1, Math.round((t.duration ?? 4) * fps)),
-                  kind: bk,
-                  name:
-                    (t.title ?? "").slice(0, 60) ||
-                    `${KIND_LABEL[bk]} ${a.doc.blocks.filter((x) => x.kind === bk).length + 1}`,
-                  request: { kind: bk },
-                  takes: [t.id],
-                  pinned: t.id,
-                  effects: [],
-                },
-              });
-            },
-          });
-        },
+        onPick: () => fromGallery(a, lane, at),
       },
       { label: "Playhead here", icon: LocateFixed, onPick: () => a.seek(at) },
     ],
@@ -1127,8 +1135,18 @@ export function turnMenu(
   return {
     title: `Line ${i + 1}`,
     items: [
-      { label: "Move up", icon: ArrowUp, off: i > 0 ? undefined : "It's the first line", onPick: on.up },
-      { label: "Move down", icon: ArrowDown, off: i < n - 1 ? undefined : "It's the last line", onPick: on.down },
+      {
+        label: "Move up",
+        icon: ArrowUp,
+        off: i > 0 ? undefined : "It's the first line",
+        onPick: on.up,
+      },
+      {
+        label: "Move down",
+        icon: ArrowDown,
+        off: i < n - 1 ? undefined : "It's the last line",
+        onPick: on.down,
+      },
       "-",
       { label: "Remove line", icon: Trash2, danger: true, onPick: on.remove },
     ],
@@ -1136,7 +1154,12 @@ export function turnMenu(
 }
 
 /** A song's section marker on its music block (API 1.89): the playhead to it, play from it. */
-export function sectionMenu(a: Act, b: Block, label: string, at: number): { title: string; items: Item[] } {
+export function sectionMenu(
+  a: Act,
+  b: Block,
+  label: string,
+  at: number,
+): { title: string; items: Item[] } {
   return {
     title: `${b.name.split(" · ")[0]} · ${label}`,
     items: [

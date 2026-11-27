@@ -29,6 +29,7 @@ import {
   EFFECTS,
   blockMenu,
   effectMenu,
+  fromGallery,
   nextLaneName,
   proposalMenu,
   snapshotMenu,
@@ -502,6 +503,14 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
             {board.name}
             <ChevronDown size={16} aria-hidden />
           </button>
+          {board.namedBy && (
+            <span
+              role="status"
+              className="fade-late -ml-2 rounded-full bg-s2 px-2 py-0.5 text-[11px] text-t2"
+            >
+              named by {board.namedBy}
+            </span>
+          )}
           <span className="pill max-md:hidden">
             {doc.target.width} × {doc.target.height} · {fps} fps · {clock(total, fps, true)}
           </span>
@@ -1009,6 +1018,14 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                   if (!edit(ops)) return;
                   setSel([id]);
                   toRun.current = id;
+                }
+              : null
+          }
+          onGallery={
+            board.gallery
+              ? (w, m) => {
+                  const lane = doc.lanes.find((l) => l.id === w.lane);
+                  if (lane) fromGallery(act, lane, w.at, m);
                 }
               : null
           }

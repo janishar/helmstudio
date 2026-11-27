@@ -7,6 +7,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError, message, ok, type S } from "@/lib/api";
 import { followSession } from "@/lib/runs";
+import { firstHint } from "@/components/create/sessions";
 import {
   FAKE_KINDS,
   takesOf,
@@ -87,6 +88,8 @@ export type Board = {
   reload: () => void;
   /** the kept revisions, newest first (History, MagicBoard frame 8); null in the fake mode */
   revisions: (() => Promise<S<"MagicRevisionItem">[]>) | null;
+  /** the model that just named the board (API 1.91): "named by Qwen3.8" under its name, once per browser; "" none */
+  namedBy?: string;
 };
 
 // ------------------------------------------------------------------------------------------------ in studio
@@ -201,15 +204,37 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     const id = current.current;
     if (!id || pending.current) return;
     const w = (await ok(api.GET("/v1/studio/magic/boards/{board_id}", board(id)))) as Wire;
-    if (current.current === id && !pending.current) show(w);
+    if (current.current === id && !pending.current) {
+      show(w);
+      setBoards((bs) => bs.map((b) => (b.id === id ? { id, name: w.name } : b)));
+    }
   }, [show]);
+  // API 1.91: an untitled board is named from its first prompt, then perhaps by the namer: its session says so
+  const [namedBy, setNamedBy] = useState("");
+  useEffect(() => {
+    if (!namedBy) return;
+    const t = setTimeout(() => setNamedBy(""), 6000);
+    return () => clearTimeout(t);
+  }, [namedBy]);
+  const naming = useRef(false);
+  const untitled = wire?.title_source === "default" || wire?.title_source === "prompt";
+  useEffect(() => {
+    naming.current = untitled;
+  }, [untitled]);
   // the board's runs move through its session's events (status, progress, outputs): read it again on them
   const session = wire?.session_id ?? null;
   useEffect(() => {
     if (!session) return;
     let t: ReturnType<typeof setTimeout> | undefined;
     const stop = followSession(session, (e) => {
-      if (e.type === "session") return;
+      if (e.type === "session") {
+        // the namer's answer for a name nobody typed (a replay of an old one finds the board named already)
+        if (!naming.current || e.data.title_source !== "model") return;
+        naming.current = false;
+        void refresh().catch(() => undefined);
+        if (e.data.named_by && firstHint()) setNamedBy(e.data.named_by);
+        return;
+      }
       clearTimeout(t);
       t = setTimeout(() => void refresh().catch(() => undefined), 250);
     });
@@ -298,6 +323,7 @@ export function useApiBoard(): (Board & { ready: true }) | { ready: false; error
     boards,
     id,
     name: wire.name,
+    namedBy,
     doc,
     takes,
     canUndo: wire.can_undo,

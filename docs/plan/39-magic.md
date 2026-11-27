@@ -590,3 +590,38 @@ and Loop in Send); web: `request.tsx` (lines, Loop, Run on, the tie row), `block
   inputs match, else for the turn they match now, else for the turn it ran for (`runTurn`); a turn plays its newest take
   made from its inputs now, else its newest. Loop is off while a sound is made from a shot's video (played and sent):
   the greyed toggle could leave it stuck on.
+
+### Follow-ups (owner, 2026-11-27)
+
+**Built (API 1.91).** The owner: "Add the check" (a run of the wrong kind), "auto naming here as well" (boards named as
+sequences are) and "yes add from gallery in add dialog". Studio: `media.go` (`mediaRules`), `names.go`
+(`boardPrompt`, `askBoardName`, the named handler), `magic.go`, `00064_magic_names.sql`; web: `add.tsx` (From
+Gallery), `menus.ts` (`fromGallery`), `use-board.ts` and `board.tsx` (the "named by" hint). Decisions taken on the
+owner's behalf:
+
+- **The run check is the offers' rule, in the media rules**: `gallery.ByClass` (the rule offers and `…/use` share,
+  commit ecd9c99a) now runs in `mediaRules`, so `POST …/runs`, a batch's rows and a Magic run all hold it; a take's kind
+  was already checked there (`MediaFit`). Its 422 keeps the media texts' shape: `repaint.source: take <id> is voice;
+  this workflow takes music only` (`a video` for a video's sound). The media rules know the graph, not the workflow
+  id, so "this workflow" stands for `workflow <id>`. A rows item takes any class, as offers. The screens never send
+  such a run (offers and Magic's requests fill media params).
+- **What names a board**: the first block (lane then time order) with a `prompt`, else a `line`, else a dialogue's
+  first line with words; asset descriptions and notes never. A "brief" names a board through the blocks the Assistant
+  makes from it (studio never sees the brief itself; Build from a brief is still the Assistant's).
+- **When**: any stored document (create with `doc`, an edit, undo, redo, restore), as a sequence's. The prompt's first
+  5 words at once (`prompt`), then the namer once.
+- **The board's session carries the ask**: the naming pipeline is keyed by session, so the board's own session is made
+  then if it has none (it was made at the first run), marked asked, and `cmd.pipeline.name` goes with the board id as
+  `run_id` (pipelines only passes it back); the answer renames the board whose session it is, and the `session` event
+  (`run_id` the board id) tells the page. A board's session is `title_source user` from birth (sessions default), so
+  its runs never ask the namer for it.
+- **Rename and typed names**: a typed name at create and any rename are `user`, kept; a rename also makes the board's
+  session's title `user`, as a sequence's.
+- **The hint**: "named by <model>" beside the board name (as the Timeline puts it beside the sequence's), once per
+  browser (`firstHint`, shared with Create and the Timeline), 6 s; only for the namer's answer to a board nobody named
+  (an old answer replayed finds it named).
+- **From Gallery in Add**: a ghost button at the left of step 1's footer; it closes Add and opens the Gallery for that
+  point, then places the take at its own length by step 1's Place (Insert or Overwrite), the lane menu's
+  `fromGallery` with the mode passed. Greyed "The Gallery is in studio" with no Gallery (the fake mode). The design
+  system's Button gains the Ghost kind, its README the board's hint.
+- **Not built**: no web vitest for the hint (the Go and contract tests cover the naming; the e2e stack's naming is off).

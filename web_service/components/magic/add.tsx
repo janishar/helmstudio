@@ -8,7 +8,7 @@ import { Link2 } from "lucide-react";
 import { Modal } from "@/components/kit";
 import { KindTitle } from "@/components/magic/block-dialog";
 import { KIND_ICON } from "@/components/magic/icons";
-import { defaultKind } from "@/components/magic/menus";
+import { defaultKind, SOON } from "@/components/magic/menus";
 import { EstimateLine, RequestForm } from "@/components/magic/request";
 import { KIND_NAME } from "@/components/magic/icons";
 import {
@@ -60,14 +60,18 @@ type AddProps = {
   onAdd: (block: Omit<Block, "id">, mode: Mode) => void;
   /** step 2's Generate: the block with its request (tied to `tie` when given), then its run; null while runs can't go */
   onGenerate: ((block: Omit<Block, "id">, mode: Mode, tie?: string[]) => void) | null;
+  /** From Gallery (frame 2a): a Gallery take at the point, at its own length, placed by `mode`; null: no Gallery */
+  onGallery?: ((at: AddAt, mode: Mode) => void) | null;
   onClose: () => void;
 };
 
 export function AddDialog({ where, ...p }: AddProps & { where: AddAt | null }) {
   const lane = where && p.doc.lanes.find((l) => l.id === where.lane);
-  const [step2, setStep2] = useState<{ block: Omit<Block, "id">; mode: Mode; tie?: string[] } | null>(
-    null,
-  );
+  const [step2, setStep2] = useState<{
+    block: Omit<Block, "id">;
+    mode: Mode;
+    tie?: string[];
+  } | null>(null);
   const close = () => {
     setStep2(null);
     p.onClose();
@@ -185,6 +189,7 @@ function Form({
   mode0,
   onAdd,
   onNext,
+  onGallery,
   onClose,
 }: AddProps & {
   where: AddAt;
@@ -235,7 +240,10 @@ function Form({
   const staged = FORM_KINDS.includes(k) && !kindOf(kinds, k)?.off;
   // a dialogue starts with two lines, its speakers the board's first two voices
   const voiced = doc.assets.filter((a) => a.voice_id);
-  const lines = [0, 1].map((i) => ({ speaker: voiced[i % Math.max(1, voiced.length)]?.id ?? "", text: "" }));
+  const lines = [0, 1].map((i) => ({
+    speaker: voiced[i % Math.max(1, voiced.length)]?.id ?? "",
+    text: "",
+  }));
   const draft = (): Omit<Block, "id"> => ({
     lane: lane.id,
     at: where.at,
@@ -260,7 +268,10 @@ function Form({
     ...(shotKind && fromFrame && frame ? { from_frame: frame.id } : {}),
   });
   // a line or a cue under a shot is tied to it
-  const tie = (k === "voice" || k === "music") && shotUnder && shotUnder.lane !== lane.id ? [shotUnder.id] : undefined;
+  const tie =
+    (k === "voice" || k === "music") && shotUnder && shotUnder.lane !== lane.id
+      ? [shotUnder.id]
+      : undefined;
   const add = () => (staged ? onNext(draft(), mode, tie) : onAdd(draft(), mode));
 
   return (
@@ -370,6 +381,18 @@ function Form({
         </div>
       )}
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          className="h-9 rounded-[10px] px-3.5 text-[13px] font-medium text-t2 disabled:opacity-50"
+          disabled={!onGallery}
+          title={onGallery ? "A take you already have, at its own length" : SOON.gallery}
+          onClick={() => {
+            onGallery?.(where, mode);
+            onClose();
+          }}
+        >
+          From Gallery
+        </button>
         <span className="grow" />
         <button
           type="button"

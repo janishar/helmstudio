@@ -1,8 +1,8 @@
 // Magic, phases C and D (plan 39 §45.12): one fresh user on the test stack opens Magic from the rail on a new board
 // kept in studio, makes the sample board, adds a shot at a point with its standard request and generates it on the
 // fake runner (echo) until it is done with a take, opens it (run history, takes), moves it, ties a line to another
-// shot, undoes (studio's undo), saves a snapshot, and finds it all again after a reload. Board: MagicBoard frames 1,
-// 2, 3, 4, 5, 11.
+// shot, undoes (studio's undo), saves a snapshot, and finds it all again after a reload; Add's From Gallery opens the
+// Gallery (frame 2a). Board: MagicBoard frames 1, 2, 3, 4, 5, 11.
 // Screenshots go to E2E_SHOTS.
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
@@ -40,6 +40,18 @@ test("Magic opens from the rail on a new board; the sample board is one pick awa
   await expect(page.getByRole("button", { name: /Video block Shot 3/ })).toContainText("Draft");
   await expect(page.getByRole("button", { name: "Run board" })).toBeEnabled();
   await page.screenshot({ path: `${SHOTS}/1-board.png` });
+});
+
+test("Add's From Gallery opens the Gallery for the point", async () => {
+  const lane = page.getByRole("group", { name: "Lane Lane 7" });
+  await lane.getByText("Empty · click to add").click({ position: { x: 4, y: 10 } });
+  const add = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
+  await add.getByRole("button", { name: "From Gallery" }).click();
+  await expect(add).toBeHidden();
+  const picker = page.getByRole("dialog", { name: "From Gallery · Lane 7 at 0:00" });
+  await expect(picker).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(picker).toBeHidden();
 });
 
 test("add a shot at a point on the empty lane and generate it", async () => {

@@ -39,7 +39,7 @@ The app speaks in short, plain words. It is a tool, not a host: no greetings, no
 
 **Media.** Pictures are cover-fit on `s1` in 16:10 cards and 112-wide tiles; video shows its poster with a length badge and plays in native controls; audio shows the `wave` mark (one speech-like shape for every sound, not the real audio) and plays in native controls. Music takes show as album covers (a mood gradient with a vinyl disc), sound and voice takes as one glowing orb (sky `kind-sound`, amber `kind-voice`).
 
-**Motion.** Little and quick: popovers and menus appear without animation; the "named by …" hint under Create's title fades after a few seconds; spinners spin. Honour reduced motion: every animation and transition drops to 0.01ms.
+**Motion.** Little and quick: popovers and menus appear without animation; the "named by …" hint beside Create's title, a sequence's name and (from alpha.6) a Magic board's name fades after a few seconds; spinners spin. Honour reduced motion: every animation and transition drops to 0.01ms.
 
 **Selection.** The app is an app, not a document: only fields and code select text. Menus are our own right-click menu, never the browser's (Shift + right-click still gives the browser's).
 
