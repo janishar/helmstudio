@@ -3469,6 +3469,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/magic/boards/{board_id}/send": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * From 1.82: send the board to the Timeline as a new sequence (a dry run answers what goes)
+         * @description contracts/README.md, Magic: Send to Timeline. Always a new sequence, built from the board at `revision`: the
+         *     first Shots lane on V1, voice, music and sound on audio tracks linked to their shots, cut and dissolve as the
+         *     Timeline's, fade, wipe and lane fades baked (and effects into their shot's clip), a morph as its own clip.
+         *     `dry_run: true`: 200 with the plan only, nothing stored. Without bakes: 201 with the send and its sequence; with
+         *     bakes: 202 with the send `baking` and its media jobs (kind `bake`), the sequence made when the last one
+         *     succeeds. 409 `You have 100 sequences; delete some first.` (the Timeline's), 409 when `revision` is not the
+         *     current one, 409 `no live host can export (ffmpeg)` when bakes are needed and no env can run them, 409 `This
+         *     board is still sending; wait for it.`; 422 `Nothing to send: add a shot with a take first.`
+         */
+        post: operations["studioSendMagicBoard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/sends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** From 1.82: the board's sends, newest first */
+        get: operations["studioListMagicSends"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/studio/magic/boards/{board_id}/sends/{send_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** From 1.82: remove a send from the list (its sequence stays; one still baking is stopped) */
+        delete: operations["studioDeleteMagicSend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/files/{path}": {
         parameters: {
             query?: never;
@@ -5217,10 +5278,10 @@ export interface components {
          */
         SoundClass: "music" | "sound" | "voice";
         /**
-         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes)
+         * @description create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence's export (`export`); frame (from 1.17): a video take's first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes); bake (from 1.82): a short clip a Magic send baked (a fade, a wipe, a lane fade or a shot's effects; `parents` = the takes it read; contracts/README.md, Magic: Send to Timeline)
          * @enum {string}
          */
-        TakeSource: "create" | "upload" | "pipeline" | "import" | "export" | "frame" | "tool";
+        TakeSource: "create" | "upload" | "pipeline" | "import" | "export" | "frame" | "tool" | "bake";
         /**
          * @description One item of the caller's gallery: a run output or an upload, pointing at an immutable object (its key is never
          *     shown). `title` starts as the first line of the prompt (at most 80 characters; the workflow title when the
@@ -8745,10 +8806,10 @@ export interface components {
             hardware: boolean | null;
         };
         /**
-         * @description from 1.79 mux: Save with the video (POST /v1/studio/takes/{take_id}/mux)
+         * @description from 1.79 mux: Save with the video (POST /v1/studio/takes/{take_id}/mux); from 1.82 bake: a Magic send's baked join, lane fade or effects (contracts/README.md, Magic: Send to Timeline)
          * @enum {string}
          */
-        MediaJobKind: "export" | "frame" | "mux";
+        MediaJobKind: "export" | "frame" | "mux" | "bake";
         /** @enum {string} */
         MediaJobStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         MediaJob: {
@@ -8776,6 +8837,11 @@ export interface components {
              */
             video_take_id?: string | null;
             /**
+             * Format: uuid
+             * @description from 1.82, bake only (absent otherwise): the Magic send it bakes for
+             */
+            send_id?: string | null;
+            /**
              * @description export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)
              * @enum {string|null}
              */
@@ -8789,7 +8855,7 @@ export interface components {
             } | null;
             /**
              * Format: uuid
-             * @description succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame; from 1.79 a mux: a video take, source create, `parents` the video and the audio take)
+             * @description succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame; from 1.79 a mux: a video take, source create, `parents` the video and the audio take; from 1.82 a bake: a video take, source bake, `parents` the takes it read)
              */
             take_id: string | null;
             failure: {
@@ -9079,6 +9145,15 @@ export interface components {
             end?: components["schemas"]["MagicId"];
             kind: components["schemas"]["MagicTransitionKind"];
             length: components["schemas"]["MagicFrames"];
+            /** @description from 1.82, a morph only: its own video request (kind video; `model` one that takes a first and a last frame; its frames are the blocks' own: the first's last frame and the second's first frame) */
+            request?: components["schemas"]["MagicRequest"];
+            /** @description from 1.82, a morph only: take ids from its runs, oldest first */
+            takes?: string[];
+            /**
+             * Format: uuid
+             * @description from 1.82, a morph only: the take it shows (absent: its latest)
+             */
+            pinned?: string;
         };
         /** @description the board's own character, prop or place (Import copies a take or an Element in; never a link) */
         MagicAsset: {
@@ -9118,13 +9193,13 @@ export interface components {
              * @description from 1.81: the board's own session (made at its first run, hidden from GET /v1/studio/sessions): its events stream the board's runs
              */
             session_id?: string | null;
-            /** @description from 1.81: every block's runs, oldest first (the last 20 of each block) */
+            /** @description from 1.81: every block's runs, oldest first (the last 20 of each block); from 1.82 a morph's too (`block` its transition id) */
             runs?: components["schemas"]["MagicBlockRun"][];
             /** @description from 1.81: the takes the document names, by id (one deleted since is left out) */
             takes?: {
                 [key: string]: components["schemas"]["MagicTake"];
             };
-            /** @description from 1.81: every block's status by id (derived, contracts/README.md, Magic: runs) */
+            /** @description from 1.81: every block's status by id (derived, contracts/README.md, Magic: runs); from 1.82 every morph transition's too */
             status?: {
                 [key: string]: components["schemas"]["MagicStatus"];
             };
@@ -9209,6 +9284,10 @@ export interface components {
             end?: components["schemas"]["MagicId"];
             kind: components["schemas"]["MagicTransitionKind"];
             length?: components["schemas"]["MagicFrames"];
+            /** @description from 1.82, kind morph only: its request (absent: kept) */
+            request?: components["schemas"]["MagicRequest"];
+            /** @description from 1.82, kind morph only: one of its takes; null unpins */
+            pinned?: string | null;
         } | {
             /** @constant */
             op: "effect";
@@ -9356,6 +9435,92 @@ export interface components {
         MagicSnapshotPatch: {
             name: string;
         };
+        MagicSendCreate: {
+            /** @description the board's current revision, as the caller has it (409 when stale) */
+            revision: number;
+            /** @description the sequence's name; absent: `<board> · send <n>` */
+            name?: string;
+            /** @description true: the plan only (200), nothing stored */
+            dry_run?: boolean;
+        };
+        /** @description one lane that goes: its blocks with a take and the Timeline track they land on */
+        MagicSendGoes: {
+            lane: components["schemas"]["MagicId"];
+            name: string;
+            /**
+             * @description video: the Shots lane on V1; the rest by their lane's role (audio: a free lane's sound)
+             * @enum {string}
+             */
+            kind: "video" | "voice" | "music" | "sound" | "audio";
+            blocks: number;
+            /** @description the track as the Timeline names it: V1, A2, A3, … */
+            track: string;
+            /** @description blocks linked to their shot */
+            linked: number;
+        };
+        MagicSendJoin: {
+            transition: components["schemas"]["MagicId"];
+            /** @enum {string} */
+            kind: "dissolve" | "fade" | "wipe" | "morph" | "fade_in" | "fade_out";
+            /**
+             * @description kept: the Timeline's own dissolve; baked: a bake job's clip; clip: a morph's take as its own clip; cut: sent as a cut (why in the warnings); skipped: not sent (a sound lane's fade)
+             * @enum {string}
+             */
+            how: "kept" | "baked" | "clip" | "cut" | "skipped";
+        };
+        MagicSendPlan: {
+            name: string;
+            revision: number;
+            goes: components["schemas"]["MagicSendGoes"][];
+            joins: components["schemas"]["MagicSendJoin"][];
+            /** @description each effect badge on a shot that goes (off ones are left out) */
+            effects: {
+                block: components["schemas"]["MagicId"];
+                name: string;
+                /** @enum {string} */
+                how: "baked" | "skipped";
+            }[];
+            /** @description what the sequence will lack or differ in (`Shot 3 has no take: a gap`, `Shot 3 is out of date: sends take 2 as it is`) */
+            warnings: string[];
+            /** @description how many bake jobs it needs */
+            bakes: number;
+            /** @description their estimate in seconds (null: no bakes) */
+            bake_seconds: number | null;
+            /** @description the host that would bake (null: no bakes, or no live host) */
+            host: string | null;
+        };
+        MagicSend: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            /** @description the board revision it was sent from (kept while the send is listed) */
+            revision: number;
+            /** @enum {string} */
+            status: "baking" | "done" | "failed";
+            /**
+             * Format: uuid
+             * @description done: the new sequence
+             */
+            timeline_id: string | null;
+            /** @description the sequence was deleted since */
+            timeline_gone?: boolean;
+            bakes: number;
+            baked: number;
+            /** @description its bake jobs (in the send's own answer) */
+            jobs?: components["schemas"]["MediaJob"][];
+            /** @description failed: why (a bake failed, or the 100 sequences were reached meanwhile) */
+            failure: string | null;
+            /** Format: date-time */
+            made_at: string;
+        };
+        MagicSendResult: {
+            plan: components["schemas"]["MagicSendPlan"];
+            /** @description absent on a dry run */
+            send?: components["schemas"]["MagicSend"];
+        };
+        MagicSendList: {
+            sends: components["schemas"]["MagicSend"][];
+        };
         /**
          * @description a shared field of the standard request (size = width and height)
          * @enum {string}
@@ -9456,7 +9621,7 @@ export interface components {
             /** @description runs whose estimate is above this ask first (default 5; 0: always ask) */
             ask_above_gpu_minutes: number;
         };
-        /** @description which blocks: `blocks` (in this order), or a `lane`'s, or (`stale`) every block that is not done; exactly one */
+        /** @description which blocks: `blocks` (in this order), or a `lane`'s, or (`stale`) every block that is not done; exactly one. From 1.82 a morph transition is picked as a block is: by its id in `blocks`, with its lane, and by `stale` */
         MagicPick: {
             blocks?: components["schemas"]["MagicId"][];
             lane?: components["schemas"]["MagicId"];
@@ -9941,6 +10106,8 @@ export interface components {
         MagicBoardId: string;
         /** @description from 1.80: a board snapshot's UUID (malformed = 404) */
         MagicSnapshotId: string;
+        /** @description from 1.82: a send's UUID (malformed = 404) */
+        MagicSendId: string;
     };
     requestBodies: never;
     headers: never;
@@ -15047,6 +15214,108 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             404: components["responses"]["NotFound"];
             422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioSendMagicBoard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MagicSendCreate"];
+            };
+        };
+        responses: {
+            /** @description the dry run's plan */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSendResult"];
+                };
+            };
+            /** @description sent */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSendResult"];
+                };
+            };
+            /** @description baking */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSendResult"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListMagicSends: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description the sends */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MagicSendList"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioDeleteMagicSend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description from 1.80: a Magic board's UUID (another user's or malformed = 404) */
+                board_id: components["parameters"]["MagicBoardId"];
+                /** @description from 1.82: a send's UUID (malformed = 404) */
+                send_id: components["parameters"]["MagicSendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description removed */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
             503: components["responses"]["Unavailable"];
         };
     };

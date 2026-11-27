@@ -108,6 +108,7 @@ HTTP_SCHEMAS = [
     "MagicDoc", "MagicBoard", "MagicBoardList", "MagicBoardCreate", "MagicEdits", "MagicEditResult", "MagicAgentView",
     "MagicRevisionList", "MagicSnapshot", "MagicSnapshotList",  # 1.80
     "MagicKinds", "MagicSettings", "MagicPick", "MagicRunCreate", "MagicRunStarted", "MagicPlan",  # 1.81
+    "MagicSendCreate", "MagicSendResult", "MagicSendList",  # 1.82
 ]
 OPENAPI = "https://helmstudio.local/contracts/openapi.yaml"
 OPERATION_PREFIX = {"/v1/studio/": "studio", "/files/": "files", "/auth/": "auth"}

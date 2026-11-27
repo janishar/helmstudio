@@ -69,6 +69,10 @@ type Transition struct {
 	End     *string    `json:"end,omitempty"`
 	Kind    string     `json:"kind"`
 	Length  int        `json:"length"`
+	// a morph's own (API 1.82): its video request, the takes its runs made and the one it shows
+	Request map[string]any `json:"request,omitempty"`
+	Takes   []string       `json:"takes,omitempty"`
+	Pinned  *string        `json:"pinned,omitempty"`
 }
 
 // Asset is the board's own character, prop or place.
@@ -505,6 +509,8 @@ type fields struct {
 	Start   *string         `json:"start"`
 	End     *string         `json:"end"`
 	Kind    string          `json:"kind"`
+	Request json.RawMessage `json:"request"` // transition, a morph's (API 1.82)
+	Pinned  json.RawMessage `json:"pinned"`
 	Effect  json.RawMessage `json:"effect"`
 	Index   *int            `json:"index"`
 	Set     json.RawMessage `json:"set"`
@@ -522,7 +528,7 @@ var opFields = map[string][2][]string{
 	"split":        {{"id", "at"}, {"id", "at"}},
 	"link":         {{"block", "to"}, {"block", "to"}},
 	"unlink":       {{"block"}, {"block"}},
-	"transition":   {{"between", "start", "end", "kind", "length"}, {"kind"}},
+	"transition":   {{"between", "start", "end", "kind", "length", "request", "pinned"}, {"kind"}},
 	"effect":       {{"ids", "effect"}, {"ids", "effect"}},
 	"effect_set":   {{"id", "index", "effect"}, {"id", "index", "effect"}},
 	"block":        {{"id", "set"}, {"id", "set"}},
@@ -604,6 +610,35 @@ func Shape(op Op) string {
 	}
 	if f.Length != nil && *f.Length < 0 || f.At != nil && *f.At < 0 || f.Index != nil && *f.Index < 0 {
 		return "times and lengths are frames from 0"
+	}
+	return ""
+}
+
+// morphSet gives a morph t its request, takes and pin (API 1.82): kept from was while it stays a morph, then the op's
+// request and pinned; another kind takes neither.
+func morphSet(t, was *Transition, f fields) string {
+	if t.Kind != "morph" {
+		if len(f.Request) > 0 || len(f.Pinned) > 0 {
+			return "Only a morph has a request."
+		}
+		return ""
+	}
+	if was != nil && was.Kind == "morph" {
+		t.Request, t.Takes, t.Pinned = was.Request, was.Takes, was.Pinned
+	}
+	if len(f.Request) > 0 {
+		var r map[string]any
+		if json.Unmarshal(f.Request, &r) != nil || r["kind"] != "video" {
+			return "A morph's request is a video's."
+		}
+		t.Request = r
+	}
+	if len(f.Pinned) > 0 {
+		var p *string
+		if json.Unmarshal(f.Pinned, &p) != nil || p != nil && !slices.Contains(t.Takes, *p) {
+			return "That take isn't the morph's."
+		}
+		t.Pinned = p
 	}
 	return ""
 }
@@ -872,6 +907,9 @@ func apply(doc Doc, op Op) Applied {
 				t.Length = was.Length
 			default:
 				t.Length = int(math.Round(DefaultLength[f.Kind] * float64(d.Target.FPS)))
+			}
+			if why := morphSet(t, was, f); why != "" {
+				return refused(why)
 			}
 			d.Transitions = append(d.Transitions, t)
 		}

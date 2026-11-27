@@ -65,6 +65,10 @@ export type Transition = {
   end?: string;
   kind: TransitionKind;
   length: number;
+  /** a morph's own (API 1.82): its video request, the takes its runs made and the one it shows */
+  request?: MagicRequest;
+  takes?: string[];
+  pinned?: string;
 };
 export type Asset = {
   id: string;
@@ -105,6 +109,9 @@ export type Op =
       end?: string;
       kind: TransitionKind;
       length?: number;
+      /** a morph's request (API 1.82; absent: kept) and its pin (null unpins) */
+      request?: MagicRequest;
+      pinned?: string | null;
     }
   | { op: "effect"; ids: string[]; effect: Effect }
   | { op: "effect_set"; id: string; index: number; effect: Effect | null }
@@ -272,6 +279,32 @@ function tidy(d: Doc): Doc {
 // ------------------------------------------------------------------------------------------------ the ops
 
 /** Applies one op, all or nothing (as studio will): the new document, or why it can't. */
+/** A morph's request, takes and pin (API 1.82): kept from `was` while it stays a morph, then the op's request and
+ * pinned; another kind takes neither (studio_service/api/magic morphSet). */
+function morphSet(
+  t: Transition,
+  was: Transition | undefined,
+  op: { request?: MagicRequest; pinned?: string | null },
+): string {
+  if (t.kind !== "morph")
+    return op.request !== undefined || op.pinned !== undefined ? "Only a morph has a request." : "";
+  if (was?.kind === "morph") {
+    if (was.request) t.request = was.request;
+    if (was.takes?.length) t.takes = was.takes;
+    if (was.pinned) t.pinned = was.pinned;
+  }
+  if (op.request !== undefined) {
+    if (op.request?.kind !== "video") return "A morph's request is a video's.";
+    t.request = op.request;
+  }
+  if (op.pinned !== undefined) {
+    if (op.pinned !== null && !(t.takes ?? []).includes(op.pinned)) return "That take isn't the morph's.";
+    if (op.pinned === null) delete t.pinned;
+    else t.pinned = op.pinned;
+  }
+  return "";
+}
+
 export function apply(doc: Doc, op: Op): Applied {
   const d = clone(doc);
   const before = new Map(doc.blocks.map((b) => [b.id, b]));
@@ -387,8 +420,8 @@ export function apply(doc: Doc, op: Op): Applied {
           return { error: "Those blocks don't meet." };
       }
       // a cut between two blocks is no transition; at a lane's start or end, a cut is none either
-      if (op.kind !== "cut")
-        d.transitions.push({
+      if (op.kind !== "cut") {
+        const t: Transition = {
           id: was?.id ?? freshId(d, "t"),
           ...(op.between
             ? { between: op.between }
@@ -397,7 +430,11 @@ export function apply(doc: Doc, op: Op): Applied {
               : { end: op.end }),
           kind: op.kind,
           length: op.length ?? was?.length ?? Math.round(DEFAULT_LENGTH[op.kind] * d.target.fps),
-        });
+        };
+        const why = morphSet(t, was, op);
+        if (why) return { error: why };
+        d.transitions.push(t);
+      }
       return { doc: tidy(d) };
     }
     case "effect": {

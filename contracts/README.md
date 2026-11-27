@@ -3964,8 +3964,8 @@ Numbers in fixtures compare by value (1 = 1.0).
 
 A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
 tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
-studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); Send to Timeline and the
-Assistant's tools come with later phases (plan 39 §45.11), and so do their routes.
+studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); from 1.82 Send to Timeline
+(phase G, below); the Assistant's tools come with a later phase (plan 39 §45.11), and so do their routes.
 
 - **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
   "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
@@ -4090,6 +4090,56 @@ Assistant's tools come with later phases (plan 39 §45.11), and so do their rout
   board frame has no estimate or the total is above `ask_above_gpu_minutes`, with `ask_text` (`3 shots, about 6
   min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
 - **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 5; `magic_settings`).
+
+### Magic: Send to Timeline (API 1.82; plan 39 phase G, board MagicBoard frame 9; normative)
+
+- **`POST …/boards/{board_id}/send {revision, name?, dry_run?}`** makes a **new sequence** every time (the Timeline is
+  never changed, and a sequence keeps no link back to its board): `MagicSendResult {plan, send}`. `dry_run`: 200 with
+  the `plan` only, nothing stored. No bakes: 201, the send `done` with its `timeline_id`. Bakes: 202, the send
+  `baking` with its `jobs` (media jobs of kind `bake`, outside the four open media jobs a user may have); the
+  projector makes the sequence when the last one succeeds, in the same transaction, and a failed or cancelled one
+  fails the send (`failure`). 409 when `revision` is not the current one, `You have 100 sequences; delete some
+  first.` (the Timeline's, also when the cap is reached while it bakes: the send fails with it), `no live host can
+  export (ffmpeg)` when it needs bakes and no env can run them, `This board is still sending; wait for it.` while a
+  send of the board bakes; 422 `Nothing to send: add a shot with a take first.` (no shot or sound with a take).
+  The name is `<board> · send <n>` (n counts the board's sends), or `name`; its session as the Timeline's own.
+- **The doc builder** (`studio_service/api/magic` `BuildSend`, a pure function of the document, its takes and
+  statuses): the board's first `shots` lane goes on V1 in time, each block's shown take (pinned, else latest): a
+  video from its start for the block's length (a take shorter than its block leaves the rest an empty slot, with a
+  warning), an image held; gaps and blocks with no take are empty slots (`Shot 3 has no take: a gap`); an out-of-date
+  block goes as it is (`Shot 3 is out of date: sends take 2 as it is`). V1 clip ids are the block ids. The audio
+  lanes (role voice, music or sound, and free lanes' audio blocks), up to 8 in lane order, are audio tracks A2… (the
+  Timeline's names: V1 is track 1), each block at its time for its length (cut at V1's end), `link` to the shot it is tied to
+  (`TimelineClip.link`, the first of its run when that shot goes). Storyboard frames, assets, other picture lanes and
+  blocks of the wrong kind for their track stay on the board (a warning names each lane). The target is the board's
+  (fps not on the Timeline's table: 24, sample rate not 44100: 48000, each a warning).
+- **Joins on V1.** A cut is a cut. A **dissolve** is the Timeline's own `transition_in` when both takes have the
+  media for it (the first runs half its length past its block, the second half past its block, whose clip then starts
+  half the dissolve into its take); else it is baked. **Fade** (through black), **wipe** (left to right) and an
+  unhandled dissolve are **baked**: the clip of `length` frames centred on the cut, from the first block's last half
+  and the second's first half (each side's take past its block where it has it, else its end frame held), takes
+  their place, so every time on the board stays the same on the sequence. A lane's **fade in** and **fade out** (on
+  the Shots lane) bake its first block's first `length` frames from black, or its last block's last ones to black.
+  A **morph** with a shown take is that take as its own clip in the same span; with none it goes as a cut (a
+  warning). A block too short for both its ends' bakes sends its second join as a cut (a warning). Effects on a shot
+  (badges that are not `off`): Grade (`temperature`, `contrast`), Slow (`rate` 0.5-2: the take slowed to fill the
+  block) and Stabilize are baked into that shot's clip and into the joins that read it; any other is skipped (a
+  warning). A sound lane's fade is skipped (the Timeline has no sound fades).
+- **The bake job** (`cmd.media.job` kind `bake`, `bake {target, frames, samples, video_bitrate, args}`): studio's
+  graph (`studio_service/api/timeline` `BuildBake`: the export's picture steps, xfade `fadeblack`, `wipeleft` or
+  `fade`, `fade` in or out, the effects' filters, `tpad` for a held end, each side's sound faded across, silence where
+  a side has none) run with the export's placeholders and checks, conformed and verified as an export; output
+  `u/<owner_id>/bakes/<job_id>/bake.mp4` with its poster, last frame and thumbnail. Its take is source `bake`
+  (`parents` the takes it read, title `<board> · <join>`), in the gallery like an export.
+- **Morphs** (from 1.82): a `morph` transition carries its own `request` (kind video; a model whose standard block
+  fills `first` and `last`; absent: the fastest such), `takes` and `pinned`, set by the `transition` op's `request`
+  and `pinned` (kept while it stays a morph; another kind drops them). It runs as a block does (`…/run` and
+  `…/plan` pick it by its id, with its lane, or by `stale`): a video of its length from the first block's last frame
+  to the second's first frame; its runs, takes and status are on `MagicBoard` under its id.
+- **The sends list**: `GET …/boards/{board_id}/sends` (`MagicSendList`, newest first: name, the revision it was sent
+  from, status, `bakes` and `baked`, `timeline_id`, `timeline_gone` once that sequence is deleted). A listed send's
+  revision is kept (never pruned), so Restore board to it works. `DELETE …/sends/{send_id}` removes it from the list
+  (204; its sequence stays; a send still baking is stopped, its jobs cancelled).
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 

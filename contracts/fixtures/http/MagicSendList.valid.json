@@ -1,0 +1,16 @@
+{
+  "sends": [
+    {
+      "id": "a1b2c3d4-0000-4000-8000-000000000182",
+      "name": "The Last Tide · send 3",
+      "revision": 41,
+      "status": "done",
+      "timeline_id": "c3a1f2e4-5b6d-4e7f-8a9b-0c1d2e3f4a5b",
+      "bakes": 3,
+      "baked": 3,
+      "failure": null,
+      "made_at": "2026-11-27T10:48:00Z",
+      "timeline_gone": false
+    }
+  ]
+}

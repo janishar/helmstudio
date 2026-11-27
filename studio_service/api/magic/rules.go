@@ -146,6 +146,9 @@ func Check(d Doc) string {
 		if !slices.Contains(TransitionKinds, t.Kind) || t.Kind == "cut" {
 			return where + ": kind must be dissolve, fade, wipe or morph (a cut is no transition)"
 		}
+		if why := checkMorph(where, t); why != "" {
+			return why
+		}
 		n := 0
 		for _, set := range []bool{t.Between != nil, t.Start != nil, t.End != nil} {
 			if set {
@@ -191,7 +194,37 @@ func cmpOr(a, b *string) string {
 	return ""
 }
 
-// TakeIDs is every take id d names (blocks' takes and pins, assets' sheets), each once.
+// checkMorph is "" or why t's morph fields break the rules (API 1.82): only a morph has them, its request is a
+// video's with known fields, its takes are UUIDs and its pin one of them.
+func checkMorph(where string, t *Transition) string {
+	if t.Kind != "morph" {
+		if t.Request != nil || len(t.Takes) > 0 || t.Pinned != nil {
+			return where + ": only a morph has a request and takes"
+		}
+		return ""
+	}
+	for _, id := range t.Takes {
+		if !uuidPattern.MatchString(id) {
+			return where + ": take ids are UUIDs"
+		}
+	}
+	if t.Pinned != nil && !slices.Contains(t.Takes, *t.Pinned) {
+		return where + ": pinned is one of its takes"
+	}
+	if t.Request != nil {
+		if t.Request["kind"] != "video" {
+			return where + ": a morph's request is a video's"
+		}
+		for k := range t.Request {
+			if !slices.Contains(requestFields, k) {
+				return where + ": request: unknown field " + k
+			}
+		}
+	}
+	return ""
+}
+
+// TakeIDs is every take id d names (blocks' takes and pins, assets' sheets, from 1.82 morphs' takes), each once.
 func TakeIDs(d Doc) []string {
 	var out []string
 	add := func(ids ...string) {
@@ -209,6 +242,12 @@ func TakeIDs(d Doc) []string {
 	}
 	for _, a := range d.Assets {
 		add(a.Sheet...)
+	}
+	for _, t := range d.Transitions {
+		add(t.Takes...)
+		if t.Pinned != nil {
+			add(*t.Pinned)
+		}
 	}
 	return out
 }

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/cmd.media.job.schema.json",
-  "title": "studio → a runner: one media job (a sequence's export, a video take's frame, from 1.48 thumbnails, or from 1.79 a mux)",
-  "description": "From API 1.17 (contracts/README.md, Timeline: media jobs). Subject cmd.media.<host>.<env> (stream CMD, work queue; durable media-<host>-<env>, max_ack_pending 1, ack wait 60 s), Nats-Msg-Id <job_id>:1. `owner_id` = the user. Sent at once to the env studio chose (one whose hosts key has `media`). The runner works on it in a worker apart from runs and model jobs (ffmpeg on CPU or the media engine: no model, no GPU memory, no admission; it never counts as holding weights), sends `+WIP` every 10 s, checks KV `cancels` key <job_id> before it starts and at least every 2 s, publishes evt.media.status running, evt.media.progress, then one terminal status, waits for its ack, then acks the command. A redelivery starts over. From 1.79 a mux (contracts/README.md, Music and sound: Save with the video): the video's picture copied (H.264), the sound encoded as AAC 48 kHz stereo, cut or padded with silence to the video's length. Never bytes or URLs: inputs are object keys under u/<owner_id>/, outputs go under output_prefix.",
+  "title": "studio → a runner: one media job (a sequence's export, a video take's frame, from 1.48 thumbnails, from 1.79 a mux, or from 1.82 a bake)",
+  "description": "From API 1.17 (contracts/README.md, Timeline: media jobs). Subject cmd.media.<host>.<env> (stream CMD, work queue; durable media-<host>-<env>, max_ack_pending 1, ack wait 60 s), Nats-Msg-Id <job_id>:1. `owner_id` = the user. Sent at once to the env studio chose (one whose hosts key has `media`). The runner works on it in a worker apart from runs and model jobs (ffmpeg on CPU or the media engine: no model, no GPU memory, no admission; it never counts as holding weights), sends `+WIP` every 10 s, checks KV `cancels` key <job_id> before it starts and at least every 2 s, publishes evt.media.status running, evt.media.progress, then one terminal status, waits for its ack, then acks the command. A redelivery starts over. From 1.79 a mux (contracts/README.md, Music and sound: Save with the video): the video's picture copied (H.264), the sound encoded as AAC 48 kHz stereo, cut or padded with silence to the video's length. Never bytes or URLs: inputs are object keys under u/<owner_id>/, outputs go under output_prefix. From 1.82 a bake (contracts/README.md, Magic: Send to Timeline): a short clip studio's graph renders from one or two takes (a Magic send's fade, wipe or dissolve between two shots, a lane's fade in or out, a shot's effects), conformed and verified as an export is.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -32,7 +32,8 @@
             "export",
             "frame",
             "thumbs",
-            "mux"
+            "mux",
+            "bake"
           ]
         },
         "inputs": {
@@ -59,7 +60,7 @@
               }
             }
           },
-          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out); (1.48) a thumbs job reads 1-20, each kind image (an image take's file or a video's poster); (1.79) a mux job reads exactly 2: inputs[0] the video (kind video), inputs[1] the sound (kind audio)"
+          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out); (1.48) a thumbs job reads 1-20, each kind image (an image take's file or a video's poster); (1.79) a mux job reads exactly 2: inputs[0] the video (kind video), inputs[1] the sound (kind audio); (1.82) a bake job reads 1 or 2, each kind video or image"
         },
         "output_prefix": {
           "allOf": [
@@ -67,7 +68,7 @@
               "$ref": "defs.schema.json#/$defs/objectPrefix"
             }
           ],
-          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png); (1.48) thumbs: u/<owner_id>/thumbs/<job_id>/ (<i>.webp per input index); (1.79) mux: u/<owner_id>/muxes/<job_id>/ (mux.mp4, mux.poster.png, mux.last.png)"
+          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png); (1.48) thumbs: u/<owner_id>/thumbs/<job_id>/ (<i>.webp per input index); (1.79) mux: u/<owner_id>/muxes/<job_id>/ (mux.mp4, mux.poster.png, mux.last.png); (1.82) bake: u/<owner_id>/bakes/<job_id>/ (bake.mp4, bake.poster.png, bake.last.png, bake.thumb.webp)"
         },
         "export": {
           "type": "object",
@@ -243,6 +244,85 @@
               "description": "the frame number from 0 (last: the take's frames − 1)"
             }
           }
+        },
+        "bake": {
+          "type": "object",
+          "required": [
+            "target",
+            "frames",
+            "samples",
+            "video_bitrate",
+            "args"
+          ],
+          "additionalProperties": false,
+          "description": "(1.82) a bake: the export's conform with studio's own graph (the same placeholders and checks as export.args); the output has the target's size, rate and sample rate and is within one frame of `frames`",
+          "properties": {
+            "target": {
+              "type": "object",
+              "required": [
+                "width",
+                "height",
+                "fps",
+                "rate",
+                "sample_rate"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "width": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 4096
+                },
+                "height": {
+                  "type": "integer",
+                  "minimum": 16,
+                  "maximum": 4096
+                },
+                "fps": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "rate": {
+                  "type": "string",
+                  "pattern": "^[1-9][0-9]*/[1-9][0-9]*$",
+                  "description": "the exact frame rate (24000/1001)"
+                },
+                "sample_rate": {
+                  "enum": [
+                    44100,
+                    48000
+                  ]
+                }
+              }
+            },
+            "frames": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 14400,
+              "description": "the clip's length in frames (at most 10 minutes at 24 fps)"
+            },
+            "samples": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "frames × sample_rate × den / num: the sound's length in samples"
+            },
+            "video_bitrate": {
+              "type": "integer",
+              "minimum": 1000000,
+              "maximum": 40000000,
+              "description": "bits per second for {venc}"
+            },
+            "args": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4000,
+              "items": {
+                "type": "string",
+                "maxLength": 65536
+              },
+              "description": "ffmpeg's arguments after the program name, built by studio (the one filter graph implementation), with placeholders the runner substitutes: `{in:<n>}` = the local absolute path of inputs[n], `{list}` = the concat list it writes from `concat`, `{out}` = the local output file, `{venc}` = its own video encoder arguments (expands to several: README, Timeline: media jobs). The runner refuses (failure `invalid`) a list with an `-i` not followed by `{in:<n>}` or `{list}`, a codec value (`-c`, `-c:v`, `-c:a`, `-codec*`, `-vcodec`, `-acodec`) other than copy, aac, rawvideo or pcm_s16le outside `{venc}`, an output other than `{out}`, or a filter that opens a file or URL (movie, amovie)"
+            }
+          }
         }
       },
       "allOf": [
@@ -259,8 +339,17 @@
               "export"
             ],
             "not": {
-              "required": [
-                "frame"
+              "anyOf": [
+                {
+                  "required": [
+                    "frame"
+                  ]
+                },
+                {
+                  "required": [
+                    "bake"
+                  ]
+                }
               ]
             }
           }
@@ -284,8 +373,17 @@
               }
             },
             "not": {
-              "required": [
-                "export"
+              "anyOf": [
+                {
+                  "required": [
+                    "export"
+                  ]
+                },
+                {
+                  "required": [
+                    "bake"
+                  ]
+                }
               ]
             }
           }
@@ -326,6 +424,11 @@
                   "required": [
                     "frame"
                   ]
+                },
+                {
+                  "required": [
+                    "bake"
+                  ]
                 }
               ]
             }
@@ -363,6 +466,58 @@
               },
               "output_prefix": {
                 "pattern": "/muxes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/$"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "export"
+                  ]
+                },
+                {
+                  "required": [
+                    "frame"
+                  ]
+                },
+                {
+                  "required": [
+                    "bake"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "bake"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "bake"
+            ],
+            "properties": {
+              "inputs": {
+                "minItems": 1,
+                "maxItems": 2,
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "video",
+                        "image"
+                      ]
+                    }
+                  }
+                }
+              },
+              "output_prefix": {
+                "pattern": "/bakes/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/$"
               }
             },
             "not": {
