@@ -337,8 +337,12 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 				names = append(names, op.Name)
 			}
 		}
+		summary := strings.Join(names, ", ")
+		if common.ViaOf(caller.Via) == "assistant" { // API 1.87: History says what the Assistant changed
+			summary = magic.Describe(before, doc)
+		}
 		undo := row.Revision
-		if err := storeBoard(ctx, tx, &row, doc, userWrite(caller, strings.Join(names, ", ")), &undo, nil); err != nil {
+		if err := storeBoard(ctx, tx, &row, doc, userWrite(caller, summary), &undo, nil); err != nil {
 			return err
 		}
 		out.Revision = row.Revision

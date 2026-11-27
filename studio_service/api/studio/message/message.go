@@ -526,15 +526,19 @@ type ToolsRequest struct {
 	CallID   string          `json:"call_id"`
 	Tool     string          `json:"tool"`
 	Args     json.RawMessage `json:"args"`
+	// Confirmed (API 1.87) is the user's Yes on a Magic card tool's card: without it studio answers the preview
+	Confirmed bool `json:"confirmed,omitempty"`
 }
 
 // ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.
 type ToolsReply struct {
-	Tool   string    `json:"tool,omitempty"` // API 1.44: an assistant call's ok reply names its tool
-	Result any       `json:"result,omitempty"`
-	Row    *ToolsRow `json:"row,omitempty"`
-	Error  string    `json:"error,omitempty"`
-	Code   string    `json:"code,omitempty"`
+	Tool   string `json:"tool,omitempty"` // API 1.44: an assistant call's ok reply names its tool
+	Result any    `json:"result,omitempty"`
+	// Preview (API 1.87) is what a Magic card tool's card shows, asked without Confirmed; nothing else was done
+	Preview any       `json:"preview,omitempty"`
+	Row     *ToolsRow `json:"row,omitempty"`
+	Error   string    `json:"error,omitempty"`
+	Code    string    `json:"code,omitempty"`
 }
 
 // ToolsRow is the stored row of a rows.add / rows.edit reply, as cmd.pipeline.submit carries rows but with seeds

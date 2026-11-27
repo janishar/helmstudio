@@ -1671,3 +1671,189 @@ async def test_generating_an_unplanned_shot_is_asked_again_and_the_model_asks(po
         and "```options" in step["text"]
         and not step.get("actions")
     )
+
+
+# --- Magic (API 1.87, contracts/README.md "Magic: the Assistant"; plan 39 §45.8, board MagicBoard frame 8)
+
+BOARD = "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e"
+MAGIC_TOOLS = TOOLS + [
+    "show_board",
+    "try_board_edit",
+    "edit_board",
+    "restore_board",
+    "run_blocks",
+    "send_to_timeline",
+]
+ADD = [{"op": "add", "mode": "insert", "block": {"lane": "shots", "at": 96, "length": 48, "kind": "video",
+                                                 "name": "Shot 3", "request": {"kind": "video"}, "takes": [],
+                                                 "effects": []}}]  # fmt: skip
+
+
+class MagicTools(Tools):
+    """studio's Magic card tools: a preview without `confirmed`, the write with it (and run_blocks within the limit at
+    once)."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.ask_rule = True
+
+    async def __call__(self, req: dict) -> dict:
+        if req["tool"] not in assistant.MAGIC_CARDS:
+            return await super().__call__(req)
+        assert not schemas.tools_errors("request", req), schemas.tools_errors("request", req)
+        self.asked.append(req)
+        if req["tool"] in self.errors:
+            return self.errors[req["tool"]]
+        if req["tool"] == "edit_board":
+            if not req.get("confirmed"):
+                return {"tool": "edit_board", "preview": {"revision": 1, "diff": {}, "warnings": ["Line 2 runs 1 s past Shot 2"],
+                                                         "summary": "Added Shot 3",
+                                                         "estimate": {"seconds": 361, "host": "mac-studio", "blocks": 1}}}  # fmt: skip
+            return {
+                "tool": "edit_board",
+                "result": {"revision": 2, "diff": {}, "warnings": [], "summary": "Added Shot 3"},
+            }
+        if req["tool"] == "run_blocks":
+            started = [{"block": "s2", "run_id": str(uuid.uuid4())}]
+            if req.get("confirmed") or not self.ask_rule:
+                return {
+                    "tool": "run_blocks",
+                    "result": {"revision": 2, "started": started, "skipped": []},
+                }
+            return {"tool": "run_blocks", "preview": {
+                "revision": 2, "plan": {"ask": True, "limit_minutes": 5, "ask_text": "4 blocks, about 6 min"},
+                "frames": [{"block": "f4", "name": "Frame 4", "run_id": str(uuid.uuid4()), "seconds": 6}],
+                "rest": {"blocks": ["s2", "s3", "s4"], "names": ["Shot 2", "Shot 3", "Shot 4"], "seconds": 361,
+                         "host": "mac-studio", "ask_text": "3 shots, about 6 min"}}}  # fmt: skip
+        if req["tool"] == "restore_board":
+            if not req.get("confirmed"):
+                return {"tool": "restore_board", "preview": {"revision": 3, "to": {
+                    "revision": 2, "by": "user", "via": "assistant", "ops_summary": "Added Shot 3",
+                    "saved_at": "2026-11-27T10:00:00Z", "blocks": 4}}}  # fmt: skip
+            return {"tool": "restore_board", "result": {"revision": 4}}
+        plan = {
+            "name": "Rain · send 1",
+            "goes": [{}, {}],
+            "bakes": 1,
+            "bake_seconds": 8,
+            "warnings": [],
+        }
+        if not req.get("confirmed"):
+            return {"tool": "send_to_timeline", "preview": {"plan": plan}}
+        return {
+            "tool": "send_to_timeline",
+            "result": {"plan": plan, "send": {"name": "Rain · send 1", "status": "baking"}},
+        }
+
+
+def magic_chat(pool, fake) -> Chat:
+    c = Chat(pool, fake)
+    c.tools = MagicTools()
+    c.restart()
+    c.tool_names = MAGIC_TOOLS
+    c.route = "/magic"
+    return c
+
+
+async def test_an_edit_is_proposed_on_the_board_and_applied_by_the_users_yes(pool, fake):
+    c = magic_chat(pool, fake)
+    args = {"board_id": BOARD, "base_revision": 1, "ops": ADD}
+    c.script(
+        calls(("try_board_edit", args)),
+        calls(("edit_board", args)),
+        {"content": "Shot 3 is on the board."},
+    )
+    step = await c.say("add a bus shot after shot 2")
+    (card,) = step["cards"]
+    assert card["kind"] == "board_edit" and card["title"] == "Assistant's change"
+    assert card["rows"] == [{"label": "Change", "value": "Added Shot 3"},
+                            {"label": "To run", "value": "about 6 min · mac-studio"}]  # fmt: skip
+    assert card["board"] == {"board_id": BOARD, "base_revision": 1, "ops": ADD} and card[
+        "tags"
+    ] == ["changes the board"]
+    assert card["note"] == "Line 2 runs 1 s past Shot 2"
+    edits = [r for r in c.tools.asked if r["tool"] == "edit_board"]
+    assert (
+        len(edits) == 1 and "confirmed" not in edits[0]
+    )  # the preview only: nothing is written before the Yes
+    step = await c.answer(card["id"])
+    yes = [r for r in c.tools.asked if r["tool"] == "edit_board"][-1]
+    assert yes["confirmed"] is True and yes["call_id"] == card["id"] and yes["args"] == args
+    assert step["done"] and step["lines"][0]["text"] == "Changed the board · Added Shot 3"
+
+
+async def test_a_discarded_edit_writes_nothing(pool, fake):
+    c = magic_chat(pool, fake)
+    c.script(
+        calls(("edit_board", {"board_id": BOARD, "base_revision": 1, "ops": ADD})),
+        {"content": "Left it."},
+    )
+    card = (await c.say("add a shot"))["cards"][0]
+    step = await c.answer(card["id"], "not_now")
+    assert step["done"] and not any(r.get("confirmed") for r in c.tools.asked)
+    told = c.asked()[-1]["messages"][1]["content"]
+    assert "the user said Not now" in json.dumps(told)
+
+
+async def test_runs_above_the_limit_ask_with_the_estimate_and_frames_run_on_their_own(pool, fake):
+    c = magic_chat(pool, fake)
+    pick = {"board_id": BOARD, "revision": 2, "stale": True}
+    c.script(calls(("run_blocks", pick)), {"content": "Running."})
+    step = await c.say("run the board")
+    (card,) = step["cards"]
+    assert card["kind"] == "magic_run" and card["title"] == "Run 3 shots, about 6 min?"
+    assert card["note"] == "Above your 5 min limit. Frame 4 ran on its own (6 s)."
+    assert card["rows"] == [
+        {"label": "Runs", "value": "Shot 2, Shot 3 and Shot 4 · about 6 min · mac-studio"}
+    ]
+    assert card["tags"] == ["uses the GPU"] and step["lines"][0]["text"] == "Running Frame 4"
+    step = await c.answer(card["id"])
+    assert [r.get("confirmed") for r in c.tools.asked if r["tool"] == "run_blocks"] == [None, True]
+    assert step["lines"][0]["text"] == "Started 1 run" and step["lines"][0]["status"] == "running"
+
+
+async def test_runs_within_the_limit_start_without_a_card(pool, fake):
+    c = magic_chat(pool, fake)
+    c.tools.ask_rule = False
+    c.script(
+        calls(("run_blocks", {"board_id": BOARD, "revision": 2, "blocks": ["s2"]})),
+        {"content": "Running."},
+    )
+    step = await c.say("run shot 2")
+    assert step["done"] and not step["cards"] and step["lines"][0]["text"] == "Started 1 run"
+
+
+async def test_restore_and_send_ask_first(pool, fake):
+    c = magic_chat(pool, fake)
+    c.script(
+        calls(("restore_board", {"board_id": BOARD, "revision": 3, "to": 2})), {"content": "Back."}
+    )
+    card = (await c.say("go back"))["cards"][0]
+    assert card["kind"] == "board_edit" and card["title"] == "Restore rev 2?"
+    assert (
+        card["rows"][0]["value"] == "rev 2 · by Assistant · Added Shot 3"
+        and card["board"]["to"] == 2
+    )
+    step = await c.answer(card["id"])
+    assert step["lines"][0]["text"] == "Restored rev 2 · now rev 4"
+    c.script(
+        calls(("send_to_timeline", {"board_id": BOARD, "revision": 4})), {"content": "Sending."}
+    )
+    card = (await c.say("send it"))["cards"][0]
+    assert card["kind"] == "send" and card["tags"] == ["uses the machine"]
+    assert card["rows"] == [{"label": "Name", "value": "Rain · send 1"}, {"label": "Goes", "value": "2 clips"},
+                            {"label": "Bakes", "value": "1 join · about 8 s"}]  # fmt: skip
+    step = await c.answer(card["id"])
+    assert step["lines"][0]["text"] == "Sending to Timeline · Rain · send 1"
+
+
+async def test_a_refused_magic_preview_is_a_failed_line_and_no_card(pool, fake):
+    c = magic_chat(pool, fake)
+    c.tools.errors["edit_board"] = {"error": "ops[0]: That lane is gone.", "code": "invalid"}
+    c.script(
+        calls(("edit_board", {"board_id": BOARD, "base_revision": 1, "ops": ADD})),
+        {"content": "Sorry."},
+    )
+    step = await c.say("add a shot")
+    assert step["done"] and not step["cards"]
+    assert step["lines"][0]["text"] == "Could not change the board · ops[0]: That lane is gone."

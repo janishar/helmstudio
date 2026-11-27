@@ -1272,87 +1272,129 @@ func (s *Service) PlanMagicBoard(ctx context.Context, caller common.Caller, id s
 		if err != nil {
 			return err
 		}
-		if out.LimitMinutes, err = askAbove(ctx, tx); err != nil {
-			return err
-		}
-		ws := s.registry.Workflows()
-		total, known, unknownRun := 0.0, true, false
-		lanes := map[string]*dto.MagicPlanLane{}
-		var kinds []string
-		for _, b := range blocks {
-			pb := dto.MagicPlanBlock{Block: b.ID, Source: "unknown"}
-			out.Order = append(out.Order, b.ID)
-			lane := lanes[b.Lane]
-			if lane == nil {
-				lane = &dto.MagicPlanLane{Lane: b.Lane, Seconds: new(float64)}
-				lanes[b.Lane] = lane
-			}
-			lane.Blocks++
-			if why := whyNot(ws, d, b); why != "" {
-				pb.Reason = &why
-				out.Blocks = append(out.Blocks, pb)
-				continue
-			}
-			kinds = append(kinds, b.Kind)
-			w, _ := magicModel(ws, b.Kind, b.Request)
-			// the host and peak as POST /runs/plan answers them, for the request without its pictures
-			_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
-				Inputs: standardInputs(w, d, b, magicPics{}, blockVoice(d, b), -1)})
-			if perr == nil {
-				if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
-					host := slices.Sorted(maps.Keys(slots))[0]
-					pb.Host = &host
-					if p := planOf(s.registry, host, probe); p.peak >= 0 {
-						gb := float64(p.peak) / 100
-						pb.PeakGB = &gb
-					}
-				}
-			}
-			count, ok := reqNumber(b.Request, "count")
-			if !ok {
-				count = 1
-			}
-			units := blockUnits(d, b) * min(max(count, 1), 4)
-			var rate *float64
-			if pb.Host != nil {
-				if rate, err = recentRate(ctx, tx, row.OwnerID, w.ID, *pb.Host, b.Kind); err != nil {
-					return err
-				}
-			}
-			switch {
-			case rate != nil:
-				pb.Source = "yours"
-			case w.Standard.Seconds != nil:
-				rate, pb.Source = w.Standard.Seconds, "pack"
-			}
-			if rate != nil {
-				sec := math.Round(*rate*units*10) / 10
-				pb.Seconds = &sec
-				total += sec
-				if lane.Seconds != nil {
-					*lane.Seconds += sec
-				}
-			} else {
-				known, lane.Seconds = false, nil
-				if b.Kind != "frame" {
-					unknownRun = true
-				}
-			}
-			out.Blocks = append(out.Blocks, pb)
-		}
-		for _, l := range d.Lanes {
-			if lane := lanes[l.ID]; lane != nil {
-				out.Lanes = append(out.Lanes, *lane)
-			}
-		}
-		if known {
-			out.Seconds = &total
-		}
-		out.Ask = unknownRun || total > out.LimitMinutes*60
-		out.AskText = askText(kinds, out.Seconds)
-		return nil
+		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, blocks, &out)
 	})
 	return out, err
+}
+
+// planBlocks fills out with blocks' estimates on document d (owner's rates), the totals, the run order and the ask
+// rule.
+func (s *Service) planBlocks(ctx context.Context, tx pgx.Tx, caller common.Caller, ownerID string, d magic.Doc, blocks []*magic.Block, out *dto.MagicPlan) error {
+	var err error
+	if out.LimitMinutes, err = askAbove(ctx, tx); err != nil {
+		return err
+	}
+	ws := s.registry.Workflows()
+	total, known, unknownRun := 0.0, true, false
+	lanes := map[string]*dto.MagicPlanLane{}
+	var kinds []string
+	for _, b := range blocks {
+		pb := dto.MagicPlanBlock{Block: b.ID, Source: "unknown"}
+		out.Order = append(out.Order, b.ID)
+		lane := lanes[b.Lane]
+		if lane == nil {
+			lane = &dto.MagicPlanLane{Lane: b.Lane, Seconds: new(float64)}
+			lanes[b.Lane] = lane
+		}
+		lane.Blocks++
+		if why := whyNot(ws, d, b); why != "" {
+			pb.Reason = &why
+			out.Blocks = append(out.Blocks, pb)
+			continue
+		}
+		kinds = append(kinds, b.Kind)
+		w, _ := magicModel(ws, b.Kind, b.Request)
+		// the host and peak as POST /runs/plan answers them, for the request without its pictures
+		_, probe, _, perr := s.probeRun(ctx, tx, caller, &dto.RunRequest{WorkflowID: w.ID,
+			Inputs: standardInputs(w, d, b, magicPics{}, blockVoice(d, b), -1)})
+		if perr == nil {
+			if slots, _, reason := eligible(s.registry, s.registry.Hosts(), probe, time.Now()); reason == "" {
+				host := slices.Sorted(maps.Keys(slots))[0]
+				pb.Host = &host
+				if p := planOf(s.registry, host, probe); p.peak >= 0 {
+					gb := float64(p.peak) / 100
+					pb.PeakGB = &gb
+				}
+			}
+		}
+		count, ok := reqNumber(b.Request, "count")
+		if !ok {
+			count = 1
+		}
+		units := blockUnits(d, b) * min(max(count, 1), 4)
+		var rate *float64
+		if pb.Host != nil {
+			if rate, err = recentRate(ctx, tx, ownerID, w.ID, *pb.Host, b.Kind); err != nil {
+				return err
+			}
+		}
+		switch {
+		case rate != nil:
+			pb.Source = "yours"
+		case w.Standard.Seconds != nil:
+			rate, pb.Source = w.Standard.Seconds, "pack"
+		}
+		if rate != nil {
+			sec := math.Round(*rate*units*10) / 10
+			pb.Seconds = &sec
+			total += sec
+			if lane.Seconds != nil {
+				*lane.Seconds += sec
+			}
+		} else {
+			known, lane.Seconds = false, nil
+			if b.Kind != "frame" {
+				unknownRun = true
+			}
+		}
+		out.Blocks = append(out.Blocks, pb)
+	}
+	for _, l := range d.Lanes {
+		if lane := lanes[l.ID]; lane != nil {
+			out.Lanes = append(out.Lanes, *lane)
+		}
+	}
+	if known {
+		out.Seconds = &total
+	}
+	out.Ask = unknownRun || total > out.LimitMinutes*60
+	out.AskText = askText(kinds, out.Seconds)
+	return nil
+}
+
+// PlanMagicDoc plans blocks ids of document d (an edit not stored yet, API 1.87: the Assistant's proposal) on board
+// id with the caller's rates; ids that are not blocks of d are left out.
+func (s *Service) PlanMagicDoc(ctx context.Context, caller common.Caller, id string, d magic.Doc, ids []string) (dto.MagicPlan, error) {
+	if !s.registry.Ready() {
+		return dto.MagicPlan{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+	}
+	out := dto.MagicPlan{Blocks: []dto.MagicPlanBlock{}, Lanes: []dto.MagicPlanLane{}, Order: []string{}}
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := readBoard(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		var blocks []*magic.Block
+		for _, b := range ids {
+			if x := runBlockOf(d, b); x != nil {
+				blocks = append(blocks, x)
+			}
+		}
+		if blocks, err = pickBlocks(d, dto.MagicPick{Blocks: idsOf(blocks)}, nil); err != nil || len(blocks) == 0 {
+			return err
+		}
+		return s.planBlocks(ctx, tx, caller, row.OwnerID, d, blocks, &out)
+	})
+	return out, err
+}
+
+// idsOf is blocks' ids.
+func idsOf(blocks []*magic.Block) []string {
+	out := make([]string, len(blocks))
+	for i, b := range blocks {
+		out[i] = b.ID
+	}
+	return out
 }
 
 // ------------------------------------------------------------------ settings

@@ -1,6 +1,7 @@
 package magic
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -499,4 +500,134 @@ func AgentView(d Doc) Agent {
 		out.Assets = append(out.Assets, AgentAsset{ID: a.ID, Kind: a.Kind, Handle: a.Handle, Name: a.Name, UsedIn: used})
 	}
 	return out
+}
+
+// ------------------------------------------------------------------ an edit in words (API 1.87)
+
+// kindNouns name blocks by kind when an action counts them ("3 shots").
+var kindNouns = map[string]string{"frame": "frame", "image": "image", "video": "shot", "voice": "line", "music": "cue",
+	"sound": "sound"}
+
+// andList is "A", "A and B", "A, B and C".
+func andList(xs []string) string {
+	if len(xs) < 2 {
+		return strings.Join(xs, "")
+	}
+	return strings.Join(xs[:len(xs)-1], ", ") + " and " + xs[len(xs)-1]
+}
+
+// blockWords names blocks: up to two by their short names; more, by kind: a kind with several is counted, one alone
+// is named ("3 shots and Frame 4", the board's frame 8).
+func blockWords(bs []*Block) string {
+	short := func(b *Block) string { name, _, _ := strings.Cut(b.Name, " · "); return name }
+	var kinds []string
+	of := map[string][]*Block{}
+	for _, b := range bs {
+		if of[b.Kind] == nil {
+			kinds = append(kinds, b.Kind)
+		}
+		of[b.Kind] = append(of[b.Kind], b)
+	}
+	parts := []string{}
+	for _, k := range kinds {
+		switch n := len(of[k]); {
+		case len(bs) <= 2 || n == 1:
+			for _, b := range of[k] {
+				parts = append(parts, short(b))
+			}
+		default:
+			parts = append(parts, fmt.Sprintf("%d %ss", n, kindNouns[k]))
+		}
+	}
+	return andList(parts)
+}
+
+// Describe is an edit from a to b in the board's words (contracts/README.md "Magic: the Assistant"): "Added Shot 2
+// and Shot 3; moved Line 2; removed Shot 5; changed Shot 1", then lanes, assets, transitions and ties; "No change".
+func Describe(a, b Doc) string {
+	diff := DiffDocs(a, b)
+	pick := func(d Doc, ids []string, keep func(was, is *Block) bool) []*Block {
+		var out []*Block
+		for _, id := range ids {
+			x := d.block(id)
+			if x != nil && (keep == nil || keep(a.block(id), x)) {
+				out = append(out, x)
+			}
+		}
+		return out
+	}
+	moved := func(was, is *Block) bool { return was.At != is.At || was.Lane != is.Lane }
+	var parts []string
+	say := func(verb, what string) {
+		if what != "" {
+			parts = append(parts, verb+" "+what)
+		}
+	}
+	say("added", blockWords(pick(b, diff.Blocks.Added, nil)))
+	say("moved", blockWords(pick(b, diff.Blocks.Changed, moved)))
+	say("removed", blockWords(pick(a, diff.Blocks.Removed, nil)))
+	say("changed", blockWords(pick(b, diff.Blocks.Changed, func(was, is *Block) bool { return !moved(was, is) })))
+	count := func(n int, one, many string) string {
+		switch n {
+		case 0:
+			return ""
+		case 1:
+			return one
+		}
+		return fmt.Sprintf("%d %s", n, many)
+	}
+	names := func(d Doc, ids []string, name func(Doc, string) string) string {
+		out := make([]string, 0, len(ids))
+		for _, id := range ids {
+			out = append(out, name(d, id))
+		}
+		if len(out) > 3 {
+			return ""
+		}
+		return andList(out)
+	}
+	lane := func(d Doc, id string) string {
+		if l := d.lane(id); l != nil {
+			return "lane " + l.Name
+		}
+		return "a lane"
+	}
+	asset := func(d Doc, id string) string {
+		if x := d.asset(id); x != nil {
+			return "@" + x.Handle
+		}
+		return "an asset"
+	}
+	for _, x := range []struct {
+		verb string
+		d    Doc
+		ids  []string
+	}{{"added", b, diff.Lanes.Added}, {"removed", a, diff.Lanes.Removed}, {"changed", b, diff.Lanes.Changed}} {
+		say(x.verb, cmp.Or(names(x.d, x.ids, lane), count(len(x.ids), "a lane", "lanes")))
+	}
+	for _, x := range []struct {
+		verb string
+		d    Doc
+		ids  []string
+	}{{"added", b, diff.Assets.Added}, {"removed", a, diff.Assets.Removed}, {"changed", b, diff.Assets.Changed}} {
+		say(x.verb, cmp.Or(names(x.d, x.ids, asset), count(len(x.ids), "an asset", "assets")))
+	}
+	transition := func(d Doc, id string) string {
+		for _, t := range d.Transitions {
+			if t.ID == id {
+				return "a " + t.Kind
+			}
+		}
+		return "a transition"
+	}
+	say("added", names(b, diff.Transitions.Added, transition))
+	say("removed", names(a, diff.Transitions.Removed, transition))
+	say("changed", count(len(diff.Transitions.Changed), "a transition", "transitions"))
+	say("tied", count(len(diff.Links.Added)+len(diff.Links.Changed), "a block", "blocks"))
+	say("untied", count(len(diff.Links.Removed), "a block", "blocks"))
+	if len(parts) == 0 {
+		return "No change"
+	}
+	out := strings.Join(parts, "; ")
+	return strings.ToUpper(out[:1]) + out[1:]
 }

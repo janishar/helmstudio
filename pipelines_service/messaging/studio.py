@@ -81,8 +81,10 @@ def _reply_errors(request: dict, reply) -> list[str]:
     openapi.yaml's, which pipelines does not carry; the result only ever reaches the model, fenced, as data.
     Everything else is checked whole."""
     if "thread_id" in request and isinstance(reply, dict) and "error" not in reply:
-        ok = set(reply) == {"tool", "result"} and reply["tool"] == request["tool"]
-        return [] if ok and isinstance(reply["result"], dict) else ["not an assistant tool reply"]
+        # API 1.87: a Magic card tool asked without `confirmed` answers its preview in place of its result
+        body = next((k for k in ("result", "preview") if k in reply), "result")
+        ok = set(reply) == {"tool", body} and reply["tool"] == request["tool"]
+        return [] if ok and isinstance(reply[body], dict) else ["not an assistant tool reply"]
     return schemas.tools_errors("reply", reply)
 
 

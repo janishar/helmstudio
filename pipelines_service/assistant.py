@@ -33,6 +33,7 @@ import contextlib
 import functools
 import json
 import logging
+import math
 import re
 import uuid
 import weakref
@@ -68,6 +69,9 @@ FOLD_AT = 0.7
 FOLD_TOKENS, DIGEST_MAX = 700, 2000
 CHAT_KEEP = 400  # transcript entries kept in the thread; past half of it the chat folds too
 CARDS = ("look_at", "web_search", "forget")
+# API 1.87 (contracts/README.md "Magic: the Assistant"): studio answers these with a preview first; the card is built
+# from it, and the Yes asks studio again with `confirmed` (run_blocks within the limit answers at once: no card)
+MAGIC_CARDS = ("edit_board", "restore_board", "run_blocks", "send_to_timeline")
 ACK_WAIT = 60  # seconds; a long turn sends in_progress every BEAT
 BEAT = 20
 RECURSION = 400  # graph steps per invocation: about 10 per model call
@@ -571,6 +575,145 @@ def same_size(a: dict) -> bool:
     return a["name"] in SAME_SIZE or (a["name"] == "change" and str(key).startswith("prompt"))
 
 
+# --- Magic's cards (API 1.87, contracts/README.md "Magic: the Assistant"; board MagicBoard frame 8)
+
+
+def secs_text(seconds: float | None) -> str:
+    """GPU time in the board's words: `about 40 s`, `about 6 min`, `no estimate yet`."""
+    if seconds is None:
+        return "no estimate yet"
+    return f"about {math.ceil(seconds)} s" if seconds < 60 else f"about {round(seconds / 60)} min"
+
+
+def and_list(xs: list[str]) -> str:
+    return xs[0] if len(xs) < 2 else ", ".join(xs[:-1]) + " and " + xs[-1]
+
+
+def _short(text: str, n: int = 300) -> str:
+    return text if len(text) <= n else text[: n - 1] + "…"
+
+
+def magic_card(c: dict, p: dict) -> dict:
+    """The card of a Magic card tool's preview, and the lines of what already started: {card, lines}."""
+    a, base = c["args"], {"id": c["id"], "state": "waiting"}
+    lines = []
+    if c["name"] == "edit_board":
+        est = p.get("estimate") or {}
+        rows = [{"label": "Change", "value": _short(p["summary"])}]
+        if est.get("blocks"):
+            run = secs_text(est.get("seconds")) + (f" · {est['host']}" if est.get("host") else "")
+            rows.append({"label": "To run", "value": _short(run)})
+        card = base | {
+            "kind": "board_edit",
+            "title": "Assistant's change",
+            "rows": rows,
+            "tags": ["changes the board"],
+            "board": {
+                "board_id": a["board_id"],
+                "base_revision": a["base_revision"],
+                "ops": a["ops"],
+            },
+        }
+        if p.get("warnings"):
+            card["note"] = _short("; ".join(p["warnings"]))
+        return {"card": card, "lines": lines}
+    if c["name"] == "restore_board":
+        to = p["to"]
+        who = (
+            "Assistant"
+            if to.get("via") == "assistant"
+            else "studio"
+            if to.get("by") == "studio"
+            else "you"
+        )
+        what = f"rev {to['revision']} · by {who}" + (
+            f" · {to['ops_summary']}" if to.get("ops_summary") else ""
+        )
+        return {"card": base | {"kind": "board_edit", "title": f"Restore rev {to['revision']}?",
+                                "rows": [{"label": "Revision", "value": _short(what)}],
+                                "note": "Restore makes a new revision; nothing is lost.", "tags": ["changes the board"],
+                                "board": {"board_id": a["board_id"], "base_revision": a["revision"],
+                                          "to": to["revision"]}}, "lines": lines}  # fmt: skip
+    if c["name"] == "run_blocks":
+        plan, rest, frames, ran = p["plan"], p["rest"], p.get("frames") or [], None
+        why = (f"Above your {plan['limit_minutes']:g} min limit." if rest.get("seconds") is not None
+               else "It has no estimate yet.")  # fmt: skip
+        if frames:
+            names = and_list([f["name"] for f in frames])
+            known = [f["seconds"] for f in frames if f.get("seconds") is not None]
+            took = (
+                f" ({secs_text(sum(known)).removeprefix('about ')})"
+                if len(known) == len(frames)
+                else ""
+            )
+            why += f" {names} ran on {'its' if len(frames) == 1 else 'their'} own{took}."
+            lines.append(
+                {
+                    "id": c["id"],
+                    "status": "running",
+                    "undo": False,
+                    "text": _short(f"Running {names}"),
+                }
+            )
+            ran = f"{names} started without asking (storyboard frames never ask)"
+        run = and_list(rest["names"]) + " · " + secs_text(rest.get("seconds")) + (
+            f" · {rest['host']}" if rest.get("host") else "")  # fmt: skip
+        return {"card": base | {"kind": "magic_run", "title": _short(f"Run {rest['ask_text']}?", 120),
+                                "rows": [{"label": "Runs", "value": _short(run)}], "note": _short(why),
+                                "tags": ["uses the GPU"]}, "lines": lines, "ran": ran}  # fmt: skip
+    plan = p["plan"]  # send_to_timeline
+    rows = [{"label": "Name", "value": _short(plan["name"])}]
+    if plan.get("goes"):
+        rows.append({"label": "Goes", "value": _short(f"{len(plan['goes'])} clips")})
+    if plan.get("bakes"):
+        rows.append(
+            {
+                "label": "Bakes",
+                "value": _short(
+                    f"{plan['bakes']} join{'s' * (plan['bakes'] != 1)} · {secs_text(plan.get('bake_seconds'))}"
+                ),
+            }
+        )
+    card = base | {
+        "kind": "send",
+        "title": "Send to Timeline?",
+        "rows": rows,
+        "tags": ["uses the machine"],
+    }
+    if plan.get("warnings"):
+        card["note"] = _short("; ".join(plan["warnings"]))
+    return {"card": card, "lines": lines}
+
+
+def magic_done(c: dict, reply: dict) -> dict:
+    """A Magic card tool's final reply as the turn keeps it: {status, result?, error?, line}."""
+    line = {"id": c["id"], "undo": False}
+    labels = {"edit_board": "Could not change the board", "restore_board": "Could not restore the board",
+              "run_blocks": "Could not run", "send_to_timeline": "Could not send"}  # fmt: skip
+    if "error" in reply:
+        return {"status": "failed", "error": reply["error"],
+                "line": line | {"status": "failed", "text": _short(f"{labels[c['name']]} · {reply['error']}")}}  # fmt: skip
+    r = reply["result"]
+    if c["name"] == "edit_board":
+        text, status = f"Changed the board · {r['summary']}", "done"
+    elif c["name"] == "restore_board":
+        text, status = f"Restored rev {c['args']['to']} · now rev {r['revision']}", "done"
+    elif c["name"] == "run_blocks":
+        if c.get("ran"):
+            r = r | {"also": c["ran"]}
+        n = len(r["started"])
+        text = f"Started {n} run{'s' * (n != 1)}" + (
+            f" · {len(r['skipped'])} skipped" if r["skipped"] else ""
+        )
+        status = "running" if n else "done"
+    else:
+        send = r.get("send") or {}
+        baking = send.get("status") == "baking"
+        text = f"{'Sending' if baking else 'Sent'} to Timeline · {send.get('name') or r['plan']['name']}"
+        status = "running" if baking else "done"
+    return {"status": "done", "result": r, "line": line | {"status": status, "text": _short(text)}}
+
+
 class Assistant:
     """The graph and its server side: `tool` is studio.tools, `search` the web search call."""
 
@@ -828,7 +971,8 @@ class Assistant:
             if inp.get("kind") == "answer":
                 c = pend["call"]
                 if inp["answer"] != "yes":
-                    chat.append(_entry(c, "cancelled", error="the user said Not now"))
+                    ran = f"; {c['ran']}" if c.get("ran") else ""
+                    chat.append(_entry(c, "cancelled", error=f"the user said Not now{ran}"))
                 else:
                     got = await self.card_yes(s, c)
                     if "end" in got:
@@ -900,6 +1044,20 @@ class Assistant:
                 chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
                 lines.append(got["line"])
                 continue
+            if c["name"] in MAGIC_CARDS:
+                got = await self.magic_ask(s, c)
+                if "card" not in got:
+                    chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
+                    lines.append(got["line"])
+                    continue
+                lines += got["lines"]
+                if got.get(
+                    "ran"
+                ):  # what started without asking: the model hears it whatever the answer
+                    c = c | {"ran": got["ran"]}
+                pending = {"actions": [], "cards": [got["card"]], "call": c}
+                return self._park(s, up | {"queue": q, "chat": chat[-CHAT_KEEP:], "caps": caps,
+                                           "lines": lines, "pending": pending})  # fmt: skip
             if c["name"] in CARDS or c["kind"] == "plugin":
                 card, error = await self.card_for(s, c)
                 if card:
@@ -1103,6 +1261,10 @@ class Assistant:
         a, line = c["args"], {"id": c["id"], "undo": False}
         if c.get("kind") == "plugin":
             return await self.plugin_run(s, c)
+        if c["name"] in MAGIC_CARDS:
+            reply = await self.tool({"owner_id": s["owner_id"], "thread_id": s["thread_id"], "call_id": c["id"],
+                                     "tool": c["name"], "args": a, "confirmed": True})  # fmt: skip
+            return magic_done(c, reply)
         if c["name"] == "web_search":
             name = s["data"]["settings"]["search"]
             p, who = s["data"]["settings"]["providers"].get(name or ""), (name or "").capitalize()
@@ -1144,6 +1306,15 @@ class Assistant:
             "result": {"deleted": gone},
             "line": line | {"status": "done", "text": text},
         }
+
+    async def magic_ask(self, s: State, c: dict) -> dict:
+        """A Magic card tool asked for its preview (API 1.87): {card, lines} to ask the user, or (studio refused, or
+        run_blocks ran within the limit) {status, result?, error?, line}."""
+        reply = await self.tool({"owner_id": s["owner_id"], "thread_id": s["thread_id"], "call_id": c["id"],
+                                 "tool": c["name"], "args": c["args"]})  # fmt: skip
+        if "preview" not in reply:
+            return magic_done(c, reply)
+        return magic_card(c, reply["preview"])
 
     @staticmethod
     def _asks(s: State, c: dict) -> bool:

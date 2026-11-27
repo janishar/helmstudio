@@ -140,9 +140,13 @@ func (s *Service) localCall(ctx context.Context, caller common.Caller, method, p
 		return recorder.Body.Bytes(), nil
 	}
 	var failure struct {
-		Detail string `json:"detail"`
+		Detail  string `json:"detail"`
+		OpIndex *int   `json:"op_index"` // an edit's refusal (MagicEditError, TimelineEditError): the op it names
 	}
 	_ = json.Unmarshal(recorder.Body.Bytes(), &failure)
+	if failure.OpIndex != nil {
+		failure.Detail = fmt.Sprintf("ops[%d]: %s", *failure.OpIndex, failure.Detail)
+	}
 	code := map[int]string{http.StatusNotFound: "not_found", http.StatusUnprocessableEntity: "invalid", http.StatusForbidden: "forbidden",
 		http.StatusConflict: "conflict", http.StatusBadRequest: "invalid"}[recorder.Code]
 	if code == "" {
@@ -190,15 +194,22 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 		return toolErr("internal", "internal error")
 	}
 	var out message.ToolsReply
+	var asked *message.ToolsReply // API 1.87: the preview a card tool answered before the user's Yes
 	if first != nil && json.Unmarshal(first, &out) == nil {
-		return out // asked again: the first reply, nothing done twice
+		if out.Preview == nil || !req.Confirmed {
+			return out // asked again: the first reply, nothing done twice
+		}
+		asked = &out
 	}
-	caller := common.Caller{ID: owner, Roles: roles}
+	// the assistant's writes are labelled via assistant (a Magic revision's "by Assistant", a run's by)
+	caller := common.Caller{ID: owner, Roles: roles, Via: "assistant"}
 	switch {
 	case slices.ContainsFunc(tool.Roles, func(r string) bool { return !slices.Contains(roles, r) }):
 		out = toolErr("forbidden", "%s needs the %s role", req.Tool, strings.Join(tool.Roles, " and "))
 	case req.Tool == "look_at":
 		return s.lookAt(ctx, caller, req) // it keeps its reply with its run
+	case isMagicTool(req.Tool):
+		out = s.magicTool(ctx, caller, req, asked)
 	default:
 		out = s.readTool(ctx, caller, req.Tool, req.Args)
 	}
@@ -210,8 +221,11 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 	}
 	{
 		if err := common.System(ctx, s.db, func(tx pgx.Tx) error {
+			// a preview is replaced by the answer after the Yes (API 1.87); any other reply is kept as it came first
 			_, err := tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply)
-				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO NOTHING`, req.CallID, req.ThreadID, owner, req.Tool, toJSON(out))
+				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO UPDATE SET reply = EXCLUDED.reply
+				WHERE assistant_tool_calls.reply ? 'preview' AND NOT EXCLUDED.reply ? 'preview'`, req.CallID, req.ThreadID,
+				owner, req.Tool, toJSON(out))
 			return err
 		}); err != nil {
 			log.Printf("studio.tools %s: %v", req.CallID, err)
