@@ -4195,9 +4195,9 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   param has it as a value (else the model's Auto); `bpm` clamped to the param's bounds; `from` is the shot's shown
   take as `{take_id}` (why a block can't run: `<model> can't take a shot's video`, `Shot 2 is not on the board`,
   `Shot 2 has no take yet`, 422 on a named block). A music or sound block's units are its seconds.
-- **The block keeps the audio take.** A run's takes join a block only when they fit its kind (voice, music, sound:
-  audio; video: video; image and frame: image), so MMAudio's video with the sound stays in the Gallery and the run
-  history lists the audio take. `MagicTake.sound` is the take's class: the web draws a music take as an album cover
+- **The block keeps the audio take.** A voice, music or sound block takes only its runs' audio takes (from 1.86 the
+  rule as built: other kinds take every take a run makes), so MMAudio's video with the sound stays in the Gallery and
+  the run history lists the audio take. `MagicTake.sound` is the take's class: the web draws a music take as an album cover
   (its gradient from the prompt, a vinyl disc) and a sound or voice take as an orb (sky, amber), by the take's class
   whatever its lane.
 
