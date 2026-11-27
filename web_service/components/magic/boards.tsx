@@ -132,7 +132,7 @@ export function BoardSwitcher({ board }: { board: Board }) {
           >
             <Plus size={14} aria-hidden /> New board
           </button>
-          <div className="flex min-h-0 flex-col gap-0.5 overflow-y-auto [&>*]:shrink-0">
+          <div className="flex min-h-0 shrink! flex-col gap-0.5 overflow-y-auto [&>*]:shrink-0">
             {search.q && !search.rows.length && (
               <NoMatch what="boards" onClear={() => search.setQ("")} />
             )}
