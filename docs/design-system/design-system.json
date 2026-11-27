@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-27T16:20:00Z",
+  "at": "2026-11-27T16:30:00Z",
   "via": "Claude Code",
-  "note": "Error states, browser pass (docs/mock/ErrorStates.dc.html, web app): the status tile uses the activity icon (as the board draws it) and lists a Mac's runners before NVIDIA hosts; the waiting line uses clock-3; the clip's Make shot form greys its Generate like the Timeline's Generate shot (owner, 2026-11-27: \"Approved, build it\")"
+  "note": "Search (docs/mock/Search.dc.html, web app): SearchField added (README, preview, bundle.css: sf, sfh, sfx, k, mark, sf-on, sf-older, sf-none); AssistantChats, Field, FilterChips (All batches' state chips) and Table (the field above a growing table, Show revoked) updated (owner, 2026-11-27: \"approved\")"
  }
 }
