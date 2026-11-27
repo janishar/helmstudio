@@ -25,11 +25,12 @@ export const VIEWS: Record<AssetKind, string[]> = {
   place: ["Wide", "Reverse angle"],
 };
 
-/** The views of its kind not on the sheet yet (by name); all of them when every one is. */
-export function missingViews(a: Asset): string[] {
+/** The views of its kind not on the sheet yet (by name); all of them when every one is; never one still being made
+ * (`making`: studio refuses those, 409). */
+export function missingViews(a: Asset, making: string[] = []): string[] {
   const have = new Set(Object.values(a.views ?? {}));
   const left = VIEWS[a.kind].filter((v) => !have.has(v));
-  return left.length ? left : VIEWS[a.kind];
+  return (left.length ? left : VIEWS[a.kind]).filter((v) => !making.includes(v));
 }
 
 /** A view's name on the sheet: its own, else "View n". */

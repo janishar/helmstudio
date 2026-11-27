@@ -195,6 +195,17 @@ func Check(d Doc) string {
 		if why := takes(where, a.Sheet); why != "" {
 			return why
 		}
+		// MagicAsset's bounds: asset_add and asset only refuse an empty name
+		switch {
+		case strings.TrimSpace(a.Name) == "" || len([]rune(a.Name)) > 80:
+			return where + ": name must be 1-80 characters"
+		case len(a.Sheet) > 50:
+			return where + ": a sheet keeps at most 50 takes"
+		case a.Note != nil && len([]rune(*a.Note)) > 4000:
+			return where + ": note is at most 4000 characters"
+		case a.VoiceID != nil && len(*a.VoiceID) > 80, a.ImportedFrom != nil && len(*a.ImportedFrom) > 80:
+			return where + ": voice_id and imported_from are at most 80 characters"
+		}
 		for t, name := range a.Views {
 			if !slices.Contains(a.Sheet, t) || strings.TrimSpace(name) == "" || len([]rune(name)) > 40 {
 				return where + ": views name sheet takes, 1-40 characters each"

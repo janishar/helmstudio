@@ -97,6 +97,16 @@ func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, 
 		if len(a.Sheet)+len(body.Views) > maxSheet {
 			return network.NewUnprocessableError("@"+a.Handle+"'s sheet keeps at most 50 views", nil)
 		}
+		var busy string // a view still being made is not made twice (a double click, Make the missing twice)
+		err = tx.QueryRow(ctx, `SELECT coalesce(min(m.label), '') FROM magic_runs m JOIN runs r ON r.id = m.run_id
+			AND r.deleted_at IS NULL WHERE m.board_id = $1 AND m.asset = $2 AND m.label = ANY($3)
+			AND r.status IN ('queued', 'running')`, row.ID, a.ID, body.Views).Scan(&busy)
+		if err != nil {
+			return err
+		}
+		if busy != "" {
+			return network.NewConflictError(busy+" is already being made", nil)
+		}
 		w, why := magicModel(s.registry.Workflows(), "image", map[string]any{"model": body.Model})
 		if why != "" {
 			return network.NewUnprocessableError(why, nil)

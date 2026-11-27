@@ -3483,7 +3483,8 @@ export interface paths {
          * @description contracts/README.md, Magic: assets and the storyboard. Each view ("Front", "Side") is a run of `model` (an image
          *     model GET /v1/studio/magic/kinds lists; absent: the first) with the asset's name, note and the view in words,
          *     its first sheet take as the reference when it has one; each take joins the asset's `sheet` named in `views` as a
-         *     studio revision (undo skips it). 202 with the board and the runs. 409 when `revision` is not the current one;
+         *     studio revision (undo skips it). 202 with the board and the runs. 409 when `revision` is not the current one, or
+         *     (from 1.84) for a view of the asset still queued or running (`Front is already being made`);
          *     422 for an asset not on the board (`unknown asset a1`), a sheet that would pass 50, a model on no host, or the
          *     run's own refusal (`Front: …`).
          */

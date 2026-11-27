@@ -188,7 +188,7 @@ function Body({
   const [error, setError] = useState("");
   const running = runs.filter((r) => (r.status === "queued" || r.status === "running") && !r.takes.length);
   const failed = runs.findLast((r) => r.status === "failed" && !r.takes.length);
-  const want = missingViews(x);
+  const want = missingViews(x, running.map((r) => r.view));
   const image = kindOf(kinds, "image")?.models[0];
   const side = Math.min(d.target.width, d.target.height, 1024);
   const est = packSeconds(
@@ -295,6 +295,7 @@ function Body({
                     ...VIEWS[x.kind].map((v) => ({
                       label: v,
                       keys: est == null ? undefined : estText(est, true),
+                      off: running.some((r) => r.view === v) ? "Being made" : undefined,
                       onPick: () => a.views?.(x.id, [v]),
                     })),
                     {
@@ -311,6 +312,7 @@ function Body({
                     {
                       label: `Make ${want.length === VIEWS[x.kind].length ? "all" : "the missing"} ${want.length}`,
                       keys: est == null ? undefined : estText(est * want.length, true),
+                      off: want.length ? undefined : "Being made",
                       onPick: () => a.views?.(x.id, want),
                     },
                   ],

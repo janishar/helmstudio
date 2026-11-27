@@ -78,6 +78,7 @@ describe("assets", () => {
     expect(missingViews(mara)).toEqual(["Front", "Side", "Back", "Full figure"]);
     const named = { ...mara, views: { "mara-1": "Front", "mara-2": "Side" } };
     expect(missingViews(named)).toEqual(["Back", "Full figure"]);
+    expect(missingViews(named, ["Back"])).toEqual(["Full figure"]);
     expect(viewName(named, "mara-2")).toBe("Side");
     expect(viewName(named, "mara-3")).toBe("View 3");
   });

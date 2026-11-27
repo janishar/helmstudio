@@ -234,7 +234,7 @@ func TestMagicPrompt(t *testing.T) {
 	d := magic.Doc{Target: board, Assets: []*magic.Asset{{ID: "a1", Handle: "mara", Name: "Mara"},
 		{ID: "a2", Handle: "bus-stop", Name: "Bus stop"}}}
 	frame := block("frame", 96, `{"style":"rough","framing":{"size":"wide","angle":"low","move":"push_in"},
-		"prompt":"@mara waits in the rain."}`)
+		"prompt":"@mara waits in the rain.","refs":[{"asset":"a1"},{"asset":"a2"}]}`)
 	frame.ID = "f1"
 	shot := block("video", 96, `{}`)
 	shot.FromFrame = &frame.ID
@@ -247,7 +247,8 @@ func TestMagicPrompt(t *testing.T) {
 	}{
 		{frame, "<image{n}>", []string{"a1", "a2"}, "A rough storyboard drawing: simple shapes, grey shading. Wide shot, from a low angle. " +
 			"Mara <image1> waits in the rain. With Bus stop <image2>."},
-		{frame, "", []string{"a1"}, "A rough storyboard drawing: simple shapes, grey shading. Wide shot, from a low angle. Mara waits in the rain."},
+		{frame, "", []string{"a1"}, "A rough storyboard drawing: simple shapes, grey shading. Wide shot, from a low angle. Mara waits in the rain. " +
+			"With Bus stop."}, // a pick with no picture yet is still named
 		{shot, "", nil, "Wide shot, from a low angle. Mara waits in the rain. The camera slowly pushes in."},
 		{block("video", 96, `{"prompt":"@mara runs, @fox follows"}`), "", nil, "Mara runs, @fox follows"},
 	}

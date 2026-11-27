@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -82,4 +83,18 @@ func sameJSON(a, b []byte) bool {
 	p, _ := json.Marshal(x)
 	q, _ := json.Marshal(y)
 	return string(p) == string(q)
+}
+
+// TestAssetBounds: asset and asset_add only refuse an empty name, so Check holds MagicAsset's bounds.
+func TestAssetBounds(t *testing.T) {
+	d := Empty(DefaultTarget)
+	r := Apply(d, Op{Name: "asset_add", Raw: json.RawMessage(`{"op":"asset_add","asset":{"id":"a1","kind":"prop","handle":"cup","name":"Cup"}}`)})
+	if r.Error != "" || Check(r.Doc) != "" {
+		t.Fatalf("add: %q %q", r.Error, Check(r.Doc))
+	}
+	long := strings.Repeat("x", 81)
+	r = Apply(r.Doc, Op{Name: "asset", Raw: json.RawMessage(`{"op":"asset","id":"a1","set":{"name":"` + long + `"}}`)})
+	if r.Error != "" || !strings.Contains(Check(r.Doc), "name must be 1-80") {
+		t.Fatalf("long name: %q %q", r.Error, Check(r.Doc))
+	}
 }

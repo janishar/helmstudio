@@ -362,3 +362,8 @@ frame dialog and rough cut (`components/magic/asset-dialog.tsx`, `import.tsx`, `
   dialog keeps its Save and close).
 - **Not built (their phases or later):** dialogue blocks running; Compare takes; a handle rename that rewrites
   prompts; Make views with a model pick (the image kind's first one runs; the request takes `model`).
+- **Review fixes (API 1.84):** Make views refuses a view of the asset still queued or running (409 `Front is already
+  being made`; the dialog leaves those out of "the missing" and greys them in its menu), so a double click or a second
+  Make the missing never makes a view twice; a frame's "With @x" names every asset it picks, also one with no picture
+  yet (before, only those with a sheet take); studio's document check holds an asset's bounds (name 1-80, sheet at
+  most 50, note at most 4000, voice_id and imported_from at most 80), which `asset_add` and `asset` alone did not.

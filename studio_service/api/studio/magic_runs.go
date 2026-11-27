@@ -307,9 +307,15 @@ func magicPrompt(d magic.Doc, b *magic.Block, mention string, refAssets []string
 	switch {
 	case b.Kind == "frame":
 		shot, _ := framingWords(b.Request)
-		var with []string // who and where the frame picks that its words don't name
+		var with []string           // who and where the frame picks that its words don't name
+		picked := map[string]bool{} // every asset it picks, with a picture or not
+		for _, r := range reqRefs(b.Request) {
+			if id, ok := r["asset"].(string); ok {
+				picked[id] = true
+			}
+		}
 		for _, a := range d.Assets {
-			if slices.Contains(refAssets, a.ID) && magic.ReplaceMention(text, a.Handle, "") == text {
+			if picked[a.ID] && magic.ReplaceMention(text, a.Handle, "") == text {
 				with = append(with, "@"+a.Handle)
 			}
 		}

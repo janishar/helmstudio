@@ -4164,7 +4164,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   of an image model per view (`A character sheet view of Mara (her note): front. …`; a character's or prop's square at
   the board's short side, at most 1024; its first sheet take the reference), in the board's session; `magic_runs`
   keeps them against the asset (`asset`, `label` the view) and the projector adds each take to its sheet named by the
-  view, as a studio revision. `MagicBoard.asset_runs` lists them (the last 20 of each asset).
+  view, as a studio revision. `MagicBoard.asset_runs` lists them (the last 20 of each asset). From 1.84: a view of
+  the asset still queued or running is not made again (409 `Front is already being made`).
 - **Board frames run** (`kind` frame) on the image kind's models: GET /magic/kinds lists them with the image fields.
   The prompt is the frame's style (`sketch` absent: `A storyboard sketch: loose pencil lines, black and white`; rough;
   full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset
