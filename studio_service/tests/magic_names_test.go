@@ -57,7 +57,11 @@ func TestMagicBoardNames(t *testing.T) {
 
 	// the answer names the board and its session, with a session event; a rename wins over a late answer
 	group := e.namer()
-	e.named(group, userB, session, id, "Red fox at dawn") // another owner: dropped
+	e.named(group, userB, session, id, "Red fox at dawn")     // another owner: dropped
+	e.named(group, userA, session, session, "Not this board") // an answer for another run id: dropped
+	if got := e.call(userA, "GET", base, nil, 200); got["name"] != "A red fox in the" {
+		t.Fatal(got)
+	}
 	e.named(group, userA, session, id, "Red fox at dawn")
 	if got := e.call(userA, "GET", base, nil, 200); got["name"] != "Red fox at dawn" || got["title_source"] != "model" ||
 		got["named_by"] != "Ollama" {

@@ -424,8 +424,8 @@ func (p *Projector) namedHandler(ctx context.Context, msg *micro.NatsJetStreamMe
 		}
 		// API 1.91: so does a Magic board's (asked by askBoardName, the board id as the run id)
 		board, err := tx.Exec(ctx, `UPDATE magic_boards SET name = $2, title_source = 'model', named_by = $3
-			WHERE session_id = $1 AND owner_id = $4 AND deleted_at IS NULL AND name_asked
-			AND title_source IN ('default', 'prompt')`, d.SessionID, title, d.NamedBy, event.OwnerID)
+			WHERE id = $5 AND session_id = $1 AND owner_id = $4 AND deleted_at IS NULL AND name_asked
+			AND title_source IN ('default', 'prompt')`, d.SessionID, title, d.NamedBy, event.OwnerID, d.RunID)
 		if err != nil {
 			return err
 		}
