@@ -273,9 +273,12 @@ export function AppShell({
                       <Bot size={18} strokeWidth={1.75} aria-hidden />
                     </span>
                     Assistant
-                    {a.cardWaits && !a.open && (
+                    {/* closed with something for you: a card waits (yellow) or an answer you have not read (accent) */}
+                    {!a.open && a.cardWaits ? (
                       <span aria-label="1 card waits for you" className="dot" />
-                    )}
+                    ) : !a.open && a.newAnswer !== null ? (
+                      <span aria-label="A new answer" className="dot new" />
+                    ) : null}
                   </button>
                 )}
                 {/* a phone's bar: Setup pinned at its right end, the rest scrolls under it */}

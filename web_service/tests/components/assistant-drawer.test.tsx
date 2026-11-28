@@ -1546,6 +1546,7 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
       }),
     );
     expect(bar("Open the Assistant · Waiting for you").textContent).toContain("Delete the take?");
+    expect(screen.getByRole("button", { name: /^Assistant.*1 card waits for you/ })).toBeTruthy();
     act(() =>
       onEvent!({
         seq: 42,
@@ -1565,7 +1566,10 @@ describe("alpha.2: size, answers that read well, polish (board frames 9, 10, 14)
       onEvent!({ seq: 44, type: "entry", entry: entry(2, { kind: "card", card: card("yes") }) }),
     );
     expect(bar("Open the Assistant · new answer").textContent).toContain("Done: 4 takes.");
+    // the rail's Assistant item carries it too: an accent dot for an answer not read yet
+    expect(screen.getByRole("button", { name: /^Assistant.*A new answer/ })).toBeTruthy();
     fireEvent.click(bar("Open the Assistant · new answer"));
+    expect(screen.queryByRole("button", { name: /A new answer/ })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Minimize" }));
     expect(bar("Open the Assistant").textContent).toBe("Assistant");
   });

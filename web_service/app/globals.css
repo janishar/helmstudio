@@ -1125,6 +1125,9 @@
     background: #f2c14e;
     box-shadow: 0 0 0 2px var(--s1);
   }
+  .dock-item .dot.new {
+    background: var(--a1);
+  }
   .ast {
     position: fixed;
     z-index: 40;
