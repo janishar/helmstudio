@@ -24,8 +24,11 @@ _NUM = r"(-?\d+(?:\.\d+)?|-?inf)"
 
 
 def _ffmpeg(args: list[str], timeout: float = 600) -> subprocess.CompletedProcess:
-    r = subprocess.run([FFMPEG or "ffmpeg", "-hide_banner", "-nostats", "-nostdin", "-protocol_whitelist", "file", *args],
-                       capture_output=True, timeout=timeout, check=False)  # fmt: skip
+    try:  # a timeout fails this take, not the whole job (its other takes would lose a try)
+        r = subprocess.run([FFMPEG or "ffmpeg", "-hide_banner", "-nostats", "-nostdin", "-protocol_whitelist", "file", *args],
+                           capture_output=True, timeout=timeout, check=False)  # fmt: skip
+    except subprocess.TimeoutExpired as e:
+        raise MediaError("input", f"ffmpeg took over {timeout:.0f} s") from e
     if r.returncode:
         raise MediaError("ffmpeg", last_line(r.stderr.decode(errors="replace")))
     return r

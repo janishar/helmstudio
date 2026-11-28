@@ -720,3 +720,14 @@ async def test_a_facts_job_measures_each_take_grids_a_video_and_reports_a_missin
     assert a["facts"]["cuts"] == [] and (a["width"], a["height"]) == (1024, 384)
     assert t["facts"]["sound_seconds"] is None and t["facts"]["lufs"] is None and len(t["at"]) == 12
     assert gone == {"index": 2, "error": "input 2 is missing"}
+
+
+def test_a_facts_ffmpeg_timeout_fails_only_its_take(monkeypatch):
+    from core import facts as take_facts  # `facts` here is the test's own helper
+
+    def slow(*a, **k):
+        raise subprocess.TimeoutExpired("ffmpeg", 1)
+
+    monkeypatch.setattr(take_facts.subprocess, "run", slow)
+    with pytest.raises(MediaError, match="took over"):
+        take_facts._ffmpeg(["-i", "x"], timeout=1)
