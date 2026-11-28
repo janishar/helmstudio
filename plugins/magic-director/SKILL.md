@@ -150,6 +150,9 @@ Once the user says yes:
   with a block op. Say in a few words why: "Take 2: her face reads, the light matches Shot 3".
 - Watch for: the character drifting (face, outfit, colours), the light changing within a scene, a move that
   fights the cut, a beat too long or too short.
+- Trust look_at's ffmpeg facts over your eye and ear (a video comes as one grid of 12 frames with their times): a
+  music or voice take shorter than its block, silence at its start, an abrupt end (`abrupt`: no fade), a loudness far
+  from its neighbours, or a cut where none was asked are reasons to retake, trim or fade it.
 - Fix the part that is wrong, not the board: one frame's words, one shot's seed, one view of an asset.
 - Before Send: read the board's statuses. List any block out of date (its frame, asset or request changed after its
   take) or with no take (it becomes a gap) and ask: run them, or send as is. Send only when the user asks.

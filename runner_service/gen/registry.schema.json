@@ -2977,6 +2977,10 @@
             "thumbs": {
               "const": true,
               "description": "from API 1.48: this env also runs thumbs jobs (contracts/README.md, Thumbnails); absent = an older runner: studio sends it none"
+            },
+            "facts": {
+              "const": true,
+              "description": "from API 1.104: this env also runs facts jobs (contracts/README.md, Take facts); absent = an older runner: studio sends it none"
             }
           }
         }

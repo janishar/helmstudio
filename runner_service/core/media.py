@@ -34,9 +34,9 @@ def _out(*args: str) -> str:
 
 
 def detect() -> dict | None:
-    """{ffmpeg: version, encoders: [...], thumbs: true} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264
+    """{ffmpeg: version, encoders: [...], thumbs: true, facts: true} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264
     encoder, else None (this env runs no media jobs). Encoders as `usable` finds them, preferred first; `thumbs`
-    (API 1.48): this runner also runs thumbs jobs."""
+    (API 1.48): this runner also runs thumbs jobs; `facts` (API 1.104) facts jobs."""
     if not (FFMPEG and FFPROBE):
         return None
     m = re.search(r"version\s+n?(\d+(?:\.\d+)*)", _out(FFMPEG, "-hide_banner", "-version"))
@@ -50,7 +50,7 @@ def detect() -> dict | None:
     h264 = [e for e in H264 if e in encoders and usable(e)]
     if not h264 or "aac" not in encoders or not all(f in filters for f in NEEDS):
         return None
-    return {"ffmpeg": m.group(1)[:40], "encoders": h264, "thumbs": True}
+    return {"ffmpeg": m.group(1)[:40], "encoders": h264, "thumbs": True, "facts": True}
 
 
 def usable(encoder: str) -> bool:
@@ -80,7 +80,7 @@ def _null(v):
 
 def probe(path: Path) -> dict:
     """ffprobe of a file: {container, video (first video stream or None), audio (first audio or None), stream (the
-    video's defs videoStream facts or None), frames (video packets counted)}. MediaError input when unreadable."""
+    video's defs videoStream facts or None), frames (video packets counted), seconds (the file's length)}. MediaError input when unreadable."""
     r = subprocess.run([FFPROBE, "-v", "error", "-protocol_whitelist", "file", "-show_data_hash", "sha256", "-count_packets", "-show_format",
                         "-show_streams", "-of", "json", str(path)],
                        capture_output=True, text=True, check=False, timeout=300)  # fmt: skip
@@ -115,7 +115,8 @@ def probe(path: Path) -> dict:
             "extradata_sha256": h.split(":")[1] if h.startswith("SHA256:") else hashlib.sha256(b"").hexdigest(),
         }
     frames = int(v.get("nb_read_packets", 0)) if v else 0
-    return {"container": first, "video": v, "audio": a, "stream": stream, "frames": frames}
+    seconds = float(fmt.get("duration") or 0)  # API 1.104: the file's real length (Take facts)
+    return {"container": first, "video": v, "audio": a, "stream": stream, "frames": frames, "seconds": seconds}
 
 
 IMAGE_CODECS = {"png", "mjpeg", "webp", "bmp", "tiff"}

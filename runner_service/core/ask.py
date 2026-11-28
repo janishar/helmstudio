@@ -4,8 +4,8 @@ A runtime only supplies `generate(prompt, images) -> (text, tokens_in, tokens_ou
 SEED, thinking off.
 
 - An image take: RGBA over white, Lanczos to long edge min(THUMB, native), both sides floored to multiples of 32
-  (area at least MIN_AREA), JPEG q90, PUT once to u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg. A video take:
-  KEYFRAMES frames at floor(F * (2k + 1) / 6), each as an image (ffmpeg). At most MAX_THUMBS per run.
+  (area at least MIN_AREA), JPEG q90, PUT once to u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg. A video take
+  (API 1.104): one picture of its frames with their times (core.facts.grid), as an image. At most MAX_THUMBS per run.
 - With a `schema`: the outermost {...} of the answer is parsed and validated with jsonschema; a failure is asked once
   more with RETRY appended; a second failure fails the run `answer did not match the schema: <error>` (AnswerError,
   which carries the record: the failed status sends it).
@@ -15,7 +15,6 @@ import hashlib
 import io
 import json
 import math
-import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -24,11 +23,16 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError, best_match
 from PIL import Image
 
+from core import facts, media
 from core.graph import RunError
-from core.media import FFMPEG, FFPROBE
+from core.media import FFMPEG, FFPROBE, MediaError
 
-THUMB, MIN_AREA, KEYFRAMES, MAX_THUMBS = 1024, 65536, 3, 24
+THUMB, MIN_AREA, MAX_THUMBS = 1024, 65536, 24
 SEED = 0  # pinned; greedy decoding makes it moot
+GRID_NOTE = (
+    "Each video is one picture of its frames in time order (left to right, then down), each with its time "
+    "at its top left."
+)
 RETRY = "Your answer was invalid: {}. Answer again with JSON only."
 SCHEMA_HINT = "Answer only with JSON matching this schema: {}"
 MAX_TEXT, MAX_ERROR = 32768, 2000
@@ -68,31 +72,18 @@ def jpeg(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def keyframes(mp4: bytes, take_id: str) -> list[tuple[int, Image.Image]]:
-    """(frame index, RGB frame) of a clip at floor(F * (2k + 1) / 6), k < KEYFRAMES, in frame order (ffprobe counts the
-    frames without decoding them; ffmpeg decodes only those)."""
+def frame_grid(mp4: bytes, take_id: str) -> Image.Image:
+    """A clip as one picture (API 1.104, core.facts.grid): its frames in time order, each with its time."""
     if not (FFMPEG and FFPROBE):
         raise RunError("video takes need ffmpeg and ffprobe on PATH (brew install ffmpeg)")
     with tempfile.TemporaryDirectory() as d:
         path = Path(d) / "take.mp4"
         path.write_bytes(mp4)
-        probe = subprocess.run([FFPROBE, "-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries",
-                                "stream=width,height,nb_read_packets", "-of", "json", str(path)],
-                               capture_output=True, timeout=120, check=False)  # fmt: skip
         try:
-            s = json.loads(probe.stdout)["streams"][0]
-            w, h, n = int(s["width"]), int(s["height"]), int(s["nb_read_packets"])
-        except (ValueError, KeyError, IndexError) as e:
+            jpg, *_ = facts.grid(path, media.probe(path))
+        except MediaError as e:
             raise RunError(f"input video {take_id} is not a readable video") from e
-        frames = sorted({n * (2 * k + 1) // (2 * KEYFRAMES) for k in range(KEYFRAMES)})
-        select = "+".join(f"eq(n\\,{f})" for f in frames)
-        dec = subprocess.run([FFMPEG, "-v", "error", "-i", str(path), "-vf", f"select='{select}'",
-                              "-fps_mode", "passthrough", "-pix_fmt", "rgb24", "-f", "rawvideo", "pipe:1"],
-                             capture_output=True, timeout=300, check=False)  # fmt: skip
-    size = w * h * 3
-    if dec.returncode or len(dec.stdout) != size * len(frames):
-        raise RunError(f"input video {take_id} is not a readable video")
-    return [(f, Image.frombytes("RGB", (w, h), dec.stdout[i * size : (i + 1) * size])) for i, f in enumerate(frames)]
+    return Image.open(io.BytesIO(jpg)).convert("RGB")
 
 
 def looked_at(ctx, media: list[dict]) -> tuple[list[Image.Image], list[dict]]:
@@ -102,7 +93,7 @@ def looked_at(ctx, media: list[dict]) -> tuple[list[Image.Image], list[dict]]:
     for row in media:
         take = row["take"]
         if "mp4" in take:
-            shown += [(take["take_id"], f, img) for f, img in keyframes(take["mp4"], take["take_id"])]
+            shown.append((take["take_id"], None, frame_grid(take["mp4"], take["take_id"])))
         else:
             shown.append((take["take_id"], None, take["image"]))
     if len(shown) > MAX_THUMBS:
@@ -155,6 +146,8 @@ def ask(ctx, params: dict, generate, see: bool = True) -> dict:
     check = validator(ctx, params["schema"])
     thumbs, seen = looked_at(ctx, params["media"]) if see else ([], [])
     prompt = params["prompt"]
+    if any("mp4" in row["take"] for row in params["media"]):
+        prompt = f"{GRID_NOTE}\n\n{prompt}"
     if check is not None:
         prompt += "\n\n" + SCHEMA_HINT.format(params["schema"])
     ctx.progress(1, 1, "answering")

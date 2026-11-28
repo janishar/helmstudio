@@ -33,7 +33,8 @@
             "frame",
             "thumbs",
             "mux",
-            "bake"
+            "bake",
+            "facts"
           ]
         },
         "inputs": {
@@ -60,7 +61,7 @@
               }
             }
           },
-          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out); (1.48) a thumbs job reads 1-20, each kind image (an image take's file or a video's poster); (1.79) a mux job reads exactly 2: inputs[0] the video (kind video), inputs[1] the sound (kind audio); (1.82) a bake job reads 1 or 2, each kind video or image"
+          "description": "every distinct object the job reads, once each (the runner downloads each into a 0700 temp dir); args name them by index. An export of empty slots only (black and silence) reads none; a frame job reads exactly one; (1.32) an audio take on an audio track is kind audio: a WAV (from 1.38 also an mp3 or an m4a), mixed as a video's sound is (resampled to target.sample_rate, stereo, gain, mute, at / in / out); (1.48) a thumbs job reads 1-20, each kind image (an image take's file or a video's poster); (1.79) a mux job reads exactly 2: inputs[0] the video (kind video), inputs[1] the sound (kind audio); (1.82) a bake job reads 1 or 2, each kind video or image; (1.104) a facts job reads 1-4, each kind video or audio (a take's file)"
         },
         "output_prefix": {
           "allOf": [
@@ -68,7 +69,7 @@
               "$ref": "defs.schema.json#/$defs/objectPrefix"
             }
           ],
-          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png); (1.48) thumbs: u/<owner_id>/thumbs/<job_id>/ (<i>.webp per input index); (1.79) mux: u/<owner_id>/muxes/<job_id>/ (mux.mp4, mux.poster.png, mux.last.png); (1.82) bake: u/<owner_id>/bakes/<job_id>/ (bake.mp4, bake.poster.png, bake.last.png, bake.thumb.webp)"
+          "description": "export: u/<owner_id>/exports/<job_id>/ (export.mp4, export.poster.png, export.last.png); frame: u/<owner_id>/frames/<job_id>/ (frame.png); (1.48) thumbs: u/<owner_id>/thumbs/<job_id>/ (<i>.webp per input index); (1.79) mux: u/<owner_id>/muxes/<job_id>/ (mux.mp4, mux.poster.png, mux.last.png); (1.82) bake: u/<owner_id>/bakes/<job_id>/ (bake.mp4, bake.poster.png, bake.last.png, bake.thumb.webp); (1.104) facts: u/<owner_id>/facts/<job_id>/ (<i>.jpg per video input)"
         },
         "export": {
           "type": "object",
@@ -411,6 +412,55 @@
               },
               "output_prefix": {
                 "pattern": "/thumbs/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/$"
+              }
+            },
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "export"
+                  ]
+                },
+                {
+                  "required": [
+                    "frame"
+                  ]
+                },
+                {
+                  "required": [
+                    "bake"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "facts"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "inputs": {
+                "minItems": 1,
+                "maxItems": 4,
+                "items": {
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "video",
+                        "audio"
+                      ]
+                    }
+                  }
+                }
+              },
+              "output_prefix": {
+                "pattern": "/facts/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/$"
               }
             },
             "not": {

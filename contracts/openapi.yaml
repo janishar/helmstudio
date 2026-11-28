@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.103.0
+  version: 1.104.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -5513,6 +5513,25 @@ components:
           maxItems: 16
           items: {$ref: '#/components/schemas/TakeDecision'}
           description: 'from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions)'
+        facts: {oneOf: [{$ref: '#/components/schemas/TakeFacts'}, {type: 'null'}], description: 'from 1.104, only in `GET /v1/studio/takes/{take_id}`, a video or audio take: what ffmpeg measured on its file (contracts/README.md, Take facts); null until made (seconds after the take is ready) or when its file cannot be read'}
+    TakeFacts:
+      type: object
+      description: |
+        From 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg, and a video's frame
+        grid. The sound facts are null when it has no sound.
+      required: [seconds, sound_seconds, lufs, peak_db, silence_start, silence_end, end_lufs, abrupt, grid_url, at]
+      properties:
+        seconds: {type: number, minimum: 0, description: the file's real length}
+        sound_seconds: {type: [number, 'null'], minimum: 0, description: its sound's length}
+        lufs: {type: [number, 'null'], description: 'integrated loudness (EBU R128), LUFS; -70 is silence'}
+        peak_db: {type: [number, 'null'], description: true peak, dBTP}
+        silence_start: {type: [number, 'null'], minimum: 0, description: seconds under -50 dB at the start}
+        silence_end: {type: [number, 'null'], minimum: 0, description: seconds under -50 dB at the end}
+        end_lufs: {type: [number, 'null'], description: 'the loudness of the last 0.5 s, LUFS'}
+        abrupt: {type: [boolean, 'null'], description: 'the sound stops within 10 LU of its loudness with no silence at the end (no fade out)'}
+        cuts: {type: array, maxItems: 32, items: {type: number, minimum: 0}, description: 'a video only: scene cuts (seconds), the first 32'}
+        grid_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'a video: one JPEG of its frames in time order (12, fewer for a shorter clip), each with its time printed at its top left, long side at most 1024; null for audio'}
+        at: {type: array, maxItems: 16, items: {type: number, minimum: 0}, description: 'the seconds of the grid''s frames, in order; empty for audio'}
     TakeDecision:
       type: object
       required: [decision_id, batch_id, row, node, outcome, first_failed]

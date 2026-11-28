@@ -473,6 +473,14 @@ func checkArgs(name string, top map[string]json.RawMessage) *message.ToolsReply 
 	return nil
 }
 
+// withFacts adds look_at's `facts` (API 1.104) when any of its takes has them.
+func withFacts(result map[string]any, facts []any) map[string]any {
+	if len(facts) > 0 {
+		result["facts"] = facts
+	}
+	return result
+}
+
 // lookAt is look_at after the user's Yes: one interactive ask run of the takes (the owner's image and video takes, in
 // order) in the first take's session, else the owner's newest; the reply is kept with the run in one transaction.
 func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message.ToolsRequest) message.ToolsReply {
@@ -499,13 +507,15 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 	}
 	var out message.ToolsReply
 	var run dto.Run
+	var facts []any // API 1.104: the facts of its takes that have them, in order
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		type takeRow struct {
 			ID        string
 			Kind      string
 			SessionID *string
+			Facts     json.RawMessage // API 1.104: takes.facts->'facts'
 		}
-		takes, err := collect[takeRow](ctx, tx, `SELECT id::text, kind, session_id::text FROM takes
+		takes, err := collect[takeRow](ctx, tx, `SELECT id::text, kind, session_id::text, facts->'facts' FROM takes
 			WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready`, args.TakeIDs, caller.ID)
 		if err != nil {
 			return err
@@ -517,12 +527,16 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 			return slices.Index(args.TakeIDs, a.ID) - slices.Index(args.TakeIDs, b.ID)
 		})
 		media, thumbs := make([]any, len(takes)), 0
+		facts = []any{}
 		for i, t := range takes {
 			if t.Kind != "image" && t.Kind != "video" {
-				out = toolErr("invalid", "take %s is %s; look_at looks at images and videos", t.ID, t.Kind)
+				out = toolErr("invalid", "take %s is %s; look_at looks at images and videos (get_take has a sound's facts)", t.ID, t.Kind)
 				return nil
 			}
 			media[i] = map[string]any{"take": map[string]any{"take_id": t.ID}}
+			if len(t.Facts) > 0 && string(t.Facts) != "null" {
+				facts = append(facts, map[string]any{"take_id": t.ID, "facts": t.Facts})
+			}
 			thumbs += map[bool]int{true: 3, false: 1}[t.Kind == "video"]
 		}
 		sessionID := takes[0].SessionID
@@ -544,8 +558,8 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 		if _, err := tx.Exec(ctx, `UPDATE runs SET thumbs = $2 WHERE id = $1`, run.ID, thumbs); err != nil {
 			return err
 		}
-		out = message.ToolsReply{Tool: "look_at", Result: map[string]any{"run_id": run.ID, "session_id": run.SessionID,
-			"workflow_id": run.WorkflowID, "host": nil, "position": nil}}
+		out = message.ToolsReply{Tool: "look_at", Result: withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID,
+			"workflow_id": run.WorkflowID, "host": nil, "position": nil}, facts)}
 		_, err = tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply) VALUES ($1, $2, $3, $4, $5)`,
 			req.CallID, req.ThreadID, caller.ID, req.Tool, toJSON(out))
 		return err
@@ -561,8 +575,8 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 		return out
 	}
 	if err := s.placeQueued(ctx, &run); err == nil {
-		result := map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID, "host": run.Host,
-			"position": run.Position}
+		result := withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID,
+			"host": run.Host, "position": run.Position}, facts)
 		out = message.ToolsReply{Tool: "look_at", Result: result}
 		_ = common.System(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `UPDATE assistant_tool_calls SET reply = $2 WHERE call_id = $1`, req.CallID, toJSON(out))

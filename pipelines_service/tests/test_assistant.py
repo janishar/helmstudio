@@ -394,6 +394,32 @@ async def test_a_model_that_sees_gets_the_messages_pictures_and_look_at_needs_no
     assert asked == [TAKES[0], TAKES[1], other]  # pictures kept in memory
 
 
+async def test_a_model_that_sees_gets_a_videos_grid_and_the_facts_of_video_and_audio(pool, fake):
+    """API 1.104 (contracts/README.md, Take facts): the facts follow the prompt, one line per take."""
+    c = Chat(pool, fake)
+    c.sees = True
+    f = {"seconds": 12.0, "sound_seconds": 12.0, "lufs": -14.0, "peak_db": -1.0, "silence_start": 0.0,
+         "silence_end": 0.0, "end_lufs": -14.5, "abrupt": True}  # fmt: skip
+
+    async def see(req: dict) -> dict:
+        if req["take_id"] == TAKES[1]:
+            got = {"take_id": TAKES[1], "kind": "audio", "title": "Theme", "images": [], "facts": f}
+        else:
+            got = {"take_id": TAKES[0], "kind": "video", "title": "Harbour", "images": [JPEG],
+                   "facts": f | {"cuts": [3.0]}, "at": [0.5, 1.5]}  # fmt: skip
+        assert not schemas.see_errors("reply", got), schemas.see_errors("reply", got)
+        return got
+
+    c.a.see = see
+    c.script({"content": "The theme stops dead at 12 s."})
+    step = await c.say(f"Does [[take:{TAKES[1]}]] fit under [[take:{TAKES[0]}]]?")
+    (req,) = c.asked()
+    text = json.dumps(req["messages"][1]["content"])
+    assert f"Facts of [[take:{TAKES[0]}]] (ffmpeg)" in text and '\\"grid_at\\":[0.5,1.5]' in text
+    assert f"Facts of [[take:{TAKES[1]}]] (ffmpeg)" in text and '\\"abrupt\\":true' in text
+    assert len(images_of(req)) == 1 and step["lines"][0]["text"] == "Looked at Harbour, Theme"
+
+
 async def test_a_text_only_model_looks_at_the_users_own_takes_without_a_card(pool, fake):
     c = Chat(pool, fake)
     look = calls(("look_at", {"take_ids": [TAKES[0]], "question": "what light?"}))

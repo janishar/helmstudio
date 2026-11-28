@@ -399,14 +399,23 @@ func (s *mcpServer) getTake(ctx context.Context, _ *mcp.CallToolRequest, in args
 	return out, []mcp.Content{&mcp.ImageContent{Data: img, MIMEType: mime}}, nil
 }
 
-// thumb fetches a take's thumb_url (plan 22: a WebP, short side 512 px); nil for audio or on any failure.
+// thumb fetches a take's thumb_url (plan 22: a WebP, short side 512 px), or (API 1.104) a video's frame grid when it
+// has one (Take facts: its frames with their times); nil for audio or on any failure.
 func (s *mcpServer) thumb(ctx context.Context, take json.RawMessage) ([]byte, string) {
 	var t struct {
 		Kind     string `json:"kind"`
 		ThumbURL string `json:"thumb_url"`
+		Facts    *struct {
+			GridURL *string `json:"grid_url"`
+		} `json:"facts"`
 	}
 	if json.Unmarshal(take, &t) != nil || t.Kind == "audio" {
 		return nil, ""
+	}
+	if t.Facts != nil && t.Facts.GridURL != nil {
+		if img, mime := s.image(ctx, *t.Facts.GridURL, 4<<20); img != nil {
+			return img, mime
+		}
 	}
 	return s.image(ctx, t.ThumbURL, 4<<20)
 }

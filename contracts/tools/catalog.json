@@ -780,7 +780,7 @@
       }
     },
     "look_at": {
-      "description": "Look at up to 8 takes and answer a question about them (the local ask stage; video as 3 keyframes). Starts an ask run after your Yes; then await the run.",
+      "description": "Look at up to 8 takes and answer a question. A video is one picture of 12 frames with their times, plus ffmpeg facts (length, loudness, peak, silence at the ends, abrupt end, cuts): trust them. A model that sees gets them next prompt; else an ask run after your Yes: await it.",
       "surfaces": [
         "assistant"
       ],
@@ -842,6 +842,28 @@
               "null"
             ],
             "minimum": 1
+          },
+          "facts": {
+            "type": "array",
+            "maxItems": 8,
+            "description": "from API 1.104: the facts of the video and audio takes that have them (Take facts), in order",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "take_id",
+                "facts"
+              ],
+              "properties": {
+                "take_id": {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                "facts": {
+                  "$ref": "../messages/defs.schema.json#/$defs/takeFacts"
+                }
+              }
+            }
           }
         },
         "required": [

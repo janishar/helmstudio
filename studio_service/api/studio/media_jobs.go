@@ -115,16 +115,16 @@ func (c mediaCommand) Subject() string { return "cmd.media." + c.host + "." + c.
 // mediaEnv is the env that would run a media job now: the named host's media envs, else every live one;
 // VideoToolbox first, then NVENC (API 1.18), then host, env by name; never a server env.
 func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
-	return mediaEnvOf(s.registry, host, false)
+	return mediaEnvOf(s.registry, host, nil)
 }
 
 // mediaEnvOf is mediaEnv over reg; thumbs: only an env whose runner runs thumbs jobs (API 1.48).
-func mediaEnvOf(reg *registry.Registry, host *string, thumbs bool) (registry.Host, bool) {
+func mediaEnvOf(reg *registry.Registry, host *string, can func(registry.Media) bool) (registry.Host, bool) {
 	now := time.Now()
 	var envs []registry.Host
 	for _, h := range reg.Hosts() {
 		if h.Media != nil && len(h.Media.Encoders) > 0 && h.Live(now) && h.Env != "server" && (host == nil || h.Host == *host) &&
-			(!thumbs || h.Media.Thumbs) {
+			(can == nil || can(*h.Media)) {
 			envs = append(envs, h)
 		}
 	}
@@ -151,9 +151,9 @@ func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCom
 	}
 	var open int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')
-		AND kind NOT IN ('thumbs', 'bake')`, j.OwnerID).Scan(&open); err != nil {
+		AND kind NOT IN ('thumbs', 'facts', 'bake')`, j.OwnerID).Scan(&open); err != nil {
 		return mediaRow{}, err
-	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" && j.Kind != "bake" { // a send's bakes are its own
+	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" && j.Kind != "facts" && j.Kind != "bake" { // a send's bakes are its own
 		return mediaRow{}, network.NewConflictError(fmt.Sprintf("You have %d unfinished exports or frames; wait for one to finish.",
 			MaxOpenMediaJobs), nil)
 	}
@@ -400,7 +400,7 @@ func (s *Service) GetMediaJob(ctx context.Context, caller common.Caller, id stri
 	}
 	var out mediaRow
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'`, id)
+		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind NOT IN ('thumbs', 'facts')`, id)
 		return err
 	})
 	return out.dto(), err
@@ -415,7 +415,7 @@ func (s *Service) CancelMediaJob(ctx context.Context, caller common.Caller, id s
 	var out mediaRow
 	ask := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'
+		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind NOT IN ('thumbs', 'facts')
 			FOR UPDATE`, id); err != nil {
 			return err
 		}
@@ -465,6 +465,10 @@ func endMedia(ctx context.Context, tx pgx.Tx, job *mediaRow, status string, fail
 	}
 	if err == nil && row.Kind == "thumbs" && status != "succeeded" {
 		_, err = tx.Exec(ctx, `UPDATE takes SET thumb_tries = thumb_tries + 1 WHERE id = ANY($1::uuid[]) AND thumb IS NULL`,
+			row.TakeIDs)
+	}
+	if err == nil && row.Kind == "facts" && status != "succeeded" { // API 1.104, as thumbs
+		_, err = tx.Exec(ctx, `UPDATE takes SET facts_tries = facts_tries + 1 WHERE id = ANY($1::uuid[]) AND facts IS NULL`,
 			row.TakeIDs)
 	}
 	return err
@@ -536,6 +540,11 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 			if err == nil && job.Kind == "thumbs" && jobEnded[job.Status] {
 				var keys []string
 				keys, err = unusedThumbs(ctx, tx, job)
+				unused = append(unused, keys...)
+			}
+			if err == nil && job.Kind == "facts" && jobEnded[job.Status] {
+				var keys []string
+				keys, err = unusedFacts(ctx, tx, job)
 				unused = append(unused, keys...)
 			}
 			if err != nil {
@@ -779,6 +788,7 @@ type mediaResult struct {
 	// API 1.48: an export's or a frame's thumbnail; a thumbs job's results by input index
 	Thumb  *gallerydto.Poster `json:"thumb"`
 	Thumbs []thumbResult      `json:"thumbs"`
+	Facts  []factsResult      `json:"facts"` // API 1.104: a facts job's results by input index
 }
 
 type thumbResult struct {
@@ -863,6 +873,9 @@ func applyMediaProgress(ctx context.Context, tx pgx.Tx, job mediaRow, data media
 func (p *Projector) applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRow, data mediaStatus) error {
 	if job.Kind == "thumbs" && data.Status != "running" {
 		return p.endThumbs(ctx, tx, job, data)
+	}
+	if job.Kind == "facts" && data.Status != "running" {
+		return p.endFacts(ctx, tx, job, data)
 	}
 	switch data.Status {
 	case "running":

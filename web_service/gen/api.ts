@@ -5462,7 +5462,37 @@ export interface components {
             tool?: components["schemas"]["TakeTool"];
             /** @description from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions) */
             decisions?: components["schemas"]["TakeDecision"][];
+            /** @description from 1.104, only in `GET /v1/studio/takes/{take_id}`, a video or audio take: what ffmpeg measured on its file (contracts/README.md, Take facts); null until made (seconds after the take is ready) or when its file cannot be read */
+            facts?: components["schemas"]["TakeFacts"] | null;
         } & (unknown & unknown);
+        /**
+         * @description From 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg, and a video's frame
+         *     grid. The sound facts are null when it has no sound.
+         */
+        TakeFacts: {
+            /** @description the file's real length */
+            seconds: number;
+            /** @description its sound's length */
+            sound_seconds: number | null;
+            /** @description integrated loudness (EBU R128), LUFS; -70 is silence */
+            lufs: number | null;
+            /** @description true peak */
+            peak_db: number | null;
+            /** @description seconds under -50 dB at the start */
+            silence_start: number | null;
+            /** @description seconds under -50 dB at the end */
+            silence_end: number | null;
+            /** @description the loudness of the last 0.5 s, LUFS */
+            end_lufs: number | null;
+            /** @description the sound stops within 10 LU of its loudness with no silence at the end (no fade out) */
+            abrupt: boolean | null;
+            /** @description a video only: scene cuts (seconds), the first 32 */
+            cuts?: number[];
+            /** @description a video: one JPEG of its frames in time order (12, fewer for a shorter clip), each with its time printed at its top left, long side at most 1024; null for audio */
+            grid_url: components["schemas"]["SignedUrl"] | null;
+            /** @description the seconds of the grid's frames, in order; empty for audio */
+            at: number[];
+        };
         TakeDecision: {
             decision_id: string;
             /** Format: uuid */

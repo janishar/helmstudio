@@ -1,4 +1,4 @@
-"""Ask runs without a GPU (contracts/README.md, "The llm pack and agent nodes"): core.ask's thumbnails, keyframes,
+"""Ask runs without a GPU (contracts/README.md, "The llm pack and agent nodes"): core.ask's thumbnails, frame grids,
 schema check and one more try; the fake echo/ask end to end through the consumer (the answer on the terminal status,
 on contract; Media takes read and checked; a repeat is a cache hit); text workflows' memory plans."""
 
@@ -87,12 +87,12 @@ def test_thumbnails_are_stored_once_by_content_and_listed_in_order():
 
 
 @pytest.mark.skipif(not shutil.which("ffprobe"), reason="ffmpeg is not on PATH")
-def test_a_video_take_is_three_keyframes_at_the_span_centres():
+def test_a_video_take_is_one_grid_of_its_frames():
     clip = mp4.mp4(Image.new("RGB", (256, 128), "blue"), 25, 24)
-    frames = ask.keyframes(clip, "t")
-    assert [f for f, _ in frames] == [4, 12, 20] and frames[0][1].size == (256, 128)
+    grid = ask.frame_grid(clip, "t")
+    assert grid.size == (1024, 384)  # 12 frames of 256 x 128 at full size, 4 across
     with pytest.raises(RunError, match="input video t is not a readable video"):
-        ask.keyframes(b"not a video", "t")
+        ask.frame_grid(b"not a video", "t")
 
 
 @pytest.mark.parametrize(

@@ -400,6 +400,7 @@ type Media struct {
 	FFmpeg   string   `json:"ffmpeg"`
 	Encoders []string `json:"encoders"`
 	Thumbs   bool     `json:"thumbs,omitempty"`
+	Facts    bool     `json:"facts,omitempty"` // API 1.104: it runs facts jobs (Take facts)
 }
 
 // ModelsDisk is the volume holding a runner's models root (API 1.16).

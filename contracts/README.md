@@ -1003,6 +1003,38 @@ Lists draw `thumb_url`; viewers, compare, export and every model input use `url`
   thumbnail is never shared between takes. A frame job at `last` stores its frame once for the video (`video.last`)
   and a copy `u/<owner>/frames/<take>.png` for the frame take, so sweeping one never deletes the other's file.
 
+## Take facts (API 1.104; plan 42-listen-and-watch, owner 2026-11-28; normative)
+
+Claude takes text and pictures only, so the Assistant judges sound and moving video from facts and one picture.
+
+- **The facts** (defs `takeFacts`, openapi `TakeFacts`) of a video or audio take, from ffmpeg on its file:
+  `seconds` (the file's real length, ffprobe), `sound_seconds`, `lufs` (integrated loudness, EBU R128; -70 is
+  silence), `peak_db` (true peak, dBTP), `silence_start` / `silence_end` (seconds under -50 dB at each end,
+  silencedetect `d=0.1`), `end_lufs` (the loudness of the last 0.5 s), `abrupt` (the sound stops within 10 LU of its
+  loudness with no silence at the end: no fade out) and, for a video, `cuts` (scene cuts in seconds, score over 0.3 on
+  a 320 px copy, the first 32). No sound: the sound facts are null.
+- **The frame grid** of a video: 12 frames (fewer for a shorter clip) at ⌊F·(2k+1)/24⌋, in one JPEG (q85), left to
+  right then down, the layout with the largest tiles in 1024 × 1024 (never upscaled), each frame's time `m:ss.s`
+  printed white on black at its top left; `at` = each frame's seconds.
+- **`takes.facts`** `{facts, key, width, height, bytes, at}` (key null for audio; null until made). `GET
+  /v1/studio/takes/{take_id}` answers `facts` (the facts with `grid_url` signed and `at`) for a video or audio take
+  (null until made), so get_take has them on both surfaces; helm mcp's get_take shows the grid instead of the
+  thumbnail when there is one.
+- **The facts job** (`cmd.media.job` kind `facts`): studio's loop (every 10 s, as System) picks ready, live video
+  and audio takes with `facts` null and `facts_tries` < 3, at most 20 minutes long, newest first, one owner per job,
+  at most 4, only when no facts job is open on the stack and a media env whose hosts key has `media.facts: true` is
+  live; a take whose key is outside `u/<owner_id>/` is never picked. `inputs`: each take's file (kind video or
+  audio); `output_prefix` `u/<owner_id>/facts/<job_id>/`. The runner answers `result.facts[]`: `{index, facts}` and
+  for a video `key` `<prefix><i>.jpg`, `width`, `height`, `bytes`, `at`; or `{index, error}` (the job goes on). The
+  projector stores each only on a live take still without facts and only a key exactly `<prefix><i>.jpg` (else the
+  object is deleted); an error or a missing item adds a try, and a job that fails, is cancelled or is lost adds one
+  to each of its takes and deletes its keys no take points at. It does not count toward a user's open media jobs and
+  has no endpoint. The take sweep deletes `facts.key` with the take.
+- **The Assistant**: `studio.see` answers a video's grid (not its poster) once made, with `facts` and `at`, and an
+  audio take's `facts`; a model that sees gets them with its next prompt (each take's facts as a line after the
+  prompt). `look_at`'s ask run (a text-only model) shows its local model each video as the same grid, made in the
+  run, and its result carries the stored `facts` of its takes.
+
 ## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
 Takes are `image` or `video`; `audio` takes come from uploads (1.19) and, from 1.30, from runs (Voices). A video take is one MP4 (H.264, may carry an AAC
@@ -2177,7 +2209,8 @@ project memory, saved checklists, thumbnails for server or remote models.
   counts it as an output) and `<family>/ask` (input `model: Model`; output `answer: Text`; params `system` string
   ≤ 4000, `prompt` string ≤ 32768 (a `string`, so it is never scanned for mentions), `media` rows 0–8 of `{take:
   Media}`, `schema` string ≤ 16384 (a JSON schema; `""` = plain text), `max_tokens` int 16–4096 default 800).
-  Temperature (0), thinking (off), seed (0), thumbnail size (1024) and keyframes (3) are fixed, not params.
+  Temperature (0), thinking (off), seed (0), thumbnail size (1024) and keyframes (3; from 1.104 one frame grid) are
+  fixed, not params.
 - `llm-ask` (env `mlx`, family `llm`, `fixtures/registry/llm.*`): `llm/model` (`variant` 4bit, `precision` int4:
   ~/GenAI/models/Qwen3.8-27B-4bit on mlx-vlm, component `model` 15.4 GB) → `llm/ask` → `answer`. The mlx runner
   publishes the ltx and llm values together (both lists, the core kinds once). `qwen-image-ask` (env `torch`):
@@ -2195,8 +2228,10 @@ project memory, saved checklists, thumbnails for server or remote models.
   An ask run makes no take and no lineage.
 - **Runner**: thumbnails per image take: decoded as for Image inputs, RGBA over white, Lanczos to long edge
   min(1024, native), both sides floored to multiples of 32 (area ≥ 65536), JPEG q90, PUT once to
-  `u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg` (defs `thumbKey`); a video take: 3 keyframes at frames
-  ⌊F·(2k+1)/6⌋, k = 0..2 (ffmpeg), each as an image; at most 24 thumbnails per run. Structured answers: with a
+  `u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg` (defs `thumbKey`); a video take: until 1.104 3 keyframes at
+  frames ⌊F·(2k+1)/6⌋, k = 0..2, each as an image; from 1.104 its frame grid (Take facts) as one image (`seen.frame`
+  null), the prompt led by `Each video is one picture of its frames in time order (left to right, then down), each
+  with its time at its top left.`; at most 24 thumbnails per run. Structured answers: with a
   `schema`, constrained decoding where the env has it (mlx: llguidance through mlx-vlm), then the outermost `{…}` is
   parsed and validated with jsonschema; a failure is asked once more **in the same run** with `Your answer was
   invalid: <error>. Answer again with JSON only.` appended; a second failure fails the run `answer did not match the
@@ -3857,6 +3892,7 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   host stopped responding: Several hosts, host loss).
 - (1.48) Kind `thumbs`: the takes' thumbnails (Thumbnails); exports and frames also write the thumbnail of their
   poster or frame (`result.thumb`).
+- (1.104) Kind `facts`: video and audio takes' facts and frame grids (Take facts).
 
 ## Timeline rules (normative)
 
@@ -4568,7 +4604,8 @@ Takes in the chat both ways: you hand the assistant pictures, and its answers sh
   with no preset: false). When it sees, every model call of a message carries the pictures of the takes that message
   names (refs in the user's words and its attachments, then those it looked at with `look_at`), at most 8, as image
   parts after the text: pipelines asks `studio.see` for each (req.studio.see: the thumbnail as JPEG, long side at most
-  1024; a video's poster; audio none) and never stores them. A line `Looked at <titles>` shows once per message.
+  1024; a video's poster, from 1.104 its frame grid once made; audio none; from 1.104 a video's or audio's facts as
+  the line `Facts of [[take:<id>]] (ffmpeg): <json>` after the prompt) and never stores them. A line `Looked at <titles>` shows once per message.
   `look_at` is then offered always and runs without a card or a run: its takes join the pictures of the next call.
 - **Text-only model.** `look_at` stays the way to see (an ask run on your machine), but on takes you attached or
   @-picked in this chat it needs no card: they are yours to show. The drawer says once, when you attach, "This model

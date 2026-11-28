@@ -134,6 +134,8 @@ type Take struct {
 	Video       *VideoInfo `json:"video,omitempty"` // kind video only
 	// only GET /takes/{id}: the judge decisions that weighed it, newest first (API 1.14)
 	Decisions *[]TakeDecision `json:"decisions,omitempty"`
+	// only GET /takes/{id}, a video or audio take: its facts (API 1.104, openapi TakeFacts); null until made
+	Facts *map[string]any `json:"facts,omitempty"`
 	// source import: the old settings, read-only (API 1.16)
 	Legacy json.RawMessage `json:"legacy,omitempty"`
 	// source frame: the video take and frame it is; source export: the sequence and revision (API 1.17)

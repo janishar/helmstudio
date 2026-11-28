@@ -648,9 +648,13 @@ class Assistant:
                "tools": tools}  # fmt: skip
         # API 1.65: the pictures go with the user part (req["images"]), so the system part stays byte-identical
         looked, lines = list(s.get("looked") or []), list(s.get("lines") or [])
-        if d["settings"].get("sees") and (pics := await self.pictures(s, message_takes(s))):
+        pics = await self.pictures(s, message_takes(s)) if d["settings"].get("sees") else []
+        if facts := self.facts(s, message_takes(s)) if d["settings"].get("sees") else []:
+            req["prompt"] += "\n\n" + "\n".join(line for _, _, line in facts)  # API 1.104: Take facts
+        if pics:
             req["images"] = [b for _, _, b in pics]
-            new = [(i, t) for i, t, _ in pics if i not in looked]
+        if pics or facts:
+            new = [(i, t) for i, t, _ in pics + facts if i not in looked]
             if new and caps["tool_calls"] < TOOL_CALLS:  # the line takes a call id
                 looked += list(dict.fromkeys(i for i, _ in new))
                 lines.append({"id": f"{s['thread_id']}:{s['msg']}:{caps['tool_calls']}", "status": "done",
@@ -775,8 +779,9 @@ class Assistant:
                 # API 1.65: a model that sees looks itself: the takes join the next call's pictures, no card, no run
                 seen = list(dict.fromkeys([*(up.get("seen") or s.get("seen") or []), *c["args"]["take_ids"]]))
                 up["seen"] = seen
-                chat.append(_entry(c, "done", {"note": "the pictures come with your next prompt; look at them yourself, "
-                                                       "there is no run to await"}))  # fmt: skip
+                chat.append(_entry(c, "done", {"note": "the pictures (a video: one grid of its frames with their times) "
+                                                       "and ffmpeg facts come with your next prompt; look at them "
+                                                       "yourself, there is no run to await"}))  # fmt: skip
                 continue
             if c["name"] == "look_at" and set(c["args"]["take_ids"]) <= given_takes(s):
                 # the user's own attachments and @ picks: no Yes card (API 1.65), the ask run starts at once
@@ -904,6 +909,18 @@ class Assistant:
             if got and "error" not in got:
                 out += [(i, got["title"] or "a take", b) for b in got["images"]]
         return out[:MAX_PICTURES]
+
+    def facts(self, s: State, ids: list[str]) -> list[tuple[str, str, str]]:
+        """(take id, title, line) of each take of `ids` whose facts studio gave with its pictures (API 1.104, Take facts:
+        a video's or audio's, `at` the grid's frame times): read from what pictures() kept."""
+        out = []
+        for i in ids:
+            got = self.pics.get(f"{s['owner_id']}:{i}") or {}
+            if got.get("facts"):
+                f = got["facts"] | ({"grid_at": got["at"]} if got.get("at") else {})
+                line = f"Facts of [[take:{i}]] (ffmpeg): {json.dumps(f, separators=(',', ':'))}"
+                out.append((i, got.get("title") or "a take", line))
+        return out
 
     # --- server calls
 

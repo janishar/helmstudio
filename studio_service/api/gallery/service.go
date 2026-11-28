@@ -338,7 +338,16 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto
 		}
 		decisions, err := takeDecisions(ctx, tx, id)
 		out.Decisions = &decisions
-		return err
+		if err != nil || (out.Kind != "video" && out.Kind != "audio") {
+			return err
+		}
+		var raw json.RawMessage // API 1.104: Take facts
+		if err := tx.QueryRow(ctx, `SELECT facts FROM takes WHERE id = $1`, id).Scan(&raw); err != nil {
+			return err
+		}
+		facts := FactsOut(raw, s.signer.Sign)
+		out.Facts = &facts
+		return nil
 	})
 	return out, err
 }

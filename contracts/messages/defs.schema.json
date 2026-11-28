@@ -1776,7 +1776,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "a video take's keyframe (frame index); null for an image take"
+          "description": "a video take's keyframe (frame index) until API 1.104; null for an image take and (1.104) a video's frame grid"
         },
         "key": {
           "$ref": "#/$defs/thumbKey"
@@ -3474,6 +3474,89 @@
         "bytes": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "takeFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seconds",
+        "sound_seconds",
+        "lufs",
+        "peak_db",
+        "silence_start",
+        "silence_end",
+        "end_lufs",
+        "abrupt"
+      ],
+      "description": "from API 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg on its file. The sound facts are null when it has no sound; `cuts` only for a video",
+      "properties": {
+        "seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "the file's real length (ffprobe)"
+        },
+        "sound_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "its first sound's length"
+        },
+        "lufs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "integrated loudness (EBU R128), LUFS; -70 is silence"
+        },
+        "peak_db": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "true peak, dBTP"
+        },
+        "silence_start": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "seconds under -50 dB at the start"
+        },
+        "silence_end": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "seconds under -50 dB at the end"
+        },
+        "end_lufs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "the loudness of the last 0.5 s, LUFS"
+        },
+        "abrupt": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "the sound stops within 10 LU of its loudness, with no silence at the end (no fade out)"
+        },
+        "cuts": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "description": "a video's scene cuts (seconds; scene score over 0.3), the first 32"
         }
       }
     }

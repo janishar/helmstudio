@@ -280,6 +280,7 @@ func Run() error {
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.MediaConsumer, mediaEvents) })
 	workers.Go(func() { studio.RunMediaJobs(ctx, pool, runners, module.purge, module.cancel, module.store) })
 	workers.Go(func() { studio.RunThumbs(ctx, pool, runners) }) // API 1.48: thumbnails of takes without one
+	workers.Go(func() { studio.RunFacts(ctx, pool, runners) })  // API 1.104: facts of video and audio takes
 	workers.Go(func() {
 		// KV host_settings is a copy of studio's table: written at every start (API 1.16)
 		if err := module.settings.PublishSettings(ctx); err != nil && ctx.Err() == nil {

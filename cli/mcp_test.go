@@ -173,6 +173,16 @@ func TestMCPRunWaitAndTake(t *testing.T) {
 	if tk, _ := out["take"].(map[string]any); tk["id"] != "t9" {
 		t.Fatalf("get_take %v", out)
 	}
+	// API 1.104: a video with facts shows its frame grid, not its thumbnail; the facts are in the take
+	video := `{"id":"t8","kind":"video","thumb_url":"/files/none.webp","facts":{"seconds":2,"abrupt":true,"grid_url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","at":[0.1]}}`
+	f.extra["GET /v1/studio/takes/t8"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, video) }
+	f.extra["GET /v1/studio/takes/t8/uses"] = f.extra["GET /v1/studio/takes/t9/uses"]
+	f.extra["GET /v1/studio/takes/t8/decisions"] = f.extra["GET /v1/studio/takes/t9/decisions"]
+	res, out = call(t, cs, "get_take", map[string]any{"take_id": "t8"})
+	if img, ok := res.Content[1].(*mcp.ImageContent); res.IsError || !ok || !bytes.Equal(img.Data, png) ||
+		out["take"].(map[string]any)["facts"].(map[string]any)["abrupt"] != true {
+		t.Fatalf("get_take grid %s", text(res))
+	}
 
 	r, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "helm://take/t9"})
 	if err != nil || len(r.Contents) != 2 || r.Contents[0].Text != take || r.Contents[1].MIMEType != "image/png" {

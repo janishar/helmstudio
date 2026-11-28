@@ -421,7 +421,7 @@ def test_the_fake_reports_the_stream_facts_ffprobe_reads():
 def test_detect_names_the_hosts_key_media():
     value = media.detect()
     assert value["encoders"][-1] == "libx264" and value["ffmpeg"][0].isdigit()
-    assert value["thumbs"] is True  # API 1.48
+    assert value["thumbs"] is True and value["facts"] is True  # API 1.48, 1.104
 
 
 LOOP = {"mode": "conform", "frames": 86400, "samples": 172800000,
@@ -696,3 +696,27 @@ async def test_a_bake_whose_output_is_off_its_frames_fails_verify(clips):
     graph = f"[0:v:0]setpts=PTS-STARTPTS,{CONFORM}[vout];[0:a:0]anull[aout]"
     end = (await run(bake_command("effects", ["runs/x/1/0.mp4"], graph, 12), store))[-1]["data"]
     assert end["status"] == "failed" and end["failure"]["class"] == "verify"
+
+
+# ---- API 1.104: take facts (contracts/README.md, Take facts)
+
+
+async def test_a_facts_job_measures_each_take_grids_a_video_and_reports_a_missing_one(clips):
+    store = store_of(clips, **{"runs/r/1/0.mp4": "a", "runs/r/2/0.mp4": "t"})
+    cmd = copy.deepcopy(BASE)
+    cmd["data"] = {"kind": "facts", "output_prefix": f"{U}facts/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}runs/r/1/0.mp4", "kind": "video"}, {"key": f"{U}runs/r/2/0.mp4", "kind": "video"},
+                              {"key": f"{U}gone.m4a", "kind": "audio"}]}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    events = await run(cmd, store)
+    end = events[-1]
+    assert end["data"]["status"] == "succeeded" and schemas.message_errors(end) == []
+    a, t, gone = end["data"]["result"]["facts"]
+    prefix = f"{U}facts/{BASE['job_id']}/"
+    assert a["key"] == f"{prefix}0.jpg" and store.objects[a["key"]][1] == "image/jpeg" and len(a["at"]) == 12
+    assert (
+        a["facts"]["seconds"] == 1.0 and a["facts"]["lufs"] > -40 and a["facts"]["abrupt"] is True
+    )  # a sine to the end
+    assert a["facts"]["cuts"] == [] and (a["width"], a["height"]) == (1024, 384)
+    assert t["facts"]["sound_seconds"] is None and t["facts"]["lufs"] is None and len(t["at"]) == 12
+    assert gone == {"index": 2, "error": "input 2 is missing"}

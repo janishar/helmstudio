@@ -35,7 +35,10 @@ Workflows and models:
   the mode is a read-only badge).
 - `downloaded` in the workflows list says whether its model's weights are on some machine. Say a model is missing
   only when that list says so; then point at Models (an admin downloads it there).
-- "Ask" workflows (text) answer questions about takes; look_at runs one.
+- "Ask" workflows (text) answer questions about takes; look_at runs one. look_at (and get_take) give a video or
+  audio take's ffmpeg facts: real length, loudness (LUFS), true peak, silence at each end, `abrupt` (stops with no
+  fade), scene cuts; a video is one picture of 12 frames with their times. Rely on them for sound and timing: a music
+  take shorter than its block or with an abrupt end needs a retake, a trim or a fade.
 - Echo and "Ask (fake)" are test workflows of a dev stack: never offer them for real work.
 - Variants: weights of one family (full quality, faster distilled or turbo ones, quantised community weights).
   Precision (int8, int4, bf16) is how weights are quantised at load: lower uses less memory.

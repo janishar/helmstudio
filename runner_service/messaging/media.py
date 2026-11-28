@@ -10,7 +10,8 @@ weight holder.
   and last frame written; frame: that exact frame as a PNG (each with its thumbnail, API 1.48); thumbs: each input's
   thumbnail (README, Thumbnails); mux (API 1.79, README Music and sound: Save with the video): the video's picture
   copied with the audio as its AAC stereo sound fitted to the picture's length, poster at frame 0 and the last frame;
-  bake (API 1.82, README Magic: Send to Timeline): an export's conform with studio's own graph, bake.mp4 and its pictures
+  bake (API 1.82, README Magic: Send to Timeline): an export's conform with studio's own graph, bake.mp4 and its pictures;
+  facts (API 1.104, README Take facts): each video or audio take's facts and a video's frame grid
   → uploads under output_prefix → one terminal status →
   ack (after the status is acked). The temp dir is removed on every path. A redelivery starts over."""
 
@@ -29,7 +30,7 @@ from pathlib import Path
 from PIL import Image
 
 from config import ENV, HOST
-from core import images, media
+from core import facts, images, media
 from core.graph import Cancelled
 from core.media import MediaError
 from messaging import cancels
@@ -100,7 +101,7 @@ class MediaJobs:
                     extra = {"encoder": "copy"}
                 else:
                     await events.publish("status", {"status": "running"})
-                    job = self.thumbs if data["kind"] == "thumbs" else self.frame
+                    job = {"thumbs": self.thumbs, "facts": self.facts}.get(data["kind"], self.frame)
                     result = await job(data, tmp, cancel)
                 status = "succeeded"
         except Cancelled:
@@ -435,3 +436,26 @@ class MediaJobs:
                     continue
                 out.append({"index": i} | (made or {"skip": True}))
         return {"thumbs": out}
+
+    async def facts(self, data: dict, tmp: Path, cancel: asyncio.Event) -> dict:
+        """API 1.104, kind facts (README, Take facts): each video or audio input's facts, and a video's frame grid at
+        <output_prefix><i>.jpg; `error` when it cannot be read (the job goes on)."""
+        out = []
+        for i, it in enumerate(data["inputs"]):
+            work = tmp / str(i)
+            work.mkdir()
+            try:
+                paths, infos = await self._fetch([it], work, cancel)
+                got = {"index": i, "facts": await asyncio.to_thread(facts.facts, paths[0], infos[0])}
+                if it["kind"] == "video":
+                    jpg, w, h, at = await asyncio.to_thread(facts.grid, paths[0], infos[0])
+                    key = f"{data['output_prefix']}{i}.jpg"
+                    await self.store.put(key, jpg, "image/jpeg")
+                    got |= {"key": key, "width": w, "height": h, "bytes": len(jpg), "at": at}
+                out.append(got)
+            except MediaError as e:
+                why = str(e).replace("input 0", f"input {i}", 1)  # _fetch names its one input 0
+                out.append({"index": i, "error": (why if why.startswith("input") else f"input {i}: {why}")[:300]})
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
+        return {"facts": out}
