@@ -93,7 +93,7 @@ resources: $(DL)/colima/colima-Darwin-arm64 $(DL)/lima/lima-$(LIMA_VERSION)-Darw
 	@for b in vendor/h3c/h3 vendor/zonos3/build/zonos3-server; do \
 	  if [ -x $(ROOT)/runner_service/$$b ]; then mkdir -p $(RES)/runner/runner_service/$$(dirname $$b) && \
 	    cp $(ROOT)/runner_service/$$b $(RES)/runner/runner_service/$$b; \
-	  else echo "note: runner_service/$$b is not built (make h3 / make zonos3 at the root): the native packs will not run"; fi; done
+	  else echo "runner_service/$$b is not built: make -C runner_service h3 zonos3 (the app's native packs need it)"; exit 1; fi; done
 	# make-secrets, the one-shots' scripts (nats-setup, storage-setup) and the deploy files (compose, nats.conf it rewrites); never deploy/secrets*
 	cd $(ROOT) && git ls-files -z deploy .tools/make-secrets .tools/nats-setup .tools/storage-setup | tar --null -T - -cf - | tar -xf - -C $(abspath $(RES))/stack
 	# the built-in plugins (API 1.64 skills; API 1.67 web search and Your Claude subscription, which the native runner
