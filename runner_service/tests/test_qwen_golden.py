@@ -1,4 +1,4 @@
-"""The qwen_image pack against the old studio's goldens (tests/golden/qwen-image at the repo root): runs the pack's
+"""The qwen_image pack against the old studio's goldens (tests/golden/qwen-image): runs the pack's
 qwen-image workflow in-process (no NATS: graph.run with a real residency manager on the GPU) with a golden's
 settings and compares the PNG with tests/golden/compare.py. Loads real weights: never alongside another process
 that holds a model.
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "golden"
+GOLDEN = Path(__file__).resolve().parent / "golden"
 CASES = ["turbo-768-s42", "turbo-1024-s7", "turbo-1344x768-s123", "base-768-s42"]
 EDITS = [
     "edit-e1",

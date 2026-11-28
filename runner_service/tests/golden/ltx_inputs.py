@@ -112,7 +112,9 @@ def synthetic_lora(path: Path, transformer_file: Path) -> dict:
 
 
 if __name__ == "__main__":  # self-check: bf16 rounding and determinism of the image
-    assert _bf16(np.array([1.0, 1.00390625, -2.5], np.float32)) == np.array([0x3F80, 0x3F80, 0xC020], np.uint16).tobytes()
+    assert (
+        _bf16(np.array([1.0, 1.00390625, -2.5], np.float32)) == np.array([0x3F80, 0x3F80, 0xC020], np.uint16).tobytes()
+    )
     import tempfile
 
     with tempfile.TemporaryDirectory() as t:

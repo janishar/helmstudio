@@ -5,7 +5,7 @@ its own lockfile in a scratch copy (nothing is written inside it):
 
     S=<scratch>/studio; rsync -a --exclude __pycache__ ltx-2-studio/{pyproject.toml,uv.lock,README.md,LICENSE,packages} $S/
     (cd $S && UV_PROJECT_ENVIRONMENT=$S/.venv uv sync --locked --no-dev)
-    LTX_MLX_CACHE_DIR=<scratch>/vcache $S/.venv/bin/python tests/golden/record_ltx.py --cases t2v-448x256-49f-s42
+    LTX_MLX_CACHE_DIR=<scratch>/vcache $S/.venv/bin/python runner_service/tests/golden/record_ltx.py --cases t2v-448x256-49f-s42
 
 One case per process (as the CLI runs): DistilledPipeline built and driven exactly as `ltx-2-mlx generate
 --distilled --quantize-on-load 8` does (cli._cmd_generate), with thin wrappers that only observe: the prompt
@@ -55,9 +55,9 @@ from ltx_pipelines_mlx.utils import _orchestration, blocks, media_io
 from ltx_pipelines_mlx.utils._orchestration import save_waveform
 from ltx_pipelines_mlx.utils.constants import detect_params
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 STUDIO = "0.18.0 (ltx-2-studio main 4b2f609, upstream ltx-2-mlx 747b30e)"
-GOLDEN = REPO / "runner_service" / "tests" / "golden"
+GOLDEN = Path(__file__).resolve().parent
 OUT = GOLDEN / "ltx-text-to-video"
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 GEMMA_DEFAULT = "mlx-community/gemma-3-12b-it-4bit"  # cli.DEFAULT_GEMMA; unused on LTX-2.5 (Gemma 4 ships in the pack)
@@ -200,7 +200,9 @@ def record(case: dict, out: Path, scratch: Path) -> dict:
         sha = ltx_inputs.test_image(png, variant=im["variant"])
         image_meta.append({**im, "file": png.name, "rgb_sha256": sha, "source_size": [640, 400],
                            "png_sha256": hashlib.sha256(png.read_bytes()).hexdigest(), "crf": crf})  # fmt: skip
-        images = (images or []) + [ImageConditioningInput.at(str(png), im["frame_idx"], im["strength"])]  # --image, auto binding
+        images = (images or []) + [
+            ImageConditioningInput.at(str(png), im["frame_idx"], im["strength"])
+        ]  # --image, auto binding
     relay = None
     if case.get("segments"):
         lengths = [s["length"] for s in case["segments"]]
@@ -492,7 +494,9 @@ def record_dev(case: dict, out: Path) -> dict:
         wav_in = out / f"{case['name']}-audio.wav"
         inputs["audio"] = {"file": wav_in.name, "sha256": ltx_inputs.test_tones(wav_in), "seconds": 3.0,
                            "rate": 48000, "channels": 2, "what": "ltx_inputs.test_tones"}  # fmt: skip
-        pipe = a2v_mod.A2VidPipelineTwoStage(model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False)
+        pipe = a2v_mod.A2VidPipelineTwoStage(
+            model_dir=str(model), gemma_model_id=GEMMA_DEFAULT, low_ram_streaming=False
+        )
         mod = a2v_mod
     else:
         inputs["video"] = {"file": str(T2V_SOURCE.relative_to(REPO)),

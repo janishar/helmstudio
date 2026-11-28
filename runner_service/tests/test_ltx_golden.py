@@ -52,7 +52,7 @@ DISTILLED_CASES = ["retake-distilled-448x256-49f-s42", "extend-distilled-448x256
 DETAIL_CASES = ["detail-448x256-49f-s42", "detail-512x320-57f-s7", "a2v-detail-448x256-49f-s42",
                 "a2v-detail-448x256-57f-s42"]  # fmt: skip
 DEV = ("retake", "extend", "a2v")
-INPUTS = Path(__file__).resolve().parents[2] / "tests" / "golden"  # ltx_inputs.py: the synthetic LoRA
+INPUTS = GOLDENS  # ltx_inputs.py: the synthetic LoRA
 
 
 def golden_dir(name: str) -> Path:
