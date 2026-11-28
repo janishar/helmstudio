@@ -27,7 +27,19 @@ Timeline's clip and track gain and Magic's sound lanes (plan 39).
 Every part also reaches the Assistant (tool args, the director skill) and helm mcp, and the right-click menus and
 the design system get the new handles and settings.
 
-## Next
+## Board approved (owner, 2026-11-28: "Approve and build")
+
+docs/mock/AudioFades.dc.html (frames 1 to 4), with the owner's answers:
+
+5. **Crossfade on the Timeline too** ("Timeline too"): "Crossfade into next" between two touching audio clips on a
+   track: a true blend when the outgoing clip's file has sound past its cut, else a dip with a warning.
+6. **Defaults kept** ("Keep these"): a new crossfade 2 s, a fade from the menu 1 s, quick picks 0.5 / 1 / 2 / 4 s,
+   ducking −6 / −9 / −12 / −18 dB, −12 by default.
+7. **Crossfade badge in sky** ("Sky"), amber when it falls back to a dip; picture dissolves stay violet.
+8. **Handles under the title row** ("Move them down"): on the waveform at the top corners, so the clip's name stays
+   readable; the curve still starts at the clip's edge.
+
+## Next (was)
 
 Boards (fade handles on a clip, the crossfade between two music blocks, the ducking setting) for the owner's OK,
 then the contract (clip and block `fade_in` / `fade_out`, the ducking setting, the crossfade on sound lanes), then
