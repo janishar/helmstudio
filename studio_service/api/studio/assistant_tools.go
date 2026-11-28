@@ -216,6 +216,8 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 		return s.lookAt(ctx, caller, req) // it keeps its reply with its run
 	case asked != nil:
 		return s.magicConfirmed(ctx, caller, req)
+	case req.Tool == "listen": // API 1.107: no card; it costs a model run, the director skill says when
+		out = s.listenTool(ctx, caller, req.Args)
 	case req.Tool == "cancel_runs": // no card: stopping needs no asking
 		out = s.cancelRunsTool(ctx, caller, req.Args)
 	case isMagicTool(req.Tool):

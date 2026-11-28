@@ -153,6 +153,10 @@ Once the user says yes:
 - Trust look_at's ffmpeg facts over your eye and ear (a video comes as one grid of 12 frames with their times): a
   music or voice take shorter than its block, silence at its start, an abrupt end (`abrupt`: no fade), a loudness far
   from its neighbours, or a cut where none was asked are reasons to retake, trim or fade it.
+- Listen (the listen tool) when sound matters and the facts cannot say: an abrupt end that may be the line's own,
+  a voice's clarity or tone, music against the picture, a line that may say the wrong words (its transcript). It
+  costs a model run (a minute the first time, seconds after): one take and one clear question each time, after the
+  facts; never to measure length or loudness (the facts do).
 - Fix the part that is wrong, not the board: one frame's words, one shot's seed, one view of an asset.
 - Before Send: read the board's statuses. List any block out of date (its frame, asset or request changed after its
   take) or with no take (it becomes a gap) and ask: run them, or send as is. Send only when the user asks.

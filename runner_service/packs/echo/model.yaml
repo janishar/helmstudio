@@ -305,6 +305,18 @@ stages:
       schema: {type: string, label: Answer schema, default: "", max: 16384,
                help: "A JSON schema the answer must match; empty = plain text."}
       max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}
+  listen:
+    title: Listen (fake)
+    help: "Fake listen (contracts/README.md, The listen tool): answers ECHO-LISTEN: and the question, and the transcript ECHO-TRANSCRIPT when asked for one."
+    outputs: {answer: Text, transcript: Text}
+    reports: [transcript]
+    params:
+      source: {type: media, label: Take, default: null, accepts: [video, audio], max_s: 120,
+               help: "The video or audio take to listen to."}
+      question: {type: string, label: Question, default: "", max: 500, help: "What to listen for."}
+      transcript: {type: bool, label: Transcript, default: true,
+                   help: "Also write down the speech; empty when the take has no sound."}
+      max_tokens: {type: int, label: Max tokens, default: 600, min: 16, max: 2048}
 # The fake family takes LoRAs (registry models[].lora): exactly the modules the contract LoRA fixtures
 # (contracts/fixtures/loras) name, so they fit echo on a stack without a GPU. Family detection prefers a family a
 # non-fake env publishes, so a real Qwen LoRA is qwen-image wherever both are published. Model-free: no component is

@@ -304,13 +304,21 @@ const what = {
     async () => {
       const r = await ok(api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }));
       const n = r.outputs.length;
-      // an ask run (look_at) answers in text, never a take: the answer comes back for the model to read
+      // an ask run (look_at, listen) answers in text, never a take: the answer comes back for the model to read,
+      // with a listen run's transcript (API 1.107: resolved.texts["listen.transcript"])
       if (r.status === "succeeded" && r.answer) {
         const a = r.answer.text.trim();
+        const transcript = Object.entries(r.resolved?.texts ?? {}).find(([k]) =>
+          k.endsWith(".transcript"),
+        )?.[1];
         return {
           end: "done",
           text: `Answered · ${a.length > 120 ? `${a.slice(0, 120)}…` : a}`,
-          result: { status: r.status, answer: a.slice(0, 4000) },
+          result: {
+            status: r.status,
+            answer: a.slice(0, 4000),
+            ...(transcript ? { transcript: transcript.slice(0, 4000) } : {}),
+          },
         };
       }
       if (r.status === "succeeded")

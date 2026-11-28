@@ -677,6 +677,24 @@
           }
         }
       }
+    },
+    {
+      "id": "echo-listen",
+      "title": "Listen (fake)",
+      "family": "echo",
+      "env": "fake",
+      "media": "text",
+      "nodes": {
+        "listen": {
+          "kind": "echo/listen"
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "listen.answer"
+          }
+        }
+      }
     }
   ]
 }

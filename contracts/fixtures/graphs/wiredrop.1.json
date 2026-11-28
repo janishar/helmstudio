@@ -1,5 +1,5 @@
 {
-  "description": "from a Text output in an echo workflow: the family's kinds first (Ask (fake) takes Text into its prompt param; echo, echo/a2v, echo/extend, echo/retake, echo/sample, echo/speak, echo/tiny, from 1.79 the music and sound fakes (echo/music, lengthen, repaint, sound, foley, vary), echo-video and echo/keyframes take Text; its Text → Text LoRA stack), then core ones (answer takes Text; prompt takes Text into its text param)",
+  "description": "from a Text output in an echo workflow: the family's kinds first (Ask (fake) takes Text into its prompt param; echo, echo/a2v, echo/extend, echo/retake, echo/sample, echo/speak, echo/tiny, from 1.79 the music and sound fakes (echo/music, lengthen, repaint, sound, foley, vary), echo-video and echo/keyframes take Text; from 1.107 echo/listen takes Text into its question param; its Text → Text LoRA stack), then core ones (answer takes Text; prompt takes Text into its text param)",
   "workflow": {
     "title": "Echo",
     "family": "echo",
@@ -54,6 +54,7 @@
     "echo/vary",
     "echo/video",
     "echo/keyframes",
+    "echo/listen",
     "echo/lora-stack",
     "answer",
     "prompt"

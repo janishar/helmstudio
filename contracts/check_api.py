@@ -151,8 +151,9 @@ def check_openapi() -> None:
 
 
 # API 1.93: an assistant write with no card: create_board makes an empty board (nothing is lost or run); 1.95:
-# cancel_runs stops runs (only work in flight is lost; owner, 2026-11-27: "yes build it")
-CARDLESS_WRITES = {"create_board", "cancel_runs"}
+# cancel_runs stops runs (only work in flight is lost; owner, 2026-11-27: "yes build it"); 1.107: listen makes a run
+# that answers (nothing is lost or made; it costs a model run, the director skill says when)
+CARDLESS_WRITES = {"create_board", "cancel_runs", "listen"}
 ASSISTANT_CARD_KINDS = {"delete", "plugin"}  # cards the server asks without a catalog tool: Clear all (a delete card); API 1.61 a plugin tool with a risk flag
 
 

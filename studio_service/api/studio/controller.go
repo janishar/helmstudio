@@ -97,6 +97,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/pipelines/:id/judge-tests", c.createJudgeTestHandler)
 	group.GET("/judge-tests/:id", c.getJudgeTestHandler)
 	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
+	group.POST("/takes/:id/listen", c.listenHandler)
 	group.GET("/batches/:id/chat", c.getChatHandler)
 	group.POST("/batches/:id/chat", c.postChatHandler)
 	group.GET("/model-sources", c.modelSourcesHandler)
@@ -807,6 +808,16 @@ func (c *controller) renamePipelineHandler(ctx *gin.Context) {
 // deletePipelineHandler: DELETE /pipelines/{id}.
 func (c *controller) deletePipelineHandler(ctx *gin.Context) {
 	noContent(ctx, c.service.DeletePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
+}
+
+// listenHandler: POST /takes/{id}/listen — 202 with the listen run (API 1.107).
+func (c *controller) listenHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.ListenRequest](ctx, false)
+	var out dto.Run
+	if err == nil { // strict: an unknown key is a 422; Validate ran
+		out, err = c.service.Listen(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
+	}
+	reply(ctx, http.StatusAccepted, out, err)
 }
 
 // saveTakeAsPipelineHandler: POST /takes/{id}/pipeline — 201 with the new pipeline; the body is optional.

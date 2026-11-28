@@ -74,11 +74,11 @@ func TestWorkflows(t *testing.T) {
 		ids = append(ids, w.ID)
 	}
 	if list := r.Workflows(); !slices.Equal(ids, []string{"echo", "echo-a2v", "echo-ask", "echo-dialogue", "echo-extend", "echo-image-to-video",
-		"echo-music", "echo-music-extend", "echo-repaint", "echo-retake", "echo-sound", "echo-sound-video", "echo-tiny", "echo-vary",
-		"echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
-		list[9].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" ||
-		WorkflowSound(list[6].Nodes, list[6].NodeSchemas) != "music" || WorkflowSound(list[11].Nodes, list[11].NodeSchemas) != "sound" ||
-		WorkflowSound(list[15].Nodes, list[15].NodeSchemas) != "voice" { // API 1.79: the class of the node feeding the Audio output
+		"echo-listen", "echo-music", "echo-music-extend", "echo-repaint", "echo-retake", "echo-sound", "echo-sound-video", "echo-tiny",
+		"echo-vary", "echo-video", "echo-voice-over"}) || list[2].Media != "text" || !IsText(list[2].Nodes) || IsText(list[0].Nodes) ||
+		list[6].Media != "text" || !IsText(list[6].Nodes) || list[10].NodeSchemas["echo/retake"].Params[0].Accepts[0] != "video" ||
+		WorkflowSound(list[7].Nodes, list[7].NodeSchemas) != "music" || WorkflowSound(list[12].Nodes, list[12].NodeSchemas) != "sound" ||
+		WorkflowSound(list[16].Nodes, list[16].NodeSchemas) != "voice" { // API 1.79: the class of the node feeding the Audio output
 		t.Fatalf("the echo workflows (echo-ask text), no lost: %v", ids)
 	}
 	if _, ok := r.Workflow("lost"); ok {

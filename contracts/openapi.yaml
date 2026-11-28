@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.106.0
+  version: 1.107.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -1198,6 +1198,32 @@ paths:
         content: {application/json: {schema: {$ref: '#/components/schemas/TakePipeline'}}}
       responses:
         '201': {description: 'the pipeline, with problems', content: {application/json: {schema: {$ref: '#/components/schemas/Pipeline'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/takes/{take_id}/listen:
+    post:
+      tags: [studio]
+      operationId: studioListen
+      summary: 'Listen: ask the local model that hears a question about one video or audio take'
+      description: |
+        From 1.107 (contracts/README.md, The listen tool): one interactive run of the listen workflow that can run now
+        (Qwen3-Omni's `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest:
+        its listen node gets `source` {take_id}, `question` and `transcript` (default true). The run's `answer` is the
+        answer, `resolved.texts["listen.transcript"]` the speech written down (absent without speech or when not
+        asked). 404 for a take that is unknown, another user's, deleted or not ready. 409 `no listen workflow can run
+        now: download Qwen3-Omni or start its machine`, `open Create once first: listening needs a session`, or the
+        open-runs cap. 422 `question must be 1-500 characters`, `take <id> is image; listen hears video and audio
+        takes (look_at sees images)`, or a take longer than 120 s (as any media input).
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ListenRequest'}}}
+      responses:
+        '202': {description: 'the listen run, queued', content: {application/json: {schema: {$ref: '#/components/schemas/Run'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
         '409': {$ref: '#/components/responses/Conflict'}
@@ -5099,6 +5125,15 @@ components:
       additionalProperties: false
       properties:
         title: {type: string, minLength: 1, maxLength: 80, description: 'absent = `<take title> pipeline`, cut to 80 characters'}
+
+    ListenRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      description: 'from 1.107: POST /v1/studio/takes/{take_id}/listen (contracts/README.md, The listen tool)'
+      properties:
+        question: {type: string, minLength: 1, maxLength: 500, description: what to listen for}
+        transcript: {type: boolean, default: true, description: 'also write down the speech (Qwen3-ASR)'}
 
     # ---------------------------------------------------------- studio: runs
     RunStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}

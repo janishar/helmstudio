@@ -1029,6 +1029,33 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/studio/takes/{take_id}/listen": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Listen: ask the local model that hears a question about one video or audio take
+         * @description From 1.107 (contracts/README.md, The listen tool): one interactive run of the listen workflow that can run now
+         *     (Qwen3-Omni's `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest:
+         *     its listen node gets `source` {take_id}, `question` and `transcript` (default true). The run's `answer` is the
+         *     answer, `resolved.texts["listen.transcript"]` the speech written down (absent without speech or when not
+         *     asked). 404 for a take that is unknown, another user's, deleted or not ready. 409 `no listen workflow can run
+         *     now: download Qwen3-Omni or start its machine`, `open Create once first: listening needs a session`, or the
+         *     open-runs cap. 422 `question must be 1-500 characters`, `take <id> is image; listen hears video and audio
+         *     takes (look_at sees images)`, or a take longer than 120 s (as any media input).
+         */
+        post: operations["studioListen"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/studio/takes/{take_id}/decisions": {
         parameters: {
             query?: never;
@@ -4967,6 +4994,16 @@ export interface components {
         TakePipeline: {
             /** @description absent = `<take title> pipeline`, cut to 80 characters */
             title?: string;
+        };
+        /** @description from 1.107: POST /v1/studio/takes/{take_id}/listen (contracts/README.md, The listen tool) */
+        ListenRequest: {
+            /** @description what to listen for */
+            question: string;
+            /**
+             * @description also write down the speech (Qwen3-ASR)
+             * @default true
+             */
+            transcript?: boolean;
         };
         /** @enum {string} */
         RunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
@@ -12073,6 +12110,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Pipeline"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            422: components["responses"]["Unprocessable"];
+            503: components["responses"]["Unavailable"];
+        };
+    };
+    studioListen: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description take UUID (malformed = 404) */
+                take_id: components["parameters"]["TakeId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListenRequest"];
+            };
+        };
+        responses: {
+            /** @description the listen run, queued */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Run"];
                 };
             };
             401: components["responses"]["Unauthorized"];

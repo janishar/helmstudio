@@ -221,6 +221,7 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			return s.get(ctx, "/takes?"+q.Encode())
 		}),
 		"get_take": s.getTake,
+		"listen":   s.listen,
 		"list_library": plain(func(ctx context.Context, in args) (any, error) {
 			switch k := in.str("kind"); {
 			case in.str("pipeline_id") != "":
@@ -383,6 +384,53 @@ func (s *mcpServer) getWorkflow(ctx context.Context, in args) (any, error) {
 		}
 	}
 	return map[string]any{"workflow": wf, "nodes": nodes}, nil
+}
+
+// listen (API 1.107) posts the take's listen run, waits for it as wait_run does, and adds its answer and transcript.
+func (s *mcpServer) listen(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	raw, err := s.send(ctx, http.MethodPost, "/takes/"+in.esc("take_id")+"/listen", in.pick("question", "transcript"), http.StatusAccepted)
+	if err != nil {
+		return nil, nil, err
+	}
+	var r struct {
+		ID         string  `json:"id"`
+		SessionID  string  `json:"session_id"`
+		WorkflowID string  `json:"workflow_id"`
+		Host       *string `json:"host"`
+		Position   *int    `json:"position"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, nil, err
+	}
+	out := map[string]any{"run_id": r.ID, "session_id": r.SessionID, "workflow_id": r.WorkflowID, "host": r.Host,
+		"position": r.Position, "answer": nil, "transcript": nil}
+	waited, _, err := s.waitRun(ctx, req, args{"run_id": r.ID})
+	if err != nil {
+		return nil, nil, err
+	}
+	var done struct {
+		Status string `json:"status"`
+		Answer *struct {
+			Text string `json:"text"`
+		} `json:"answer"`
+		Resolved *struct {
+			Texts map[string]string `json:"texts"`
+		} `json:"resolved"`
+	}
+	if json.Unmarshal(waited.(map[string]any)["run"].(json.RawMessage), &done) == nil {
+		out["status"] = done.Status
+		if done.Answer != nil && done.Status == "succeeded" {
+			out["answer"] = done.Answer.Text
+		}
+		if done.Resolved != nil {
+			for k, v := range done.Resolved.Texts {
+				if strings.HasSuffix(k, ".transcript") {
+					out["transcript"] = v
+				}
+			}
+		}
+	}
+	return out, nil, nil
 }
 
 // getTake is the take, its uses and decisions, and its small thumbnail as image content (not an audio take's).

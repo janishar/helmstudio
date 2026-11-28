@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-28T12:00:00Z",
+  "published_by": "runner mlx 0.4.0",
+  "nodes": [
+    {
+      "kind": "omni/model",
+      "title": "Qwen3-Omni 30B",
+      "family": "omni",
+      "params": [
+        {
+          "name": "variant",
+          "type": "enum",
+          "enum": [
+            "q8"
+          ],
+          "default": "q8",
+          "label": "Variant"
+        },
+        {
+          "name": "precision",
+          "type": "enum",
+          "enum": [
+            "int8"
+          ],
+          "default": "int8",
+          "label": "Precision",
+          "help": "Stored Q8_0; loaded as it is. Not a choice."
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "help": "Qwen3-Omni 30B (A3B, GGUF Q8_0) hears and watches a take; Qwen3-ASR 1.7B writes down its speech."
+    },
+    {
+      "kind": "omni/listen",
+      "title": "Listen",
+      "family": "omni",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Take",
+          "default": null,
+          "accepts": [
+            "video",
+            "audio"
+          ],
+          "max_s": 120,
+          "help": "The video or audio take to listen to."
+        },
+        {
+          "name": "question",
+          "type": "string",
+          "label": "Question",
+          "default": "",
+          "max": 500,
+          "help": "What to listen for."
+        },
+        {
+          "name": "transcript",
+          "type": "bool",
+          "label": "Transcript",
+          "default": true,
+          "help": "Also write down the speech (Qwen3-ASR); empty when the take has no sound."
+        },
+        {
+          "name": "max_tokens",
+          "type": "int",
+          "label": "Max tokens",
+          "default": 600,
+          "min": 16,
+          "max": 2048
+        }
+      ],
+      "inputs": [
+        {
+          "name": "model",
+          "type": "Model"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "answer",
+          "type": "Text"
+        },
+        {
+          "name": "transcript",
+          "type": "Text"
+        }
+      ],
+      "component": "whole model",
+      "help": "Answers one question about a video or audio take: it hears the sound and watches the picture (2 frames a second), and writes down the speech."
+    },
+    {
+      "kind": "answer",
+      "title": "Answer",
+      "family": null,
+      "params": [],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [],
+      "help": "Stores its text as the run's answer: no take. Ask workflows end with it."
+    }
+  ]
+}

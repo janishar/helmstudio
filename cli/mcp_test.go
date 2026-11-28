@@ -749,3 +749,23 @@ func TestMCPCancelRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPListenWaitsForTheAnswerAndTranscript(t *testing.T) { // API 1.107
+	f, cs, _ := mcpSession(t, "succeeded")
+	var body map[string]any
+	f.extra["POST /v1/studio/takes/t7/listen"] = func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"echo-listen","status":"queued","host":null,"position":1}`)
+	}
+	f.extra["GET /v1/studio/runs/r9"] = func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"echo-listen","status":"succeeded","outputs":[],
+			"answer":{"text":"ECHO-LISTEN: abrupt?","tokens_in":0,"tokens_out":0,"seconds":0},
+			"resolved":{"texts":{"listen.transcript":"ECHO-TRANSCRIPT"}}}`)
+	}
+	res, out := call(t, cs, "listen", map[string]any{"take_id": "t7", "question": "abrupt?", "transcript": true})
+	if res.IsError || out["run_id"] != "r9" || out["status"] != "succeeded" || out["answer"] != "ECHO-LISTEN: abrupt?" ||
+		out["transcript"] != "ECHO-TRANSCRIPT" || fmt.Sprint(body) != "map[question:abrupt? transcript:true]" {
+		t.Fatalf("listen %v %s (sent %v)", out, text(res), body)
+	}
+}

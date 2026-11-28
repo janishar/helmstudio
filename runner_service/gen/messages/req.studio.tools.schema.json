@@ -176,6 +176,7 @@
       "read_skill_file",
       "read_model_guide",
       "look_at",
+      "listen",
       "list_boards",
       "create_board",
       "show_board",
@@ -506,6 +507,22 @@
       "properties": {
        "args": {
         "$ref": "../tools/catalog.json#/tools/look_at/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "listen"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/listen/input"
        }
       }
      }
@@ -891,6 +908,7 @@
       "read_skill_file",
       "read_model_guide",
       "look_at",
+      "listen",
       "list_boards",
       "create_board",
       "show_board",
@@ -1274,6 +1292,25 @@
       "properties": {
        "result": {
         "$ref": "../tools/catalog.json#/tools/look_at/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "listen"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/listen/output"
        }
       }
      }

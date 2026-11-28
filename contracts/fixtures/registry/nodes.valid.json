@@ -160,6 +160,60 @@
       "help": "Fake ask: answers the JSON after the last ECHO-ANSWER: in the prompt (contracts/README.md, The llm pack: the fake)."
     },
     {
+      "kind": "echo/listen",
+      "title": "Listen (fake)",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Take",
+          "default": null,
+          "accepts": [
+            "video",
+            "audio"
+          ],
+          "max_s": 120,
+          "help": "The video or audio take to listen to."
+        },
+        {
+          "name": "question",
+          "type": "string",
+          "label": "Question",
+          "default": "",
+          "max": 500,
+          "help": "What to listen for."
+        },
+        {
+          "name": "transcript",
+          "type": "bool",
+          "label": "Transcript",
+          "default": true,
+          "help": "Also write down the speech; empty when the take has no sound."
+        },
+        {
+          "name": "max_tokens",
+          "type": "int",
+          "label": "Max tokens",
+          "default": 600,
+          "min": 16,
+          "max": 2048
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "answer",
+          "type": "Text"
+        },
+        {
+          "name": "transcript",
+          "type": "Text"
+        }
+      ],
+      "help": "Fake listen (contracts/README.md, The listen tool): answers ECHO-LISTEN: and the question, and the transcript ECHO-TRANSCRIPT when asked for one."
+    },
+    {
       "kind": "echo/model",
       "title": "Echo (fake)",
       "family": "echo",
@@ -246,7 +300,6 @@
       "kind": "echo/tiny",
       "title": "Echo tiny",
       "family": "echo",
-      "component": "transformer",
       "params": [
         {
           "name": "steps",
@@ -282,6 +335,7 @@
           "type": "Image"
         }
       ],
+      "component": "transformer",
       "help": "Fake model stage: loads the tiny model's transformer and vae, then draws its text and the variant."
     },
     {

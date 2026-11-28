@@ -129,10 +129,14 @@ func ByClass(class string, t MediaTake, p registry.Param) bool {
 // whose accepts names its kind, or audio for a video with sound) that the take fits, with the inputs pre-filled. rng:
 // (in, out) in the take's own seconds (a Timeline clip or selection), nil = the whole take. From API 1.79
 // (contracts/README.md, Music and sound) a workflow with a sound class takes a take as sound into a media param only
-// when it is an audio take of that class (a video's sound never; rows take any class).
+// when it is an audio take of that class (a video's sound never; rows take any class). From API 1.107 a text
+// workflow is never one.
 func Offers(t MediaTake, workflows []registry.Workflow, rng *[2]float64) []dto.TakeOffer {
 	out := []dto.TakeOffer{}
 	for _, wf := range workflows {
+		if wf.Media == "text" { // API 1.107: a text workflow (listen) answers, it makes no take: never a use
+			continue
+		}
 		class := registry.WorkflowSound(wf.Nodes, wf.NodeSchemas)
 		type at struct {
 			node string

@@ -59,6 +59,22 @@ describe("await", () => {
     });
   });
 
+  it("a listen run (API 1.107) comes back with its answer and transcript", async () => {
+    answer("GET", {
+      "/v1/studio/runs/{run_id}": () =>
+        run("succeeded", {
+          outputs: [],
+          answer: { text: "It ends abruptly.", tokens_in: 1, tokens_out: 1, seconds: 1 },
+          resolved: { texts: { "listen.transcript": "Good morning." } },
+        }),
+    });
+    expect(await awaitIt({ what: "run", id: "r1" }, () => undefined)).toEqual({
+      status: "done",
+      text: "Answered · It ends abruptly.",
+      result: { status: "succeeded", answer: "It ends abruptly.", transcript: "Good morning." },
+    });
+  });
+
   it("a failed run fails the line with its reason", async () => {
     answer("GET", { "/v1/studio/runs/{run_id}": () => run("failed") });
     expect(await awaitIt({ what: "run", id: "r1" }, () => undefined)).toMatchObject({

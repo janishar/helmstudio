@@ -217,6 +217,33 @@ def run(ctx, argv: list[str], *, cwd: Path, name: str, phases: dict[str, str | t
     raise RunError(f"{ctx.node}: {c.why()}")
 
 
+def start(ctx, argv: list[str], *, cwd: Path, name: str, ready: re.Pattern, ready_s: float,
+          env: dict[str, str] | None = None) -> tuple[_Child, int]:  # fmt: skip
+    """Start the server `argv` and wait for its ready line (as serve()); (the child, its port). The caller stops it
+    (`.stop()`): serve() after its body; a resident server (omni's llama-server) when the residency manager drops it."""
+    c = _Child(argv, cwd, name, ready=ready, loose=True, env=env)
+    try:
+        until = time.monotonic() + ready_s
+        while True:
+            with c.lock:
+                m = c.ready
+            if m:
+                return c, int(m.group(1))
+            if c.gone(POLL):
+                raise RunError(f"{ctx.node}: {c.why()}")
+            ctx.check()
+            if time.monotonic() > until:
+                raise RunError(f"{ctx.node}: the server was not ready within {ready_s:.0f} s")
+    except RunError:
+        c.reader.join(5)
+        log.error("%s failed; its last stderr lines:\n%s", name, "\n".join(c.tail))
+        c.stop()
+        raise
+    except BaseException:  # a cancel while it loads
+        c.stop()
+        raise
+
+
 @contextlib.contextmanager
 def serve(
     ctx,
@@ -232,21 +259,10 @@ def serve(
     group 1 (polling ctx.check() meanwhile), then yield the port for the body; the process group is killed when the
     body ends, raises or is cancelled. No ready line within `ready_s`, or an exit before it: RunError. The body's
     error when the server died under it: RunError with the server's reason instead."""
-    c = _Child(argv, cwd, name, ready=ready, loose=True, env=env)
+    c, port = start(ctx, argv, cwd=cwd, name=name, ready=ready, ready_s=ready_s, env=env)
     try:
-        until = time.monotonic() + ready_s
-        while True:
-            with c.lock:
-                m = c.ready
-            if m:
-                break
-            if c.gone(POLL):
-                raise RunError(f"{ctx.node}: {c.why()}")
-            ctx.check()
-            if time.monotonic() > until:
-                raise RunError(f"{ctx.node}: the server was not ready within {ready_s:.0f} s")
         try:
-            yield int(m.group(1))
+            yield port
         except Exception as e:
             # the server died under the body (a refused connection, a timeout the stage turned into a RunError):
             # its own reason, not the body's; a cancel stays a cancel

@@ -31,6 +31,7 @@ import mlx.core as mx
 from mlx import nn
 
 import config
+from core import child
 from core import pack as packs
 from core.graph import RunError
 from core.residency import footprint_gb, host_device, ram_gb
@@ -81,7 +82,9 @@ def measure_gb() -> float:
     """What the process really holds: its physical footprint (MLX active + cache + everything else), or MLX active
     + cache where the footprint cannot be read."""
     fp = footprint_gb()
-    return fp if fp is not None else (mx.get_active_memory() + mx.get_cache_memory()) / 2**30
+    own = fp if fp is not None else (mx.get_active_memory() + mx.get_cache_memory()) / 2**30
+    pid = child.LIVE["pid"]  # a resident server child (omni's llama-server) counts with the runner, as native
+    return own + ((footprint_gb(pid) or 0.0) if pid else 0.0)
 
 
 def linears(module: nn.Module) -> list[str]:
@@ -289,7 +292,7 @@ def load_component(model, component: str, ctx):
     """Load one component of a Model handle (core.pack.ModelRef) for ctx's run, reporting the phase
     `loading <component>` (underscores as spaces) under the node that needs it."""
     spec, precision = model.pack.component(component), model.precision_of(component)
-    files = [p for p in model.files(component) if p.suffix == ".safetensors"]
+    files = [p for p in model.files(component) if p.suffix in (".safetensors", ".gguf")]  # GGUF: omni's server
     if not files:
         raise RunError(f"{component}: no weights for {model.owner(component)} in the models folder")
     ctx.progress(1, 1, f"loading {component.replace('_', ' ')}")

@@ -1267,3 +1267,18 @@ type JudgeTest struct {
 	Error       *string         `json:"error"`
 	CreatedAt   time.Time       `json:"created_at"`
 }
+
+// ListenRequest is POST /takes/{id}/listen (API 1.107): the question, and whether to write down the speech (default
+// true).
+type ListenRequest struct {
+	Question   string `json:"question"`
+	Transcript *bool  `json:"transcript"`
+}
+
+// Validate wants a question of 1-500 characters.
+func (b *ListenRequest) Validate() string {
+	if strings.TrimSpace(b.Question) == "" || utf8.RuneCountInString(b.Question) > 500 {
+		return "question must be 1-500 characters"
+	}
+	return ""
+}

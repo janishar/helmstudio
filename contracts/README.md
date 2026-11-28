@@ -1035,6 +1035,38 @@ Claude takes text and pictures only, so the Assistant judges sound and moving vi
   prompt). `look_at`'s ask run (a text-only model) shows its local model each video as the same grid, made in the
   run, and its result carries the stored `facts` of its takes.
 
+## The listen tool (API 1.107; plan 42-listen-and-watch step 2, owner 2026-11-28; normative)
+
+The Assistant and helm mcp ask a local model that hears one question about a video or audio take.
+
+- **Route** `POST /v1/studio/takes/{take_id}/listen` `{question 1-500, transcript = true}` → 202 Run: one
+  interactive run of the listen workflow that can run now (a template with a node whose kind ends in `/listen` and an
+  `answer` sink; `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest.
+  The node gets `source` `{take_id}` (a media param accepting `[video, audio]`, `max_s` 120), `question` and
+  `transcript`. Refusals: 404 (the take unknown, another user's, deleted or not ready); 409 `no listen workflow can
+  run now: download Qwen3-Omni or start its machine`, `open Create once first: listening needs a session`; 422
+  `question must be 1-500 characters`, `take <id> is <kind>; listen hears video and audio takes (look_at sees
+  images)`.
+- **Result**: the run's `answer` (defs `answer`: one try, `seen` empty) is the answer; `resolved.texts`
+  `listen.transcript` the speech written down (the node's `reports`; absent with no speech, no sound or `transcript`
+  false).
+- **Use in…** (`take_uses`): a text workflow (`media` text: `echo-listen`, `omni-listen`, the ask workflows) is never
+  a use, though its media param accepts the take.
+- **Tool** `listen` (tools/catalog.json; surfaces assistant and mcp, no card): the Assistant gets the run to await (as
+  look_at) and is always offered it (a 409 says when it cannot run); helm mcp posts the route, waits for the run (at
+  most 10 minutes) and answers `{run_id, session_id, workflow_id, host, position, status, answer, transcript}`.
+- **The omni family** (`fixtures/registry/omni.{nodes,workflows}.valid.json`, the mlx runner's `packs/omni`):
+  `omni/model` variant `q8` (dir `Qwen3-Omni-30B-A3B-Instruct-GGUF`, ggml-org at 6e35a28f, Apache-2.0; components
+  `model` = the Q8_0 GGUF and its Q8_0 mmproj, stored; `asr` = Qwen3-ASR-1.7B in its own folder, bf16), precision
+  `int8` only. `omni/listen` (Model → answer: Text, transcript: Text; `reports [transcript]`; uses both components;
+  `peak_gb` 4.5): the model runs in llama.cpp's `llama-server` (one 32k slot, Metal, video sampled at 2 frames a
+  second), a server child the residency manager holds as the `model` component, so it stays loaded between runs
+  (keep_warm) and is stopped when the component is unloaded; a video goes whole plus its sound as 16 kHz mono WAV,
+  an audio take as the WAV; greedy (temperature 0, seed 0). The transcript is Qwen3-ASR through mlx-audio. Workflow
+  `omni-listen` (`Listen (Qwen3-Omni)`, media text). The 3B fallback (Qwen2.5-Omni-3B) is not built.
+- **The fake** `echo/listen` (workflow `echo-listen`, `Listen (fake)`): answers `ECHO-LISTEN: <question>` and the
+  transcript `ECHO-TRANSCRIPT` when `transcript` is true; the take is read, not heard.
+
 ## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
 Takes are `image` or `video`; `audio` takes come from uploads (1.19) and, from 1.30, from runs (Voices). A video take is one MP4 (H.264, may carry an AAC

@@ -428,3 +428,18 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
 
 
 globals()["lora-stack"] = lora_stack  # the stage is named lora-stack (kind echo/lora-stack)
+
+
+def listen(ctx, params: dict, inputs: dict) -> dict:
+    """The fake listen (contracts/README.md, The listen tool): `ECHO-LISTEN: <question>` and, with `transcript`,
+    `ECHO-TRANSCRIPT`; the take is read (the core's checks) but not heard."""
+    text = f"ECHO-LISTEN: {params['question'].strip()}"
+    answer = asks.Answer(text)
+    answer.record = {
+        "tries": [{"text": text, "error": None}],
+        "seen": [],
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "seconds": 0,
+    }
+    return {"answer": answer, "transcript": "ECHO-TRANSCRIPT" if params["transcript"] else ""}

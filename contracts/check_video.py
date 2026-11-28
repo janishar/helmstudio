@@ -257,6 +257,8 @@ def take_uses(take: dict, workflows: list[dict], palette: dict, rng: tuple | Non
     rng: (in, out) in the take's own seconds (a Timeline clip or selection), else the whole take."""
     out = []
     for wf in workflows:
+        if wf.get("media") == "text":  # API 1.107: a text workflow (listen) answers, it makes no take: never a use
+            continue
         found, shown = [], placed_paths(wf)
         cls = workflow_sound(wf["nodes"], palette)
         for nid in sorted(wf["nodes"]):

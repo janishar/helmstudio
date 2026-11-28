@@ -252,6 +252,8 @@ class Residency:
         with self.lock:
             entry = self.entries.pop(key)
         log.info("unloaded %s", "/".join(map(str, key)))
+        if callable(evicted := getattr(entry[1], "evicted", None)):  # a resident server child (omni): stop it
+            evicted()
         entry.clear()  # drop the reference to the loaded module here, so free() can return its memory
 
     def release(self, keys: set[tuple]) -> None:

@@ -39,6 +39,10 @@ Workflows and models:
   audio take's ffmpeg facts: real length, loudness (LUFS), true peak, silence at each end, `abrupt` (stops with no
   fade), scene cuts; a video is one picture of 12 frames with their times. Rely on them for sound and timing: a music
   take shorter than its block or with an abrupt end needs a retake, a trim or a fade.
+- listen asks the local model that hears (Qwen3-Omni) one question about one video or audio take, with its speech
+  written down (Qwen3-ASR); await the run: its answer is the run's answer, the transcript `listen.transcript`. Use it
+  when sound matters and the facts cannot say: an abrupt end, a voice's clarity, music against the picture. It costs
+  a model run (about a minute the first time, seconds after), so check the facts first and listen once per question.
 - Echo and "Ask (fake)" are test workflows of a dev stack: never offer them for real work.
 - Variants: weights of one family (full quality, faster distilled or turbo ones, quantised community weights).
   Precision (int8, int4, bf16) is how weights are quantised at load: lower uses less memory.

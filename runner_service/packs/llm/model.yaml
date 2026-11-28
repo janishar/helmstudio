@@ -48,7 +48,7 @@ stages:
                help: "A JSON schema the answer must match; empty = plain text."}
       max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}
     # peak above the 14.95 GB component: 4.43 at 4 x 512 px, 5.89 at 4 x 1024 px (~1024 tokens per thumbnail);
-    # a bound over both, extrapolated beyond 4 thumbnails (a video counts 3)
+    # a bound over both, extrapolated beyond 4 thumbnails (a video counts 1, its frame grid)
     peak_gb: "4 + 0.5 * images"
 
 # The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
