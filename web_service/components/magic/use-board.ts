@@ -3,6 +3,7 @@
 // for the tests' fake mode, in this browser with fake takes (phase B's). The page edits through one shape, `Board`:
 // an edit is applied here first (lib/magic.ts, the same ops as studio's) and then sent with the revision it was made
 // on, one call after another, so the board never waits for the network and never runs ahead of studio.
+import { stored } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { api, ApiError, message, ok, okOr, type S } from "@/lib/api";
@@ -128,18 +129,8 @@ export type Board = {
 
 type Wire = S<"MagicBoard">;
 const CURRENT = "helm.magic.board";
-const remember = (id: string) => {
-  try {
-    localStorage.setItem(CURRENT, id);
-  } catch {}
-};
-const remembered = () => {
-  try {
-    return localStorage.getItem(CURRENT);
-  } catch {
-    return null;
-  }
-};
+const remember = (id: string) => stored.set(CURRENT, id);
+const remembered = () => stored.get(CURRENT);
 const board = (id: string) => ({ params: { path: { board_id: id } } });
 const web = { "X-Helm-Client": "web" };
 const toSnapshot = (s: S<"MagicSnapshot">): Snapshot => ({

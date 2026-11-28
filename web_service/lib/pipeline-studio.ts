@@ -2,6 +2,7 @@
 // a session of its own. The take picked from a step's results goes into the next step's input its bind names
 // (`<step>.takes`, `<gate>.picked`, `<judge>.picked`); a `$input` bind stays a field the user fills. What was run and
 // picked is remembered in this browser (no API change: runs and takes stay ordinary).
+import { stored } from "@/lib/hydrated";
 import type { S } from "@/lib/api";
 import { imageField, order, type PDoc } from "@/lib/pipeline";
 import { rawsFrom, type Field, type Raw } from "@/lib/workflow";
@@ -20,21 +21,12 @@ const keyOf = (pipelineId: string) => `pipeline-studio:${pipelineId}`;
 
 // ponytail: per browser (localStorage); another browser starts a fresh session. A server-side record when that matters.
 export function loadStudio(pipelineId: string): StudioState {
-  try {
-    const v = JSON.parse(localStorage.getItem(keyOf(pipelineId)) ?? "null") as StudioState | null;
-    return v && typeof v === "object" && v.steps ? v : EMPTY;
-  } catch {
-    return EMPTY;
-  }
+  const v = stored.json<StudioState>(keyOf(pipelineId));
+  return v && typeof v === "object" && v.steps ? v : EMPTY;
 }
 
-export function saveStudio(pipelineId: string, s: StudioState) {
-  try {
-    localStorage.setItem(keyOf(pipelineId), JSON.stringify(s));
-  } catch {
-    /* private window */
-  }
-}
+export const saveStudio = (pipelineId: string, s: StudioState) =>
+  stored.set(keyOf(pipelineId), JSON.stringify(s));
 
 /** The step ids in row order. */
 export const studioSteps = (doc: PDoc) => order(doc).filter((id) => doc.nodes[id].kind === "step");

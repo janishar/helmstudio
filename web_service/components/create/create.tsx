@@ -2,6 +2,7 @@
 // Create: one session's runs of one workflow (docs/mock/Main.dc.html). The form comes from the workflow's node
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
+import { stored, useStoredFlag } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -125,7 +126,7 @@ import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/l
 import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { downloaded, precisionPins } from "@/lib/models";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import {
   KIND_LABEL,
   SIDES,
@@ -143,7 +144,6 @@ import {
 } from "@/lib/media";
 import {
   applyEvent,
-  clock,
   deleteRuns,
   etaText,
   GENERIC_FAIL,
@@ -300,14 +300,6 @@ export type CreateInitial = {
 
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
 const DRAWER = "create-settings-drawer";
-const noSub = () => () => undefined;
-const storedDrawer = () => {
-  try {
-    return localStorage.getItem(DRAWER) !== "0";
-  } catch {
-    return true;
-  }
-};
 /** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
  * (picture, sound: sideOf), so neither replaces the other. */
 const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
@@ -393,15 +385,7 @@ export function Create({
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
   // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): open by default (owner, 2026-11-26:
   // "keep the setting open by default"), a closed one remembered in this browser ("0")
-  const stored = useSyncExternalStore(noSub, storedDrawer, () => true);
-  const [drawerSet, setDrawerState] = useState<boolean | null>(null);
-  const drawer = drawerSet ?? stored;
-  const setDrawer = (on: boolean) => {
-    setDrawerState(on);
-    try {
-      localStorage.setItem(DRAWER, on ? "1" : "0");
-    } catch {}
-  };
+  const [drawer, setDrawer] = useStoredFlag(DRAWER);
   // a reused take's look ids, put under their groups once the looks are known
   const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
@@ -492,21 +476,11 @@ export function Create({
 
   const varKey = (id: string | null) => `create-variations:${id ?? ""}`;
   const setVariations = (v: { runs: string[]; kept: string[] } | null) => {
-    setVariationsState(v);
-    try {
-      if (v) localStorage.setItem(varKey(sessionRef.current), JSON.stringify(v));
-      else localStorage.removeItem(varKey(sessionRef.current));
-    } catch {
-      /* no storage here: kept for this page only */
-    }
+    setVariationsState(v); // no storage here: kept for this page only
+    stored.set(varKey(sessionRef.current), v ? JSON.stringify(v) : null);
   };
   useEffect(() => {
-    let v: { runs: string[]; kept: string[] } | null = null;
-    try {
-      v = JSON.parse(localStorage.getItem(varKey(sessionId)) ?? "null");
-    } catch {
-      /* no storage here */
-    }
+    const v = stored.json<{ runs: string[]; kept: string[] }>(varKey(sessionId));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
     setVariationsState(v && Array.isArray(v.runs) && Array.isArray(v.kept) ? v : null);
   }, [sessionId]);
@@ -1466,12 +1440,8 @@ export function Create({
         setVariations({ runs: queuedIds, kept: [] });
       setReuseNote("");
       sentDraft.current = prompt ? raws[prompt.key] : undefined;
-      try {
-        localStorage.removeItem(draftKey(sessionId, sideOf(workflow)));
-        localStorage.removeItem(draftKey(sid, sideOf(workflow)));
-      } catch {
-        /* no storage here */
-      }
+      stored.set(draftKey(sessionId, sideOf(workflow)), null);
+      stored.set(draftKey(sid, sideOf(workflow)), null);
       return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before

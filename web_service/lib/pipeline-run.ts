@@ -1,7 +1,7 @@
 // A pipeline batch as the screens show it (contracts/README.md "Batches of a pipeline", "Execution view"): the run
 // table's columns and cells (loop attempts stacked), and one row's execution (the graph as run, the step list).
+import { clock, plural } from "@/lib/format";
 import type { S } from "@/lib/api";
-import { clock } from "@/lib/runs";
 import { nodeLabel, order, stepNumbers, type PDoc } from "@/lib/pipeline";
 
 type Row = S<"BatchRow">;
@@ -73,8 +73,6 @@ export type CellLine = {
   takes: string[];
   error: string | null;
 };
-
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** A cell's attempts, oldest first. */
 /** A cell as its row shows it: a row that ended while parked (cancelled, stopped) keeps its gate's or judge's

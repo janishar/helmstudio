@@ -2,6 +2,7 @@
 // "Add to timeline" (plan 9.1, 15.1): one take or a multi-selection in order goes to the sequence opened last, or to
 // a new one made from them (docs/mock/TimelineDialogs.dc.html "Added to timeline"). Small on purpose: Gallery and
 // Create import it, the editor stays lazy.
+import { stored } from "@/lib/hydrated";
 import Link from "next/link";
 import { useState } from "react";
 import { api, editTimeline, getTimeline, message, ok } from "@/lib/api";
@@ -9,20 +10,8 @@ import { api, editTimeline, getTimeline, message, ok } from "@/lib/api";
 const LAST = "helm.timeline";
 
 /** The sequence opened last in this browser (a convenience: a cleared store falls back to the newest). */
-export function lastTimeline(): string | null {
-  try {
-    return localStorage.getItem(LAST);
-  } catch {
-    return null;
-  }
-}
-export function rememberTimeline(id: string) {
-  try {
-    localStorage.setItem(LAST, id);
-  } catch {
-    /* private window */
-  }
-}
+export const lastTimeline = () => stored.get(LAST);
+export const rememberTimeline = (id: string) => stored.set(LAST, id);
 
 /** Adds the takes (in order) to the last opened sequence, else the newest, else a new one made from them. Audio
  * takes (API 1.32) go on its first audio track, at its end; a sequence without one gets A2 first. */

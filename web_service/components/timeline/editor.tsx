@@ -6,7 +6,8 @@
 // was made on (plan 24 28.8 A; the server's answer replaces the draft); a 409 reloads, says so and re-applies the
 // edit to the new revision once.
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStoredFlag } from "@/lib/hydrated";
 import {
   ArrowRight,
   ArrowUpDown,
@@ -142,14 +143,6 @@ function linkedTo(d: Norm, cid: string): string[] {
 
 /** Whether the Timeline's side panel is closed ("0"), in this browser (alpha.5 item 11). */
 const PANEL = "timeline-side-panel";
-const noSub = () => () => undefined;
-const readPanel = () => {
-  try {
-    return localStorage.getItem(PANEL) !== "0";
-  } catch {
-    return true;
-  }
-};
 /** What a menu opened in the clip inspector: Make shot, Use in…, a frame's Use in (first, last), an offer's form
  * (`offer:<workflow> <param>`). */
 type Opened = string | null;
@@ -174,15 +167,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [sheet, setSheet] = useState(false);
   // the side panel on the right (alpha.5 item 11): open by default, a closed one remembered in this browser ("0");
   // selecting a clip or a track while it is closed opens it
-  const storedPanel = useSyncExternalStore(noSub, readPanel, () => true);
-  const [panelSet, setPanelState] = useState<boolean | null>(null);
-  const panel = panelSet ?? storedPanel;
-  const setPanel = (on: boolean) => {
-    setPanelState(on);
-    try {
-      localStorage.setItem(PANEL, on ? "1" : "0");
-    } catch {}
-  };
+  const [panel, setPanel, setPanelState] = useStoredFlag(PANEL);
   const [picked, setPicked] = useState({ sel, track });
   if (picked.sel !== sel || picked.track !== track) {
     setPicked({ sel, track });

@@ -9,7 +9,7 @@ import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
 import type { VoiceCtx } from "@/components/create/voices";
 import type { ShotSlot } from "@/components/timeline/shot";
-import { mb } from "@/lib/format";
+import { mb, plural } from "@/lib/format";
 import { withIds } from "@/lib/timeline-tools";
 import {
   Grid,
@@ -141,7 +141,6 @@ const VERB: Record<Op["op"], [string, string]> = {
   marker: ["Set", "marker"],
   remove_marker: ["Removed", "marker"],
 };
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** The edits in words, like the board's "Placed shots 5, 6, 7 at 0:12": runs of one kind, joined by " · ". */
 export function editText(ops: Op[]): string {

@@ -4,6 +4,7 @@
 // Tools and Skills (the plugins' on/off switches: their only home), Auto mode (the caps), Context (the chat window and
 // the prompt cache), and their own Memory. Behind it are the admin routes as they are (providers, provider-keys, /admin/assistant, the plugins and their
 // switches, Add as provider); keys are checked by KeyArea, never kept in React state.
+import { sleep } from "@/lib/format";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -1185,8 +1186,6 @@ function SavedStep({ saved, settings, onCancel, saveWith }: Step & { saved: Prov
     </>
   );
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** A model-provider plugin (Your Claude subscription): no API key, its state and disclaimer; Save turns the plugin on,
  * waits for it to run, adds it as the caller's own provider once (Add as provider; its token from its host, API 1.73) and

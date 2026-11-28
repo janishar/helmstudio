@@ -4,7 +4,7 @@
 // buttons use.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { clock } from "@/lib/runs";
+import { clock } from "@/lib/format";
 import { ErrorNote } from "@/components/kit";
 import type { S } from "@/lib/api";
 

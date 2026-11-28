@@ -2,6 +2,7 @@
 // The Magic page (plan 39 phase B, MagicBoard frames 1, 2, 4, 5, 10, 11): the board name and its tools, the Assets
 // row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
 // `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
+import { useStoredFlag } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   Camera,
@@ -94,14 +95,6 @@ const runsHere = (b: Block) =>
 /** a Gallery pick a menu asked for */
 type Pick = Parameters<NonNullable<Act["gallery"]>>[0];
 
-const noSub = () => () => undefined;
-const readPanel = () => {
-  try {
-    return localStorage.getItem(PANEL) !== "0";
-  } catch {
-    return true;
-  }
-};
 /** The board's phone layout (the dock's own breakpoint). */
 const phoneQuery = "(max-width: 47.99rem)";
 const subPhone = (cb: () => void) => {
@@ -207,15 +200,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     () => false,
   );
   // the side panel: open by default, a closed one remembered in this browser ("0"), as on Create and the Timeline
-  const storedPanel = useSyncExternalStore(noSub, readPanel, () => true);
-  const [panelSet, setPanelSet] = useState<boolean | null>(null);
-  const panel = panelSet ?? storedPanel;
-  const setPanel = (on: boolean) => {
-    setPanelSet(on);
-    try {
-      localStorage.setItem(PANEL, on ? "1" : "0");
-    } catch {}
-  };
+  const [panel, setPanel] = useStoredFlag(PANEL);
 
   /** One edit (one op, or several in order): applied all or nothing, one step of undo; a refusal says why. */
   // the Assistant's change, drawn on the board until Apply or Discard (plan 39 phase F, frame 8)

@@ -1,6 +1,7 @@
 // Voices (contracts/README.md "Voices (API 1.30)", "Cloned voices (API 1.31)"): the voice fit (check.py
 // `voice_sources` / `voice_reason` / `voice_fit`, tested against contracts/fixtures/voices/fit.json), a voice's words in
 // the picker and on its tiles, the voice picker's groups, and a clip's limits (3–30 s of a take with sound).
+import { clock } from "@/lib/format";
 import type { S } from "@/lib/api";
 import { mediaValueError, type Facts } from "@/lib/source";
 
@@ -131,12 +132,6 @@ export function languageName(tag?: string | null, family?: string | null): strin
 
 /** A tag's language without its region ("en-US" → "en"): the picker's language chips and card lines. */
 export const baseLanguage = (tag?: string | null) => (tag ?? "").split("-")[0];
-
-/** Seconds as "0:04" (lib/runs' clock; not imported: lib/workflow reads this module). */
-const clock = (s: number) => {
-  const t = Math.max(0, Math.round(s));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-};
 
 /** A clip's part: "0:04–0:16". */
 export const clipText = (c: { in: number; out: number }) => `${clock(c.in)}–${clock(c.out)}`;

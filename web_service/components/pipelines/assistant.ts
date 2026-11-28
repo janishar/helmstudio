@@ -4,8 +4,9 @@
 // controls (start, resume, retry, again as Batch cards with what leaves the machine, stop as a card, pause a line),
 // a gate's pick (a card) and the judge test (a card with its egress line). Every card's Yes calls the screen's own
 // function at the click.
+import { plural, sleep } from "@/lib/format";
 import { api, ok, okOr, type S } from "@/lib/api";
-import { done, failed, type Asked, type Outcome } from "@/lib/assistant";
+import { deleteCard, done, failed, type Asked, type Outcome } from "@/lib/assistant";
 import { AWAIT_CAP_MS, until, type ScreenSpec } from "@/components/assistant/tools";
 import { testSummary } from "@/components/pipelines/judge-test";
 import { egressLines } from "@/lib/egress";
@@ -35,8 +36,6 @@ type Pipeline = S<"Pipeline">;
 type Batch = S<"Batch">;
 type Kind = PNode["kind"];
 
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const GPU = "uses the GPU";
 
 // ---------------------------------------------------------------- what leaves the machine
@@ -81,29 +80,6 @@ const batchCard = (
   yes: () => Promise<Outcome>,
 ): Asked => ({
   card: { kind: "batch", title, rows, tags: egress.tags, note: egress.note, go, fine },
-  yes,
-});
-
-const deleteCard = (
-  title: string,
-  goes: string,
-  stays: string,
-  fine: string,
-  yes: () => Promise<Outcome>,
-  go = "DELETE",
-): Asked => ({
-  card: {
-    kind: "delete",
-    title,
-    rows: [
-      ["Goes", goes],
-      ["Stays", stays],
-    ],
-    tags: [],
-    go,
-    danger: true,
-    fine,
-  },
   yes,
 });
 

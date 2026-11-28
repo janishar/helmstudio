@@ -1,5 +1,6 @@
 // Folding a session's events (SSE or ?since= pages) into its runs. Events are hints: a run that ends is fetched again.
 import { api, ok, okOr, type S } from "@/lib/api";
+import { clock } from "@/lib/format";
 import { graphOrder, nodeTitle } from "@/lib/workflow";
 import { emptyStack } from "@/lib/loras";
 
@@ -83,12 +84,6 @@ export function mergeRuns(local: Run[], fetched: Run[]): Run[] {
 
 /** The seed the run was made with: what the runner resolved, else its first output's. */
 export const seedOf = (r: Run) => r.resolved?.seed ?? r.outputs[0]?.seed;
-
-/** Seconds as m:ss ("1:52"). */
-export const clock = (s: number) => {
-  const t = Math.max(0, Math.round(s));
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-};
 
 /** A render time as low text, "⏱ 1:14" ("⏱ 1:02:05" from an hour); "" without one (API 1.60, MadeWith.render_s). */
 export const renderTime = (s?: number | null) => {

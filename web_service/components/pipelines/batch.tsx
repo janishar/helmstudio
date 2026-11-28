@@ -28,9 +28,8 @@ import {
   rowState,
   type BatchView,
 } from "@/lib/batches";
-import { safeUrl, when } from "@/lib/format";
+import { clock, safeUrl, when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
-import { clock } from "@/lib/runs";
 import { canPick, countFacts } from "@/lib/pipeline-run";
 import type { PDoc } from "@/lib/pipeline";
 import { useScreenTools } from "@/components/assistant/tools";
