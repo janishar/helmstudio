@@ -12,11 +12,11 @@ Also the `pipelines.assistant.memory` responder (core request/reply, queue group
 /v1/studio/assistant/memory: list, edit, delete, clear."""
 
 import asyncio
-import json
 import logging
 import uuid
 
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -269,12 +269,9 @@ async def handle(store, req: dict) -> dict:
 
 async def answer(store, body: bytes) -> dict:
     ref = f"{schemas.BASE}req.pipelines.assistant.memory.schema.json#/$defs/"
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.errors(ref + "request", req):
-        return {"error": f"not a {SUBJECT} request", "code": "invalid"}
+    req, bad = request(body, lambda part, v: schemas.errors(ref + part, v), SUBJECT)
+    if bad:
+        return bad
     try:
         reply = await handle(store, req)
     except Exception:
@@ -288,8 +285,4 @@ async def answer(store, body: bytes) -> dict:
 
 async def serve(nc, store):
     """Subscribe the responder; returns the subscription."""
-
-    async def on(msg) -> None:
-        await msg.respond(json.dumps(await answer(store, msg.data), ensure_ascii=False).encode())
-
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=on)
+    return await respond(nc, SUBJECT, lambda body: answer(store, body))

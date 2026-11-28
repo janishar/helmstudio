@@ -12,6 +12,7 @@ import logging
 import uuid
 
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -119,12 +120,9 @@ async def handle(store, req: dict) -> dict:
 
 
 async def answer(store, body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.memory_errors("request", req):
-        return {"error": "not a pipelines.memory request", "code": "invalid"}
+    req, bad = request(body, schemas.memory_errors, SUBJECT)
+    if bad:
+        return bad
     try:
         reply = await handle(store, req)
     except Exception:
@@ -152,8 +150,4 @@ def encode(reply: dict) -> bytes:
 
 async def serve(nc, store):
     """Subscribe the responder; returns the subscription."""
-
-    async def on(msg) -> None:
-        await msg.respond(encode(await answer(store, msg.data)))
-
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=on)
+    return await respond(nc, SUBJECT, lambda body: answer(store, body), encode)

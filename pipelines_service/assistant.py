@@ -43,7 +43,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TypedDict
 
-import nats.errors
 from jsonschema import Draft202012Validator, FormatChecker
 from langgraph.graph import END, START, StateGraph
 from langgraph.types import Command, interrupt
@@ -56,6 +55,7 @@ import providers
 import remote
 from messaging import schemas
 from messaging.publisher import envelope, send
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -1674,12 +1674,9 @@ CACHE_SUBJECT = "pipelines.assistant.cache"
 async def cache_stats(pool, body: bytes) -> dict:
     """The last `days` days of model calls that reported their hits, summed per provider and model."""
     ref = f"{schemas.BASE}req.pipelines.assistant.cache.schema.json#/$defs/"
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.errors(ref + "request", req):
-        return {"error": f"not a {CACHE_SUBJECT} request", "code": "invalid"}
+    req, bad = request(body, lambda part, v: schemas.errors(ref + part, v), CACHE_SUBJECT)
+    if bad:
+        return bad
     try:
         async with pool.connection() as conn:
             cur = await conn.execute(
@@ -1700,28 +1697,4 @@ async def cache_stats(pool, body: bytes) -> dict:
 
 async def serve_cache(nc, pool):
     """Subscribe the responder; returns the subscription."""
-
-    async def on(msg) -> None:
-        await msg.respond(json.dumps(await cache_stats(pool, msg.data)).encode())
-
-    return await nc.subscribe(CACHE_SUBJECT, queue="pipelines", cb=on)
-
-
-async def pull(sub, handle, stop: asyncio.Event, batch: int = 16) -> None:
-    """Fetch and handle deliveries concurrently (one chat's inputs in order, by its lock) until `stop`."""
-    tasks: set[asyncio.Task] = set()
-    while not stop.is_set():
-        try:
-            msgs = await sub.fetch(batch, timeout=2)
-        except nats.errors.TimeoutError:
-            continue
-        except Exception:
-            log.exception("fetch failed; retrying")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), 2)
-            continue
-        for m in msgs:
-            t = asyncio.create_task(handle(m))
-            tasks.add(t)
-            t.add_done_callback(tasks.discard)
-    await asyncio.gather(*tasks, return_exceptions=True)
+    return await respond(nc, CACHE_SUBJECT, lambda body: cache_stats(pool, body))

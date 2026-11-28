@@ -46,6 +46,7 @@ from langchain_openai import ChatOpenAI
 
 import config
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -504,12 +505,9 @@ def reasoning_of(extra: dict) -> dict | None:
 
 
 async def answer_test(body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_test_errors("request", req):
-        return {"error": "not a pipelines.providers.test request", "code": "internal"}
+    req, bad = request(body, schemas.providers_test_errors, SUBJECT, "internal")
+    if bad:
+        return bad
     return await test(req)
 
 
@@ -518,12 +516,9 @@ async def answer_test(body: bytes) -> dict:
 
 def answer_key(body: bytes) -> dict:
     """{found, writable} for a key_secret: stat only, never the file's content."""
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_key_errors("request", req):
-        return {"error": "not a pipelines.providers.key request", "code": "internal"}
+    req, bad = request(body, schemas.providers_key_errors, KEY_SUBJECT, "internal")
+    if bad:
+        return bad
     try:
         return {"found": key_found(req["key_secret"]), "writable": writable()}
     except OSError:
@@ -626,12 +621,9 @@ async def check_key(name: str, p: dict, key: str) -> tuple[str, str]:
 
 async def answer_write(body: bytes) -> dict:
     """save: check (unless force), then write; remove: delete. Never the key in a reply or a log line."""
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_key_write_errors("request", req):
-        return {"error": "not a pipelines.providers.key.write request", "code": "internal"}
+    req, bad = request(body, schemas.providers_key_write_errors, WRITE_SUBJECT, "internal")
+    if bad:
+        return bad
     name = req["key_secret"]
     try:
         if req["op"] == "remove":
@@ -671,15 +663,8 @@ async def serve(nc):
     """Subscribe the test, key and (API 1.52) key write responders; returns the subscriptions."""
     make_first_folder()
 
-    async def on(msg) -> None:
-        await msg.respond(json.dumps(await answer_test(msg.data)).encode())
-
-    async def on_key(msg) -> None:
-        await msg.respond(json.dumps(answer_key(msg.data)).encode())
-
-    async def on_write(msg) -> None:
-        await msg.respond(json.dumps(await answer_write(msg.data)).encode())
-
-    return [await nc.subscribe(SUBJECT, queue="pipelines", cb=on),
-            await nc.subscribe(KEY_SUBJECT, queue="pipelines", cb=on_key),
-            await nc.subscribe(WRITE_SUBJECT, queue="pipelines", cb=on_write)]  # fmt: skip
+    return [
+        await respond(nc, SUBJECT, answer_test),
+        await respond(nc, KEY_SUBJECT, answer_key),
+        await respond(nc, WRITE_SUBJECT, answer_write),
+    ]

@@ -6,6 +6,7 @@ import json
 import logging
 
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -20,12 +21,9 @@ def encode(reply: dict) -> bytes:
 
 
 async def answer(engine, body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.state_get_errors("request", req):
-        return {"error": "not a pipelines.state.get request", "code": "not_found"}
+    req, bad = request(body, schemas.state_get_errors, SUBJECT, "not_found")
+    if bad:
+        return bad
     try:
         reply = await engine.state_get(req)
     except Exception:
@@ -39,8 +37,4 @@ async def answer(engine, body: bytes) -> dict:
 
 async def serve(nc, engine):
     """Subscribe the responder; returns the subscription."""
-
-    async def handle(msg) -> None:
-        await msg.respond(encode(await answer(engine, msg.data)))
-
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=handle)
+    return await respond(nc, SUBJECT, lambda body: answer(engine, body), encode)
