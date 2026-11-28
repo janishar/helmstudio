@@ -28,8 +28,9 @@ function toggleFull(el: HTMLElement | null) {
     if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     el.classList.add("fp-max");
   };
-  if (!el.requestFullscreen) return fill();
-  el.requestFullscreen().then(() => setTimeout(fill, 300), fill);
+  // the request may never settle (an embedded browser): look 0.4 s on whatever it did
+  void el.requestFullscreen?.().catch(() => undefined);
+  setTimeout(fill, 400);
 }
 
 export function Player({
