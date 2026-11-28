@@ -893,6 +893,6 @@
   "by": "owner",
   "at": "2026-11-28T10:00:00Z",
   "via": "Claude Code",
-  "note": "FixList: the Magic board's failed / out-of-date / doesn't-fit bars become one bottom-left warning icon with a count and an upward list (Run all); ChipPopup: confirms (Run the board?, Stop runs?) on their own key; Chip: Run board carries its estimate as a suffix (owner, 2026-11-28: \"group all these messages into a error message left icon\", \"bottom left in this view\")"
+  "note": "Rail: the tools and the Assistant at the top, Hub, System and Settings in a Setup panel at the foot that folds to one Setup gear on a short window; the phone bar pins the gear at its right end (owner, 2026-11-28: \"2 and 4\", \"keep assitant in rail right now\")"
  }
 }
