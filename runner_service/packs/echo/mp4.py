@@ -106,9 +106,7 @@ def h264(image: Image.Image, frames: int) -> tuple[bytes, bytes, list[bytes]]:
     y_, cb, cr = ycc.split()
     y = y_.point(lambda v: 16 + v * 219 // 255).tobytes()
     cb, cr = (
-        c.resize((w // 2, h // 2), Image.Resampling.BOX)
-        .point(lambda v: 16 + v * 224 // 255)
-        .tobytes()
+        c.resize((w // 2, h // 2), Image.Resampling.BOX).point(lambda v: 16 + v * 224 // 255).tobytes()
         for c in (cb, cr)
     )
     i = Bits()
@@ -184,9 +182,7 @@ def descriptor(tag: int, body: bytes) -> bytes:
     return bytes([tag, len(body)]) + body  # every body here is under 128 bytes
 
 
-def trak(
-    tid, movie_ms, timescale, duration, handler, media_header, entry, deltas, sizes, offset, sync
-):
+def trak(tid, movie_ms, timescale, duration, handler, media_header, entry, deltas, sizes, offset, sync):
     video = handler == b"vide"
     w, h = struct.unpack(">HH", entry[32:36]) if video else (0, 0)
     tkhd = full(

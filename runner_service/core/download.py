@@ -21,23 +21,13 @@ from pathlib import Path
 
 from core import models
 from core import pack as packs
+from core.graph import Cancelled
+from core.media import MediaError as JobError  # one job-failure class: `cls` and a one-line detail
 
 log = logging.getLogger("download")
 
 MARGIN = 2**30  # free space kept beyond the plan
 DISK_EVERY = 256 * 2**20  # bytes streamed between free-space checks
-
-
-class JobError(Exception):
-    """A model job failed: `cls` is its failure class, the message its one-line detail."""
-
-    def __init__(self, cls: str, detail: str) -> None:
-        super().__init__(detail[:500])
-        self.cls = cls
-
-
-class Cancelled(Exception):
-    pass
 
 
 @dataclass
@@ -99,8 +89,7 @@ def classify(e: Exception, repo: str, revision: str, token: str | None) -> JobEr
         and getattr(e.response, "status_code", 0) in (401, 403)
         and not isinstance(e, errors.RepositoryNotFoundError)
     ):
-        why = "the token was refused" if token else \
-            "put a Hub token in this host's secrets file (RUNNER_HF_TOKEN_FILE)"  # fmt: skip
+        why = "the token was refused" if token else "put a Hub token in this host's secrets file (RUNNER_HF_TOKEN_FILE)"
         return JobError("gated", f"repo {repo} is gated: {why}")
     if isinstance(e, errors.RevisionNotFoundError):
         return JobError("not_found", f"repo {repo} has no revision {revision}")
@@ -136,10 +125,7 @@ def matching(paths, patterns: list[str]) -> list[str]:
 
 def component_patterns(pack, component: str, variant: str | None = None) -> list[str]:
     """A component's files with their configs: every file under its globs' (the variant's) folders."""
-    return [
-        g.rsplit("/", 1)[0] + "/*" if "/" in g else g
-        for g in models.globs(pack, component, variant)
-    ]
+    return [g.rsplit("/", 1)[0] + "/*" if "/" in g else g for g in models.globs(pack, component, variant)]
 
 
 def file_sha(root: Path, rel: str, check=lambda: None) -> str:
@@ -154,9 +140,7 @@ def addon_plan(pack, c: str, api) -> list[Item]:
     src = pack.component(c)["addon"]["source"]
     commit, tree = listing(api, src["repo"], src["revision"])
     dest = models.addon_dest(pack, c)
-    return [
-        Item(src["repo"], commit, p, *tree[p], dest) for p in matching(tree, src["allow_patterns"])
-    ]
+    return [Item(src["repo"], commit, p, *tree[p], dest) for p in matching(tree, src["allow_patterns"])]
 
 
 def checked(items: list[Item]) -> list[Item]:
@@ -164,20 +148,12 @@ def checked(items: list[Item]) -> list[Item]:
     seen = set()
     for it in items:
         if not models.is_safe(it.path):
-            raise JobError(
-                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
-            )
-        if models.linked(
-            it.dest, it.path
-        ):  # a linked folder: the write would land in another folder
+            raise JobError("internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}")
+        if models.linked(it.dest, it.path):  # a linked folder: the write would land in another folder
             raise JobError("internal", f"{it.dest.name}/{it.path[:200]} is under a symlinked folder: "
                                        "remove the link by hand")  # fmt: skip
-        if not models.inside(packs.models_root(), it.dest) or not models.inside(
-            it.dest, it.dest / it.path
-        ):
-            raise JobError(
-                "internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}"
-            )
+        if not models.inside(packs.models_root(), it.dest) or not models.inside(it.dest, it.dest / it.path):
+            raise JobError("internal", f"repo {it.repo} lists an unsafe file name: {it.path[:200]!r}")
         if (it.dest, it.path.casefold()) in seen:  # APFS folds case: one file on disk
             raise JobError("internal", f"repo {it.repo} lists {it.path[:200]} twice")
         seen.add((it.dest, it.path.casefold()))
@@ -194,25 +170,20 @@ def plan(pack, vid: str, api, progress: Progress) -> tuple[list[Item], list[str]
     src = v["source"]
     commit, tree = listing(api, src["repo"], src["revision"])
     own = models.folder(pack, vid)
-    items = [
-        Item(src["repo"], commit, p, *tree[p], own) for p in matching(tree, src["allow_patterns"])
-    ]
+    items = [Item(src["repo"], commit, p, *tree[p], own) for p in matching(tree, src["allow_patterns"])]
     for more in v.get("sources", []):
         try:
             mcommit, mtree = listing(api, more["repo"], more["revision"])
         except Exception as e:  # noqa: BLE001 (named by its own repo)
             raise classify(e, more["repo"], more["revision"], api.token or None) from None
         dest = packs.models_root() / more["dir"] if "dir" in more else own
-        items += [Item(more["repo"], mcommit, p, *mtree[p], dest)
-                  for p in matching(mtree, more["allow_patterns"])]  # fmt: skip
+        items += [Item(more["repo"], mcommit, p, *mtree[p], dest) for p in matching(mtree, more["allow_patterns"])]
     reused, separate, lacking = [], [], []
     owner = models.folder(pack, first)
     # API 1.78: the lender's complete copy in any connected folder is reused (read there), never fetched again
     lender = packs.found(spec["variants"][first]["dir"]) or owner
     have = {r.as_posix() for r in models.own_files(lender)} if first != vid else set()
-    for c in [
-        c for c in v.get("shares", []) if c in packs.needed(pack, vid)
-    ]:  # an add-on downloads on its own
+    for c in [c for c in v.get("shares", []) if c in packs.needed(pack, vid)]:  # an add-on downloads on its own
         theirs = {p: tree[p] for p in matching(tree, component_patterns(pack, c, first))}
         lfs = {p: sha for p, (_, sha) in theirs.items() if sha}
         if packs.owns_copy(pack, vid, c) or (lfs and set(lfs) <= have and any(
@@ -273,17 +244,11 @@ def bar_class(progress: Progress):
             progress.current += n
             progress.fetched += n
             if progress.size is not None and progress.current > progress.size:
-                raise JobError(
-                    "network", f"the hub sent more than {progress.size} bytes for {progress.file}"
-                )
+                raise JobError("network", f"the hub sent more than {progress.size} bytes for {progress.file}")
             if progress.fetched - progress.checked >= DISK_EVERY:
                 progress.checked = progress.fetched
-                if (
-                    free := disk_free(packs.models_root())
-                ) < progress.left - progress.current + MARGIN // 2:
-                    raise JobError(
-                        "disk_full", f"the disk is filling up ({free / 1e9:.1f} GB free)"
-                    )
+                if (free := disk_free(packs.models_root())) < progress.left - progress.current + MARGIN // 2:
+                    raise JobError("disk_full", f"the disk is filling up ({free / 1e9:.1f} GB free)")
 
         def __getattr__(self, name):  # set_description, refresh, close, ...: nothing to show
             return lambda *a, **kw: None
@@ -301,9 +266,7 @@ def download(pack, vid: str | None, *, endpoint: str, token: str | None, cache: 
 
     spec = pack.spec
     if config.ROOTS and not packs.models_root().is_dir():  # API 1.78: a folder is never created
-        raise JobError(
-            "not_found", f"{models.folder_name(packs.models_root())} is not connected on {host}"
-        )
+        raise JobError("not_found", f"{models.folder_name(packs.models_root())} is not connected on {host}")
     if addon:
         src = pack.component(addon)["addon"].get("source")
         what = f"{spec['title']} {pack.component(addon)['addon']['title']}"
@@ -330,21 +293,15 @@ def download(pack, vid: str | None, *, endpoint: str, token: str | None, cache: 
                                     f"{(need + MARGIN) / 1e9:.1f} GB")  # fmt: skip
     for d in {it.dest for it in todo}:
         (d / models.MARKER).parent.mkdir(parents=True, exist_ok=True)
-        (d / models.MARKER).write_text(
-            f'{{"repo": "{src["repo"]}", "variant": "{addon or vid}"}}\n'
-        )
+        (d / models.MARKER).write_text(f'{{"repo": "{src["repo"]}", "variant": "{addon or vid}"}}\n')
     written, progress.left = 0, need
     cache.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(
-        prefix="hf-", dir=cache
-    ) as tmp:  # never the Hugging Face cache
+    with tempfile.TemporaryDirectory(prefix="hf-", dir=cache) as tmp:  # never the Hugging Face cache
         for it in items:
             progress.check()
             progress.file, progress.current, progress.size = it.path, 0, it.size
             if it in todo:
-                (it.dest / it.path).unlink(
-                    missing_ok=True
-                )  # an older or broken copy: fetched again
+                (it.dest / it.path).unlink(missing_ok=True)  # an older or broken copy: fetched again
                 (it.dest / models.SIDECARS / f"{it.path}.metadata").unlink(missing_ok=True)
                 try:
                     hf_hub_download(it.repo, it.path, revision=it.commit, local_dir=it.dest,

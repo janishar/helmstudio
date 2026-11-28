@@ -85,23 +85,15 @@ def main() -> None:
                         "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(CLIP)], check=True)  # fmt: skip
     m = a.models
     _clip = fu.create_model_from_pretrained
-    fu.create_model_from_pretrained = lambda name, **kw: _clip(
-        f"local-dir:{m / 'DFN5B-CLIP-ViT-H-14-384'}", **kw
-    )
+    fu.create_model_from_pretrained = lambda name, **kw: _clip(f"local-dir:{m / 'DFN5B-CLIP-ViT-H-14-384'}", **kw)
     _voc = ae.BigVGANv2.from_pretrained
-    ae.BigVGANv2.from_pretrained = lambda repo, **kw: _voc(
-        str(m / "bigvgan_v2_44khz_128band_512x"), **kw
-    )
+    ae.BigVGANv2.from_pretrained = lambda repo, **kw: _voc(str(m / "bigvgan_v2_44khz_128band_512x"), **kw)
     dev, dtype = "mps" if torch.backends.mps.is_available() else "cpu", torch.bfloat16
     cfg = all_model_cfg["large_44k_v2"]
     seq = cfg.seq_cfg
     t0 = time.monotonic()
     net = get_my_mmaudio(cfg.model_name).to(dev, dtype).eval()
-    net.load_weights(
-        torch.load(
-            m / "MMAudio/weights/mmaudio_large_44k_v2.pth", map_location=dev, weights_only=True
-        )
-    )
+    net.load_weights(torch.load(m / "MMAudio/weights/mmaudio_large_44k_v2.pth", map_location=dev, weights_only=True))
     feats = fu.FeaturesUtils(tod_vae_ckpt=str(m / "MMAudio/ext_weights/v1-44.pth"),
                              synchformer_ckpt=str(m / "MMAudio/ext_weights/synchformer_state_dict.pth"),
                              enable_conditions=True, mode=cfg.mode, bigvgan_vocoder_ckpt=None,

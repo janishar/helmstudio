@@ -87,16 +87,12 @@ def model_linears(folder: Path, component: str = "transformer") -> dict[str, tup
 def main(argv=None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("out", type=Path)
-    ap.add_argument(
-        "--model", type=Path, required=True, help="a model folder (its transformer/ headers)"
-    )
+    ap.add_argument("--model", type=Path, required=True, help="a model folder (its transformer/ headers)")
     ap.add_argument("--component", default="transformer")
     ap.add_argument("--style", choices=["peft", "kohya", "comfyui"], default="peft")
     ap.add_argument("--rank", type=int, default=4)
     ap.add_argument("--alpha", type=float)
-    ap.add_argument(
-        "--match", action="append", help="fnmatch globs over module names (default: all)"
-    )
+    ap.add_argument("--match", action="append", help="fnmatch globs over module names (default: all)")
     ap.add_argument("--seed", type=int, default=0)
     a = ap.parse_args(argv)
     mods = model_linears(a.model.expanduser(), a.component)
@@ -104,12 +100,8 @@ def main(argv=None) -> None:
         mods = {m: s for m, s in mods.items() if any(fnmatchcase(m, g) for g in a.match)}
     if not mods:
         sys.exit("no modules matched")
-    make_lora(
-        a.out, mods, rank=a.rank, style=a.style, alpha=a.alpha, dtype=torch.bfloat16, seed=a.seed
-    )
-    print(
-        f"{a.out}: {len(mods)} modules, rank {a.rank}, {a.style} keys, {a.out.stat().st_size} bytes"
-    )
+    make_lora(a.out, mods, rank=a.rank, style=a.style, alpha=a.alpha, dtype=torch.bfloat16, seed=a.seed)
+    print(f"{a.out}: {len(mods)} modules, rank {a.rank}, {a.style} keys, {a.out.stat().st_size} bytes")
 
 
 if __name__ == "__main__":

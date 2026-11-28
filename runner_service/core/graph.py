@@ -31,9 +31,7 @@ from core import images
 
 log = logging.getLogger("graph")
 
-GPU = ThreadPoolExecutor(
-    1, thread_name_prefix="gpu"
-)  # every node and every load runs on this one thread
+GPU = ThreadPoolExecutor(1, thread_name_prefix="gpu")  # every node and every load runs on this one thread
 SEED_MAX = 2**53 - 1
 
 
@@ -121,32 +119,20 @@ class Ctx:
     - `fetch(key, limit, etag)`: the core's object-store read for Image params (core.images), set by the consumer;
     - `resolved`: `<node>.<param>` → the frames an "auto" length became (a video output's frame count)."""
 
-    def __init__(
-        self, *, progress, output, check, owner="", residency=None, device="cpu", loop=None
-    ):
+    def __init__(self, *, progress, output, check, owner="", residency=None, device="cpu", loop=None):
         self._progress, self._output, self._check = progress, output, check
         self.owner, self.residency, self.device, self.loop = owner, residency, device, loop
         self.node, self.impl, self.seed = "", None, None
         self.fetch = None  # async (key, limit) -> bytes | None
-        self.store = (
-            None  # the object store (storage.Store), set by the consumer: `put` writes through it
-        )
-        self.answer: dict | None = (
-            None  # a text workflow's answer record (defs answer), set by the `answer` node
-        )
+        self.store = None  # the object store (storage.Store), set by the consumer: `put` writes through it
+        self.answer: dict | None = None  # a text workflow's answer record (defs answer), set by the `answer` node
         self.loras = None  # the host's core.lora.Library, set by the consumer
         self.outputs = 0  # outputs stored so far: the next one's index
-        self.auto: list[
-            str
-        ] = []  # `<node>.<param>` of the run's frames params set to "auto" (graph.run)
+        self.auto: list[str] = []  # `<node>.<param>` of the run's frames params set to "auto" (graph.run)
         self.resolved: dict[str, int] = {}  # what they resolved to: the stored clip's frame count
-        self.texts: dict[
-            str, str
-        ] = {}  # `<node>.<output>` → a reported Text output (resolved.texts)
+        self.texts: dict[str, str] = {}  # `<node>.<output>` → a reported Text output (resolved.texts)
         self.started = time.monotonic()  # when the running node started
-        self.alive = (
-            time.monotonic()
-        )  # the last cancel point or progress: the stall watchdog reads it
+        self.alive = time.monotonic()  # the last cancel point or progress: the stall watchdog reads it
         self._phase = (None, None, 0.0)  # (node, phase, started) for the ETA
         self._last = (None, 0.0)  # (node, time) of the last progress
 
@@ -160,9 +146,7 @@ class Ctx:
         self.alive = time.monotonic()
         self._check()
 
-    def progress(
-        self, step: int, of: int, phase: str | None = None, phase_id: str | None = None
-    ) -> None:
+    def progress(self, step: int, of: int, phase: str | None = None, phase_id: str | None = None) -> None:
         """One step of the node; `phase_id` (API 1.36) names one of the node's model.yaml `phases`."""
         now = time.monotonic()
         self.alive = now
@@ -176,11 +160,7 @@ class Ctx:
         # ponytail: the ETA of this node's phase only, from its own pace; history-based ETA is later
         elapsed = now - self._phase[2]
         eta = round(elapsed / step * (of - step), 1) if step and elapsed > 0 else None
-        self._call(
-            self._progress(
-                self.node, step, of, phase, eta, **({"phase_id": phase_id} if phase_id else {})
-            )
-        )
+        self._call(self._progress(self.node, step, of, phase, eta, **({"phase_id": phase_id} if phase_id else {})))
 
     def output(
         self,
@@ -212,9 +192,7 @@ class Ctx:
         if video is not None and self.auto:  # auto length: the clip's real frames (README, Video)
             self.resolved |= dict.fromkeys(self.auto, video["frames"])
             extra["resolved"] = {"params": dict(self.resolved)}
-        self._call(
-            self._output(index, data, ext=ext, kind=kind, width=width, height=height, **extra)
-        )
+        self._call(self._output(index, data, ext=ext, kind=kind, width=width, height=height, **extra))
 
     def put(self, key: str, data: bytes, content_type: str) -> None:
         """Store `data` at `key` (under u/<owner_id>/ only), from the GPU thread: an ask stage's thumbnails."""
@@ -229,27 +207,19 @@ class Ctx:
         if (addon := model.pack.component(name).get("addon")) and not model.files(name):
             # studio's run check refuses this first (API 1.36, Optional add-ons)
             # (API 1.40: by its `short`, the name the controls use)
-            raise RunError(
-                f"{self.node}: {addon.get('short', addon['title'])} not downloaded on host {config.HOST}"
-            )
+            raise RunError(f"{self.node}: {addon.get('short', addon['title'])} not downloaded on host {config.HOST}")
         gb, transient = model.gb(name)
         key = model.key(name)
-        module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))  # fmt: skip
-        if model.baked(
-            name
-        ):  # counted at what it holds, not at the plain size (loaders_mlx extra_gb)
+        module = self.residency.get(key, gb, transient, lambda: model.load(name, self), model.resident_loras(name))
+        if model.baked(name):  # counted at what it holds, not at the plain size (loaders_mlx extra_gb)
             gb += model.extra_gb(name, module)
             self.residency.resize(key, gb)
-        if (
-            name == model.lora_component
-        ):  # exactly this handle's adapters, at its strengths; no reload
+        if name == model.lora_component:  # exactly this handle's adapters, at its strengths; no reload
             from core.pack import BYTES
 
             uses = [u for u, _ in model.adapters(name).values()]
             dtype = BYTES.get(model.pack.component(name).get("dtype", "bf16"), 2)  # stored: as bf16
-            self.residency.grow(
-                key, gb + model.lora_gb(uses, dtype)
-            )  # room first: nothing is allocated yet
+            self.residency.grow(key, gb + model.lora_gb(uses, dtype))  # room first: nothing is allocated yet
             self.residency.resize(key, gb + model.activate(name, module, self))
         return module
 
@@ -283,14 +253,8 @@ def _check_param(spec: dict, value) -> str | None:
             return "must be a take"
         why = media_fit(spec, value)
         return f": {why}" if why else None
-    if (
-        t == "voice"
-    ):  # README, Voices: null in a workflow; in a run defs voice, as studio resolved it
-        return (
-            None
-            if value is None or (isinstance(value, dict) and "source" in value)
-            else "must be a voice"
-        )
+    if t == "voice":  # README, Voices: null in a workflow; in a run defs voice, as studio resolved it
+        return None if value is None or (isinstance(value, dict) and "source" in value) else "must be a voice"
     if t == "span":
         if value is None:
             return None
@@ -307,12 +271,7 @@ def _check_param(spec: dict, value) -> str | None:
         if value == "auto":
             return None if "auto" in spec else ": auto length is not offered"
         lo, step, hi = spec["min"], spec["step"], spec["max"]
-        if (
-            isinstance(value, bool)
-            or not isinstance(value, int)
-            or not lo <= value <= hi
-            or (value - lo) % step
-        ):
+        if isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi or (value - lo) % step:
             return f": {value!r} is not on the frame grid {lo} + {step}k up to {hi}"
         return None
     if t == "enum":
@@ -353,9 +312,7 @@ def media_fit(spec: dict, v: dict) -> str | None:
         return f"take {tid} is {v.get('width')} × {v.get('height')}; this input needs sides on a {g} px grid"
     if picture and (n := spec.get("max_frames")) and v.get("frames", 0) > n:
         return f"take {tid} has {v['frames']} frames; this input takes at most {n}"
-    if (m := spec.get("min_s")) and v[
-        "duration_s"
-    ] < m - 1e-6:  # API 1.22; a trim cannot make it longer
+    if (m := spec.get("min_s")) and v["duration_s"] < m - 1e-6:  # API 1.22; a trim cannot make it longer
         return f"take {tid} lasts {v['duration_s']:.1f} s; this input takes at least {m:.1f} s"
     if not spec.get("trim"):
         if "in" in v or "out" in v:
@@ -378,9 +335,7 @@ def media_fit(spec: dict, v: dict) -> str | None:
 def _check_rows(spec: dict, value) -> str | None:
     if not isinstance(value, list):
         return "must be a list"
-    if value == [] and (
-        any(t in images.TAKES for t in spec["item"].values()) or voice_fields(spec)
-    ):
+    if value == [] and (any(t in images.TAKES for t in spec["item"].values()) or voice_fields(spec)):
         return None  # a workflow holds no takes or voices: [] even under min; `validate` needs min take items at run
     if not spec.get("min", 0) <= len(value) <= spec["max"]:
         return f"must have {spec.get('min', 0)} to {spec['max']} items"
@@ -390,9 +345,7 @@ def _check_rows(spec: dict, value) -> str | None:
         for f, item in spec["item"].items():
             if item in images.TAKES:
                 if not _image(row.get(f)):
-                    return (
-                        f"item {i}.{f}: {'an image' if item == 'Image' else 'a take'} is required"
-                    )
+                    return f"item {i}.{f}: {'an image' if item == 'Image' else 'a take'} is required"
             elif item == "Lora":  # {lora_id} in a workflow, resolved (`defs lora`) in a command
                 v = row.get(f)
                 if not isinstance(v, dict) or not LORA_ID.match(str(v.get("lora_id"))):
@@ -401,11 +354,7 @@ def _check_rows(spec: dict, value) -> str | None:
                 if item.get("optional") and row.get(f) is None:
                     continue  # API 1.37: an optional media field left empty
                 return f"item {i}.{f}: a take is required"  # API 1.22: never left out
-            elif (
-                isinstance(item, dict)
-                and item["type"] == "voice"
-                and not isinstance(row.get(f), dict)
-            ):
+            elif isinstance(item, dict) and item["type"] == "voice" and not isinstance(row.get(f), dict):
                 return f"item {i}.{f}: a voice is required"  # API 1.32: a dialogue line's speaker
             elif f in row and (why := _check_param(item, row[f])):
                 return f"item {i}.{f} {why}"
@@ -414,14 +363,10 @@ def _check_rows(spec: dict, value) -> str | None:
 
 def voice_fields(spec: dict) -> list[str]:
     """A rows param's item fields that are `voice` params (API 1.32: a dialogue's lines)."""
-    return [
-        f for f, t in spec.get("item", {}).items() if isinstance(t, dict) and t["type"] == "voice"
-    ]
+    return [f for f, t in spec.get("item", {}).items() if isinstance(t, dict) and t["type"] == "voice"]
 
 
-LORA_ID = re.compile(
-    r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$"
-)
+LORA_ID = re.compile(r"^([0-9a-f]{64}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 HANDLES = {"Model", "Conditioning", "Latent"}  # family-scoped: Model[f] is not Model[g]
 MEDIA = {"Image", "Video", "Audio"}  # what an input of type Media takes
 WIREABLE = {
@@ -489,9 +434,7 @@ def _typed(t: str, kind: str) -> str:
     return f"{t}[{family(kind)}]" if t in HANDLES else t
 
 
-def problems(
-    nodes: dict, schemas: dict[str, dict], workflow_family: str | None = None
-) -> list[tuple]:
+def problems(nodes: dict, schemas: dict[str, dict], workflow_family: str | None = None) -> list[tuple]:
     """The graph rules of contracts/README.md ("Graph rules") that a runner can check, as (code, node, port, param,
     message): the palette is this runner's node schemas (so a kind of another env is `unknown_kind`); `wrong_family`
     only when `workflow_family` is given; no studio block. Every param must be present (studio fills defaults):
@@ -521,9 +464,7 @@ def problems(
     for nid, n in nodes.items():
         kind, wires = n["kind"], n.get("in", {})
         if workflow_family and family(kind) and family(kind) != workflow_family:
-            add(
-                "wrong_family", nid, message=f"{nid}: {kind} is not of the family {workflow_family}"
-            )
+            add("wrong_family", nid, message=f"{nid}: {kind} is not of the family {workflow_family}")
         s = schemas.get(kind)
         if s is None:
             add("unknown_kind", nid, message=f"{nid}: unknown node kind {kind!r}")
@@ -542,21 +483,12 @@ def problems(
             elif why := _check_param(spec, params[name]):
                 sep = "" if why.startswith(":") else " "
                 add("param_invalid", nid, param=name, message=f"{nid}.{name}{sep}{why}")
-            elif (
-                (vb := spec.get("values_by"))
-                and params[name]
-                not in (
-                    ok := vb["values"].get(
-                        _by(nodes, params, vb["param"]), spec.get("values") or spec["enum"]
-                    )
-                )
+            elif (vb := spec.get("values_by")) and params[name] not in (
+                ok := vb["values"].get(_by(nodes, params, vb["param"]), spec.get("values") or spec["enum"])
             ):  # README, Video: steps allowed for the node's role; 1.39: Extend's direction for model.variant
-                add("param_invalid", nid, param=name,
-                    message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")  # fmt: skip
+                add("param_invalid", nid, param=name, message=f"{nid}.{name}: must be one of {', '.join(map(str, ok))}")
             elif (
-                spec["type"] == "enum"
-                and name in n.get("only", {})
-                and params[name] not in n["only"][name]
+                spec["type"] == "enum" and name in n.get("only", {}) and params[name] not in n["only"][name]
             ):  # README, Media inputs: only (a voice param's only is studio's fit rule)
                 add("param_invalid", nid, param=name,
                     message=f"{nid}.{name}: must be one of {', '.join(map(str, n['only'][name]))}")  # fmt: skip
@@ -607,9 +539,7 @@ def problems(
     for (
         nid,
         n,
-    ) in (
-        nodes.items()
-    ):  # API 1.22: an optional node is an image source whose wires all go to optional inputs
+    ) in nodes.items():  # API 1.22: an optional node is an image source whose wires all go to optional inputs
         feeds = [(m, port) for m, x in nodes.items() for port, ref in x.get("in", {}).items() if ref.partition(".")[0] == nid]  # fmt: skip
         required = lambda m, port: any(i["name"] == port and not i.get("optional")
                                        for i in schemas.get(nodes[m]["kind"], {}).get("inputs", []))  # fmt: skip
@@ -649,9 +579,7 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
     node (studio splices them out before it sends a graph) and, for a run, `min` items in a rows param of takes
     (`run=False`: a registry workflow, which holds no takes)."""
     errs = [  # a registry workflow may bypass a node (studio splices it out of a run)
-        f"{nid}: a bypassed node reached the runner"
-        for nid, n in nodes.items()
-        if run and n.get("bypass")
+        f"{nid}: a bypassed node reached the runner" for nid, n in nodes.items() if run and n.get("bypass")
     ]
     for nid, n in nodes.items() if run else ():  # takes rows: [] in a workflow, min items in a run
         for spec in schemas.get(n["kind"], {}).get("params", []):
@@ -668,12 +596,10 @@ def validate(nodes: dict, schemas: dict[str, dict], run: bool = True) -> list[st
                 errs.append(f"{nid}.{spec['name']}: {REQUIRED[spec['type']]} is required")
             elif spec["type"] == "voice" and isinstance(value, dict) and "source" in value and (why := voice_reason(spec, n["kind"], value)):  # fmt: skip
                 errs.append(f"{nid}.{spec['name']}: {why}")
-            for i, row in enumerate(
-                value if spec["type"] == "rows" and isinstance(value, list) else [], 1
-            ):
+            for i, row in enumerate(value if spec["type"] == "rows" and isinstance(value, list) else [], 1):
                 for f in voice_fields(spec):  # API 1.32: each line's voice, as a voice param's
                     v = row.get(f) if isinstance(row, dict) else None
-                    if isinstance(v, dict) and "source" in v and (why := voice_reason(spec["item"][f], n["kind"], v)):  # fmt: skip
+                    if isinstance(v, dict) and "source" in v and (why := voice_reason(spec["item"][f], n["kind"], v)):
                         errs.append(f"{nid}.{spec['name']}[{i}].{f}: {why}")
     # a registry workflow may leave params at their defaults (the ask fixtures give only max_tokens); a run has all
     return errs + [p[4] for p in problems(nodes, schemas) if run or p[0] != "param_missing"]
@@ -687,11 +613,7 @@ def workflow_media(nodes: dict, schemas: dict) -> str:
         return "text"
     got = set()
     for n in nodes.values():
-        src, _, out = (
-            n.get("in", {}).get("media", "").partition(".")
-            if n["kind"] == "output"
-            else ("", "", "")
-        )
+        src, _, out = n.get("in", {}).get("media", "").partition(".") if n["kind"] == "output" else ("", "", "")
         s = schemas.get(nodes[src]["kind"]) if src in nodes else None
         got |= {o["type"] for o in s["outputs"] if o["name"] == out} if s else set()
     if workflow_sound(nodes, schemas):  # API 1.79: a classed sound wins over a second Video output
@@ -704,17 +626,9 @@ def workflow_sound(nodes: dict, schemas: dict) -> str | None:
     an output node takes, else None."""
     for nid in sorted(nodes):
         n = nodes[nid]
-        src, _, out = (
-            n.get("in", {}).get("media", "").partition(".")
-            if n["kind"] == "output"
-            else ("", "", "")
-        )
+        src, _, out = n.get("in", {}).get("media", "").partition(".") if n["kind"] == "output" else ("", "", "")
         s = schemas.get(nodes[src]["kind"]) if src in nodes else None
-        if (
-            s
-            and s.get("sound")
-            and any(o["name"] == out and o["type"] == "Audio" for o in s["outputs"])
-        ):
+        if s and s.get("sound") and any(o["name"] == out and o["type"] == "Audio" for o in s["outputs"]):
             return s["sound"]
     return None
 
@@ -745,18 +659,12 @@ def speech_seconds(nodes: dict, schemas: dict, nid: str, max_seconds: float | No
     reaching its first wired Text input (a prompt's text; through any other node, the nearest upstream prompt's),
     else of its nearest upstream prompt (fewest wires, then node id), / 15, capped at `max_seconds`; 0 without."""
     s = schemas[nodes[nid]["kind"]]
-    if script_target(
-        s
-    ):  # API 1.32, a dialogue: its lines' text and the pauses between them (README, Dialogue)
+    if script_target(s):  # API 1.32, a dialogue: its lines' text and the pauses between them (README, Dialogue)
         rows = nodes[nid].get("params", {}).get("lines", [])
-        sec = sum(len(r.get("text", "")) for r in rows) / SPEECH_CPS + sum(
-            r.get("pause_s", 0) for r in rows[:-1]
-        )
+        sec = sum(len(r.get("text", "")) for r in rows) / SPEECH_CPS + sum(r.get("pause_s", 0) for r in rows[:-1])
         return min(sec, max_seconds) if max_seconds is not None else sec
     wires = nodes[nid].get("in", {})
-    port = next(
-        (i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in wires), None
-    )
+    port = next((i["name"] for i in s["inputs"] if i["type"] == "Text" and i["name"] in wires), None)
     level, chars = [wires[port].partition(".")[0]] if port else [nid], 0
     seen = set(level)
     while level:
@@ -764,9 +672,7 @@ def speech_seconds(nodes: dict, schemas: dict, nid: str, max_seconds: float | No
             spec = next(p for p in schemas["prompt"]["params"] if p["name"] == "text")
             chars = len(nodes[hits[0]].get("params", {}).get("text", spec["default"]))
             break
-        level = sorted(
-            {r.partition(".")[0] for m in level for r in nodes[m].get("in", {}).values()} - seen
-        )
+        level = sorted({r.partition(".")[0] for m in level for r in nodes[m].get("in", {}).values()} - seen)
         seen |= set(level)
     sec = chars / SPEECH_CPS
     return min(sec, max_seconds) if max_seconds is not None else sec
@@ -774,9 +680,7 @@ def speech_seconds(nodes: dict, schemas: dict, nid: str, max_seconds: float | No
 
 def order(nodes: dict) -> list[str]:
     """Node ids, each after every node it is wired to. graphlib.CycleError on a cycle."""
-    deps = {
-        nid: {ref.partition(".")[0] for ref in n.get("in", {}).values()} for nid, n in nodes.items()
-    }
+    deps = {nid: {ref.partition(".")[0] for ref in n.get("in", {}).values()} for nid, n in nodes.items()}
     return list(graphlib.TopologicalSorter(deps).static_order())
 
 
@@ -805,7 +709,7 @@ def resolve(nodes: dict, schemas: dict[str, dict]) -> tuple[dict, dict]:
         for spec in schemas[node["kind"]]["params"]:
             if spec["type"] == "rows" and node.get("params", {}).get(spec["name"]):
                 # item fields left out take their defaults (contracts/README.md, Video: keyframes)
-                defaults = {f: s["default"] for f, s in spec["item"].items() if isinstance(s, dict) and "default" in s}  # fmt: skip
+                defaults = {f: s["default"] for f, s in spec["item"].items() if isinstance(s, dict) and "default" in s}
                 node["params"][spec["name"]] = [defaults | r for r in node["params"][spec["name"]]]
             if spec["type"] == "seed" and spec["name"] not in wired:
                 params = node.setdefault("params", {})
@@ -821,11 +725,7 @@ def _model(nodes: dict, impls: dict, schemas: dict, ref: str):
     src_id, _, out = ref.partition(".")
     src = nodes[src_id]
     types = {i["name"]: i["type"] for i in schemas[src["kind"]]["inputs"]}
-    inputs = {
-        p: _model(nodes, impls, schemas, r)
-        for p, r in src.get("in", {}).items()
-        if types.get(p) == "Model"
-    }
+    inputs = {p: _model(nodes, impls, schemas, r) for p, r in src.get("in", {}).items() if types.get(p) == "Model"}
     return impls[src["kind"]].fn(None, src.get("params", {}), inputs)[out]
 
 
@@ -836,9 +736,7 @@ def seen(nodes: dict, schemas: dict, nid: str, sees: dict) -> tuple[dict, list]:
     values, specs = {}, []
     for param, output in sees.items():
         for m in order(nodes):
-            spec = next(
-                (p for p in schemas[nodes[m]["kind"]]["params"] if p["name"] == param), None
-            )
+            spec = next((p for p in schemas[nodes[m]["kind"]]["params"] if p["name"] == param), None)
             if spec and f"{nid}.{output}" in nodes[m].get("in", {}).values():
                 values[param] = nodes[m].get("params", {}).get(param, spec.get("default"))
                 specs.append(spec)
@@ -857,9 +755,7 @@ def keys(nodes: dict, impls: dict, schemas: dict, owner: str) -> dict[str, str]:
         for port, ref in node.get("in", {}).items():
             if types.get(port) == "Model":
                 model = _model(nodes, impls, schemas, ref)
-                ins[port] = model.fingerprint(impl.uses) + (
-                    [model.variant] if impl.by_variant else []
-                )
+                ins[port] = model.fingerprint(impl.uses) + ([model.variant] if impl.by_variant else [])
             else:
                 src, _, name = ref.partition(".")
                 ins[port] = [out[src], name]
@@ -903,9 +799,7 @@ def _canvas_mp(nodes: dict, schemas: dict, nid: str) -> float:
         node = nodes[cur]
         p = node.get("params", {})
         if "width" in p and any(o["type"] == "Canvas" for o in schemas[node["kind"]]["outputs"]):
-            refs = _image_values(
-                nodes, schemas, nid
-            )  # a family canvas (minimax) keeps its area on auto
+            refs = _image_values(nodes, schemas, nid)  # a family canvas (minimax) keeps its area on auto
             if node["kind"] == "canvas" and p.get("mode") == "auto" and refs:
                 width, height = images.auto_size(refs[-1]["width"], refs[-1]["height"])
                 return width * height / 1e6
@@ -993,11 +887,7 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
     frames = known[0] if known else _frames(nodes, schemas, nid)
     if not frames and media:
         m = media[0]
-        frames = (
-            m["frames"]
-            if video is m
-            else int((m.get("out", m["duration_s"]) - m.get("in", 0)) * 24)
-        )
+        frames = m["frames"] if video is m else int((m.get("out", m["duration_s"]) - m.get("in", 0)) * 24)
     fps = next((v.fps for v in inputs.values() if isinstance(getattr(v, "fps", None), (int, float))),
                video["fps"] if video else 24)  # fmt: skip
     mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
@@ -1006,9 +896,7 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
     return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in, "fps": fps}
 
 
-def stage_peak(
-    nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict, plan: bool = False
-) -> float:
+def stage_peak(nodes: dict, schemas: dict, nid: str, impl, params: dict, inputs: dict, plan: bool = False) -> float:
     """The stage's peak_gb formula at `nid` (0 without one), over its params and the graph's sizes; `images` also
     counts the Image values of the params the stage `sees` (minimax/enhance: the encode node's refs). `speech_seconds` is
     the run's speech length (speech_seconds); a memory plan (`plan`) takes a stage's max_seconds when it has one."""
@@ -1064,19 +952,13 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
         if ctx.residency is not None and (impl.uses or impl.peak is not None):
             comps = _components(nodes, impls, schemas, nid)
             needs = {key: m.gb(key[2])[0] for key, m in comps.items()}
-            if (
-                impl.alone
-            ):  # model.yaml: none of its model's other components stay beside it (the plan says so)
+            if impl.alone:  # model.yaml: none of its model's other components stay beside it (the plan says so)
                 ids = {key[0] for key in comps}
-                ctx.residency.release(
-                    {key for key in ctx.residency.entries if key[0] in ids and key not in needs}
-                )
+                ctx.residency.release({key for key in ctx.residency.entries if key[0] in ids and key not in needs})
             peak = stage_peak(nodes, schemas, nid, impl, params, inputs)
             ctx.residency.admit(needs, peak, later() - set(needs))
         outs = impl.fn(ctx, params, inputs)
-        if (
-            impl.unload_after and ctx.residency is not None
-        ):  # model.yaml: the stage's components go now
+        if impl.unload_after and ctx.residency is not None:  # model.yaml: the stage's components go now
             comps = _components(nodes, impls, schemas, nid)
             ctx.residency.release({k for k in comps if k[2] in impl.unload_after})
         return outs
@@ -1124,14 +1006,12 @@ async def run(nodes: dict, impls: dict, schemas: dict, ctx: Ctx, cache: Cache) -
             if outs[o]:  # defs: 1-16384 characters
                 ctx.texts[f"{nid}.{o}"] = outs[o][:16384]
 
-    for nid in pull_order(
-        nodes, sinks
-    ):  # a pack's own checks, before anything loads or runs (in run order)
+    for nid in pull_order(nodes, sinks):  # a pack's own checks, before anything loads or runs (in run order)
         impl, node = impls[nodes[nid]["kind"]], nodes[nid]
         if impl.check is None:
             continue
         types = {i["name"]: i["type"] for i in schemas[node["kind"]]["inputs"]}
-        models = {p: _model(nodes, impls, schemas, r) for p, r in node.get("in", {}).items() if types.get(p) == "Model"}  # fmt: skip
+        models = {p: _model(nodes, impls, schemas, r) for p, r in node.get("in", {}).items() if types.get(p) == "Model"}
         if why := impl.check(node.get("params", {}), set(node.get("in", {})), models):
             raise RunError(f"{nid}{why}")
     for nid in sinks:

@@ -74,14 +74,10 @@ def run(name: str) -> dict:
         try:
             if "lines" in case:  # API 1.32: a dialogue, one server for its lines
                 lines = [x | {"voice": voice_value(x["voice"])} for x in case["lines"]]
-                out = native.dialogue(
-                    ctx, case["params"] | {"lines": lines}, {"model": model, "seed": case["seed"]}
-                )
+                out = native.dialogue(ctx, case["params"] | {"lines": lines}, {"model": model, "seed": case["seed"]})
             else:
                 params = case["params"] | {"voice": voice_value(case["voice"])}
-                out = native.speak(
-                    ctx, params, {"model": model, "text": case["text"], "seed": case["seed"]}
-                )
+                out = native.speak(ctx, params, {"model": model, "text": case["text"], "seed": case["seed"]})
         finally:
             config.CACHE = keep
             done.set()

@@ -7,7 +7,7 @@ config, versions, device, timings and peak memory.
 
 ## How they were made
 
-    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python tests/golden/record_qwen.py
+    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python runner_service/tests/golden/record_qwen.py
 
 `record_qwen.py` imports the studio's own `qwen_image_2_1.generate` (no web server) and does what its CLI does for a
 text-to-image render: `load_pipe(..., int8=True)`, `free_text_encoder_after_encoding`, then `pipe(prompt, width,
@@ -36,7 +36,7 @@ spikes may be missed. Load times are with the checkpoint warm in the page cache.
 Multi-reference edits, recorded by the same script with the old studio's edit path (what its CLI does for
 `--input a.png,b.png` and no `--ratio`/`--enhance`):
 
-    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python tests/golden/record_qwen.py --cases edit-e1 edit-e2 edit-e3
+    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python runner_service/tests/golden/record_qwen.py --cases edit-e1 edit-e2 edit-e3
 
 The references are text-to-image goldens from `qwen-image/` (RGBA PNGs), so every input is reproducible; each
 sidecar names them with their sha256, plus `noise_seed`, `size_rule`, `auto_size_would_be` and every ref's
@@ -108,8 +108,8 @@ Sources: `qwen_image_2_1/generate.py` (`main`, `plan_size`, `noise_seed`) and di
 
 ## Compare
 
-    python tests/golden/compare.py tests/golden/qwen-image/turbo-768-s42.png out.png [--threshold 30]
-    python tests/golden/compare.py tests/golden/qwen-image-edit/edit-e1.png out.png
+    python runner_service/tests/golden/compare.py runner_service/tests/golden/qwen-image/turbo-768-s42.png out.png [--threshold 30]
+    python runner_service/tests/golden/compare.py runner_service/tests/golden/qwen-image-edit/edit-e1.png out.png
 
 Prints `psnr_db` and `mean_abs_diff`; exit 0 if PSNR >= threshold, 1 below it, 2 on a size mismatch. Needs Pillow
 and numpy. `python compare.py --self-test` checks the maths.

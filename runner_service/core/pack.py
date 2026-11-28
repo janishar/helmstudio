@@ -1,5 +1,5 @@
 """Packs: a folder runner_service/packs/<name>/ with model.yaml, one python module per runtime (`fake.py`,
-`torch.py`) and workflows/*.json. The pack API is documented in packs/README.md (repo root); this module turns a
+`torch.py`) and workflows/*.json. The pack API is documented in packs/README.md (in runner_service); this module turns a
 pack into registry values (node schemas, workflows, the models entry) and node implementations.
 
 The core's own nodes (prompt, seed, canvas, image, output) are written in the same stage grammar in core/nodes.yaml."""
@@ -11,14 +11,25 @@ import importlib
 import json
 import struct
 import sys
-import threading
-from contextlib import contextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 import yaml
 
 from core import looks, voices
+from core.folders import (  # noqa: F401 (re-exported: the model folders moved to core.folders)
+    complete,
+    connected,
+    downloads_root,
+    folder_id,
+    found,
+    models_root,
+    place,
+    root_of,
+    rooted,
+    roots,
+    shown,
+)
 
 PACKS = Path(__file__).resolve().parent.parent / "packs"
 PRECISIONS = ("bf16", "fp16", "int8", "int4", "fp8")  # fp8 (API 1.33): stored only, a variant's own
@@ -56,21 +67,11 @@ class Node:
     pack: Pack | None = None
     check: object = None  # the pack's check_<stage>(params, wired, models) -> problem text or None, run before anything
     unload_after: tuple[str, ...] = ()  # components unloaded once the stage has run
-    alone: bool = (
-        False  # its components never sit beside the model's others: plans count no kept ones
-    )
-    sees: dict = field(
-        default_factory=dict
-    )  # param → output: that param of the node(s) the output feeds
-    reports: tuple[
-        str, ...
-    ] = ()  # Text outputs reported as the run's resolved.texts (`<node>.<output>`)
-    max_seconds: float | None = (
-        None  # model.yaml: caps peak_gb's `speech_seconds`; memory plans plan at it
-    )
-    by_variant: bool = (
-        False  # its cache key holds its Model's variant (it branches on it over shared components)
-    )
+    alone: bool = False  # its components never sit beside the model's others: plans count no kept ones
+    sees: dict = field(default_factory=dict)  # param → output: that param of the node(s) the output feeds
+    reports: tuple[str, ...] = ()  # Text outputs reported as the run's resolved.texts (`<node>.<output>`)
+    max_seconds: float | None = None  # model.yaml: caps peak_gb's `speech_seconds`; memory plans plan at it
+    by_variant: bool = False  # its cache key holds its Model's variant (it branches on it over shared components)
 
 
 @dataclass(eq=False)
@@ -107,9 +108,7 @@ class LoraUse:
     strength: float
     mode: str  # adapter | bake
     key: str | None = None  # own only: u/<owner_id>/loras/<lora_id>.safetensors
-    path: str | None = (
-        None  # a model component's file, read in place (plan 19 phase 4: ltx/ic-lora's IC-LoRA)
-    )
+    path: str | None = None  # a model component's file, read in place (plan 19 phase 4: ltx/ic-lora's IC-LoRA)
 
     @classmethod
     def of(cls, row: dict) -> LoraUse:
@@ -194,7 +193,7 @@ class ModelRef:
     def resident_loras(self, component: str) -> list[dict] | None:
         """The hosts value's resident[].loras of `component`'s entry: its baked rows, or None."""
         baked = self.baked(component)
-        return [{"lora_id": u.lora_id, "name": u.name, "strength": u.strength, "bytes": u.bytes} for u in baked] or None  # fmt: skip
+        return [{"lora_id": u.lora_id, "name": u.name, "strength": u.strength, "bytes": u.bytes} for u in baked] or None
 
     @staticmethod
     def lora_gb(uses, dtype_bytes: int) -> float:
@@ -250,9 +249,7 @@ class ModelRef:
 def default_model(pack: Pack) -> ModelRef:
     """The Model a stage with `uses` but no Model input loads from (MiniMax's enhance: a model of its own beside the
     family's): the first variant at the model node's default precision."""
-    return ModelRef(
-        pack, next(iter(pack.spec["variants"])), model_schema(pack)["params"][1]["default"]
-    )
+    return ModelRef(pack, next(iter(pack.spec["variants"])), model_schema(pack)["params"][1]["default"])
 
 
 def component_precisions(pack: Pack, variant: str, component: str) -> list[str]:
@@ -267,106 +264,8 @@ def variant_precisions(pack: Pack, variant: str) -> list[str]:
     `precision` (API 1.33: an already-quantized variant lists only its own, [fp8]), else what its components offer."""
     if own := pack.spec["variants"][variant].get("precision"):
         return list(own)
-    offered = {
-        p for c in pack.spec.get("components", {}) for p in component_precisions(pack, variant, c)
-    }
+    offered = {p for c in pack.spec.get("components", {}) for p in component_precisions(pack, variant, c)}
     return [p for p in PRECISIONS if p in offered]
-
-
-# --- model folders (API 1.78, contracts/README.md "Model folders"): an ordered list of roots; a model folder loads
-# from the first connected root with a complete copy. A root that is not a directory now is skipped, never created.
-
-_scope = threading.local()  # rooted(): (root, strict) of this thread's job or scan
-
-
-def shown(path: Path) -> str:
-    """`path` with the home directory written `~`."""
-    home = str(Path.home())
-    return "~" + str(path)[len(home) :] if str(path).startswith(home + "/") else str(path)
-
-
-def folder_id(text: str) -> str:
-    """A folder's id: the first 12 hex of the SHA-256 of its path as stored."""
-    return hashlib.sha256(text.encode()).hexdigest()[:12]
-
-
-def roots() -> list[tuple[str, Path]]:
-    """(path as stored, path) of each model folder in priority order: host_settings `folders`, else the one
-    HELMSTUDIO_MODELS."""
-    import config
-
-    return [(x, Path(x).expanduser()) for x in config.ROOTS] or [
-        (shown(config.MODELS), config.MODELS)
-    ]
-
-
-def connected() -> list[Path]:
-    return [r for _, r in roots() if r.is_dir()]
-
-
-def downloads_root() -> Path:
-    """The downloads folder, else the next connected one after it (the list wraps), else the downloads folder."""
-    import config
-
-    rs = [r for _, r in roots()]
-    i = config.DOWNLOADS if 0 <= config.DOWNLOADS < len(rs) else 0
-    return next((r for r in rs[i:] + rs[:i] if r.is_dir()), rs[i])
-
-
-def models_root() -> Path:
-    """Where writes go: the root of a strict rooted() scope, else the downloads folder."""
-    s = getattr(_scope, "root", None)
-    return s[0] if s and s[1] else downloads_root()
-
-
-def complete(path: Path) -> bool:
-    """A model folder with files and no unfinished download (core.models.MARKER)."""
-    from core.models import MARKER
-
-    try:
-        return not (path / MARKER).exists() and any(
-            not x.name.startswith(".") for x in path.iterdir()
-        )
-    except OSError:
-        return False
-
-
-def found(rel: str) -> Path | None:
-    """The first connected root's complete copy of `rel`, whatever the scope; None when none has one. A real copy
-    wins over a link to one (an old link into another folder of the list: that folder's copy is the one used)."""
-    live = [r / rel for r in connected() if complete(r / rel)]
-    return next((p for p in live if not p.is_symlink()), live[0] if live else None)
-
-
-def place(rel: str) -> Path:
-    """Where the model folder `rel` is read from: the first connected root with a complete copy, else the first
-    with some of it, else the downloads folder. In a strict rooted() scope: that root; a loose one prefers its root
-    when the folder is there. ponytail: complete = files and no marker, not every glob; a partial copy first in the
-    list that lacks a weight still wins over a full one later."""
-    if (s := getattr(_scope, "root", None)) and (s[1] or (s[0] / rel).exists()):
-        return s[0] / rel
-    live = connected()
-    return (
-        found(rel)
-        or next((r / rel for r in live if (r / rel).exists()), None)
-        or models_root() / rel
-    )
-
-
-def root_of(path: Path) -> tuple[str, Path] | None:
-    """The (stored, path) root holding `path`, the first that does."""
-    return next(((t, r) for t, r in roots() if path.is_relative_to(r)), None)
-
-
-@contextmanager
-def rooted(root: Path, strict: bool = True):
-    """Within it this thread reads and writes model folders in `root` only (strict: a job's download or delete), or
-    prefers `root` (loose: a scan of one copy)."""
-    old, _scope.root = getattr(_scope, "root", None), (root, strict)
-    try:
-        yield
-    finally:
-        _scope.root = old
 
 
 def share_owner(pack: Pack, variant: str) -> str:
@@ -392,10 +291,7 @@ def owns_copy(pack: Pack, variant: str, component: str) -> bool:
 def component_globs(pack: Pack, variant: str, component: str) -> list[str]:
     """model.yaml `files` of a component (a glob or a list of globs), or the variant's own `files` for it (a variant
     whose file sits in another variant's folder under another name: LTX dev's transformer)."""
-    g = (
-        pack.spec["variants"][variant].get("files", {}).get(component)
-        or pack.component(component)["files"]
-    )
+    g = pack.spec["variants"][variant].get("files", {}).get(component) or pack.component(component)["files"]
     return [g] if isinstance(g, str) else g
 
 
@@ -420,9 +316,7 @@ def header(path: Path) -> dict:
 def quantized(spec: dict, precision: str, module_name: str) -> bool:
     """Whether a Linear named `module_name` is stored quantized (precision int8 or int4 and a `quantize` glob
     matches)."""
-    return precision in ("int8", "int4") and any(
-        fnmatch.fnmatchcase(module_name, g) for g in spec.get("quantize", [])
-    )
+    return precision in ("int8", "int4") and any(fnmatch.fnmatchcase(module_name, g) for g in spec.get("quantize", []))
 
 
 _sizes: dict = {}
@@ -442,9 +336,7 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
         dtype = spec.get("dtype", "bf16")
         total = largest = 0
         for p in files:
-            if (
-                p.suffix != ".safetensors"
-            ):  # a torch.save checkpoint (plan 38): its bytes, stored fp32, at the dtype;
+            if p.suffix != ".safetensors":  # a torch.save checkpoint (plan 38): its bytes, stored fp32, at the dtype;
                 # no transient: memory-mapped, read from the file as it is cast (core.loaders_torch.state_dict)
                 size = p.stat().st_size
                 total += size if dtype == "stored" else size // 4 * BYTES[dtype]
@@ -463,16 +355,11 @@ def size_gb(pack: Pack, key: tuple, files: tuple[Path, ...]) -> tuple[float, flo
                     total += numel * 2 if name.startswith(dense) else numel + t["shape"][0] * 4
                 elif linear and quantized(spec, precision, module):
                     if pack.runtime == "mlx":
-                        total += (
-                            numel * (8 if precision == "int8" else 4) // 8
-                            + numel // QUANT_GROUP * 4
-                        )
+                        total += numel * (8 if precision == "int8" else 4) // 8 + numel // QUANT_GROUP * 4
                     else:  # a U8 weight packs two 4-bit values per byte (NVFP4, dequantized at load)
                         total += numel * (2 if t["dtype"] == "U8" else 1) + t["shape"][0] * 2
                 else:
-                    total += numel * (
-                        STORED.get(t["dtype"], 2) if dtype == "stored" else BYTES[dtype]
-                    )
+                    total += numel * (STORED.get(t["dtype"], 2) if dtype == "stored" else BYTES[dtype])
         _sizes[(key, files)] = (total / 2**30, largest / 2**30)
     return _sizes[(key, files)]
 
@@ -494,9 +381,7 @@ def compile_formula(text: str, names: set[str]):
     for n in ast.walk(tree):
         if not isinstance(n, _ALLOWED):
             raise ValueError(f"peak_gb {text!r}: {type(n).__name__} is not allowed")  # noqa: TRY004
-        if isinstance(n, ast.Call) and not (
-            isinstance(n.func, ast.Name) and n.func.id in ("min", "max", "len")
-        ):
+        if isinstance(n, ast.Call) and not (isinstance(n.func, ast.Name) and n.func.id in ("min", "max", "len")):
             raise ValueError(f"peak_gb {text!r}: only min(), max() and len() may be called")
         if isinstance(n, ast.Name) and n.id not in names | {"min", "max", "len"}:
             raise ValueError(f"peak_gb {text!r}: unknown name {n.id!r} (known: {sorted(names)})")
@@ -519,8 +404,7 @@ def stage_schema(name: str, stage: dict, family: str | None) -> dict:
         "params": [{"name": p} | spec for p, spec in (stage.get("params") or {}).items()],
         # an input is `name: Type`, or `name: {type: Type, optional: true}`
         "inputs": [
-            {"name": p} | (t if isinstance(t, dict) else {"type": t})
-            for p, t in (stage.get("inputs") or {}).items()
+            {"name": p} | (t if isinstance(t, dict) else {"type": t}) for p, t in (stage.get("inputs") or {}).items()
         ],
         "outputs": [{"name": p, "type": t} for p, t in (stage.get("outputs") or {}).items()],
     }
@@ -571,9 +455,7 @@ def value_addon_errors(schema: dict, extra: list[str]) -> str | None:
             return f"{p['name']}: addons_with names no optional input or rows param {sorted(bad)}"
         if any(set(x) - set(per) for x in by.values()):
             return f"{p['name']}: addons_with must key values of its addons"
-        if bad := {
-            c for x in [*per.values(), *(c for w in by.values() for c in w.values())] for c in x
-        } - set(extra):
+        if bad := {c for x in [*per.values(), *(c for w in by.values() for c in w.values())] for c in x} - set(extra):
             return f"{p['name']}: addons names no add-on {sorted(bad)}"
     return None
 
@@ -597,17 +479,14 @@ def model_schema(pack: Pack) -> dict:
         "title": spec["title"],
         "family": pack.family,
         "params": [
-            {"name": "variant", "type": "enum", "enum": variants, "default": variants[0]}
-            | extra.get("variant", {}),
+            {"name": "variant", "type": "enum", "enum": variants, "default": variants[0]} | extra.get("variant", {}),
             {"name": "precision", "type": "enum", "enum": precisions, "default": precisions[0]}
             | extra.get("precision", {}),
         ],
         "inputs": [],
         "outputs": [{"name": "model", "type": "Model"}],
     }
-    if compute := extra.get(
-        "compute"
-    ):  # API 1.39: a load option of `components` (ModelRef.compute_of)
+    if compute := extra.get("compute"):  # API 1.39: a load option of `components` (ModelRef.compute_of)
         schema["params"].append({"name": "compute", "type": "enum"} | {k: v for k, v in compute.items() if k not in ("components", "runtime")})  # fmt: skip
     if "help" in extra:
         schema["help"] = extra["help"]
@@ -717,11 +596,7 @@ SOUNDS = {"music", "sound", "voice"}  # API 1.79: the sound classes (defs soundC
 
 def model_node(pack: Pack):
     def model(ctx, params: dict, inputs: dict) -> dict:
-        return {
-            "model": ModelRef(
-                pack, params["variant"], params["precision"], compute=params.get("compute")
-            )
-        }
+        return {"model": ModelRef(pack, params["variant"], params["precision"], compute=params.get("compute"))}
 
     return model
 
@@ -744,19 +619,13 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
     for name, stage in stages.items():
         schema = stage_schema(name, stage, family)
         if shared := {p["name"] for p in schema["params"]} & {i["name"] for i in schema["inputs"]}:
-            raise ValueError(
-                f"{schema['kind']}: params and inputs share the names {sorted(shared)}"
-            )
+            raise ValueError(f"{schema['kind']}: params and inputs share the names {sorted(shared)}")
         # a param would be shadowed by the size of its name; frames, fps and images params feed those sizes
         if taken := set(stage.get("params") or {}) & {"mp", "mp_in", "speech_seconds"}:
             raise ValueError(f"{schema['kind']}: params {sorted(taken)} are peak_gb size names")
-        names = {"mp", "images", "frames", "mp_in", "fps", "speech_seconds"} | set(
-            stage.get("params") or {}
-        )
+        names = {"mp", "images", "frames", "mp_in", "fps", "speech_seconds"} | set(stage.get("params") or {})
         cap = stage.get("max_seconds")
-        if cap is not None and (
-            isinstance(cap, bool) or not isinstance(cap, int | float) or cap <= 0
-        ):
+        if cap is not None and (isinstance(cap, bool) or not isinstance(cap, int | float) or cap <= 0):
             raise ValueError(f"{schema['kind']}: max_seconds must be a number > 0")
         peak = compile_formula(stage["peak_gb"], names) if "peak_gb" in stage else None
         fn = getattr(module, name, None)
@@ -768,16 +637,12 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
         # API 1.40: `addons` names add-ons the stage reads outside residency (ltx/distill's bake): never planned
         extra = tuple(stage.get("addons", ()))
         if extra and (not pack or (bad := set(extra) - set(addons(pack)))):
-            raise ValueError(
-                f"{schema['kind']}: addons names no add-on {sorted(bad) if pack else list(extra)}"
-            )
+            raise ValueError(f"{schema['kind']}: addons names no add-on {sorted(bad) if pack else list(extra)}")
         # API 1.79 (contracts/README.md, Music and sound): a node with an Audio output carries its class, the stage's
         # `sound` else the pack's
         audio = any(o["type"] == "Audio" for o in schema["outputs"])
         if "sound" in stage and (stage["sound"] not in SOUNDS or not audio):
-            raise ValueError(
-                f"{schema['kind']}: sound must be music, sound or voice, on a stage with an Audio output"
-            )
+            raise ValueError(f"{schema['kind']}: sound must be music, sound or voice, on a stage with an Audio output")
         if audio and (sound := stage.get("sound") or (pack.spec.get("sound") if pack else None)):
             schema["sound"] = sound
         if pack and (need := list(dict.fromkeys(c for c in (*uses, *extra) if c in addons(pack)))):
@@ -788,18 +653,15 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
             raise ValueError(f"{schema['kind']}: phases repeat an id")
         unload = tuple(stage.get("unload_after", ()))
         if unknown := set(unload) - set(uses):
-            raise ValueError(
-                f"{schema['kind']}: unload_after names components outside its uses {sorted(unknown)}"
-            )
+            raise ValueError(f"{schema['kind']}: unload_after names components outside its uses {sorted(unknown)}")
         check = getattr(module, f"check_{name}", None)
-        node = Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload,
-                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())), cap,
-                    bool(stage.get("by_variant")))  # fmt: skip
+        node = Node(fn=fn, uses=uses, peak=peak, stall_s=stage.get("stall_s", STALL_S), code=code, pack=pack,
+                    check=check, unload_after=unload, alone=bool(stage.get("alone")),
+                    sees=dict(stage.get("sees") or {}), reports=tuple(stage.get("reports", ())), max_seconds=cap,
+                    by_variant=bool(stage.get("by_variant")))  # fmt: skip
         outs = {o["name"]: o["type"] for o in schema["outputs"]}
         if bad := [o for o in (*node.sees.values(), *node.reports) if outs.get(o) != "Text"]:
-            raise ValueError(
-                f"{schema['kind']}: sees / reports name outputs that are not Text: {bad}"
-            )
+            raise ValueError(f"{schema['kind']}: sees / reports name outputs that are not Text: {bad}")
         out[schema["kind"]] = (schema, node)
     return out
 
@@ -839,9 +701,7 @@ def load(dir: Path, runtime: str) -> tuple[Pack, dict]:
     # sources (canvas, ...) first, then the model; `source: false` keeps a stage without inputs in its place
     # (echo/dialogue, after echo/speak: the canonical palette's order)
     nodes = {
-        k: v
-        for k, v in stages.items()
-        if not v[0]["inputs"] and spec["stages"][k.split("/", 1)[1]].get("source", True)
+        k: v for k, v in stages.items() if not v[0]["inputs"] and spec["stages"][k.split("/", 1)[1]].get("source", True)
     }
     schema = model_schema(pack)
     nodes[schema["kind"]] = (schema, Node(model_node(pack), code=code, pack=pack))

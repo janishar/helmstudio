@@ -63,7 +63,7 @@ def expand(modules: list[str]) -> list[str]:
     out = []
     for m in modules:
         r = re.search(r"\{(\d+)\.\.(\d+)\}", m)
-        out += [m[: r.start()] + str(i) + m[r.end() :] for i in range(int(r[1]), int(r[2]) + 1)] if r else [m]  # fmt: skip
+        out += [m[: r.start()] + str(i) + m[r.end() :] for i in range(int(r[1]), int(r[2]) + 1)] if r else [m]
     return out
 
 
@@ -78,7 +78,7 @@ def compress(names) -> list[str]:
         if i is None:
             plain.append(n)
         else:
-            groups.setdefault((".".join(parts[:i]), ".".join(parts[i + 1 :])), []).append(int(parts[i]))  # fmt: skip
+            groups.setdefault((".".join(parts[:i]), ".".join(parts[i + 1 :])), []).append(int(parts[i]))
     out = plain
     for (pre, post), nums in groups.items():
         nums.sort()
@@ -123,9 +123,7 @@ def _matches(rename: dict, part: str) -> bool:
     return part.endswith(f) if rename.get("at") == "end" else part.startswith(f)
 
 
-def normalise(
-    name: str, tensors: dict, block: dict, family: str, shapes: dict | None = None
-) -> dict:
+def normalise(name: str, tensors: dict, block: dict, family: str, shapes: dict | None = None) -> dict:
     """Apply a file's header ({key: {dtype, shape}}) to one family's lora block ({modules, renames, ignore}).
     `shapes` (module → (in_features, out_features)), when given, also requires A [rank, in] and B [out, rank] to
     fit the model's Linear. Answers key_style, rank, total, applied, ignored, unapplied (sorted keys), error (None
@@ -175,7 +173,7 @@ def normalise(
         error = f"LoRA {name}: 0 of {total} keys apply to {family} ({ks or 'unrecognised'} keys); is it for another model?"  # fmt: skip
     elif unapplied:
         n = len(unapplied)
-        error = f"LoRA {name}: {n} of {total} keys do not apply to {family}: {', '.join(unapplied[:3])}"  # fmt: skip
+        error = f"LoRA {name}: {n} of {total} keys do not apply to {family}: {', '.join(unapplied[:3])}"
         error += f" and {n - 3} more" if n > 3 else ""
     return {
         "key_style": ks,
@@ -244,7 +242,7 @@ def read_header(path: Path, ignore=()) -> tuple[dict, dict]:
         raise LoraFileError(f"tensor {min(bad)} lies outside the file")
     for k in keys:
         if h[k]["dtype"] not in DTYPES:
-            raise LoraFileError(f"tensor {k} has dtype {h[k]['dtype']}; LoRAs must be F32, F16 or BF16")  # fmt: skip
+            raise LoraFileError(f"tensor {k} has dtype {h[k]['dtype']}; LoRAs must be F32, F16 or BF16")
     ks = style(keys)
     if ks is None:
         raise LoraFileError("no LoRA keys found (is it a full model?)")
@@ -273,11 +271,8 @@ def read_header(path: Path, ignore=()) -> tuple[dict, dict]:
 
 
 def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
     with path.open("rb") as f:
-        while chunk := f.read(1 << 22):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
 # --- the host's library
@@ -316,14 +311,7 @@ class Library:
 
         # API 1.78: every connected model folder of the list when `models` is None
         tops = [self.models] if self.models else packs.connected()
-        files = sorted(
-            {
-                f
-                for m in tops
-                for g in ("loras/*.safetensors", "*/loras/*.safetensors")
-                for f in m.glob(g)
-            }
-        )
+        files = sorted({f for m in tops for g in ("loras/*.safetensors", "*/loras/*.safetensors") for f in m.glob(g)})
         ignore = [g for b in blocks.values() for g in b["ignore"]]
         shared, files_, entries, kept = (
             {},
@@ -352,7 +340,7 @@ class Library:
             if sha in shared:
                 continue  # the same file twice on this host is one LoRA
             # family detection: this runner's packs are one env, so the fake-last rule leaves name order
-            fits = [f for f in sorted(blocks) if normalise(p.stem, tensors, blocks[f], f)["error"] is None]  # fmt: skip
+            fits = [f for f in sorted(blocks) if normalise(p.stem, tensors, blocks[f], f)["error"] is None]
             res = normalise(p.stem, tensors, _NO_BLOCK, "")  # style and rank need no family
             shared[sha] = p
             entries.append(
@@ -364,9 +352,7 @@ class Library:
                     "bytes": st.st_size,
                     "key_style": res["key_style"],
                     "licence": licence(meta),
-                    "modified_at": datetime.fromtimestamp(st.st_mtime, UTC).strftime(
-                        "%Y-%m-%dT%H:%M:%SZ"
-                    ),
+                    "modified_at": datetime.fromtimestamp(st.st_mtime, UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 }
             )
         self.shared, self.files, self.entries = shared, files_, entries
@@ -404,16 +390,12 @@ class Library:
             part.replace(dest)
         finally:
             part.unlink(missing_ok=True)  # a failed or cancelled fetch leaves nothing behind
-        log.info(
-            "fetched own LoRA %s to the cache (%d bytes, SHA-256 verified)", use.name, use.bytes
-        )
+        log.info("fetched own LoRA %s to the cache (%d bytes, SHA-256 verified)", use.name, use.bytes)
         return dest
 
     def _evict(self, room: int) -> None:
         """Delete least recently used cached LoRAs until `room` more bytes fit under the cap."""
-        for p in self.dir.glob(
-            "*.part*"
-        ):  # left by a runner that died mid-fetch; ponytail: one fetch at a time
+        for p in self.dir.glob("*.part*"):  # left by a runner that died mid-fetch; ponytail: one fetch at a time
             p.unlink(missing_ok=True)
         files = sorted(self.dir.glob("*.safetensors"), key=lambda p: p.stat().st_mtime)
         used = sum(p.stat().st_size for p in files)

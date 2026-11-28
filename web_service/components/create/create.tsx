@@ -2,6 +2,7 @@
 // Create: one session's runs of one workflow (docs/mock/Main.dc.html). The form comes from the workflow's node
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
+import { stored, useStoredFlag } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
@@ -125,10 +126,9 @@ import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/l
 import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { downloaded, precisionPins } from "@/lib/models";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import {
   KIND_LABEL,
-  SIDES,
   audioFormat,
   createKinds,
   kindOf,
@@ -139,11 +139,9 @@ import {
   soundText,
   workflowFor,
   type Kind,
-  type Side,
 } from "@/lib/media";
 import {
   applyEvent,
-  clock,
   deleteRuns,
   etaText,
   GENERIC_FAIL,
@@ -171,21 +169,16 @@ import { rememberProject, soundOf, soundTakeOf, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
+import { useAddonGates } from "@/components/create/use-addon-gates";
+import { useDrafts } from "@/components/create/use-drafts";
 import {
-  addonBlocks,
-  addonNeeds,
-  needed,
   chosenVariants,
   clashNote,
-  machineReason,
   machines,
   pinnedMachine,
   planWhy,
   runnerWhy,
   unpluggedDrive,
-  valueBlock,
-  valueNeeds,
-  valueNeedsAt,
   versionRow,
 } from "@/lib/run-on";
 import {
@@ -300,17 +293,6 @@ export type CreateInitial = {
 
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
 const DRAWER = "create-settings-drawer";
-const noSub = () => () => undefined;
-const storedDrawer = () => {
-  try {
-    return localStorage.getItem(DRAWER) !== "0";
-  } catch {
-    return true;
-  }
-};
-/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
- * (picture, sound: sideOf), so neither replaces the other. */
-const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
  * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
@@ -393,15 +375,7 @@ export function Create({
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
   // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): open by default (owner, 2026-11-26:
   // "keep the setting open by default"), a closed one remembered in this browser ("0")
-  const stored = useSyncExternalStore(noSub, storedDrawer, () => true);
-  const [drawerSet, setDrawerState] = useState<boolean | null>(null);
-  const drawer = drawerSet ?? stored;
-  const setDrawer = (on: boolean) => {
-    setDrawerState(on);
-    try {
-      localStorage.setItem(DRAWER, on ? "1" : "0");
-    } catch {}
-  };
+  const [drawer, setDrawer] = useStoredFlag(DRAWER);
   // a reused take's look ids, put under their groups once the looks are known
   const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
@@ -492,21 +466,11 @@ export function Create({
 
   const varKey = (id: string | null) => `create-variations:${id ?? ""}`;
   const setVariations = (v: { runs: string[]; kept: string[] } | null) => {
-    setVariationsState(v);
-    try {
-      if (v) localStorage.setItem(varKey(sessionRef.current), JSON.stringify(v));
-      else localStorage.removeItem(varKey(sessionRef.current));
-    } catch {
-      /* no storage here: kept for this page only */
-    }
+    setVariationsState(v); // no storage here: kept for this page only
+    stored.set(varKey(sessionRef.current), v ? JSON.stringify(v) : null);
   };
   useEffect(() => {
-    let v: { runs: string[]; kept: string[] } | null = null;
-    try {
-      v = JSON.parse(localStorage.getItem(varKey(sessionId)) ?? "null");
-    } catch {
-      /* no storage here */
-    }
+    const v = stored.json<{ runs: string[]; kept: string[] }>(varKey(sessionId));
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
     setVariationsState(v && Array.isArray(v.runs) && Array.isArray(v.kept) ? v : null);
   }, [sessionId]);
@@ -687,93 +651,29 @@ export function Create({
   );
   const machineList = useMemo(() => machines(hosts), [hosts]);
   const runOn = pinnedMachine(machineList, runOnHost);
-  // optional add-ons (API 1.36): a node whose add-on is not where the run may go has its controls greyed, and stays
-  // bypassed so the run check never refuses it (contracts/README.md, Optional add-ons)
-  // (API 1.40) an add-on scoped to other variants than the chosen one is not needed; one a node the workflow always
-  // runs needs greys its variants' rows instead (Dev without the distilled LoRA)
-  const allNeeds = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
-  const chosenModels = chosenVariants(all, { ...held, ...pins }, modelList);
-  // (API 1.40) and one for the other task (`refs`): an edit needs Qwen's PE-I2I, text to image its PE-T2I
-  const withRefs = refCount(all, held) > 0;
-  const needs = allNeeds.filter((n) => needed(n, chosenModels, withRefs));
-  const blocks = addonBlocks(needs, runOn);
-  const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
-  const raws =
-    Object.keys(pins).length || Object.keys(forced).length ? { ...held, ...pins, ...forced } : held;
-  // (API 1.41) an add-on one value of a param asks for (MiniMax H3's lora turbo: Turbo LoRA, with a reference Turbo
-  // Ref LoRA): that option and every preset that picks it are greyed where the run may go, and a form that holds it
-  // anyway keeps it, greyed, with Generate blocked (it never drops to another value by itself; H3Options 11-13)
-  const allValueNeeds = useMemo(() => valueNeeds(workflow, modelList), [workflow, modelList]);
-  const valueOn = (node: string) =>
-    (raws[`${node}.bypass`] ?? workflow?.nodes[node]?.bypass) !== true;
-  const wiredIn = (node: string) => (name: string) => {
-    const v = raws[`${node}.${name}`] ?? all.find((f) => f.key === `${node}.${name}`)?.initial;
-    return (Array.isArray(v) && v.length > 0) || !!workflow?.nodes[node]?.in?.[name];
-  };
-  const canRun = machineList.filter(
-    (mc) => machineReason(mc, workflow?.env, chosenModels) === null,
+  const { allNeeds, needs, blocks, raws, valueBlocks, heldNeeds, heldBlock } = useAddonGates(
+    workflow,
+    modelList,
+    all,
+    held,
+    pins,
+    machineList,
+    runOn,
   );
-  const valueBlocks: Record<string, Record<string, string>> = {};
-  const heldNeeds: typeof allValueNeeds = [];
-  let heldBlock: string | null = null;
-  for (const f of all.filter((x) =>
-    allValueNeeds.some((n) => n.field === x.key && valueOn(n.node)),
-  )) {
-    const cur = String(raws[f.key] ?? toRaw(f.initial, f.param));
-    for (const o of f.param.enum ?? []) {
-      const why = valueBlock(allValueNeeds, f.key, o, wiredIn(f.node), canRun, runOn, chosenModels);
-      if (why) (valueBlocks[f.key] ??= {})[o] = why;
-    }
-    heldNeeds.push(...valueNeedsAt(allValueNeeds, f.key, cur, wiredIn(f.node)));
-    heldBlock ??= valueBlocks[f.key]?.[cur] ?? null;
-  }
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
-  // a half-written prompt survives a reload (owner, 2026-11-25): kept in this browser per session (a reload starts
-  // with an empty leftForm), dropped once Generate sends it; switching to another session brings back its own
-  const promptKey = (
-    all.find((f) => f.param.type === "text" && f.param.name === "text") ??
-    all.find((f) => f.param.type === "text")
-  )?.key;
-  const draft = promptKey ? held[promptKey] : undefined;
-  const sentDraft = useRef<unknown>(undefined);
-  const draftRead = useRef<string | null | undefined>(undefined); // the session whose draft was read
-  // each side's draft (alpha.2 item 14): the open workflow's side goes into the form, the other waits in keptTexts
-  // for a switch (carryKind), so a script never lands in a picture prompt after a reload, nor the reverse
-  const side = workflow ? sideOf(workflow) : undefined;
-  useEffect(() => {
-    if (!workflows || !side || draftRead.current === sessionId) return;
-    const first = draftRead.current === undefined;
-    draftRead.current = sessionId;
-    if (first && (back || reuse || use)) return;
-    try {
-      for (const s of SIDES) {
-        const d = JSON.parse(localStorage.getItem(draftKey(sessionId, s)) ?? "null");
-        if (!d?.key || typeof d.text !== "string") continue;
-        // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
-        if (s === side) setRaws((h) => ({ ...h, [d.key]: d.text }));
-        else keptTexts.current[s] = { [d.key]: d.text };
-      }
-    } catch {
-      /* no storage here: the draft is not kept */
-    }
-  }, [workflows, side, back, reuse, use, sessionId]);
-  useEffect(() => {
-    if (draftRead.current !== sessionId || !promptKey || !side) return;
-    try {
-      if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
-        localStorage.setItem(
-          draftKey(sessionId, side),
-          JSON.stringify({ key: promptKey, text: draft }),
-        );
-      else localStorage.removeItem(draftKey(sessionId, side));
-    } catch {
-      /* no storage here */
-    }
-  }, [draft, promptKey, sessionId, side]);
+  const draftSent = useDrafts({
+    sessionId,
+    workflows,
+    workflow,
+    all,
+    held,
+    setRaws,
+    keptRef: keptTexts,
+    restored: !!(back || reuse || use),
+  });
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
   const rules = ruleErrors(workflow, all, raws, fields);
@@ -1465,13 +1365,7 @@ export function Create({
       if ((w.studio?.count?.default ?? 1) > 1 && queuedIds.length > 1)
         setVariations({ runs: queuedIds, kept: [] });
       setReuseNote("");
-      sentDraft.current = prompt ? raws[prompt.key] : undefined;
-      try {
-        localStorage.removeItem(draftKey(sessionId, sideOf(workflow)));
-        localStorage.removeItem(draftKey(sid, sideOf(workflow)));
-      } catch {
-        /* no storage here */
-      }
+      draftSent(prompt ? raws[prompt.key] : undefined, sid, sideOf(workflow));
       return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before

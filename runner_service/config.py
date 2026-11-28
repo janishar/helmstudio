@@ -57,19 +57,13 @@ ROOTS: list[str] = []
 DOWNLOADS = 0
 # residency manager: budget = physical RAM - RESERVE_GB; what stays loaded after a run
 RESERVE_GB = float(os.environ.get("RUNNER_RESERVE_GB", "12"))  # on CUDA: VRAM - RESERVE_GB
-RAM_RESERVE_GB = float(
-    os.environ.get("RUNNER_RAM_RESERVE_GB", "4")
-)  # CUDA: host RAM budget = RAM - this
-DEVICE = os.environ.get(
-    "RUNNER_DEVICE", ""
-)  # torch: force mps | cuda | cpu; empty = the first present
+RAM_RESERVE_GB = float(os.environ.get("RUNNER_RAM_RESERVE_GB", "4"))  # CUDA: host RAM budget = RAM - this
+DEVICE = os.environ.get("RUNNER_DEVICE", "")  # torch: force mps | cuda | cpu; empty = the first present
 # torch, CUDA: how an Fp8Linear multiplies (API 1.33): auto = torch._scaled_mm when this GPU takes it, else dequant
 # per layer; dequant = always dequant (the reference for PSNR checks)
 FP8_MATMUL = os.environ.get("RUNNER_FP8_MATMUL", "auto")
 AFTER_RUN = os.environ.get("RUNNER_AFTER_RUN", "keep_warm")  # unload | keep_warm | keep_pinned
-IDLE_UNLOAD_S = float(
-    os.environ.get("RUNNER_IDLE_UNLOAD_S", "600")
-)  # keep_warm: unload after idle this long
+IDLE_UNLOAD_S = float(os.environ.get("RUNNER_IDLE_UNLOAD_S", "600"))  # keep_warm: unload after idle this long
 # the runner's own files: the LoRA cache (<cache>/loras/<sha256>.safetensors, own LoRAs, LRU) and the shared
 # LoRA hashes; never weights of a model
 CACHE = Path(os.environ.get("RUNNER_CACHE", "~/.cache/helmstudio-runner")).expanduser()
@@ -80,17 +74,12 @@ PINS = {c for c in os.environ.get("RUNNER_PIN", "").split(",") if c}  # componen
 # its token, a file read only when a gated repo is downloaded; absent = anonymous. Never logged or published.
 HF_ENDPOINT = (os.environ.get("HF_ENDPOINT") or "https://huggingface.co").rstrip("/")
 HF_TOKEN_FILE = Path(
-    os.environ.get("RUNNER_HF_TOKEN_FILE")
-    or Path(__file__).resolve().parent.parent / "deploy/secrets/hf_token"
+    os.environ.get("RUNNER_HF_TOKEN_FILE") or Path(__file__).resolve().parent.parent / "deploy/secrets/hf_token"
 )
 
 # plugins that start themselves (contracts/README.md, Plugins: starts itself; API 1.67): one runner per host has
 # RUNNER_PLUGINS on (`make runners`' native env, the Mac app's native runner); RUNNER_PLUGINS_DIRS is `:`-separated,
 # the first folder wins a name (empty: off). Logs go to $HELM_HOME/logs/<plugin>.log.
-PLUGINS_DIRS = [
-    Path(d).expanduser() for d in os.environ.get("RUNNER_PLUGINS_DIRS", "").split(":") if d
-]
-PLUGINS = os.environ.get("RUNNER_PLUGINS", "off").lower() in ("on", "1", "true", "yes") and bool(
-    PLUGINS_DIRS
-)
+PLUGINS_DIRS = [Path(d).expanduser() for d in os.environ.get("RUNNER_PLUGINS_DIRS", "").split(":") if d]
+PLUGINS = os.environ.get("RUNNER_PLUGINS", "off").lower() in ("on", "1", "true", "yes") and bool(PLUGINS_DIRS)
 HELM_HOME = Path(os.environ.get("HELM_HOME") or "~/.helm").expanduser()

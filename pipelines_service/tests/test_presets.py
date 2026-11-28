@@ -14,9 +14,7 @@ import config
 import providers
 from messaging import schemas
 
-PRESETS = {
-    p["id"]: p for p in json.loads((CONTRACTS / "providers/presets.json").read_text())["presets"]
-}
+PRESETS = {p["id"]: p for p in json.loads((CONTRACTS / "providers/presets.json").read_text())["presets"]}
 
 
 @pytest.fixture
@@ -56,9 +54,7 @@ def test_key_status_is_stat_only_over_every_folder(keys, monkeypatch):
     monkeypatch.setattr(pathlib.Path, "open", never)
     monkeypatch.setattr(pathlib.Path, "read_text", never)
     monkeypatch.setattr(pathlib.Path, "read_bytes", never)
-    found = {
-        n: providers.key_found(n) for n in ("deepseek", "fake-openai", "empty", "folder", "nope")
-    }
+    found = {n: providers.key_found(n) for n in ("deepseek", "fake-openai", "empty", "folder", "nope")}
     assert found == {
         "deepseek": True,
         "fake-openai": True,
@@ -93,9 +89,7 @@ async def test_models_are_cut_at_1000_not_64(fake):
 
 
 async def test_compat_sends_no_temperature_and_a_strict_schema_without_a_retry(fake):
-    schema = json.dumps(
-        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
-    )
+    schema = json.dumps({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
     req = {"model": "m", "system": "s", "prompt": "p", "max_tokens": 8, "schema": schema}
     p = server(fake.url, compat=PRESETS["anthropic"]["compat"])
     fake.script["m"] = [{"content": '{"text": "hi"}'}]
@@ -105,13 +99,9 @@ async def test_compat_sends_no_temperature_and_a_strict_schema_without_a_retry(f
     fake.script["m"] = [{"status": 400}, {"content": '{"text": "late"}'}]
     with pytest.raises(providers.CallError):
         await providers.chat("claude", p, req)
-    assert (
-        fake.requests[-1]["body"]["response_format"]["type"] == "json_schema"
-    )  # no json_object retry
+    assert fake.requests[-1]["body"]["response_format"]["type"] == "json_schema"  # no json_object retry
     assert "claude" not in providers._NO_JSON_SCHEMA
-    await providers.chat(
-        "plain", server(fake.url), req | {"schema": None}
-    )  # without compat: as before
+    await providers.chat("plain", server(fake.url), req | {"schema": None})  # without compat: as before
     assert fake.requests[-1]["body"]["temperature"] == 0
 
 

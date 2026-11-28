@@ -116,12 +116,7 @@ def _parked_at(snap) -> tuple[str, str, dict] | None:
 def _picked(r: dict) -> bool:
     """The row waits at a gate whose pick is stored: it resumes once the window has room."""
     p, k = r["pick"], r["parked"]
-    return (
-        r["status"] == "waiting"
-        and bool(p and k)
-        and p["gate"] == k["gate"]
-        and p["visit"] == k["visit"]
-    )
+    return r["status"] == "waiting" and bool(p and k) and p["gate"] == k["gate"] and p["visit"] == k["visit"]
 
 
 def _resume_value(r: dict, at) -> dict | None:
@@ -192,22 +187,17 @@ class Engine:
         return await self._one("SELECT * FROM batches WHERE batch_id = %s", (batch_id,))
 
     async def _row(self, batch_id, row: int) -> dict | None:
-        return await self._one(
-            "SELECT * FROM batch_rows WHERE batch_id = %s AND row = %s", (batch_id, row)
-        )
+        return await self._one("SELECT * FROM batch_rows WHERE batch_id = %s AND row = %s", (batch_id, row))
 
     async def _rows(self, batch_id) -> list[dict]:
-        return await self._all(
-            "SELECT * FROM batch_rows WHERE batch_id = %s ORDER BY row", (batch_id,)
-        )
+        return await self._all("SELECT * FROM batch_rows WHERE batch_id = %s ORDER BY row", (batch_id,))
 
     # --- events: the seq is taken and the state read in one committed transaction, then published
 
     async def _next_seq(self, conn, batch_id) -> dict:
         return await (
             await conn.execute(
-                "UPDATE batches SET seq = seq + 1, updated_at = now() WHERE batch_id = %s "
-                "RETURNING *",
+                "UPDATE batches SET seq = seq + 1, updated_at = now() WHERE batch_id = %s RETURNING *",
                 (batch_id,),
             )
         ).fetchone()
@@ -261,8 +251,7 @@ class Engine:
         await self.publisher.publish("step", b, base | data)
         if step_pub is not None:  # once published: a failed one is published on the next try
             await self._one(
-                "UPDATE batch_rows SET step_pub = %s WHERE batch_id = %s AND row = %s "
-                "AND attempt = %s RETURNING 1",
+                "UPDATE batch_rows SET step_pub = %s WHERE batch_id = %s AND row = %s AND attempt = %s RETURNING 1",
                 (step_pub, batch_id, r["row"], r["attempt"]),
             )
 
@@ -360,12 +349,8 @@ class Engine:
                 if cur.rowcount:
                     async with conn.cursor() as c:
                         await c.executemany(
-                            "INSERT INTO batch_rows (batch_id, row, inputs, seeds) "
-                            "VALUES (%s, %s, %s, %s)",
-                            [
-                                (b, r["row"], Jsonb(r["inputs"]), Jsonb(r.get("seeds") or {}))
-                                for r in d["rows"]
-                            ],
+                            "INSERT INTO batch_rows (batch_id, row, inputs, seeds) VALUES (%s, %s, %s, %s)",
+                            [(b, r["row"], Jsonb(r["inputs"]), Jsonb(r.get("seeds") or {})) for r in d["rows"]],
                         )
                     p = d["snapshot"].get("pipeline")
                     if dn := next((n for n, v in (p or {}).get("nodes", {}).items()
@@ -413,8 +398,7 @@ class Engine:
         end with their runs, which studio has cancelled. A second delivery publishes the cancelled rows again."""
         async with _lock(self.batch_locks, batch_id):
             if not await self._one(
-                "UPDATE batches SET control = 'stop' WHERE batch_id = %s AND status <> ALL(%s) "
-                "RETURNING 1",
+                "UPDATE batches SET control = 'stop' WHERE batch_id = %s AND status <> ALL(%s) RETURNING 1",
                 (batch_id, list(FINAL_BATCH)),
             ):
                 return
@@ -429,20 +413,14 @@ class Engine:
         await self._director_state(batch_id, "off")
         await self._after_row(batch_id)
 
-    async def retry(
-        self, batch_id, row: int, attempt: int, from_step: int | None = None, checkpoint_id=None
-    ) -> None:
+    async def retry(self, batch_id, row: int, attempt: int, from_step: int | None = None, checkpoint_id=None) -> None:
         """Run a row again as `attempt` (new keys, so new runs): from its start, or with from_step > 1 from the
         checkpoint of the step before it. A done batch runs again until it ends. A second delivery (the first
         may have failed after its update) publishes and drives the row again."""
         fork = checkpoint_id if (from_step or 1) > 1 else None
         async with _lock(self.batch_locks, batch_id):
             r = await self._row(batch_id, row)
-            if (
-                not r
-                or r["attempt"] > attempt
-                or (r["attempt"] == attempt and r["status"] != "queued")
-            ):
+            if not r or r["attempt"] > attempt or (r["attempt"] == attempt and r["status"] != "queued"):
                 return
             await self._one(
                 "UPDATE batch_rows SET attempt = %s, status = 'queued', run_id = NULL, take_ids = NULL, "
@@ -457,9 +435,7 @@ class Engine:
             )
             await self._publish_batch(batch_id)
             await self._publish_row(batch_id, row)
-        await self.kick(
-            batch_id
-        )  # the older attempt's thread is forked or deleted when the row is driven
+        await self.kick(batch_id)  # the older attempt's thread is forked or deleted when the row is driven
 
     async def pick(self, d: dict) -> bool:
         """cmd.pipeline.pick: store the answer for a row parked on that gate visit and attempt; kick resumes the
@@ -473,18 +449,10 @@ class Engine:
         if p["gate"] != d["gate"] or p["visit"] != d["visit"]:
             return False
         ids = d.get("take_ids")
-        if ids and (
-            len(set(ids)) != len(ids)
-            or len(ids) > p["keep"]
-            or not set(ids) <= set(p["candidates"])
-        ):
-            log.warning(
-                "pick for %s rejected: not 1..%d of the candidates", thread_id(b, row), p["keep"]
-            )
+        if ids and (len(set(ids)) != len(ids) or len(ids) > p["keep"] or not set(ids) <= set(p["candidates"])):
+            log.warning("pick for %s rejected: not 1..%d of the candidates", thread_id(b, row), p["keep"])
             return False
-        answer = {"gate": d["gate"], "visit": d["visit"]} | (
-            {"take_ids": ids} if ids else {"reject": True}
-        )
+        answer = {"gate": d["gate"], "visit": d["visit"]} | ({"take_ids": ids} if ids else {"reject": True})
         if "agreed" in d:
             answer["agreed"] = d["agreed"]
         if d.get("note") and p.get("kind") == "judge":  # a judge example, seen from the next batch
@@ -557,9 +525,7 @@ class Engine:
             self.again.add(t)
             return
         self.tasks[t] = task = asyncio.create_task(self._drive(batch_id, row))
-        task.add_done_callback(
-            lambda _, t=t, task=task: self.tasks.get(t) is task and self.tasks.pop(t)
-        )
+        task.add_done_callback(lambda _, t=t, task=task: self.tasks.get(t) is task and self.tasks.pop(t))
 
     async def kick(self, batch_id, every_open_row: bool = False) -> None:
         """Drive the batch's picked rows (paused or not) and then, if it may run, its released queued rows,
@@ -575,9 +541,7 @@ class Engine:
             if not ended and batch["control"] != "stop":
                 driven = lambda r: thread_id(batch_id, r["row"]) in self.tasks
                 busy = sum(  # asked of studio, or about to be
-                    r["status"] == "running"
-                    or (driven(r) and (r["status"] == "queued" or _picked(r)))
-                    for r in rows
+                    r["status"] == "running" or (driven(r) and (r["status"] == "queued" or _picked(r))) for r in rows
                 )
                 todo = [r for r in rows if _picked(r)]
                 if batch["control"] == "run":
@@ -673,16 +637,14 @@ class Engine:
             return
         value = {"message_id": d["message_id"], "text": d["text"], "at": d["at"]}
         await self._one(
-            "INSERT INTO director_inbox (batch_id, id, value) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING "
-            "RETURNING 1",
+            "INSERT INTO director_inbox (batch_id, id, value) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING RETURNING 1",
             (d["batch_id"], d["message_id"], Jsonb(value)),
         )
         self._poke_director(d["batch_id"])
 
     async def _director_state(self, batch_id, state: str) -> None:
         if await self._one(
-            "UPDATE directors SET state = %s WHERE batch_id = %s AND state <> %s AND state <> 'off' "
-            "RETURNING 1",
+            "UPDATE directors SET state = %s WHERE batch_id = %s AND state <> %s AND state <> 'off' RETURNING 1",
             (state, batch_id, state),
         ):
             await self._publish_batch(batch_id)
@@ -693,9 +655,7 @@ class Engine:
             self.again.add(t)
             return
         self.tasks[t] = task = asyncio.create_task(self._drive_director(batch_id))
-        task.add_done_callback(
-            lambda _, t=t, task=task: self.tasks.get(t) is task and self.tasks.pop(t)
-        )
+        task.add_done_callback(lambda _, t=t, task=task: self.tasks.get(t) is task and self.tasks.pop(t))
 
     async def _drive_director(self, batch_id) -> None:
         t, delay = thread_id(batch_id, 0), 1.0
@@ -744,11 +704,7 @@ class Engine:
                 "SELECT id, value FROM director_inbox WHERE batch_id = %s ORDER BY created_at",
                 (batch_id,),
             )
-            off = (
-                batch["status"] in FINAL_BATCH
-                or batch["control"] == "stop"
-                or d["wakes"] >= d["max_wakes"]
-            )
+            off = batch["status"] in FINAL_BATCH or batch["control"] == "stop" or d["wakes"] >= d["max_wakes"]
             if off:
                 return await self._director_state(batch_id, "off")
             if not inbox:
@@ -756,20 +712,13 @@ class Engine:
             box = {"messages": [i["value"] for i in inbox if "message_id" in i["value"]],
                    "rows": [i["value"] for i in inbox if "row" in i["value"]],
                    "ids": [i["id"] for i in inbox]}  # fmt: skip
-            await self._one("UPDATE directors SET wakes = wakes + 1 WHERE batch_id = %s RETURNING 1",
-                            (batch_id,))  # fmt: skip
+            await self._one("UPDATE directors SET wakes = wakes + 1 WHERE batch_id = %s RETURNING 1", (batch_id,))
             await self._director_state(batch_id, "thinking")
-            first = (
-                {}
-                if snap.values
-                else {"batch_id": str(batch_id), "row": 0, "attempt": 1, "chat": []}
-            )
+            first = {} if snap.values else {"batch_id": str(batch_id), "row": 0, "attempt": 1, "chat": []}
             await dg.ainvoke(first | {"inbox": box}, run, context=ctx, durability="sync")
         snap = await dg.aget_state(cfg)
         v = snap.values
-        if v.get(
-            "consumed"
-        ):  # what the current wake took, on every path (a wake resumed after a failure too)
+        if v.get("consumed"):  # what the current wake took, on every path (a wake resumed after a failure too)
             await self._one("DELETE FROM director_inbox WHERE batch_id = %s AND id = ANY(%s) RETURNING 1",
                             (batch_id, v["consumed"]))  # fmt: skip
         if not snap.next and v.get("wake", 0) > d["published"]:
@@ -786,9 +735,7 @@ class Engine:
             await self._director_state(batch_id, "off")
         else:
             await self._director_state(batch_id, "idle")
-            if await self._one(
-                "SELECT 1 FROM director_inbox WHERE batch_id = %s LIMIT 1", (batch_id,)
-            ):
+            if await self._one("SELECT 1 FROM director_inbox WHERE batch_id = %s LIMIT 1", (batch_id,)):
                 self.again.add(thread_id(batch_id, 0))  # what came while it thought: its next wake
 
     async def _drive(self, batch_id, row: int) -> None:
@@ -841,17 +788,13 @@ class Engine:
             inp = Command(resume=resume)
         else:
             cancelled = False
-            async with _lock(
-                self.batch_locks, batch_id
-            ):  # the control now, as kick and stop see it
+            async with _lock(self.batch_locks, batch_id):  # the control now, as kick and stop see it
                 batch = await self._batch(batch_id)
                 if batch["control"] != "run" and self.tasks.get(t) is asyncio.current_task():
                     del self.tasks[t]  # not driven: kick (Resume) or stop sees this row again
                     self.again.discard(t)
                 if batch["control"] == "stop":  # never started (or never went on): cancelled
-                    cancelled = await self._end_row(
-                        batch_id, row, r["attempt"], {"status": "cancelled"}
-                    )
+                    cancelled = await self._end_row(batch_id, row, r["attempt"], {"status": "cancelled"})
                     await self._publish_row(batch_id, row)
             if cancelled:
                 await self._after_row(batch_id)
@@ -882,9 +825,7 @@ class Engine:
         if await self.saver.aget_tuple(_cfg(batch_id, row, r["fork"])):
             src = await g.aget_state(_cfg(batch_id, row, r["fork"]))
         if not src or not src.values.get("last"):
-            if await self._end_row(
-                batch_id, row, r["attempt"], {"status": "failed", "error": STATE_GONE}
-            ):
+            if await self._end_row(batch_id, row, r["attempt"], {"status": "failed", "error": STATE_GONE}):
                 await self._publish_row(batch_id, row)
                 await self._after_row(batch_id)
                 await self.kick(batch_id)
@@ -916,9 +857,7 @@ class Engine:
         return await self.deliver(data["batch_id"], data["row"], data["run_id"], result,
                                   int(data["idempotency_key"].split(":")[2]))  # fmt: skip
 
-    async def deliver(
-        self, batch_id, row: int, rid: str, result: dict, attempt: int | None = None
-    ) -> bool:
+    async def deliver(self, batch_id, row: int, rid: str, result: dict, attempt: int | None = None) -> bool:
         """A run's (or a remote call's: rid = its key) result for the thread parked on it."""
         if attempt is None:
             attempt = int(rid.split(":")[2])
@@ -1021,9 +960,7 @@ class Engine:
                     self.unsettled.discard(t)
                     return
                 if status == "waiting" and row == 1:
-                    await conn.execute(
-                        "UPDATE batches SET released = true WHERE batch_id = %s", (batch_id,)
-                    )
+                    await conn.execute("UPDATE batches SET released = true WHERE batch_id = %s", (batch_id,))
             await self._publish_current(batch_id, r, plan, snap, at)
             await self._publish_row(batch_id, row)
             if status == "waiting":  # its window slot is free
@@ -1076,9 +1013,7 @@ class Engine:
                     (batch_id,),
                 )
             if row == 1:
-                await conn.execute(
-                    "UPDATE batches SET released = true WHERE batch_id = %s", (batch_id,)
-                )
+                await conn.execute("UPDATE batches SET released = true WHERE batch_id = %s", (batch_id,))
             d = await (await conn.execute(
                 "SELECT d.node, b.snapshot FROM directors d JOIN batches b USING (batch_id) "
                 "WHERE d.batch_id = %s AND d.state <> 'off' AND b.control <> 'stop'", (batch_id,)
@@ -1087,8 +1022,7 @@ class Engine:
             if on == "all" or (on == "failed" and status == "failed"):
                 value = {"row": row, "status": status, "error": (error or None) and error[:2000]}
                 await conn.execute(
-                    "INSERT INTO director_inbox (batch_id, id, value) VALUES (%s, %s, %s) "
-                    "ON CONFLICT DO NOTHING",
+                    "INSERT INTO director_inbox (batch_id, id, value) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
                     (batch_id, f"row:{row}:{attempt}", Jsonb(value)),
                 )
         if on == "all" or (on == "failed" and status == "failed"):
@@ -1118,8 +1052,7 @@ class Engine:
                 if status not in FINAL_BATCH:
                     status = "stopped" if batch["control"] == "stop" else "done"
                     await self._one(
-                        "UPDATE batches SET status = %s, reason = NULL WHERE batch_id = %s "
-                        "RETURNING 1",
+                        "UPDATE batches SET status = %s, reason = NULL WHERE batch_id = %s RETURNING 1",
                         (status, batch_id),
                     )
                 await self._one("UPDATE directors SET state = 'off' WHERE batch_id = %s AND state <> 'off' "

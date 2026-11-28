@@ -44,9 +44,7 @@ from core.pack import default_model
 log = logging.getLogger("minimax")
 
 STEPS = 6  # distilled to six steps, one output head each
-TEXT_LAYERS = (
-    51  # hidden_states[50] conditions the transformer; a 51-layer stack leaves it un-normed
-)
+TEXT_LAYERS = 51  # hidden_states[50] conditions the transformer; a 51-layer stack leaves it un-normed
 MAX_RATIO = 4.0  # widest ratio rendered (generate.py MAX_RATIO)
 MAX_MP = 20  # the old CLI's --mp cap, in MiB of pixels
 PE_IMAGE_PIXELS = 1 << 20  # an edit's references reach the enhancer at about 1 MP (enhance.py)
@@ -136,14 +134,10 @@ def patch_single_frame_conv() -> None:
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         if hidden_states.shape[2] != 1 or self.temporal_padding != self.kernel_size[0] - 1:
             return conv3d(self, hidden_states)
-        hidden_states = (
-            hidden_states.contiguous()
-        )  # a tile is a view; MPS keeps buffers per view offset
+        hidden_states = hidden_states.contiguous()  # a tile is a view; MPS keeps buffers per view offset
         if self.spatial_padding > 0:
             p = self.spatial_padding
-            hidden_states = torch.nn.functional.pad(
-                hidden_states, (p, p, p, p, 0, 0), mode=self.spatial_padding_mode
-            )
+            hidden_states = torch.nn.functional.pad(hidden_states, (p, p, p, p, 0, 0), mode=self.spatial_padding_mode)
         out = torch.nn.functional.conv2d(hidden_states[:, :, 0], self.weight[:, :, -1], self.bias,
                                          stride=self.stride[1:], dilation=self.dilation[1:])  # fmt: skip
         return out[:, :, None]
@@ -232,9 +226,7 @@ def _norm_out(self, hidden_states, temb, timestep_indices) -> torch.Tensor:
     """MiniMaxH3ImageAdaLayerNormOut.forward in curve form (as _modulation)."""
     shift, scale = self.linear(temb.float()).to(torch.bfloat16).chunk(2, dim=-1)
     hidden_states = self.norm(hidden_states)
-    return hidden_states * (1.0 + scale.index_select(0, timestep_indices)) + shift.index_select(
-        0, timestep_indices
-    )
+    return hidden_states * (1.0 + scale.index_select(0, timestep_indices)) + shift.index_select(0, timestep_indices)
 
 
 def curve_form(dit) -> None:
@@ -272,22 +264,14 @@ def community_hook(component: str, model):
             raise RunError(f"{path.name}: unsloth_format {meta.get('unsloth_format')!r}, not {FP8_FORMAT}: "
                            "not a file this pack reads")  # fmt: skip
         if component == "text_encoder":
-            tags = {
-                bytes(f.get_tensor(k).tolist()).decode()
-                for k in packs.header(path)
-                if k.endswith(".comfy_quant")
-            }
+            tags = {bytes(f.get_tensor(k).tolist()).decode() for k in packs.header(path) if k.endswith(".comfy_quant")}
             want = {
                 "format": "int8_tensorwise",
                 "convrot": True,
                 "convrot_groupsize": CONVROT_GROUP,
             }
-            if json.loads(meta.get("minimax_h3_te", "{}")) != CONVROT_TE or any(
-                json.loads(t) != want for t in tags
-            ):
-                raise RunError(
-                    f"{path.name}: not the 50-layer int8 ConvRot text encoder this pack reads"
-                )
+            if json.loads(meta.get("minimax_h3_te", "{}")) != CONVROT_TE or any(json.loads(t) != want for t in tags):
+                raise RunError(f"{path.name}: not the 50-layer int8 ConvRot text encoder this pack reads")
     if component == "text_encoder":
         return None
 
@@ -361,9 +345,7 @@ def part(model, *names: str):
 
     blocks = MiniMaxH3ImageBlocks()
     sub = SequentialPipelineBlocks.from_blocks_dict({n: blocks.sub_blocks[n] for n in names})
-    return MiniMaxH3ImageModularPipeline(
-        blocks=sub, pretrained_model_name_or_path=str(model.folder())
-    )
+    return MiniMaxH3ImageModularPipeline(blocks=sub, pretrained_model_name_or_path=str(model.folder()))
 
 
 def scheduler(model, sampler: str):
@@ -392,9 +374,7 @@ def clamp(ratio: float) -> float:
 def output_size(canvas: dict, refs: list) -> tuple[int, int]:
     """Canvas auto with references: the first one's aspect (clamped) at the canvas's area; else width × height."""
     if canvas.get("mode") == "auto" and refs:
-        return size_for(
-            clamp(refs[0].width / refs[0].height), canvas["width"] * canvas["height"] / 2**20
-        )
+        return size_for(clamp(refs[0].width / refs[0].height), canvas["width"] * canvas["height"] / 2**20)
     return canvas["width"], canvas["height"]
 
 
@@ -428,9 +408,7 @@ def check_canvas(params: dict, wired: set, models: dict) -> str | None:
 
 
 def canvas(ctx, params: dict, inputs: dict) -> dict:
-    return {
-        "canvas": {"width": params["width"], "height": params["height"], "mode": params["mode"]}
-    }
+    return {"canvas": {"width": params["width"], "height": params["height"], "mode": params["mode"]}}
 
 
 def reduced_ratio(w: int, h: int) -> str:
@@ -454,16 +432,10 @@ def parse_answer(gen: str, ratio_key: str) -> tuple[str, str | None] | None:
 
 def shrink(img: Image.Image) -> Image.Image:
     scale = math.sqrt(PE_IMAGE_PIXELS / (img.width * img.height))
-    return (
-        img
-        if scale >= 1
-        else img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
-    )
+    return img if scale >= 1 else img.resize((round(img.width * scale), round(img.height * scale)), Image.LANCZOS)
 
 
-def edit_content(
-    task_prompt: str, prompt: str, images: list, ratio: str | None = None
-) -> list[dict]:
+def edit_content(task_prompt: str, prompt: str, images: list, ratio: str | None = None) -> list[dict]:
     """The one user message of an edit's enhancement (enhance.py `edit_content`); `ratio`: W:H the user fixed."""
     n = len(images)
     content = [
@@ -474,7 +446,7 @@ def edit_content(
         content += [
             {"type": "text", "text": f"Reference Media:\n- <Picture {i}> [aspect_ratio {reduced_ratio(*img.size)}]"},
             {"type": "image", "image": shrink(img)},
-        ]  # fmt: skip
+        ]
     content.append({"type": "text", "text": (
         "\nUser Editing Instruction (JSON string):\n"
         f"{json.dumps(prompt, ensure_ascii=False)}\n\n"
@@ -490,9 +462,7 @@ def messages(folder, prompt: str, images: list, ratio: str | None) -> tuple[list
     prompts = folder / "prompt"
     if images:
         task = (prompts / "edit" / "task_prompt.txt").read_text(encoding="utf-8")
-        return [
-            {"role": "user", "content": edit_content(task, prompt, images, ratio)}
-        ], "target_aspect_ratio"
+        return [{"role": "user", "content": edit_content(task, prompt, images, ratio)}], "target_aspect_ratio"
     system = (prompts / "t2i" / "system_prompt.txt").read_text(encoding="utf-8").strip()
     task = (prompts / "t2i" / "task_prompt.txt").read_text(encoding="utf-8")
     return [
@@ -566,9 +536,7 @@ def encode(ctx, params: dict, inputs: dict) -> dict:
     text, model = inputs["prompt"], inputs["model"]
     if not text.strip():
         raise RunError(f"{ctx.node}: empty prompt")
-    refs = [
-        r["image"].convert("RGB") for r in params["refs"]
-    ]  # generate.py: alpha dropped, no compositing
+    refs = [r["image"].convert("RGB") for r in params["refs"]]  # generate.py: alpha dropped, no compositing
     te = ctx.component(model, "text_encoder")
     tokenizer, processor = text_tools(model.folder())
     encoder = part(model, "before_encode", "text_encoder")
@@ -591,9 +559,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
     dit = ctx.component(model, "transformer")
     vae = ctx.component(model, "vae")
     render = part(model, "vae_encoder", "denoise")
-    render.update_components(
-        transformer=dit, vae=vae, scheduler=scheduler(model, params["sampler"])
-    )
+    render.update_components(transformer=dit, vae=vae, scheduler=scheduler(model, params["sampler"]))
     seed = noise_seed(inputs["seed"], cond.refs)
     torch.manual_seed(seed)  # LCM's per-step noise comes from the global (device) RNG
     step = [0]
@@ -608,17 +574,14 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
 
     hooks = [dit.register_forward_pre_hook(before), dit.register_forward_hook(after)]
     try:
-        state = render(state=cond.state, height=height, width=width,
-                       generator=torch.Generator().manual_seed(seed))  # fmt: skip
+        state = render(state=cond.state, height=height, width=width, generator=torch.Generator().manual_seed(seed))
     except ValueError as e:
         raise RunError(f"{ctx.node}: {e}") from e
     finally:
         for h in hooks:
             h.remove()
     latents = state.get("latents")
-    return {
-        "latent": Latent(latents.clone(), state.get("output_width"), state.get("output_height"))
-    }
+    return {"latent": Latent(latents.clone(), state.get("output_width"), state.get("output_height"))}
 
 
 @torch.no_grad()
@@ -628,7 +591,6 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
     ctx.check()
     decoder = part(model, "decode")
     decoder.update_components(vae=vae)
-    image = decoder(latents=latent.latents, output_height=latent.height, output_width=latent.width,
-                    output="images")[0]  # fmt: skip
+    image = decoder(latents=latent.latents, output_height=latent.height, output_width=latent.width, output="images")[0]
     ctx.progress(1, 1, "decoding")
     return {"image": image}

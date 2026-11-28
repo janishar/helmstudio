@@ -4,6 +4,7 @@
 // (lib/pipeline-studio). The composer and the step's settings are Create's form parts; the aside's Memory card shows
 // the step's host with what Admin › Hosts has (pin, unload, after the queue, unload all), for admins only: others
 // see it read-only.
+import { plural } from "@/lib/format";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus } from "lucide-react";
@@ -56,7 +57,6 @@ type Take = S<"Take">;
 type Workflow = S<"Workflow">;
 
 const ENV_NAMES: Record<string, string> = { mlx: "MLX", torch: "PyTorch", cuda: "CUDA" };
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 const seedText = (t: Take) => (t.made_with?.seed != null ? `seed ${t.made_with.seed}` : t.title);
 
 export function PipelineStudio({

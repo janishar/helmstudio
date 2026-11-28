@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/helmstudio/helmgo/network"
-	"github.com/helmstudio/helmgo/utility"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/helmstudio/studio_service/api/magic"
@@ -28,25 +27,10 @@ import (
 // run_blocks starts what needs no asking (everything within the limit, else the board frames); the user's Yes asks
 // again with `confirmed` under the same call id.
 
-// magicTools are each tool's args and which it needs.
-var magicTools = map[string][2][]string{
-	"list_boards":      {{"q"}, {}},
-	"create_board":     {{"name", "target"}, {}},
-	"show_board":       {{"board_id"}, {"board_id"}},
-	"magic_kinds":      {{"kind"}, {}},
-	"try_board_edit":   {{"board_id", "base_revision", "ops"}, {"board_id", "base_revision", "ops"}},
-	"edit_board":       {{"board_id", "base_revision", "ops"}, {"board_id", "base_revision", "ops"}},
-	"restore_board":    {{"board_id", "revision", "to"}, {"board_id", "revision", "to"}},
-	"plan_board":       {{"board_id", "blocks", "lane", "stale"}, {"board_id"}},
-	"run_blocks":       {{"board_id", "revision", "blocks", "lane", "stale"}, {"board_id", "revision"}},
-	"make_views":       {{"board_id", "revision", "asset", "views", "model", "width", "height", "advanced"}, {"board_id", "revision", "asset", "views"}},
-	"design_voice":     {{"board_id", "revision", "asset", "design", "line", "language", "voice_id"}, {"board_id", "revision", "asset", "design", "line"}},
-	"save_voice":       {{"board_id", "revision", "asset", "take_id", "consent"}, {"board_id", "revision", "asset", "take_id"}},
-	"board_frame":      {{"board_id", "at"}, {"board_id", "at"}},
-	"send_to_timeline": {{"board_id", "revision", "name"}, {"board_id", "revision"}},
+// isMagicTool is a tool of the board routes (cancel_runs, which also asks them, is answered before).
+func isMagicTool(name string) bool {
+	return slices.ContainsFunc(toolCatalog()[name].Routes, func(r string) bool { return strings.Contains(r, "/v1/studio/magic/") })
 }
-
-func isMagicTool(name string) bool { _, ok := magicTools[name]; return ok }
 
 // magicArgs are every Magic tool's args (tools/catalog.json input); each takes only its own.
 type magicArgs struct {
@@ -100,21 +84,10 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 	if err := json.Unmarshal(raw, &top); err != nil || top == nil || strictArgs(raw, &a) != nil {
 		return toolErr("invalid", "args must be an object of the tool's input")
 	}
-	spec := magicTools[req.Tool]
-	for key := range top {
-		if !slices.Contains(spec[0], key) {
-			return toolErr("invalid", "args: %s does not take %s", req.Tool, key)
-		}
+	if refused := checkArgs(req.Tool, top); refused != nil {
+		return *refused
 	}
-	for _, key := range spec[1] {
-		if _, ok := top[key]; !ok {
-			return toolErr("invalid", "args: %s is required", key)
-		}
-	}
-	if _, ok := top["board_id"]; ok && !utility.IsUUID(a.BoardID) {
-		return toolErr("invalid", "args: board_id must be a uuid")
-	}
-	base := "/v1/studio/magic/boards/" + url.PathEscape(a.BoardID)
+	base := magicBase(a.BoardID)
 	call := s.magicCaller(ctx, caller)
 	pick := map[string]any{}
 	for key, v := range map[string]any{"blocks": a.Blocks, "lane": a.Lane, "stale": a.Stale} {

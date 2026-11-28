@@ -3,9 +3,9 @@
 h3.c is pinned and vendored at runner_service/vendor/h3c (VERSION names the commit); build it first:
 
     make -C runner_service/vendor/h3c h3
-    python3 -I tests/golden/record_h3.py golden t2v fl2va-first fl2va-first-last ref2va-image
-    python3 -I tests/golden/record_h3.py golden ref2va-image-audio ref2va-silent-video
-    python3 -I tests/golden/record_h3.py measure --width 864 --height 480 --frames 124 --steps 4 [--first IMG]
+    python3 -I runner_service/tests/golden/record_h3.py golden t2v fl2va-first fl2va-first-last ref2va-image
+    python3 -I runner_service/tests/golden/record_h3.py golden ref2va-image-audio ref2va-silent-video
+    python3 -I runner_service/tests/golden/record_h3.py measure --width 864 --height 480 --frames 124 --steps 4 [--first IMG]
         [--env H3_ZERO_COPY_WEIGHTS=0] [--extra --ssd-streaming] [--bin <other h3>] [--json out.jsonl]
 
 Stdlib only (ffmpeg/ffprobe on PATH, as h3 needs them). The binary runs with cwd = its own folder (it opens
@@ -43,9 +43,9 @@ import threading
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 VENDOR = REPO / "runner_service" / "vendor" / "h3c"
-GOLDEN = REPO / "runner_service" / "tests" / "golden"
+GOLDEN = Path(__file__).resolve().parent
 SOURCE_IMG = GOLDEN / "minimax-h3-image-edit" / "input-turbo-768-s42.png"
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 GUARD_GB = 58.0  # the child (with its ffmpeg) is stopped past this footprint: the Mac has 64 GB

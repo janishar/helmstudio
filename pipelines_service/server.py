@@ -16,7 +16,6 @@ import asyncio
 import contextlib
 import json
 import logging
-import uuid
 
 from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 from nats.js.errors import KeyDeletedError, KeyNotFoundError
@@ -25,7 +24,7 @@ import agents
 import config
 import providers
 from messaging import schemas
-from messaging.publisher import now
+from messaging.publisher import envelope, now, send
 
 log = logging.getLogger(__name__)
 
@@ -165,14 +164,10 @@ class Executor:
 
     async def _status(self, cmd: dict, seq: int, data: dict) -> None:
         d = cmd["data"]
-        msg = {"type": "evt.run.status", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
-               "owner_id": cmd["owner_id"], "occurred_at": now(),
-               "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
-               "data": {"seq": seq, "attempt": d.get("attempt", 1)} | data}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.run.status is off-contract: {'; '.join(errs[:3])}")
-        await self.js.publish(f"evt.run.{self.host}.{d['session_id']}.status", json.dumps(msg).encode(),
-                              headers={"Nats-Msg-Id": f"{d['run_id']}:{d.get('attempt', 1)}:{seq}"})  # fmt: skip
+        data = {"seq": seq, "attempt": d.get("attempt", 1)} | data
+        msg = envelope("evt.run.status", cmd["job_id"], cmd["owner_id"], cmd["trace"], data)
+        subject = f"evt.run.{self.host}.{d['session_id']}.status"
+        await send(self.js, subject, msg, f"{d['run_id']}:{d.get('attempt', 1)}:{seq}")
 
     async def _cancelled(self, run_id: str) -> bool:
         try:
@@ -186,11 +181,7 @@ class Executor:
             cmd = json.loads(msg.data)
         except ValueError:
             cmd = None
-        if (
-            not isinstance(cmd, dict)
-            or schemas.message_errors(cmd)
-            or cmd.get("type") != "cmd.run.execute"
-        ):
+        if not isinstance(cmd, dict) or schemas.message_errors(cmd) or cmd.get("type") != "cmd.run.execute":
             log.error("rejecting %s: not a cmd.run.execute", msg.subject)
             await msg.term()
             return
@@ -203,9 +194,7 @@ class Executor:
                 return
             await self._status(cmd, 1, {"status": "running", "host": self.host})
             status, error, answer = await execute(self.pool, cmd)
-            if await self._cancelled(
-                d["run_id"]
-            ):  # ponytail: checked around the call, not during it
+            if await self._cancelled(d["run_id"]):  # ponytail: checked around the call, not during it
                 status, error = "cancelled", None
             data = {"status": status, "error": error} | ({"answer": answer} if answer else {})
             await self._status(cmd, 2, data)

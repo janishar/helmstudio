@@ -36,6 +36,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -288,7 +289,7 @@ func importCmd(args []string, stdout, stderr io.Writer) error {
 	parents := map[string][]string{}
 	for _, in := range inputs {
 		p, ok := byAsset[in.AssetID]
-		if ok && p != in.ItemID && len(parents[in.ItemID]) < 64 && !contains(parents[in.ItemID], "helmstudio:"+p) {
+		if ok && p != in.ItemID && len(parents[in.ItemID]) < 64 && !slices.Contains(parents[in.ItemID], "helmstudio:"+p) {
 			parents[in.ItemID] = append(parents[in.ItemID], "helmstudio:"+p)
 		}
 	}
@@ -367,15 +368,6 @@ func printFailed(failed []string, stdout io.Writer) error {
 		return &exitErr{1, nil}
 	}
 	return nil
-}
-
-func contains(ss []string, s string) bool {
-	for _, x := range ss {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // userID resolves an email to its user id with the admin user list; an unknown email is a usage error (exit 2).

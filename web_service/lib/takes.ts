@@ -1,9 +1,9 @@
 // Takes: the gallery's filters, labels and the upload flow (contracts/README.md "Takes, the gallery and uploads").
+import { stored } from "@/lib/hydrated";
 import { api, ApiError, errorText, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import { audioFormat, secondsText } from "@/lib/media";
 import { optimise, type Limits, type Optimised, type Step } from "@/lib/optimise";
-import { clock } from "@/lib/runs";
 import { prettyModel } from "@/lib/workflow";
 
 type Take = S<"Take">;
@@ -26,20 +26,8 @@ const PROJECT = "helm.project";
 
 /** The session last opened in Create in this browser: the Gallery's "This project only" (a convenience: gone when
  * the store is cleared). */
-export function lastProject(): string | null {
-  try {
-    return localStorage.getItem(PROJECT);
-  } catch {
-    return null;
-  }
-}
-export function rememberProject(id: string) {
-  try {
-    localStorage.setItem(PROJECT, id);
-  } catch {
-    /* private window */
-  }
-}
+export const lastProject = () => stored.get(PROJECT);
+export const rememberProject = (id: string) => stored.set(PROJECT, id);
 
 /** The list query for a filter, a search text and a page cursor: only what is set (a blank search is none). */
 export function takeQuery(f: Filter, q: string, cursor?: string | null) {

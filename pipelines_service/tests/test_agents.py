@@ -64,8 +64,7 @@ def judged(checks: list[list[bool]], ranking=None) -> str:
     return json.dumps({"takes": takes, "ranking": ranking or list(range(1, len(checks) + 1))})
 
 
-PASS3 = judged([[False, True, True], [True, True, False], [True, True, True], [True, False, True]],
-               [1, 3, 2, 4])  # fmt: skip
+PASS3 = judged([[False, True, True], [True, True, False], [True, True, True], [True, False, True]], [1, 3, 2, 4])
 FAIL = judged([[False, True, True]] * 4)
 
 
@@ -163,9 +162,7 @@ async def test_auto_judge_keeps_the_best_of_4_and_records_the_decision(pool):
     assert json.loads(req["inputs"]["ask.schema"])["required"] == ["takes", "ranking"]
     assert "The brief:\n<<<\na fox 1 with @rex\n>>>" in req["inputs"]["ask.prompt"]
     assert js.rows()[1]["status"] == "running" and js.rows()[1]["node"] == "judge"
-    await finish(
-        e, studio, "judge", twice=True
-    )  # a result delivered twice is dropped the second time
+    await finish(e, studio, "judge", twice=True)  # a result delivered twice is dropped the second time
     still = [studio.runs[f"{b}:1:1:still:0:{i}"]["take_ids"][0] for i in range(4)]
     clip = studio.runs[f"{b}:1:1:clip:0:0"]["req"]["inputs"]
     assert clip["keyframes.images"] == [{"image": {"take_id": still[2]}}] and takes == [still[3]]
@@ -213,9 +210,7 @@ async def test_suggest_parks_with_the_pick_preselected_and_records_agreement(poo
     j2 = cell(js, "judge", 2)["attempts"][0]["judged"]
     assert (j1["agreed"], j2["agreed"]) == (True, False) and j2["suggested"] == p2["suggested"]
     items = await memory.items(e.store, OWNER, PIPELINE)
-    assert [(i["kind"], i["key"], i["text"], i["agreed"]) for i in items] == [
-        ("judge_example", "judge", note, False)
-    ]
+    assert [(i["kind"], i["key"], i["text"], i["agreed"]) for i in items] == [("judge_example", "judge", note, False)]
     assert items[0]["kept"] == other and len(items[0]["rejected"]) == 3
     assert items[0]["source"] == {
         "kind": "pick",
@@ -278,9 +273,8 @@ async def test_decide_routes_along_its_edges_and_an_undeclared_route_fails(pool)
     studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
     retry, bad = '{"route": "retry", "reason": "miss"}', '{"route": "maybe", "reason": "?"}'
     studio.answer_for = lambda req: (
-        PASS3 if node_of(req["idempotency_key"]) == "judge"
-        else retry if req["row"] == 1 else bad
-    )  # fmt: skip
+        PASS3 if node_of(req["idempotency_key"]) == "judge" else retry if req["row"] == 1 else bad
+    )
     check = {"kind": "decide", "question": "Animate it, or make the stills again?",
              "from": ["$prompt", "judge.reasons"], "routes": {"retry": "miss", "accept": "ok"},
              "model": "auto", "workflow": "echo-ask"}  # fmt: skip
@@ -336,9 +330,7 @@ async def test_memory_reads_the_batch_snapshot_and_writes_for_the_next_batch(poo
     assert batch["memory"]["notes"] == 1 and batch["memory"]["examples"] == 0
     reads = [x for x in steps(js, 2) if x["part"] == "memory" and x["node"] == "mem"]
     assert len(reads[0]["memory"]["read"]) == 1  # row 2 read the snapshot, not row 1's note
-    verdict = next(
-        x for x in steps(js) if x["part"] == "verdict"
-    )  # the judge's reads are on its step too
+    verdict = next(x for x in steps(js) if x["part"] == "verdict")  # the judge's reads are on its step too
     assert verdict["memory"] == {"read": verdict["decision"]["memory_read"], "wrote": []}
     assert len(verdict["memory"]["read"]) == 1
     assert "foxes face left" in studio.answer_for.prompts[0]
@@ -355,9 +347,7 @@ async def test_memory_reads_the_batch_snapshot_and_writes_for_the_next_batch(poo
     assert "reason 3" in studio.runs[f"{b2}:1:1:judge:0:0"]["req"]["inputs"]["ask.prompt"]
     # the Memory panel's requests
     lst = await memory.answer(e.store, json.dumps(seed | {"op": "list", "kind": "note"}).encode())
-    assert (
-        len(lst["items"]) == 3 and lst["items"][0]["created_at"] >= lst["items"][-1]["created_at"]
-    )
+    assert len(lst["items"]) == 3 and lst["items"][0]["created_at"] >= lst["items"][-1]["created_at"]
     gone = {"owner_id": OWNER, "op": "delete", "pipeline_id": PIPELINE, "item_id": wrote[0]}
     assert await memory.answer(e.store, json.dumps(gone).encode()) == {"deleted": 1}
     assert (await memory.answer(e.store, json.dumps(gone).encode()))["code"] == "not_found"
@@ -413,9 +403,7 @@ async def test_decisions_are_replayed_on_resume_retry_and_run_again(pool):
     assert d3["replayed_from"] == dec["id"] and d3["replay_key"].startswith(f"{b2}:1:judge:1:")
     picked = studio.runs[f"{b2}:1:1:still:0:2"]["take_ids"]
     assert d3["judge"]["picked"] == picked  # this batch's take at the same position
-    assert (
-        d3["seen"] == []
-    )  # the model saw nothing in this batch (the source decision holds what it saw)
+    assert d3["seen"] == []  # the model saw nothing in this batch (the source decision holds what it saw)
     # a Retry inside the Run-again batch asks the model
     s3 = steps(js2)
     sub = next(x for x in s3 if (x["node"], x["part"]) == ("judge", "submit"))
@@ -448,9 +436,7 @@ def test_prompts_keep_their_instructions_and_room_for_the_re_ask():
     examples = [{"kept": ["x"], "text": "é" * 2000}] * 16
     p = agents.judge_prompt("a fox", 4, crit, examples, "n" * 40000)
     assert len(p) + len(agents.REASK.format(error="e" * 2000)) + 2 <= agents.PROMPT_MAX
-    assert (
-        p.startswith(agents.DATA) and p.endswith("passes all of them.") and "[must] " + MUST[0] in p
-    )
+    assert p.startswith(agents.DATA) and p.endswith("passes all of them.") and "[must] " + MUST[0] in p
     w = agents.write_prompt("Fix it.", "a fox @rex", [("judge.reasons", "r" * 40000)], ["rex"])
     assert w.endswith("add no others): @rex") and "Reviewer's reasons:\n<<<\nrrr" in w
     assert len(w) <= agents.PROMPT_MAX - agents.RESERVE
@@ -496,8 +482,7 @@ async def test_machine_failures_after_a_judge_gave_up_pause_the_batch(pool, then
     studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
     studio.answer_for = Script(judge=[FAIL])
     br = {"pass": "clip", "fail": "still", "max": 1, "then": "clip"} if then else "clip"
-    p = doc("auto", [["inputs", "mem"], ["mem", "still"], ["still", "judge"], ["judge", br],
-                     ["clip", "out"]])  # fmt: skip
+    p = doc("auto", [["inputs", "mem"], ["mem", "still"], ["still", "judge"], ["judge", br], ["clip", "out"]])
     del p["nodes"]["rewrite"], p["nodes"]["review"]
     e = engine(pool, studio, js)
     await e.submit(submit(b, p, 4))
@@ -533,9 +518,7 @@ async def test_a_write_reads_memory_and_allows_only_the_users_mentions(pool):
 
 async def test_a_judge_short_of_keep_names_the_counts_and_a_failed_criterion(pool):
     studio, js, b = FakeStudio(), FakeJS(), str(uuid.uuid4())
-    one = judged(
-        [[False, True, True], [True, True, True], [False, True, True], [True, False, True]]
-    )
+    one = judged([[False, True, True], [True, True, True], [False, True, True], [True, False, True]])
     studio.answer_for = Script(judge=[one])
     judge = doc()["nodes"]["judge"] | {"keep": 2, "mode": "auto"}
     e = engine(pool, studio, js)
@@ -543,9 +526,7 @@ async def test_a_judge_short_of_keep_names_the_counts_and_a_failed_criterion(poo
     await finish(e, studio, "judge")
     v = next(x for x in steps(js) if x["part"] == "verdict")
     assert v["what"] == f"1 of 4 passed, 2 needed; first failed: {MUST[0]}"
-    assert (
-        v["decision"]["judge"]["first_failed"] is None
-    )  # the best take passes (fixtures/decisions)
+    assert v["decision"]["judge"]["first_failed"] is None  # the best take passes (fixtures/decisions)
     assert cell(js, "judge")["attempts"][0]["judged"]["first_failed"] == MUST[0]
 
 
@@ -611,7 +592,7 @@ async def test_a_pick_at_ask_me_goes_on(pool):
 
 async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict(pool):
     """pipelines.judge.test (API 1.28): the prompt as a batch's judge would ask, and the verdict from the answer."""
-    import judge_test
+    import judge
 
     e = engine(pool, FakeStudio(), FakeJS())
     for text, key in (("faces left", "briefs"), ("ignore me", "other")):
@@ -626,31 +607,28 @@ async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict
     crit = {"must": MUST, "nice": NICE}
     req = {"op": "prompt", "owner_id": OWNER, "pipeline_id": PIPELINE, "node": "judge", "criteria": crit,
            "n": 4, "brief": "a fox", "memory": {"limit": 8, "key": "briefs"}}  # fmt: skip
-    got = await judge_test.answer(e.store, json.dumps(req).encode())
+    got = await judge.answer(e.store, json.dumps(req).encode())
     assert got["prompt"] == agents.judge_prompt("a fox", 4, crit, [], "faces left")
     assert got["template"] == agents.JUDGE and got["max_tokens"] == agents.judge_tokens(4, 3)
     assert json.loads(got["schema"]) == agents.judge_schema(4, 3)
     other = req | {"owner_id": str(uuid.uuid4())}  # another owner's namespace is empty
-    assert (
-        "faces left" not in (await judge_test.answer(e.store, json.dumps(other).encode()))["prompt"]
-    )
+    assert "faces left" not in (await judge.answer(e.store, json.dumps(other).encode()))["prompt"]
     ids = [str(uuid.uuid4()) for _ in range(4)]
     v = {"op": "verdict", "criteria": crit, "keep": 1, "take_ids": ids, "text": PASS3}
-    got = await judge_test.answer(e.store, json.dumps(v).encode())
+    got = await judge.answer(e.store, json.dumps(v).encode())
     assert got["verdict"] == "pass" and got["picked"] == [ids[2]]
     assert [t["passes"] for t in got["takes"]] == [False, True, True, False]
     assert got["takes"][0]["reason"] == "reason 1"
-    bad = await judge_test.answer(e.store, json.dumps(v | {"text": "not json"}).encode())
+    bad = await judge.answer(e.store, json.dumps(v | {"text": "not json"}).encode())
     assert bad["code"] == "answer" and bad["error"].startswith("answer did not match")
-    nope = await judge_test.answer(e.store, json.dumps(v | {"keep": 0}).encode())
+    nope = await judge.answer(e.store, json.dumps(v | {"keep": 0}).encode())
     assert nope["code"] == "invalid"
 
 
 async def test_a_script_write_reads_the_cast_rechecks_once_and_records_the_script(pool):
     studio, js, b, tools = FakeStudio(), FakeJS(), str(uuid.uuid4()), FakeTools()
     good = "@rex (calm): Hello.\n\n@rex: Bye."
-    studio.answer_for = Script(judge=[FAIL, PASS3], rewrite=['{"script": "@bob: hi"}',
-                                                             json.dumps({"script": good})])  # fmt: skip
+    studio.answer_for = Script(judge=[FAIL, PASS3], rewrite=['{"script": "@bob: hi"}', json.dumps({"script": good})])
     rewrite = doc()["nodes"]["rewrite"] | {"from": ["$prompt"], "form": "script"}
     e = engine(pool, studio, js, tool=tools)
     await run_to_judge(e, studio, js, b, doc("auto", rewrite=rewrite))
@@ -669,9 +647,7 @@ async def test_a_script_write_reads_the_cast_rechecks_once_and_records_the_scrip
 
 async def test_a_script_cast_pages_through_the_library(pool):
     studio, js, b, tools = FakeStudio(), FakeJS(), str(uuid.uuid4()), FakeTools()
-    tools.library_pages = (
-        3  # 3 pages: every element with a voice is in the cast, not only the first 20
-    )
+    tools.library_pages = 3  # 3 pages: every element with a voice is in the cast, not only the first 20
     studio.answer_for = Script(judge=[FAIL, PASS3], rewrite=[json.dumps({"script": "@rex2: Hi."})])
     rewrite = doc()["nodes"]["rewrite"] | {"from": ["$prompt"], "form": "script"}
     e = engine(pool, studio, js, tool=tools)

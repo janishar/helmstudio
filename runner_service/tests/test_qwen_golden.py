@@ -1,4 +1,4 @@
-"""The qwen_image pack against the old studio's goldens (tests/golden/qwen-image at the repo root): runs the pack's
+"""The qwen_image pack against the old studio's goldens (tests/golden/qwen-image): runs the pack's
 qwen-image workflow in-process (no NATS: graph.run with a real residency manager on the GPU) with a golden's
 settings and compares the PNG with tests/golden/compare.py. Loads real weights: never alongside another process
 that holds a model.
@@ -26,7 +26,7 @@ from pathlib import Path
 
 import pytest
 
-GOLDEN = Path(__file__).resolve().parents[2] / "tests" / "golden"
+GOLDEN = Path(__file__).resolve().parent / "golden"
 CASES = ["turbo-768-s42", "turbo-1024-s7", "turbo-1344x768-s123", "base-768-s42"]
 EDITS = [
     "edit-e1",
@@ -98,15 +98,11 @@ class Bench:
         nodes = json.loads(json.dumps(self.workflow["nodes"]))
         nodes["prompt"]["params"]["text"] = case["prompt"]
         nodes["seed"]["params"]["seed"] = case["seed"]
-        if (
-            case["width"] and case["height"]
-        ):  # an edit without a size is sized from its last reference
+        if case["width"] and case["height"]:  # an edit without a size is sized from its last reference
             nodes["canvas"]["params"] |= {"width": case["width"], "height": case["height"]}
             nodes["canvas"]["params"]["mode"] = "fixed" if case.get("refs") else "auto"
         refs = case.get("refs", [])
-        nodes["encode"]["params"]["refs"] = [
-            {"image": ref_value(i, r["file"])} for i, r in enumerate(refs, 1)
-        ]
+        nodes["encode"]["params"]["refs"] = [{"image": ref_value(i, r["file"])} for i, r in enumerate(refs, 1)]
         nodes["model"]["params"] |= {"variant": case["variant"], "precision": case["precision"]}
         nodes["encode"]["params"]["transparent"] = case["transparent"]
         nodes["sample"]["params"]["steps"] = case["steps_arg"]
@@ -135,9 +131,7 @@ class Bench:
             if phase == "sampling":
                 out["steps"].append((step, time.monotonic()))
                 if step == cancel_after_step and "at" not in flag:
-                    threading.Timer(
-                        cancel_delay, lambda: flag.setdefault("at", time.monotonic())
-                    ).start()
+                    threading.Timer(cancel_delay, lambda: flag.setdefault("at", time.monotonic())).start()
 
         async def output(index, data, **meta):
             out["png"], out["meta"] = data, meta
@@ -228,9 +222,7 @@ def checks(bench: Bench) -> dict:
     reseed = bench.run(nodes)
     nodes["seed"]["params"]["seed"] = 44
     cancel = bench.run(nodes, cancel_after_step=2, cancel_delay=0.5)
-    after_cancel = [
-        s for s, at in cancel["steps"] if cancel["cancelled"] and at > cancel["cancelled"]
-    ]
+    after_cancel = [s for s, at in cancel["steps"] if cancel["cancelled"] and at > cancel["cancelled"]]
     step_s = cancel["steps"][1][1] - cancel["steps"][0][1]
     loaded = lt.measure_gb()
     res.after_run("unload")
@@ -291,9 +283,7 @@ def test_turbo_processor_gives_the_same_ids_as_base():
 
 
 def edit_goldens() -> list[dict]:
-    return [
-        json.loads(p.read_text()) for p in sorted((GOLDEN / "qwen-image-edit").glob("edit-*.json"))
-    ]
+    return [json.loads(p.read_text()) for p in sorted((GOLDEN / "qwen-image-edit").glob("edit-*.json"))]
 
 
 def test_edit_prompt_template_for_0_1_2_references():
@@ -304,9 +294,7 @@ def test_edit_prompt_template_for_0_1_2_references():
     assert prompt_text("a fox", 0) == TEMPLATE.format("a fox")  # text-to-image: unchanged
     assert prompt_text("edit <image1>", 1) == TEMPLATE.format(slot.format(1) + "edit <image1>")
     two = prompt_text("x", 2)
-    assert two == TEMPLATE.format(
-        f"{slot.format(1)} {slot.format(2)}x"
-    )  # pipeline_qwenimage21.py:259-261
+    assert two == TEMPLATE.format(f"{slot.format(1)} {slot.format(2)}x")  # pipeline_qwenimage21.py:259-261
     assert two.count("<|image_pad|>") == 2
 
 
@@ -343,9 +331,7 @@ def test_edit_noise_seed_and_size_match_the_goldens():
         pytest.skip("no edit goldens in tests/golden/qwen-image-edit yet")
     for c in cases:
         refs = [images.decode((GOLDEN / r["file"]).read_bytes(), "t") for r in c["refs"]]
-        assert [[im.mode, list(im.size)] for im in refs] == [
-            [r["mode"], r["size"]] for r in c["refs"]
-        ]
+        assert [[im.mode, list(im.size)] for im in refs] == [[r["mode"], r["size"]] for r in c["refs"]]
         assert noise_seed(c["seed"], refs) == c["noise_seed"]
         mode = "fixed" if c["width"] and c["height"] else "auto"
         canvas = {"mode": mode, "width": c["width"] or 1024, "height": c["height"] or 1024}
@@ -371,9 +357,7 @@ def test_enhance_answer_parse_and_canvas():
 
     one = '{"rewritten_prompt": "a {fox}", "wh_ratio": "16:9"}'
     assert pe_answer(f"plan {{x}}</think>\n\n{one}") == ("a {fox}", "16:9", "")
-    assert (
-        pe_answer(one) == ("a {fox}", "16:9", "") and pe_answer("</think> no json") is None
-    )  # think off: no </think>
+    assert pe_answer(one) == ("a {fox}", "16:9", "") and pe_answer("</think> no json") is None  # think off: no </think>
     assert pe_answer('{"rewritten_prompt": " "} {"rewrited_prompt": "b", "ratio_follow": "<image2>"}') == ("b", "", "<image2>")  # fmt: skip
     auto = {"mode": "auto", "width": 1024, "height": 1024}
     refs = [Image.new("RGB", (300, 100)), Image.new("RGB", (100, 100))]
@@ -382,12 +366,9 @@ def test_enhance_answer_parse_and_canvas():
         "height": 768,
         "mode": "fixed",
     }  # the canvas's area
-    assert pe_canvas(auto, [], "21:9", "") == pe_canvas(
-        auto, [], "16:9", ""
-    )  # snapped to the old studio's seven
+    assert pe_canvas(auto, [], "21:9", "") == pe_canvas(auto, [], "16:9", "")  # snapped to the old studio's seven
     assert (
-        pe_canvas(auto, [], "", "") == auto
-        and pe_canvas(auto | {"mode": "fixed"}, [], "16:9", "")["mode"] == "fixed"
+        pe_canvas(auto, [], "", "") == auto and pe_canvas(auto | {"mode": "fixed"}, [], "16:9", "")["mode"] == "fixed"
     )
     assert pe_canvas(auto, refs, "", "<image1>") == {
         "width": 1760,
@@ -440,9 +421,7 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("cases", nargs="*", default=CASES[:1], choices=CASES + EDITS + [ENHANCE])
     ap.add_argument("--checks", action="store_true")
-    ap.add_argument(
-        "--record", action="store_true", help="write the enhance case's .txt and .png first"
-    )
+    ap.add_argument("--record", action="store_true", help="write the enhance case's .txt and .png first")
     ap.add_argument("--out", type=Path)
     args = ap.parse_args()
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -450,9 +429,7 @@ if __name__ == "__main__":
     failed = False
     for name in args.cases:
         r = case(b, name, args.out, args.record)
-        failed |= (
-            r["psnr"] < 30 or r.get("psnr_cuda", CUDA_BAR) < CUDA_BAR or not r.get("text_ok", True)
-        )
+        failed |= r["psnr"] < 30 or r.get("psnr_cuda", CUDA_BAR) < CUDA_BAR or not r.get("text_ok", True)
         if "text" in r:
             print("enhanced:", r["text"], "| canvas:", r["meta"].get("width"), r["meta"].get("height"),
                   "| enhancer_gb:", r["enhancer_gb"], "| text equal:", r["text_ok"], flush=True)  # fmt: skip

@@ -31,6 +31,7 @@ type TimelineEditError struct {
 }
 
 func (e *TimelineEditError) Error() string { return e.Detail }
+func (*TimelineEditError) unprocessable()  {}
 
 // EditTimeline applies body.Ops in order to the sequence at body.BaseRevision and stores the result as one user
 // revision, or (dry run) answers it without storing.

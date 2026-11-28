@@ -19,14 +19,14 @@ import {
   type MagicRequest,
   type Takes,
   type Transition,
+  estText,
 } from "@/lib/magic";
-import { estText } from "@/lib/magic-fixture";
 import type { Estimate, Kinds } from "@/lib/magic-standard";
 
 export type Send = S<"MagicSend">;
 export type SendPlan = S<"MagicSendPlan">;
 
-/** What the page sends through: studio's routes for one board (null in the fake mode). */
+/** What the page sends through: studio's routes for one board (null: none). */
 export type SendApi = {
   /** the board's id: a new SendApi each render is the same one */
   key: string;

@@ -2,9 +2,15 @@
 // Speech on the stage (docs/mock/CreateAudio.dc.html): the take's waveform with a playhead, play / pause, the time,
 // a scrubber, Loop and the sound switch; and the shared "play one clip at a time" player the voice picker's play
 // buttons use.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { clock } from "@/lib/runs";
+import { clock } from "@/lib/format";
+import {
+  followDetail,
+  peaksFailed,
+  peaksOf as cachedPeaks,
+  type Peaks,
+} from "@/lib/timeline-detail";
 import { ErrorNote } from "@/components/kit";
 import type { S } from "@/lib/api";
 import { Range } from "@/components/range";
@@ -25,29 +31,22 @@ export function peaksOf(samples: Float32Array, n = BARS): number[] {
   return top > 0 ? out.map((x) => x / top) : out;
 }
 
-/** The clip's bars, once it is fetched and decoded; null until then (or where the browser cannot decode); `failed`
- * when the clip could not be fetched or decoded. */
+/** The clip's bars, once it is fetched and decoded (lib/timeline-detail's cached decoder, keyed by the url); null
+ * until then (or where the browser cannot decode); `failed` when the clip could not be fetched or decoded. */
 export function usePeaks(url?: string) {
-  const [peaks, setPeaks] = useState<{ url: string; bars: number[] | null } | null>(null);
+  const [got, setGot] = useState<{ url: string; p: Peaks | null } | null>(null);
   useEffect(() => {
-    if (!url || typeof AudioContext === "undefined") return;
-    let stop = false;
-    const ctx = new AudioContext();
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then((b) => ctx.decodeAudioData(b))
-      .then((a) => !stop && setPeaks({ url, bars: peaksOf(a.getChannelData(0)) }))
-      .catch(() => !stop && setPeaks({ url, bars: null }))
-      .finally(() => void ctx.close().catch(() => undefined));
-    return () => {
-      stop = true;
+    if (!url || typeof OfflineAudioContext === "undefined") return;
+    const read = () => {
+      const p = cachedPeaks(url, url, 0);
+      if (p || peaksFailed(url)) setGot({ url, p });
     };
+    queueMicrotask(read);
+    return followDetail(read);
   }, [url]);
-  const mine = peaks && peaks.url === url ? peaks : null;
-  return { bars: mine?.bars ?? null, failed: !!mine && !mine.bars };
+  const mine = got && got.url === url ? got : null;
+  const bars = useMemo(() => (mine?.p ? peaksOf(mine.p[0]) : null), [mine]);
+  return { bars, failed: !!mine && !mine.p };
 }
 
 /** A dialogue's speakers' colours, by first appearance (docs/mock/CreateAudio.dc.html: Mara a2, Jon a1). */

@@ -1,6 +1,7 @@
 package lora
 
 import (
+	"cmp"
 	"fmt"
 	"maps"
 	"regexp"
@@ -219,7 +220,7 @@ func Normalise(name string, header Header, block registry.LoraBlock, family stri
 	switch n := len(out.Unapplied); {
 	case out.Applied == 0:
 		out.Error = fmt.Sprintf("LoRA %s: 0 of %d keys apply to %s (%s keys); is it for another model?", name, out.Total,
-			family, cmpOr(style, "unrecognised"))
+			family, cmp.Or(style, "unrecognised"))
 	case n > 0:
 		out.Error = fmt.Sprintf("LoRA %s: %d of %d keys do not apply to %s: %s", name, n, out.Total, family,
 			strings.Join(out.Unapplied[:min(3, n)], ", "))
@@ -228,14 +229,6 @@ func Normalise(name string, header Header, block registry.LoraBlock, family stri
 		}
 	}
 	return out
-}
-
-// cmpOr is a, or b when a is "".
-func cmpOr(a, b string) string {
-	if a == "" {
-		return b
-	}
-	return a
 }
 
 // Check runs the upload checks that follow the header's (contracts/README.md "LoRA upload checks"): a style, every
@@ -262,9 +255,9 @@ func Check(header Header, ignore []string) (style string, rank int, detail strin
 		}
 		switch role {
 		case "A":
-			parts[part].a = cmpOr(parts[part].a, key)
+			parts[part].a = cmp.Or(parts[part].a, key)
 		case "B":
-			parts[part].b = cmpOr(parts[part].b, key)
+			parts[part].b = cmp.Or(parts[part].b, key)
 		}
 	}
 	order, largest := slices.Sorted(maps.Keys(parts)), int64(0)

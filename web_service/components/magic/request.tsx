@@ -15,8 +15,15 @@ import { turnMenu } from "@/components/magic/menus";
 import { api, ok, type S } from "@/lib/api";
 import { useVoices } from "@/lib/library";
 import { machines, pinnedMachine, runnerWhy } from "@/lib/run-on";
-import { secs, type Block, type Doc, type MagicRequest, type Ref, type Status } from "@/lib/magic";
-import { estText } from "@/lib/magic-fixture";
+import {
+  estText,
+  secs,
+  type Block,
+  type Doc,
+  type MagicRequest,
+  type Ref,
+  type Status,
+} from "@/lib/magic";
 import {
   FIELD_LABEL,
   KEYS,

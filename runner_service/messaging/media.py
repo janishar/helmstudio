@@ -17,7 +17,6 @@ weight holder.
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -31,9 +30,10 @@ from PIL import Image
 
 from config import ENV, HOST
 from core import images, media
-from core.download import Cancelled
+from core.graph import Cancelled
 from core.media import MediaError
-from messaging import cancels, schemas
+from messaging import cancels
+from messaging.delivery import dead_letter, decode, keep_alive
 from messaging.models import ModelEvents
 
 log = logging.getLogger("media")
@@ -68,25 +68,15 @@ class MediaJobs:
         self.job: str | None = None
 
     async def handle(self, msg) -> None:
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.media.job":
-            errs = [f"not a media job: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.media.job", "media job")
         if errs:
-            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-            with contextlib.suppress(Exception):
-                await self.js.publish(f"dlq.{msg.subject}", msg.data)
-            with contextlib.suppress(Exception):
-                await msg.term()
+            await dead_letter(self.js, msg, errs)
             return
         meta = getattr(msg, "metadata", None)
         events = MediaEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
         job_id, data = cmd["job_id"], cmd["data"]
         self.job, cancel = job_id, asyncio.Event()
-        beat = asyncio.create_task(self._wip(msg))
+        beat = asyncio.create_task(keep_alive(msg, WIP))
         tmp = Path(tempfile.mkdtemp(prefix="media-"))  # 0700
         stop = failure = result = None
         extra: dict = {}
@@ -100,12 +90,8 @@ class MediaJobs:
                     await events.publish("status", {"status": "running", "encoder": planned})
                     result, encoder = await self.export(data, events, tmp, cancel)
                     extra = {"encoder": encoder}
-                elif (
-                    data["kind"] == "bake"
-                ):  # API 1.82: an export's conform with studio's own graph
-                    await events.publish(
-                        "status", {"status": "running", "encoder": self.encoders[0]}
-                    )
+                elif data["kind"] == "bake":  # API 1.82: an export's conform with studio's own graph
+                    await events.publish("status", {"status": "running", "encoder": self.encoders[0]})
                     result, encoder = await self.export(data, events, tmp, cancel, "bake")
                     extra = {"encoder": encoder}
                 elif data["kind"] == "mux":
@@ -134,9 +120,7 @@ class MediaJobs:
                     await stop()
             shutil.rmtree(tmp, ignore_errors=True)
             self.job = None
-        log.info(
-            "media job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else ""
-        )
+        log.info("media job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else "")
         body: dict = {"status": status}
         if failure is not None:
             body["failure"] = {"class": failure.cls, "detail": str(failure) or failure.cls}
@@ -147,12 +131,6 @@ class MediaJobs:
             await msg.ack_sync()
         except Exception:  # not acked: redelivered after ACK_WAIT, and the job runs again
             log.exception("media job %s: could not report %s", job_id, status)
-
-    async def _wip(self, msg) -> None:
-        while True:
-            await asyncio.sleep(WIP)
-            with contextlib.suppress(Exception):
-                await msg.in_progress()
 
     async def _fetch(
         self, inputs: list[dict], tmp: Path, cancel: asyncio.Event, done=None
@@ -178,20 +156,12 @@ class MediaJobs:
             if got is None:
                 raise MediaError("input", f"input {n} is missing")
             if got[0] > limit:
-                why = (
-                    f"larger than {LIMIT >> 30} GB"
-                    if limit == LIMIT
-                    else "past the job's room on disk"
-                )
+                why = f"larger than {LIMIT >> 30} GB" if limit == LIMIT else "past the job's room on disk"
                 raise MediaError("input", f"input {n} is {why}")
             total += got[0]
             info = await asyncio.to_thread(media.probe, raw)
             media.check_kind(info, it["kind"])
-            ext = (
-                info["container"]
-                if it["kind"] in ("video", "audio")
-                else IMAGE_EXT[info["video"]["codec_name"]]
-            )
+            ext = info["container"] if it["kind"] in ("video", "audio") else IMAGE_EXT[info["video"]["codec_name"]]
             paths.append(raw.rename(tmp / f"in{n}.{ext}"))
             infos.append(info)
             if done:
@@ -222,9 +192,7 @@ class MediaJobs:
         if mode == "copy":
             for e in ex["expect"]:
                 if e["input"] >= len(infos):
-                    raise MediaError(
-                        "invalid", f"expect names input {e['input']}, which is not an input"
-                    )
+                    raise MediaError("invalid", f"expect names input {e['input']}, which is not an input")
                 got = infos[e["input"]]["stream"] or {}
                 if diff := next((k for k, v in e["stream"].items() if got.get(k) != v), None):
                     mode, args = "conform", ex["conform_args"]
@@ -345,20 +313,14 @@ class MediaJobs:
         if v is None or (v["width"], v["height"]) != (t["width"], t["height"]):
             raise MediaError("verify", f"the output is not {t['width']}x{t['height']}")
         if Fraction(v.get("r_frame_rate", "0/1")) != Fraction(t["rate"]):
-            raise MediaError(
-                "verify", f"the output's frame rate {v.get('r_frame_rate')} is not {t['rate']}"
-            )
+            raise MediaError("verify", f"the output's frame rate {v.get('r_frame_rate')} is not {t['rate']}")
         if a is None or int(a.get("sample_rate", 0)) != t["sample_rate"]:
             raise MediaError("verify", f"the output's sound is not {t['sample_rate']} Hz")
         if abs(info["frames"] - ex["frames"]) > 1:
-            raise MediaError(
-                "verify", f"the output has {info['frames']} frames, not {ex['frames']}"
-            )
+            raise MediaError("verify", f"the output has {info['frames']} frames, not {ex['frames']}")
         return info
 
-    async def _ffmpeg(
-        self, argv: list[str], total: int, events, cancel: asyncio.Event, tmp: Path
-    ) -> None:
+    async def _ffmpeg(self, argv: list[str], total: int, events, cancel: asyncio.Event, tmp: Path) -> None:
         """ffmpeg in its own process group (a list, never a shell), progress from its `frame=N` lines only when the
         count moved; a cancel stops the group (SIGTERM, KILL_AFTER, SIGKILL) and raises Cancelled; past its deadline
         (DEADLINE_BASE + DEADLINE_PER_FRAME × total, at most DEADLINE_MAX) it is stopped: MediaError ffmpeg; a
@@ -395,9 +357,7 @@ class MediaJobs:
                 n, now = state["frames"], time.monotonic()
                 if now > deadline:
                     await self._stop(proc, waiter)
-                    raise MediaError(
-                        "ffmpeg", f"timed out after {round(now - start)} s at frame {n} of {total}"
-                    )
+                    raise MediaError("ffmpeg", f"timed out after {round(now - start)} s at frame {n} of {total}")
                 if n != sent and now - at >= PROGRESS:
                     d = {"frames": n, "total": total}
                     if 0 < n < total:
@@ -466,9 +426,7 @@ class MediaJobs:
             elif body is None:
                 out.append({"index": i, "error": f"input {i} is missing"})
             elif len(body) > images.MAX_BYTES:
-                out.append(
-                    {"index": i, "error": f"input {i} is larger than {images.MAX_BYTES >> 20} MB"}
-                )
+                out.append({"index": i, "error": f"input {i} is larger than {images.MAX_BYTES >> 20} MB"})
             else:
                 try:
                     made = await self._thumb(body, key)

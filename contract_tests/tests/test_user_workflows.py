@@ -7,16 +7,19 @@ graph_problems) run against the LIVE palette (GET /nodes); when every kind of a 
 the fixture's own `problems` (written against fixtures/graphs/palette.json)."""
 
 import json
-import sys
-from pathlib import Path
 
 import pytest
-from helpers import NO_SUCH_ID, STUDIO, new_session, ok, start_run, wait_run
+from helpers import (  # check: the contracts' reference graph rules
+    CONTRACTS,
+    NO_SUCH_ID,
+    STUDIO,
+    check,
+    new_session,
+    ok,
+    start_run,
+    wait_run,
+)
 from test_batches import BATCHES, SLOWER, finish, lines, rows_of, submit, wait_batch
-
-CONTRACTS = Path(__file__).parents[2] / "contracts"
-sys.path.insert(0, str(CONTRACTS))
-import check  # the contracts' reference graph rules (not server code)
 
 WF = f"{STUDIO}/workflows"
 GRAPHS = sorted((CONTRACTS / "fixtures" / "graphs").glob("*valid.*.json"))  # valid.* and invalid.*
@@ -71,13 +74,6 @@ def edited(w: dict) -> dict:
 
 def put(client, wid: str, body: dict, version: int, status: int = 200):
     return ok(client.put(f"{WF}/{wid}", json=body | {"version": version}), status)
-
-
-@pytest.fixture(scope="module")
-def palette(api) -> dict:
-    """kind → PaletteNode, from the live hosts."""
-    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
-    return {n["kind"]: n for g in groups for n in g["nodes"]}
 
 
 @pytest.fixture(scope="module")

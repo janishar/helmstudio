@@ -18,14 +18,14 @@ helmstudio/
   studio_service/     Go: api/<feature>/{controller,service,dto,model,message} · messaging · dispatcher · migrations
   files_service/      Go
   pipelines_service/  Python: LangGraph graphs, consumers, migrations
-  runner_service/     Python: core (graph, schema, ctx, residency, loaders, lora) · envs/mlx · envs/torch
-  packs/              qwen_image/ · ltx/ · llm/   — model.yaml · torch.py / mlx.py · workflows/ · looks/ · GOTCHAS.md
+  runner_service/     Python: core (graph, schema, ctx, residency, loaders, lora) · envs/mlx · packs
+    packs/            README.md (the pack API) · qwen_image/ · ltx/ · llm/ … — model.yaml · torch.py / mlx.py · workflows/ · looks/ · GOTCHAS.md
+    tests/golden/     reference outputs (recorded from the old studios and the models' own code) and their recorders
   web_service/        Next.js app, BFF, generated API types
   cli/                Go: `helm` (login, run, import), an API client of studio_service
   deploy/             compose · postgres · nats · secrets · runner launch agents
   docs/               this plan
   renovate.json       dependency updates (section 18)
-  tests/golden/       reference outputs recorded from the old studios
 ```
 
 `make dev` brings up the compose stack with fake providers; `make runners`

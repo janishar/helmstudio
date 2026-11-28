@@ -79,9 +79,7 @@ def tiny_gemma():
     raw["text_config"] |= {"hidden_size": 64, "intermediate_size": 128, "num_attention_heads": 2,
                            "num_key_value_heads": 1, "head_dim": 32, "global_head_dim": 64, "num_hidden_layers": 2,
                            "layer_types": ["sliding_attention", "full_attention"]}  # fmt: skip
-    assets = GemmaAssets(
-        source="tiny", config_dict=raw, tokenizer_json=b"", sidecars={}, weight_paths=()
-    )
+    assets = GemmaAssets(source="tiny", config_dict=raw, tokenizer_json=b"", sidecars={}, weight_paths=())
     torch.manual_seed(0)
     model = AutoModelForImageTextToText.from_config(build_gemma_hf_config(assets))
     words = ["<pad>", "<eos>", "<bos>", "<unk>", *dict.fromkeys(WORDS.split())]
@@ -110,9 +108,7 @@ def tiny():
                                     video_connector=Embeddings1DConnectorConfigurator.from_metadata(dit),
                                     audio_connector=AudioEmbeddings1DConnectorConfigurator.from_metadata(dit))  # fmt: skip
     vae = official("video-vae")
-    vae["config"]["vae"]["decoder_base_channels"] = (
-        8  # the encoder is as wide as its 128 latent channels: no growth
-    )
+    vae["config"]["vae"]["decoder_base_channels"] = 8  # the encoder is as wide as its 128 latent channels: no growth
     vae["config"]["vae"]["encoder_blocks"] = [[n, {"num_layers": 1} if n == "res_x" else {"multiplier": 1}]
                                               for n, _ in vae["config"]["vae"]["encoder_blocks"]]  # fmt: skip
     audio = official("audio-vae")
@@ -183,19 +179,13 @@ def test_text_and_image_to_video_make_an_mp4_of_the_canvas(tiny, pack, tmp_path)
         size, d = {"width": 128, "height": 128}, {"frames": 9, "fps": 24}
         lat = ltx.sample(ctx, {"role": "stage1", "steps": 8},
                          {"model": model, "cond": c, "seed": 7, "canvas": size, "duration": d})["latent"]  # fmt: skip
-        assert lat.fhw == (2, 2, 2) and lat.video.shape[1] == 8 + 4 * bool(
-            c.images
-        )  # the frame-7 row's tokens
+        assert lat.fhw == (2, 2, 2) and lat.video.shape[1] == 8 + 4 * bool(c.images)  # the frame-7 row's tokens
         lat = ltx.upscale(ctx, {}, {"model": model, "latent": lat})["latent"]
         lat = ltx.sample(ctx, {"role": "stage2", "steps": 3}, {"model": model, "cond": c, "seed": 7, "latent": lat})["latent"]  # fmt: skip
         assert lat.fhw == (2, 4, 4) and torch.isfinite(lat.video.float()).all()
         out = ltx.decode(ctx, {"audio": True}, {"model": model, "latent": lat})["video"]
         info = clip(out["mp4"], tmp_path, 9)
-        assert (
-            info["audio"] is not None
-            and out["poster"].size == (128, 128)
-            and out["last"].size == (128, 128)
-        )
+        assert info["audio"] is not None and out["poster"].size == (128, 128) and out["last"].size == (128, 128)
     assert {v for v, _ in ctx.asked} == {"distilled-fp8"}
 
 
@@ -212,14 +202,10 @@ def test_retake_and_extend_give_the_whole_clip_with_its_source_map(tiny, pack, t
     ctx, model = Ctx(tiny), packs.ModelRef(pack, "dev-int8", "int8")
     cond = ltx.encode_guided(ctx, {}, {"model": model, "prompt": "a red fox"})["cond"]
     assert cond.neg_video.shape == cond.video.shape
-    src = ltx.encode_video(
-        ctx, {"source": {"take_id": "t", "data": source(tmp_path)}}, {"model": model}
-    )["latent"]
+    src = ltx.encode_video(ctx, {"source": {"take_id": "t", "data": source(tmp_path)}}, {"model": model})["latent"]
     assert (src.frames, src.fhw, src.fps) == (9, (2, 2, 2), 24.0) and src.audio.shape[2] == 128
     inputs = {"model": model, "cond": cond, "seed": 3, "latent": src}
-    lat = ltx.retake(ctx, {"span": {"start": 0.3, "end": 0.6}, "audio": True} | GUIDED, inputs)[
-        "latent"
-    ]
+    lat = ltx.retake(ctx, {"span": {"start": 0.3, "end": 0.6}, "audio": True} | GUIDED, inputs)["latent"]
     assert lat.source_map["take_id"] == "t" and lat.video.shape == src.video.shape
     clip(
         ltx.decode(ctx, {"audio": True}, {"model": model, "latent": lat})["video"]["mp4"],
@@ -228,20 +214,14 @@ def test_retake_and_extend_give_the_whole_clip_with_its_source_map(tiny, pack, t
         64,
     )
     lat = ltx.extend(ctx, {"seconds": 0.3, "direction": "before"} | GUIDED, inputs)["latent"]
-    assert (
-        lat.frames == 17
-        and lat.fhw == (3, 2, 2)
-        and lat.source_map["offset_s"] == pytest.approx(8 / 24)
-    )
+    assert lat.frames == 17 and lat.fhw == (3, 2, 2) and lat.source_map["offset_s"] == pytest.approx(8 / 24)
     out = ltx.decode(ctx, {"audio": False}, {"model": model, "latent": lat})["video"]
-    assert clip(out["mp4"], tmp_path, 17, 64)["audio"] is None and out["source_map"][
-        "new_out_s"
-    ] == pytest.approx(8 / 24)
+    assert clip(out["mp4"], tmp_path, 17, 64)["audio"] is None and out["source_map"]["new_out_s"] == pytest.approx(
+        8 / 24
+    )
 
 
-def test_audio_to_video_freezes_the_sound_and_stage_2_runs_the_share_owners_transformer(
-    tiny, pack, tmp_path
-):
+def test_audio_to_video_freezes_the_sound_and_stage_2_runs_the_share_owners_transformer(tiny, pack, tmp_path):
     ctx, dev = Ctx(tiny), packs.ModelRef(pack, "dev-int8", "int8")
     cond = ltx.encode_guided(ctx, {}, {"model": dev, "prompt": "a red fox"})["cond"]
     ffmpeg("-f", "lavfi", "-i", "sine=f=330:sample_rate=48000", "-t", "1", str(tmp_path / "a.wav"))
@@ -261,9 +241,7 @@ def test_audio_to_video_freezes_the_sound_and_stage_2_runs_the_share_owners_tran
     lat = ltx.upscale(ctx, {}, {"model": dev, "latent": lat})["latent"]
     distilled = ltx.distill(None, {}, {"model": dev})["model"]
     assert (distilled.variant, distilled.precision_of("transformer")) == ("distilled-fp8", "fp8")
-    assert distilled.key("text_encoder") == dev.key(
-        "text_encoder"
-    )  # the shared parts stay one residency entry
+    assert distilled.key("text_encoder") == dev.key("text_encoder")  # the shared parts stay one residency entry
     ctx.asked.clear()
     lat = ltx.sample(ctx, {"role": "stage2", "steps": 3}, {"model": distilled, "cond": cond, "seed": 5, "latent": lat})["latent"]  # fmt: skip
     assert ctx.asked == [("distilled-fp8", "transformer")]
@@ -276,14 +254,10 @@ def test_audio_to_video_freezes_the_sound_and_stage_2_runs_the_share_owners_tran
         "new_in_s": 0,
         "new_out_s": 9 / 24,
     }
-    assert float(info["audio"]["duration"]) == pytest.approx(
-        9 / 24, abs=0.03
-    )  # the source part, trimmed
+    assert float(info["audio"]["duration"]) == pytest.approx(9 / 24, abs=0.03)  # the source part, trimmed
 
 
-def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_ones(
-    pack, tmp_path, monkeypatch
-):
+def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_ones(pack, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MODELS", tmp_path)
     fp8, int8 = (
         packs.ModelRef(pack, "distilled-fp8", "fp8"),
@@ -297,16 +271,10 @@ def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_one
     row = packs.LoraUse("l", "shared", "style", "0" * 64, 10, 1.0, "bake")
     for check, m in ((ltx.check_sample, fp8), (ltx.check_retake, int8), (ltx.check_distill, int8)):
         assert check(*stage1, {"model": replace(m, loras=(row,))}) == ltx.NO_LORA
-    assert (
-        ltx.check_encode({"beats": [{"text": "x", "seconds": 0}]}, set())
-        == f".beats: {ltx.NO_RELAY}"
-    )
+    assert ltx.check_encode({"beats": [{"text": "x", "seconds": 0}]}, set()) == f".beats: {ltx.NO_RELAY}"
     assert ltx.check_encode({"beats": []}, set()) is None
     # API 1.39: NAG is Mac only (board LtxFeatures frame 5); a blank negative is no NAG
-    assert (
-        ltx.check_encode({"beats": [], "negative": "text"}, set())
-        == ".negative: NAG is Mac only for now"
-    )
+    assert ltx.check_encode({"beats": [], "negative": "text"}, set()) == ".negative: NAG is Mac only for now"
     assert ltx.check_encode({"beats": [], "negative": "  "}, set()) is None
     # API 1.39: image bindings other than auto are Mac only (plan 19 phase 5, board LtxFeatures frame 5)
     auto = {"image": None, "seconds": 0}
@@ -316,19 +284,14 @@ def test_checks_refuse_lora_rows_beats_and_take_the_variants_as_the_official_one
         == ".images[1].binding: Replace and Guide are Mac only for now"
     )
     # distill needs its distill_from variant's transformer on this host (the contract's text, as the dispatcher's)
-    assert (
-        ltx.check_distill({}, set(), {"model": int8})
-        == ": no live host for env torch has the distilled LoRA"
-    )
+    assert ltx.check_distill({}, set(), {"model": int8}) == ": no live host for env torch has the distilled LoRA"
     (tmp_path / "ltx-2.5-nvidia/LTX-2.5-FP8.safetensors").parent.mkdir()
     (tmp_path / "ltx-2.5-nvidia/LTX-2.5-FP8.safetensors").write_bytes(b"")
     assert ltx.check_distill({}, set(), {"model": int8}) is None
     assert ltx.check_distill({}, set(), {"model": fp8}) == ": needs model variant dev"
 
 
-def test_the_nvidia_variants_publish_on_cuda_only_and_the_official_ones_on_the_mac(
-    pack, tmp_path, monkeypatch
-):
+def test_the_nvidia_variants_publish_on_cuda_only_and_the_official_ones_on_the_mac(pack, tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MODELS", tmp_path)
     mlx = replace(pack, runtime="mlx")
     for device, torch_ids, mlx_ids in (
@@ -348,10 +311,7 @@ def test_the_nvidia_variants_publish_on_cuda_only_and_the_official_ones_on_the_m
     assert "distill_from" not in v["distilled-fp8"]
     assert "lora" not in entry
     comps = {c["component"]: c["from_variant"] for c in v["dev-int8"]["components"]}
-    assert (
-        comps["transformer"] == "dev-int8"
-        and comps["text_encoder"] == comps["vae"] == "distilled-fp8"
-    )
+    assert comps["transformer"] == "dev-int8" and comps["text_encoder"] == comps["vae"] == "distilled-fp8"
     value = {"schema_version": 1, "host": "t", "env": "torch", "published_at": "2026-11-21T10:00:00Z",
              "published_by": "t", "models": [entry], "licences": models.licences([pack])}  # fmt: skip
     assert schemas.registry_errors("models", value) == []
@@ -384,9 +344,7 @@ def test_a_torch_runner_plans_the_nvidia_variants_past_the_mlx_only_lora_stack(p
 
 def hadamard_rotated(w: torch.Tensor) -> torch.Tensor:
     g = ltx.CONVROT_GROUP
-    return (w.float().reshape(w.shape[0], -1, g) @ lt.hadamard(g, "cpu", torch.float32)).reshape(
-        w.shape
-    )
+    return (w.float().reshape(w.shape[0], -1, g) @ lt.hadamard(g, "cpu", torch.float32)).reshape(w.shape)
 
 
 def test_int8_convrot_and_fp8_layouts_load_as_their_dequantized_selves(tmp_path):
@@ -426,9 +384,7 @@ def test_int8_convrot_and_fp8_layouts_load_as_their_dequantized_selves(tmp_path)
     assert (got.to_q.rot_group, got.to_k.rot_group, type(got.to_v)) == (256, None, lt.Fp8Linear)
     assert torch.equal(got.to_q.qweight, q)  # the file's own int8 values, requantized exactly
     x = torch.randn(3, 512)
-    w["to_v"] = (
-        e4m3.float() * e4m3_scale
-    )  # FP8 against its own dequantized weight (e4m3 itself is ~3 % off)
+    w["to_v"] = e4m3.float() * e4m3_scale  # FP8 against its own dequantized weight (e4m3 itself is ~3 % off)
     for n, m in (("to_q", got.to_q), ("to_k", got.to_k), ("to_v", got.to_v)):
         want = x @ w[n].T
         assert (m(x) - want).norm() / want.norm() < 0.02, n
@@ -507,22 +463,16 @@ def test_the_torch_port_matches_mlx_on_the_same_tiny_weights(tmp_path):
     kpos = ltx.keyframe_positions(7, h, w, 24.0, "cpu").mean(-1).permute(0, 2, 1)
     assert torch.allclose(kpos, mlx["kpos"], atol=1e-6)
     with torch.no_grad():
-        vx0, ax0 = ltx._pass(
-            ltx.X0Model(module), x["video"], x["audio"], video, audio, 0.5, x["vctx"], x["actx"]
-        )
+        vx0, ax0 = ltx._pass(ltx.X0Model(module), x["video"], x["audio"], video, audio, 0.5, x["vctx"], x["actx"])
     # the audio frozen (a2v): sigma 0 in its AdaLN and the video's A->V gate, mask 0 (its x0 is its input)
     frozen = ltx.State(x["audio"], x["audio"], torch.zeros(1, t, 1), audio.positions, frozen=True)
     with torch.no_grad():
-        vf, af = ltx._pass(
-            ltx.X0Model(module), x["video"], x["audio"], video, frozen, 0.5, x["vctx"], x["actx"]
-        )
+        vf, af = ltx._pass(ltx.X0Model(module), x["video"], x["audio"], video, frozen, 0.5, x["vctx"], x["actx"])
     assert torch.equal(af, x["audio"]) and torch.equal(mlx["audio_frozen"], x["audio"])
     assert (mlx["video_frozen"] - mlx["video"]).norm() > 0  # the gate's sigma moved the video
     for got, want, noisy in ((vx0, mlx["video"], x["video"]), (ax0, mlx["audio"], x["audio"]),
                              (vf, mlx["video_frozen"], x["video"])):  # fmt: skip
         # against the model's own term (x − x0 = v·σ), not x0, which the input dominates: measured 0.17 %
         assert (got.float() - want).norm() / (noisy - want).norm() < 1e-2
-    assert ltx.ltx2_schedule(30, 1234) == pytest.approx(
-        json.loads((tmp_path / "schedule.json").read_text())
-    )
+    assert ltx.ltx2_schedule(30, 1234) == pytest.approx(json.loads((tmp_path / "schedule.json").read_text()))
     assert math.isclose(ltx.ltx2_schedule(30, 1234)[-1], 0.0)

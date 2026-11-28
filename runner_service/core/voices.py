@@ -37,7 +37,7 @@ def _check(x, where: str, folder) -> dict:
         raise ValueError(f"{where}: speaker must match {SPEAKER.pattern}")
     if not isinstance(v.get("language"), str) or not LANGUAGE.match(v["language"]):
         raise ValueError(f"{where}: language must be a BCP 47 tag ({LANGUAGE.pattern})")
-    if "style" in v and (not isinstance(v["style"], str) or not 1 <= len(v["style"]) <= 500 or _control(v["style"])):  # fmt: skip
+    if "style" in v and (not isinstance(v["style"], str) or not 1 <= len(v["style"]) <= 500 or _control(v["style"])):
         raise ValueError(f"{where}: style must be 1-500 characters, no control characters")
     if not isinstance(v["version"], int) or isinstance(v["version"], bool) or v["version"] < 1:
         raise ValueError(f"{where}: version must be an integer >= 1")
@@ -58,14 +58,8 @@ def _preview(name, where: str, folder) -> dict:
             channels, rate, frames = w.getnchannels(), w.getframerate(), w.getnframes()
     except Exception as e:
         raise ValueError(f"{where}: preview {name} is not a PCM WAV ({type(e).__name__})") from e
-    if (
-        channels not in (1, 2)
-        or not 8000 <= rate <= 96000
-        or not 0 < frames / rate <= MAX_PREVIEW_S
-    ):
-        raise ValueError(
-            f"{where}: preview {name} must be mono or stereo, 8-96 kHz, up to {MAX_PREVIEW_S} s"
-        )
+    if channels not in (1, 2) or not 8000 <= rate <= 96000 or not 0 < frames / rate <= MAX_PREVIEW_S:
+        raise ValueError(f"{where}: preview {name} must be mono or stereo, 8-96 kHz, up to {MAX_PREVIEW_S} s")
     return {"data": data, "sha256": hashlib.sha256(data).hexdigest(), "duration_s": round(frames / rate, 3),
             "sample_rate": rate}  # fmt: skip
 
@@ -81,7 +75,7 @@ def load(pack) -> list[dict]:
         for i, x in enumerate(items, 1):
             v = _check(x, f"{path} voice {i}", path.parent)
             if v["id"] in seen:
-                raise ValueError(f"{path} voice {i}: id {v['id']} is used twice in {pack.family} (voices and looks)")  # fmt: skip
+                raise ValueError(f"{path} voice {i}: id {v['id']} is used twice in {pack.family} (voices and looks)")
             seen.add(v["id"])
             out.append(v)
     if len(out) > MAX_VOICES:

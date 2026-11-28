@@ -8,6 +8,7 @@ import wave
 
 from PIL import Image
 
+from core import media
 from core.graph import RunError
 from core.images import thumb
 
@@ -21,9 +22,7 @@ def seed(ctx, params: dict, inputs: dict) -> dict:
 
 
 def canvas(ctx, params: dict, inputs: dict) -> dict:
-    return {
-        "canvas": {"width": params["width"], "height": params["height"], "mode": params["mode"]}
-    }
+    return {"canvas": {"width": params["width"], "height": params["height"], "mode": params["mode"]}}
 
 
 def image(ctx, params: dict, inputs: dict) -> dict:
@@ -55,18 +54,9 @@ def _wav(ctx, audio: dict) -> tuple[bytes, dict]:
     frame = 2 * channels
     duration = len(pcm) // frame / rate
     if not 0 < duration <= 600:
-        raise RunError(
-            f"{ctx.node}: audio of {duration:.2f} s at {rate} Hz is outside 8-96 kHz, up to 600 s"
-        )
-    buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(channels)
-        w.setsampwidth(2)
-        w.setframerate(rate)
-        w.writeframes(pcm[: len(pcm) // frame * frame])
-    return buf.getvalue(), {"duration_s": duration, "sample_rate": rate} | (
-        {"channels": 2} if channels == 2 else {}
-    )
+        raise RunError(f"{ctx.node}: audio of {duration:.2f} s at {rate} Hz is outside 8-96 kHz, up to 600 s")
+    facts = {"duration_s": duration, "sample_rate": rate} | ({"channels": 2} if channels == 2 else {})
+    return media.wav(pcm[: len(pcm) // frame * frame], rate, channels), facts
 
 
 def output(ctx, params: dict, inputs: dict) -> dict:

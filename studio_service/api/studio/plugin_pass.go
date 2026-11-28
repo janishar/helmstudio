@@ -92,7 +92,7 @@ func (s *Service) PluginPass(ctx context.Context, req *PassRequest) PassReply {
 // under req.CallID (takes.tool's plugin and call, as CreatePluginTake records them from the pass).
 func (s *Service) madeBy(ctx context.Context, req *PassRequest) PassReply {
 	made := []string{}
-	err := common.WithUser(ctx, s.db, common.Caller{ID: req.OwnerID}, func(tx pgx.Tx) error {
+	err := common.WithUser(ctx, s.db, req.OwnerID, func(tx pgx.Tx) error {
 		rows, err := tx.Query(ctx, `SELECT id::text FROM takes WHERE id::text = ANY($1) AND owner_id = $2 AND source = 'tool'
 			AND deleted_at IS NULL AND tool->>'plugin' = $3 AND tool->>'call' = $4`, req.TakeIDs, req.OwnerID, req.Plugin, req.CallID)
 		if err != nil {

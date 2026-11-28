@@ -90,9 +90,7 @@ class Song:
 class Latent:
     latents: torch.Tensor  # [1, T, 64] on the device
     sections: list = field(default_factory=list)
-    keep: np.ndarray | None = (
-        None  # the source, float32 [2, n] at 48 kHz, where the output keeps it
-    )
+    keep: np.ndarray | None = None  # the source, float32 [2, n] at 48 kHz, where the output keeps it
     window: tuple[float, float] | None = None  # the generated seconds of the output
 
 
@@ -382,9 +380,7 @@ def plan(ctx, params: dict, inputs: dict) -> dict:
     lm, tok = ctx.component(model, "lm"), tokenizer(model, "lm")
     gen = torch.Generator().manual_seed(int(inputs["seed"]))
     user = f"# Caption\n{caption}\n\n# Lyric\n{lyrics}\n"
-    head = (
-        f"<think>\nbpm: {song.bpm}\n" if song.bpm else ""
-    )  # the first key: the thought goes on from a set BPM
+    head = f"<think>\nbpm: {song.bpm}\n" if song.bpm else ""  # the first key: the thought goes on from a set BPM
     said = parse_metas(head + think(ctx, lm, tok, _chat(tok, user) + head, gen))
     metas = settle(song, said)
     if not metas["duration"]:
@@ -490,8 +486,7 @@ def repaint(ctx, params: dict, inputs: dict) -> dict:
 
 def cover(ctx, params: dict, inputs: dict) -> dict:
     src = source_audio(ctx, params["source"])
-    latents, sections = _dit(ctx, params, inputs, "cover", src,
-                             audio_cover_strength=float(params["strength"]))  # fmt: skip
+    latents, sections = _dit(ctx, params, inputs, "cover", src, audio_cover_strength=float(params["strength"]))
     return {"latent": Latent(latents, sections)}
 
 
@@ -539,9 +534,7 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
     vae = ctx.component(inputs["model"], "vae")
     ctx.progress(1, 1, "decoding")
     with torch.inference_mode():
-        wav = (
-            vae.decode(latent.latents.transpose(1, 2).to(vae.dtype)).sample[0].float().cpu().numpy()
-        )
+        wav = vae.decode(latent.latents.transpose(1, 2).to(vae.dtype)).sample[0].float().cpu().numpy()
     ctx.check()
     peak = float(np.abs(wav).max()) if wav.size else 0.0
     if peak > 1:
@@ -549,7 +542,7 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
     if latent.keep is not None:
         wav = splice(wav, latent.keep, latent.window)
     wav = level(wav)
-    pcm = (np.clip(wav, -1, 1) * 32767).round().astype("<i2").T.tobytes()
+    pcm = media.pcm16(wav.T)
     audio = {
         "wav": pcm,
         "sample_rate": SAMPLE_RATE,
@@ -572,9 +565,7 @@ class _Capture:
 
     def __call__(self, attn, hidden_states, encoder_hidden_states=None, attention_mask=None, **kw):
         q = attn.norm_q(attn.to_q(hidden_states).unflatten(-1, (attn.heads, attn.head_dim)))
-        k = attn.norm_k(
-            attn.to_k(encoder_hidden_states).unflatten(-1, (attn.kv_heads, attn.head_dim))
-        )
+        k = attn.norm_k(attn.to_k(encoder_hidden_states).unflatten(-1, (attn.kv_heads, attn.head_dim)))
         k = k.repeat_interleave(attn.heads // attn.kv_heads, dim=2)
         h = self.heads
         w = torch.einsum("bqhd,bkhd->bhqk", q[:, :, h].float(), k[:, :, h].float()) * attn.scaling
@@ -594,9 +585,7 @@ def dtw(cost: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         i = np.arange(max(1, d - m), min(n, d - 1) + 1)
         j = d - i
         c0, c1, c2 = acc[i - 1, j - 1], acc[i - 1, j], acc[i, j - 1]
-        t = np.where((c0 < c1) & (c0 < c2), 0, np.where((c1 < c0) & (c1 < c2), 1, 2)).astype(
-            np.int8
-        )
+        t = np.where((c0 < c1) & (c0 < c2), 0, np.where((c1 < c0) & (c1 < c2), 1, 2)).astype(np.int8)
         acc[i, j] = cost[i - 1, j - 1] + np.choose(t, [c0, c1, c2])
         trace[i, j] = t
     i, j, path = n, m, []
@@ -636,9 +625,7 @@ def lyric_sections(pipe, dit, latents, caption, song, src, codes) -> list:
     the alignment heads against the lyric tokens, the consensus and DTW; a section starts where its first sung line
     does and ends at the next. Empty when the alignment fails (a song without markers is still a song)."""
     lines = song.sung().split("\n")
-    tags = [
-        (i, m.group(1).strip().lower()) for i, line in enumerate(lines) if (m := TAG.match(line))
-    ]
+    tags = [(i, m.group(1).strip().lower()) for i, line in enumerate(lines) if (m := TAG.match(line))]
     if not tags:
         return []
     tok, lang = pipe.tokenizer, song.vocal_language()
@@ -670,15 +657,11 @@ def lyric_sections(pipe, dit, latents, caption, song, src, codes) -> list:
                 latent_length=latents.shape[1], task_type=task)  # fmt: skip
             context = torch.cat([context[:, : latents.shape[1]], torch.ones_like(latents)], dim=-1)
             t = torch.full((1,), 1.0 / 8, device=dev, dtype=dtype)
-            noise = torch.randn(latents.shape, generator=torch.Generator().manual_seed(42)).to(
-                dev, dtype
-            )
+            noise = torch.randn(latents.shape, generator=torch.Generator().manual_seed(42)).to(dev, dtype)
             xt = t * noise + (1 - t) * latents
             dit.transformer(hidden_states=xt, timestep=t, timestep_r=t, encoder_hidden_states=enc,
                             context_latents=context, return_dict=False)  # fmt: skip
-        weights = torch.cat(
-            [w[:, :, head : head + total].transpose(-1, -2) for w in store]
-        )  # [H, tokens, frames]
+        weights = torch.cat([w[:, :, head : head + total].transpose(-1, -2) for w in store])  # [H, tokens, frames]
         tokens, frames = dtw(-align(weights).astype(np.float64))
     except Exception:  # ponytail: markers are a nicety; the take must not fail on them
         import logging
@@ -700,9 +683,7 @@ def sections_of(tags, lines, starts, first: dict, seconds: float) -> list:
     out = []
     for n, (i, label) in enumerate(tags):
         nxt = tags[n + 1][0] if n + 1 < len(tags) else len(lines)
-        sung = [
-            starts[j] for j in range(i + 1, nxt) if lines[j].strip() and not TAG.match(lines[j])
-        ]
+        sung = [starts[j] for j in range(i + 1, nxt) if lines[j].strip() and not TAG.match(lines[j])]
         at = first.get(sung[0] if sung else starts[i], 0.0) if n else 0.0
         out.append({"label": label, "start_s": round(min(at, seconds), 3)})
     out.sort(key=lambda s: s["start_s"])

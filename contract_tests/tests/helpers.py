@@ -4,11 +4,17 @@ import io
 import json
 import os
 import subprocess
+import sys
 import time
+from pathlib import Path
 
 import httpx
 import schemas
 from PIL import Image
+
+CONTRACTS = Path(__file__).parents[2] / "contracts"
+sys.path.insert(0, str(CONTRACTS))
+import check  # noqa: F401  re-exported: the contracts' reference rules (not server code)
 
 JOB_TIMEOUT = float(os.environ.get("JOB_TIMEOUT", "60"))
 STUDIO = "/v1/studio"
@@ -18,6 +24,7 @@ QUICK = {"prompt.text": "a red fox", "echo.steps": 3, "echo.delay_ms": 50}
 # long enough to cancel mid-run (200 steps of 300 ms)
 SLOW = {"prompt.text": "a slow fox", "echo.steps": 200, "echo.delay_ms": 300}
 NO_SUCH_ID = "00000000-0000-4000-8000-000000000000"
+PROJECT = os.environ.get("COMPOSE_PROJECT", "helmstudio-test")  # the test stack's compose project
 
 
 def ok(r: httpx.Response, status: int = 200) -> dict:
@@ -26,6 +33,13 @@ def ok(r: httpx.Response, status: int = 200) -> dict:
         f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
     )
     return r.json() if r.content else None
+
+
+def detail(r, status: int) -> str:
+    assert r.status_code == status, (
+        f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
+    )
+    return r.json()["detail"]
 
 
 def wait_for(fn, timeout: float = JOB_TIMEOUT, interval: float = 0.3, what: str = "condition"):
@@ -216,9 +230,8 @@ def usable_looks(client: httpx.Client) -> list[dict]:
 def docker_exec(service: str, *cmd: str, stdin: bytes | None = None) -> str:
     """stdout of a command in `<COMPOSE_PROJECT>-<service>-1` (default project helmstudio-test): the fakes and the
     fake runner's disk publish no host port. RuntimeError when it fails."""
-    project = os.environ.get("COMPOSE_PROJECT", "helmstudio-test")
     out = subprocess.run(
-        ["docker", "exec", "-i", f"{project}-{service}-1", *cmd],
+        ["docker", "exec", "-i", f"{PROJECT}-{service}-1", *cmd],
         input=stdin,
         capture_output=True,
         timeout=60,

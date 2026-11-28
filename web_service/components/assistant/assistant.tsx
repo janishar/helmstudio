@@ -2116,10 +2116,10 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
   );
 }
 
-const mac = () =>
+const onApple = () =>
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
-export const shortcut = () => (mac() ? "⌘J" : "Ctrl J");
-const fullKey = () => (mac() ? "⇧⌘J" : "Ctrl Shift J");
+export const shortcut = () => (onApple() ? "⌘J" : "Ctrl J");
+const fullKey = () => (onApple() ? "⇧⌘J" : "Ctrl Shift J");
 
 /** A dialog or menu is open (Esc is its own then): a screen's closed popover (Run on, Memory) does not count. */
 const overlayOpen = () =>

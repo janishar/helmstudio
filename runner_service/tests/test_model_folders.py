@@ -68,9 +68,7 @@ def test_priority_then_fallback(roots, pack):
     a, b, _ = roots
     put(a), put(b)
     v = variant(pack)
-    assert (
-        packs.place("Tiny") == a / "Tiny" and v["folder"] == fid(a) and v["presence"] == "present"
-    )
+    assert packs.place("Tiny") == a / "Tiny" and v["folder"] == fid(a) and v["presence"] == "present"
     assert [(c["folder"], c["state"]) for c in v["copies"]] == [
         (fid(a), "present"),
         (fid(b), "present"),
@@ -83,9 +81,7 @@ def test_priority_then_fallback(roots, pack):
     assert variant(pack)["folder"] == fid(b) and not a.exists()
 
 
-def test_a_model_only_on_an_unplugged_drive_is_unplugged_and_the_drive_is_never_created(
-    roots, pack
-):
+def test_a_model_only_on_an_unplugged_drive_is_unplugged_and_the_drive_is_never_created(roots, pack):
     _, _, gone = roots
     put(gone)
     variant(pack)  # seen while connected
@@ -100,9 +96,7 @@ def test_a_model_only_on_an_unplugged_drive_is_unplugged_and_the_drive_is_never_
         (True, False),
         (False, False),
     ]
-    assert (
-        not gone.exists() and models.check_folders([str(gone)])["folders"][0]["connected"] is False
-    )
+    assert not gone.exists() and models.check_folders([str(gone)])["folders"][0]["connected"] is False
 
 
 def test_a_variant_in_b_loads_its_shared_parts_from_a(roots, pack):
@@ -123,9 +117,7 @@ def test_download_into_folder_b_writes_only_there_and_reuses_a_lender_in_a(roots
         out = ModelJobs.within(b, download.download, pack, "turbo", endpoint=hub.url, token=None,
                                cache=config.CACHE, host="t", progress=Progress())  # fmt: skip
         assert out["reused"] == ["vae"]
-        assert (b / "Tiny-Turbo/transformer/w.safetensors").is_file() and not (
-            a / "Tiny-Turbo"
-        ).exists()
+        assert (b / "Tiny-Turbo/transformer/w.safetensors").is_file() and not (a / "Tiny-Turbo").exists()
         with pytest.raises(JobError) as e:  # an unplugged folder: refused, not created
             ModelJobs.within(gone, download.download, pack, "base", endpoint=hub.url, token=None,
                              cache=config.CACHE, host="t", progress=Progress())  # fmt: skip
@@ -138,9 +130,7 @@ def test_delete_one_copy_then_the_other_is_used(roots, pack):
     a, b, _ = roots
     put(a), put(b)
     files, freed = ModelJobs.within(ModelJobs.root(fid(a)), models.delete_variant, pack, "base")
-    assert (
-        (files, freed) == (2, 2 * len(BLOB)) and not (a / "Tiny").exists() and (b / "Tiny").is_dir()
-    )
+    assert (files, freed) == (2, 2 * len(BLOB)) and not (a / "Tiny").exists() and (b / "Tiny").is_dir()
     assert variant(pack)["folder"] == fid(b)
 
 
@@ -172,14 +162,8 @@ async def test_settings_set_the_list_and_rescan_once_it_changes(roots, monkeypat
     s.rescan = rescan
     v = json.loads((CONTRACTS / "fixtures/registry/settings.valid.json").read_text())
     await s.offer(v | {"version": 10, "folders": [str(b), str(a)], "downloads": 1})
-    assert (
-        config.ROOTS == [str(b), str(a)]
-        and packs.downloads_root() == a
-        and scans == [[str(b), str(a)]]
-    )
-    await s.offer(
-        v | {"version": 11, "folders": [str(b), str(a)], "downloads": 1, "after_run": "unload"}
-    )
+    assert config.ROOTS == [str(b), str(a)] and packs.downloads_root() == a and scans == [[str(b), str(a)]]
+    await s.offer(v | {"version": 11, "folders": [str(b), str(a)], "downloads": 1, "after_run": "unload"})
     assert len(scans) == 1  # the list did not change
     await s.offer(None)  # the key deleted: HELMSTUDIO_MODELS alone
     assert config.ROOTS == [] and scans[-1] == []

@@ -2,6 +2,7 @@
 // An asset opened (MagicBoard frame 6; plan 39 phase E): left, its sheet (views and expressions: made here with Make
 // views, imported from the Gallery as a copy, or a file), its voice as an orb to play or change, a note; right, where
 // it is used, lit on a small board. "new" makes one first (kind, name, handle). Each view has its right-click menu.
+import { stored } from "@/lib/hydrated";
 import { useRef, useState } from "react";
 import { ChevronDown, Images, Mic, Play, SlidersHorizontal, Upload } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
@@ -29,8 +30,8 @@ import {
   usedIn,
   type Asset,
   type AssetKind,
+  estText,
 } from "@/lib/magic";
-import { estText } from "@/lib/magic-fixture";
 import { VARIANT, kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
 import { useTakes } from "@/lib/take-cache";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";
@@ -46,20 +47,10 @@ type ViewsPick = {
 };
 const PRECISION = "model.precision";
 const pickKey = (board?: string) => `helm.magic.views.${board ?? "local"}`;
-function readPick(board?: string): ViewsPick {
-  try {
-    return JSON.parse(localStorage.getItem(pickKey(board)) ?? "{}") as ViewsPick;
-  } catch {
-    return {};
-  }
-}
-function savePick(board: string | undefined, p: ViewsPick) {
-  try {
-    localStorage.setItem(pickKey(board), JSON.stringify(p));
-  } catch {
-    // a private window: kept for this dialog only
-  }
-}
+const readPick = (board?: string) => stored.json<ViewsPick>(pickKey(board)) ?? {};
+// a private window: kept for this dialog only
+const savePick = (board: string | undefined, p: ViewsPick) =>
+  stored.set(pickKey(board), JSON.stringify(p));
 const side = (v: string) => Math.min(8192, Math.max(16, Math.round(Number(v) || 16)));
 
 export function AssetDialog({

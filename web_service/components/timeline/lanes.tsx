@@ -13,7 +13,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Ellipsis, Link2, X } from "lucide-react";
 import type { S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
 import { MagnetIcon, ToolIcon } from "@/components/timeline/tools";
 import { Filmstrip, RulerCanvas, Waveform } from "@/components/timeline/detail";
@@ -126,12 +126,6 @@ export function clipText(
     line: `${maker} · ${len}${fade}`,
   };
 }
-
-/** "0:09": whole seconds of a clip's length. */
-const clock = (s: number) => {
-  const t = Math.round(s);
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
-};
 
 /** An audio take's cues on its clip (API 1.32): each line's tick at its start in the clip, a trimmed-out one not
  * drawn (sequence time = at + cue − in). */

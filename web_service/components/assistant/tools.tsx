@@ -21,7 +21,7 @@ import {
   type Outcome,
   type Screen,
 } from "@/lib/assistant";
-import { clock } from "@/lib/runs";
+import { clock, sleep } from "@/lib/format";
 
 /** What a screen registers: its actions (names from tools/actions.json), the "Sees" chips, the open ids, the
  * summary's fields (§22.4, built from values the screen already works out) and the empty drawer's examples. */
@@ -274,7 +274,6 @@ export function useDialogWait<T>() {
   );
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Resolves once `cond` holds (checked every 100 ms), false after `ms`. */
 export async function until(cond: () => boolean, ms: number) {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (cond()) return true;

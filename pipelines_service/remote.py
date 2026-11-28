@@ -31,9 +31,7 @@ POLL = 1.0  # seconds between looks at the queue when nothing pokes it
 
 def bound(req: dict) -> int:
     """A call's token bound: its prompt's estimate and its whole output allowance (as BOUND)."""
-    return providers.estimate(req.get("system", "") + req.get("prompt", "")) + int(
-        req.get("max_tokens", 0)
-    )
+    return providers.estimate(req.get("system", "") + req.get("prompt", "")) + int(req.get("max_tokens", 0))
 
 
 # bound() in SQL over remote_calls.request
@@ -44,8 +42,7 @@ BOUND = (
 
 
 def _failed(error: str, kind: str, failures: int = 0) -> dict:
-    return {"status": "failed", "take_ids": [], "error": error[:2000], "kind": kind,
-            "network_failures": failures}  # fmt: skip
+    return {"status": "failed", "take_ids": [], "error": error[:2000], "kind": kind, "network_failures": failures}
 
 
 class Remote:
@@ -54,9 +51,7 @@ class Remote:
         self.poke = asyncio.Event()
         self.lock = asyncio.Lock()
         self.flying: dict[str, tuple[str, str, asyncio.Task]] = {}  # key → (batch, provider, task)
-        self.stopping: set[str] = (
-            set()
-        )  # keys Stop aborts (any other cancel is a shutdown: sent again later)
+        self.stopping: set[str] = set()  # keys Stop aborts (any other cancel is a shutdown: sent again later)
 
     async def queue(self, batch: dict, key: str, row: int, req: dict) -> dict | None:
         """Queue one call (once per key): its result when it is known already (done, refused, past a cap),
@@ -81,9 +76,7 @@ class Remote:
             return old["result"] if old["status"] == "done" else None
         b = await self.e._one(
             "SELECT remote_tokens, (SELECT count(*) FROM remote_calls WHERE batch_id = %s) AS calls, "
-            "(SELECT coalesce(sum("
-            + BOUND
-            + "), 0) FROM remote_calls WHERE batch_id = %s AND status <> 'done') "
+            "(SELECT coalesce(sum(" + BOUND + "), 0) FROM remote_calls WHERE batch_id = %s AND status <> 'done') "
             "AS reserved FROM batches WHERE batch_id = %s",
             (batch["batch_id"], batch["batch_id"], batch["batch_id"]),
         )
@@ -103,9 +96,7 @@ class Remote:
         """Send queued calls of running batches, oldest first, within each provider's in-flight limit. At start, a
         call left `sent` is queued again and a stored result is delivered again (deliver drops it unless the thread
         still waits on it)."""
-        await self.e._one(
-            "UPDATE remote_calls SET status = 'queued' WHERE status = 'sent' RETURNING 1"
-        )
+        await self.e._one("UPDATE remote_calls SET status = 'queued' WHERE status = 'sent' RETURNING 1")
         for c in await self.e._all(
             "SELECT c.key, c.batch_id, c.row, c.result FROM remote_calls c JOIN batches b USING (batch_id) "
             "WHERE c.status = 'done' AND b.status NOT IN ('done', 'failed', 'stopped')"
@@ -138,9 +129,7 @@ class Remote:
             busy = sum(p == c["provider"] for _, p, _ in self.flying.values())
             if c["key"] in self.flying or busy >= prov.get("max_in_flight", 2):
                 continue
-            await self.e._one(
-                "UPDATE remote_calls SET status = 'sent' WHERE key = %s RETURNING 1", (c["key"],)
-            )
+            await self.e._one("UPDATE remote_calls SET status = 'sent' WHERE key = %s RETURNING 1", (c["key"],))
             task = asyncio.create_task(self._send(c, prov))
             self.flying[c["key"]] = (str(c["batch_id"]), c["provider"], task)
 
@@ -151,14 +140,10 @@ class Remote:
     async def _send(self, c: dict, prov: dict) -> None:
         req, name, key = c["request"], c["provider"], c["key"]
         try:
-            got, failures = await providers.chat_retried(
-                name, prov, req, hold=lambda: self._held(c["batch_id"])
-            )
+            got, failures = await providers.chat_retried(name, prov, req, hold=lambda: self._held(c["batch_id"]))
             result = {"status": "succeeded", "take_ids": [], "error": None, "answer": providers.answer_of(got),
                       "network_failures": failures}  # fmt: skip
-        except (
-            providers.Held
-        ) as h:  # paused between retries: back to the queue, its failures counted now
+        except providers.Held as h:  # paused between retries: back to the queue, its failures counted now
             async with self.e.pool.connection() as conn, conn.transaction():
                 await conn.execute("UPDATE remote_calls SET status = 'queued' WHERE key = %s AND status = 'sent'",
                                    (key,))  # fmt: skip
@@ -186,17 +171,15 @@ class Remote:
         tokens = answer.get("tokens_in", 0) + answer.get("tokens_out", 0)
         async with self.e.pool.connection() as conn, conn.transaction():
             cur = await conn.execute(
-                "UPDATE remote_calls SET status = 'done', result = %s WHERE key = %s AND status <> 'done' "
-                "RETURNING 1",
+                "UPDATE remote_calls SET status = 'done', result = %s WHERE key = %s AND status <> 'done' RETURNING 1",
                 (Jsonb(result), c["key"]),
             )
             if cur.rowcount:
                 await conn.execute(
                     "UPDATE batches SET remote_calls = remote_calls + %s, remote_tokens = remote_tokens + %s, "
                     "network_failures = network_failures + %s WHERE batch_id = %s",
-                    (int(result["status"] != "cancelled"), tokens, result.get("network_failures", 0),
-                     c["batch_id"]),
-                )  # fmt: skip
+                    (int(result["status"] != "cancelled"), tokens, result.get("network_failures", 0), c["batch_id"]),
+                )
         await self.e._publish_batch(str(c["batch_id"]))
         await self.e.deliver(str(c["batch_id"]), c["row"], c["key"], result)
 
@@ -210,6 +193,4 @@ class Remote:
             "SELECT key, batch_id, row FROM remote_calls WHERE batch_id = %s AND status = 'queued'",
             (batch_id,),
         ):
-            await self._done(
-                c, {"status": "cancelled", "take_ids": [], "error": None, "network_failures": 0}
-            )
+            await self._done(c, {"status": "cancelled", "take_ids": [], "error": None, "network_failures": 0})

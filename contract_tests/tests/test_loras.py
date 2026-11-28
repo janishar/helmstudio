@@ -25,10 +25,13 @@ from urllib.parse import urlsplit
 import pytest
 from conftest import headers, make_client
 from helpers import (
+    CONTRACTS,
     NO_SUCH_ID,
     QUICK,
     SLOW,
     STUDIO,
+    check,
+    detail,
     new_session,
     ok,
     start_run,
@@ -37,7 +40,7 @@ from helpers import (
     wait_run,
 )
 from test_batches import BATCHES, FAST, finish, rows_of, submit, wait_batch
-from test_user_workflows import CONTRACTS, check, copy_echo, doc
+from test_user_workflows import copy_echo, doc
 from test_user_workflows import put as put_workflow
 
 LORAS = f"{STUDIO}/loras"
@@ -115,13 +118,6 @@ def uploaded(client, anon, data: bytes, filename: str) -> dict:
     up = start(client, filename, len(data))
     put(anon, up, data)
     return ok(complete(client, up["lora"]["id"]))
-
-
-def detail(r, status: int) -> str:
-    assert r.status_code == status, (
-        f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
-    )
-    return r.json()["detail"]
 
 
 def row(lid: str, strength: float = 1.0, **extra) -> dict:

@@ -21,9 +21,9 @@ from dataclasses import dataclass
 from functools import lru_cache
 
 import accelerate
-import numpy as np
 import torch
 
+from core import media
 from core.graph import RunError
 
 MAX_S = 300  # Length's max: Auto lets the model run up to this
@@ -91,11 +91,6 @@ def song_text(node: str, style: str, params: dict) -> tuple[str, str]:
     if params["instrumental"] or not lyrics:
         return f"{style.rstrip('.')}. {INSTRUMENTAL}", "[instrumental]"
     return style, lyrics
-
-
-def pcm16(audio: np.ndarray) -> bytes:
-    """[channels, samples] float in [-1, 1] -> interleaved PCM 16-bit."""
-    return (np.clip(audio.T, -1, 1) * 32767).round().astype("<i2").tobytes()
 
 
 def _passes(ctx, module, of: int, phase: str):
@@ -167,5 +162,5 @@ def vocode(ctx, params: dict, inputs: dict) -> dict:
         for h in hooks:
             h.remove()
     rate = int(vocoder.config.sampling_rate)
-    return {"audio": {"wav": pcm16(audio), "sample_rate": rate, "duration_s": audio.shape[-1] / rate,
-                      "channels": 2}}  # fmt: skip
+    wav = media.pcm16(audio.T)
+    return {"audio": {"wav": wav, "sample_rate": rate, "duration_s": audio.shape[-1] / rate, "channels": 2}}

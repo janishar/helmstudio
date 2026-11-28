@@ -21,6 +21,7 @@ import pytest
 from helpers import (
     NO_SUCH_ID,
     STUDIO,
+    check,
     new_session,
     ok,
     png_bytes,
@@ -47,7 +48,7 @@ from test_timeline import (
     put,
     video_inputs,
 )
-from test_user_workflows import WF, check
+from test_user_workflows import WF
 
 RETAKE, A2V, EXTEND, VIDEO = "echo-retake", "echo-a2v", "echo-extend", "echo-video"
 ECHO = [

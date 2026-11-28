@@ -16,8 +16,7 @@ from pathlib import Path
 from jsonschema import Draft202012Validator
 
 SYSTEM = (
-    "You are a careful reviewer for an image and video studio. "
-    "Answer only with JSON that matches the given schema."
+    "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema."
 )
 REASK = "Your answer was invalid: {error}. Answer again with JSON only."
 # max_tokens: a decide's; a judge's grows with its takes and criteria; a write's holds 4000 chars of text
@@ -351,11 +350,7 @@ def offered(node: dict, chat: bool = False) -> list[str]:
     tools = [WIRE[x] for x in node.get("tools", []) if x != "rows.edit" or chat]
     if chat:
         return tools
-    return (
-        tools
-        + (["route"] if node.get("routes") else [])
-        + (["set_items"] if node.get("list") else [])
-    )
+    return tools + (["route"] if node.get("routes") else []) + (["set_items"] if node.get("list") else [])
 
 
 def tool_args(node: dict, wire: str) -> dict:
@@ -403,9 +398,7 @@ def normalise_native(msg: dict) -> dict:
     return {"say": msg.get("content") or "", "calls": calls}
 
 
-def agent_turn(
-    turn: dict, node: dict, calls_left: int, items_set: bool, chat: bool = False
-) -> dict:
+def agent_turn(turn: dict, node: dict, calls_left: int, items_set: bool, chat: bool = False) -> dict:
     """What one turn does, checked before anything runs: {calls, final, route} or {error} (the re-ask's text)."""
     if "error" in turn:
         return turn
@@ -423,8 +416,7 @@ def agent_turn(
         return {"error": "call set_items before you finish"}
     if not calls and node.get("routes") and not chat:
         return {"error": "call route to finish"}
-    return {"calls": calls, "final": bool(routes) or not calls,
-            "route": calls[-1]["args"]["to"] if routes else None}  # fmt: skip
+    return {"calls": calls, "final": bool(routes) or not calls, "route": calls[-1]["args"]["to"] if routes else None}
 
 
 def cut_result(result: dict | None) -> dict | None:
@@ -474,21 +466,16 @@ def agent_prompt(node: dict, sources: list[tuple[str, str]], turns: list[dict], 
     head = f"{node['instruction']}\n\n{DATA}"
     tail = ""
     if node.get("routes"):
-        tail += "\n\nFinish by calling route with one of: " + " ".join(
-            f'"{k}": {v}' for k, v in node["routes"].items()
-        )
+        tail += "\n\nFinish by calling route with one of: " + " ".join(f'"{k}": {v}' for k, v in node["routes"].items())
     if node.get("list"):
         tail += f"\n\nCall set_items with your list (at most {node['list']['max']} items) before you finish."
     tail += f"\n\nCall tools with `calls`; answer with no calls when you are done.\n\nThis is turn {turn} of at most {caps['max_turns']}."
     blocks = [(_label(n), v) for n, v in sources] + _transcript(turns)
     room = PROMPT_MAX - RESERVE - len(head) - len(tail)
-    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[
-        : PROMPT_MAX - RESERVE
-    ]
+    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[: PROMPT_MAX - RESERVE]
 
 
-def director_prompt(node: dict, chat: list[dict], counts: dict, woken: list[dict], turns: list[dict],
-                    turn: int) -> str:  # fmt: skip
+def director_prompt(node: dict, chat: list[dict], counts: dict, woken: list[dict], turns: list[dict], turn: int) -> str:
     """director/v1: the instruction, the newest chat messages that fit CHAT_MAX characters, the batch's counts and
     the rows that woke it, this wake's earlier turns (all fenced); `This is turn <n> of at most <max>.`"""
     caps = node["caps"]
@@ -504,8 +491,7 @@ def director_prompt(node: dict, chat: list[dict], counts: dict, woken: list[dict
         "Answer the user's newest messages. You may add rows, or change rows that have not started, with your "
         f"tools.\n\n{DATA}"
     )
-    rows = "\n".join(f"row {r['row']}: {r['status']}" + (f" ({r['error']})" if r.get("error") else "")
-                     for r in woken)  # fmt: skip
+    rows = "\n".join(f"row {r['row']}: {r['status']}" + (f" ({r['error']})" if r.get("error") else "") for r in woken)
     blocks = [("The chat so far", "\n".join(lines) or "(no messages)"),
               ("The batch", " ".join(f"{k} {v}" for k, v in counts.items()))]  # fmt: skip
     if rows:
@@ -513,9 +499,7 @@ def director_prompt(node: dict, chat: list[dict], counts: dict, woken: list[dict
     blocks += _transcript(turns)
     tail = f"\n\nCall tools with `calls`; answer with no calls to reply.\n\nThis is turn {turn} of at most {caps['max_turns']}."
     room = PROMPT_MAX - RESERVE - len(head) - len(tail)
-    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[
-        : PROMPT_MAX - RESERVE
-    ]
+    return (head + "".join(_block(k, v) for k, v in _fit_oldest(blocks, room)) + tail)[: PROMPT_MAX - RESERVE]
 
 
 def list_schema(n: int) -> dict:
@@ -530,9 +514,7 @@ def list_schema(n: int) -> dict:
     }  # fmt: skip
 
 
-def write_list_prompt(
-    instruction: str, texts: list[tuple[str, str]], n: int, allowed: list[str]
-) -> str:
+def write_list_prompt(instruction: str, texts: list[tuple[str, str]], n: int, allowed: list[str]) -> str:
     mentions = " ".join(f"@{h}" for h in allowed) or "none"
 
     def render(*values):

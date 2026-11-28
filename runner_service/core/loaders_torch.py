@@ -64,9 +64,7 @@ def device() -> str:
                                ("cuda", torch.cuda.is_available()), ("cpu", True)) if ok]  # fmt: skip
     want = config.DEVICE or present[0]
     if want not in present:
-        raise ValueError(
-            f"RUNNER_DEVICE={want} is not present here (present: {', '.join(present)})"
-        )
+        raise ValueError(f"RUNNER_DEVICE={want} is not present here (present: {', '.join(present)})")
     return want
 
 
@@ -151,18 +149,14 @@ def dtype_of(name: str) -> torch.dtype | None:
 @cache
 def _int8_kernel(device_type: str) -> bool:
     """Whether torch has its int8 weight-only matmul kernel on this device type (CPU and MPS; CUDA per build)."""
-    return torch._C._dispatch_has_kernel_for_dispatch_key(
-        "aten::_weight_int8pack_mm", device_type.upper()
-    )
+    return torch._C._dispatch_has_kernel_for_dispatch_key("aten::_weight_int8pack_mm", device_type.upper())
 
 
 @cache
 def hadamard(n: int, device: str, dtype: torch.dtype) -> torch.Tensor:
     """The normalized block Hadamard matrix of ConvRot (n = 4^k): kron(H4, ..., H4) / sqrt(n), symmetric and
     orthogonal (H @ H = I)."""
-    h4 = torch.tensor(
-        [[1, 1, 1, -1], [1, 1, -1, 1], [1, -1, 1, 1], [-1, 1, 1, 1]], dtype=torch.float64
-    )
+    h4 = torch.tensor([[1, 1, 1, -1], [1, 1, -1, 1], [1, -1, 1, 1], [-1, 1, 1, 1]], dtype=torch.float64)
     h = torch.ones(1, 1, dtype=torch.float64)
     while h.shape[0] < n:
         h = torch.kron(h, h4)
@@ -180,15 +174,11 @@ class Int8Linear(nn.Module):
         super().__init__()
         self.in_features, self.out_features = linear.in_features, linear.out_features
         if rot_group and self.in_features % rot_group:
-            raise ValueError(
-                f"ConvRot: {self.in_features} input features are not a multiple of {rot_group}"
-            )
+            raise ValueError(f"ConvRot: {self.in_features} input features are not a multiple of {rot_group}")
         self.rot_group = rot_group
         shape = (self.out_features, self.in_features)
         self.register_buffer("qweight", torch.empty(shape, dtype=torch.int8, device="meta"))
-        self.register_buffer(
-            "scale", torch.empty(self.out_features, dtype=torch.bfloat16, device="meta")
-        )
+        self.register_buffer("scale", torch.empty(self.out_features, dtype=torch.bfloat16, device="meta"))
         self.bias = linear.bias
         # the MPS int8 kernel needs both sides in multiples of 32
         self.kernel = self.in_features % 32 == 0 and self.out_features % 32 == 0
@@ -203,14 +193,10 @@ class Int8Linear(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         shape = x.shape
         if g := self.rot_group:
-            x = (
-                x.reshape(-1, self.in_features // g, g) @ hadamard(g, str(x.device), x.dtype)
-            ).reshape(shape)
+            x = (x.reshape(-1, self.in_features // g, g) @ hadamard(g, str(x.device), x.dtype)).reshape(shape)
         small = x.numel() // self.in_features <= SMALL_BATCH
         if small and self.kernel and x.dtype == torch.bfloat16 and _int8_kernel(x.device.type):
-            out = torch._weight_int8pack_mm(
-                x.reshape(-1, self.in_features), self.qweight, self.scale
-            )
+            out = torch._weight_int8pack_mm(x.reshape(-1, self.in_features), self.qweight, self.scale)
             out = out.reshape(*shape[:-1], self.out_features)
             return out if self.bias is None else out + self.bias.to(out.dtype)
         weight = self.qweight.to(x.dtype) * self.scale.to(x.dtype)[:, None]
@@ -233,9 +219,7 @@ class Fp8Linear(nn.Module):
         super().__init__()
         self.in_features, self.out_features = linear.in_features, linear.out_features
         shape = (self.out_features, self.in_features)
-        self.register_buffer(
-            "qweight", torch.empty(shape, dtype=torch.float8_e4m3fn, device="meta")
-        )
+        self.register_buffer("qweight", torch.empty(shape, dtype=torch.float8_e4m3fn, device="meta"))
         # ones on the CPU (a plain FP8 cast has no scale); load() moves it with the rest
         self.register_buffer("scale", torch.ones(self.out_features, 1))
         self.bias = linear.bias
@@ -272,9 +256,7 @@ class Fp8Linear(nn.Module):
                 if _scaled_mm_ok:  # it worked before: a real failure, not a missing kernel
                     raise
                 _scaled_mm_ok = False
-                log.warning(
-                    "fp8: row-wise torch._scaled_mm refused here (%s); dequantizing per layer", e
-                )
+                log.warning("fp8: row-wise torch._scaled_mm refused here (%s); dequantizing per layer", e)
         return F.linear(x, self.dequantized(x.dtype), bias)
 
 
@@ -287,9 +269,7 @@ class LoraLinear(nn.Module):
         super().__init__()
         self.base = base
         self.in_features, self.out_features = base.in_features, base.out_features
-        self.adapters: dict[
-            str, list
-        ] = {}  # sha256 → [A [r, in], B [out, r], s]; not in the state dict
+        self.adapters: dict[str, list] = {}  # sha256 → [A [r, in], B [out, r], s]; not in the state dict
 
     @property
     def weight(
@@ -330,7 +310,7 @@ def lora_tensors(model, use, path, shapes: dict, dev: str, dtype: torch.dtype) -
     from core import lora
 
     block = model.pack.spec["lora"]
-    block = {"modules": list(shapes), "renames": block.get("renames", []), "ignore": block.get("ignore", [])}  # fmt: skip
+    block = {"modules": list(shapes), "renames": block.get("renames", []), "ignore": block.get("ignore", [])}
     try:
         header, _ = lora.read_header(path, block["ignore"])
     except lora.LoraFileError as e:
@@ -343,9 +323,7 @@ def lora_tensors(model, use, path, shapes: dict, dev: str, dtype: torch.dtype) -
     log.info("LoRA %s (%s keys): %d of %d keys applied, %d ignored", use.name, res["key_style"], res["applied"],
              res["total"], res["ignored"])  # fmt: skip
     want = {k for g in res["groups"].values() for k in (g["A"], g["B"], g["alpha"]) if k}
-    got = dict(
-        tensors(path, dev, want)
-    )  # straight to the device (CUDA: through the pinned staging buffer)
+    got = dict(tensors(path, dev, want))  # straight to the device (CUDA: through the pinned staging buffer)
     out = {}
     for module, g in res["groups"].items():
         a, b = got[g["A"]], got[g["B"]]
@@ -451,8 +429,7 @@ def staged(path, dev: str, keys: set | None = None):
         if wanted:
             limit = host_ram()["budget_gb"]
             if (need := (rss_gb() or 0) + staging_gb(largest, pin)) > limit:
-                raise RunError(f"needs {need:.1f} GB of host RAM at its peak; host {config.HOST} has "
-                               f"{limit:.1f} GB")  # fmt: skip
+                raise RunError(f"needs {need:.1f} GB of host RAM at its peak; host {config.HOST} has {limit:.1f} GB")
             buf = torch.empty(max(largest, 1), dtype=torch.uint8, pin_memory=pin)
         for key, info in wanted:
             start, end = info["data_offsets"]
@@ -505,16 +482,12 @@ def load(
             name = f"{parent_name}.{child_name}" if parent_name else child_name
             if type(child) is nn.Linear and name in fp8:
                 if name in bake:
-                    raise RunError(
-                        f"LoRA bake is not available on fp8 weights ({name}): use adapter mode"
-                    )
+                    raise RunError(f"LoRA bake is not available on fp8 weights ({name}): use adapter mode")
                 setattr(parent, child_name, Fp8Linear(child))
             elif type(child) is nn.Linear and quantize(name):
                 # a delta added to a rotated weight would apply as (B A) H: wrong, so it fails as on fp8
                 if (group := rotated(name)) and name in bake:
-                    raise RunError(
-                        f"LoRA bake is not available on int8 ConvRot weights ({name}): use adapter mode"
-                    )
+                    raise RunError(f"LoRA bake is not available on int8 ConvRot weights ({name}): use adapter mode")
                 setattr(parent, child_name, Int8Linear(child, group))
     modules = dict(module.named_modules())
     wanted = {p: {k for k in h if rename(k) is not None} for p, h in headers.items()}
@@ -560,9 +533,7 @@ def load(
             progress(done, total)
     free()  # the last window's cache too: the component then holds about its declared size
     if unbaked := sorted(bake.keys() - baked):
-        raise KeyError(
-            f"{type(module).__name__}: LoRA modules without a weight: {', '.join(unbaked[:8])}"
-        )
+        raise KeyError(f"{type(module).__name__}: LoRA modules without a weight: {', '.join(unbaked[:8])}")
     missing = [n for n, p in module.named_parameters() if p.is_meta]
     missing += [n for n, b in module.named_buffers() if b.is_meta]
     if missing:
@@ -602,9 +573,7 @@ def load_component(model, component: str, ctx):
         raise RunError(f"{component}: {files[0].suffix} weights need the pack's own load_component")
     meta = model.pack.module.build(component, model)
     bake: dict[str, list] = {}
-    if baked := model.baked(
-        component
-    ):  # LoRA bake: the deltas, on the device, before the first tensor
+    if baked := model.baked(component):  # LoRA bake: the deltas, on the device, before the first tensor
         shapes = {n: (m.in_features, m.out_features) for n, m in _linears(meta).items()}
         for use in baked:
             path = ctx.lora_path(use)

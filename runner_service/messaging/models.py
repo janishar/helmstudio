@@ -13,18 +13,18 @@ holder, so a download does not block generation.
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import shutil
 import time
-import uuid
 
 from config import ENV, HOST
 from core import download, models
 from core import pack as packs
-from core.download import Cancelled, JobError
-from messaging import cancels, schemas
-from messaging.publisher import now, retried
+from core.download import JobError
+from core.graph import Cancelled
+from messaging import cancels
+from messaging.delivery import dead_letter, decode, keep_alive
+from messaging.publisher import envelope, send
 
 log = logging.getLogger("models")
 
@@ -48,23 +48,12 @@ class ModelEvents:
 
     async def publish(self, kind: str, data: dict) -> dict:
         cmd, seq = self.cmd, self.seq + 1
-        msg = {"type": f"evt.{self.KIND}.{kind}", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
-               "owner_id": cmd["owner_id"], "occurred_at": now(),
-               "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
-               "data": {"seq": seq, "delivery": self.delivery} | data}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.{self.KIND}.{kind} is off-contract: {'; '.join(errs[:3])}")
+        msg = envelope(cmd, f"evt.{self.KIND}.{kind}", {"seq": seq, "delivery": self.delivery} | data)
         self.seq = seq
-        body = json.dumps(msg).encode()
-        headers = {"Nats-Msg-Id": f"{cmd['job_id']}:{self.delivery}:{seq}"}
-        await retried(
-            lambda: self.js.publish(f"evt.{self.KIND}.{HOST}.{kind}", body, headers=headers)
-        )
+        await send(self.js, f"evt.{self.KIND}.{HOST}.{kind}", msg, f"{cmd['job_id']}:{self.delivery}:{seq}")
         return msg
 
-    async def status(
-        self, status: str, failure: JobError | None = None, result: dict | None = None
-    ):
+    async def status(self, status: str, failure: JobError | None = None, result: dict | None = None):
         data: dict = {"status": status}
         if failure is not None:
             data["failure"] = {"class": failure.cls, "detail": str(failure) or failure.cls}
@@ -76,34 +65,22 @@ class ModelEvents:
 class ModelJobs:
     """Runs this runner's model jobs. `rescan()` republishes the models and loras keys and the hosts key."""
 
-    def __init__(
-        self, *, js, cancels_kv, packs_, library, consumer, rescan, cache, endpoint, token_file
-    ):
+    def __init__(self, *, js, cancels_kv, packs_, library, consumer, rescan, cache, endpoint, token_file):
         self.js, self.cancels_kv, self.packs, self.library = js, cancels_kv, packs_, library
         self.consumer, self.rescan, self.cache = consumer, rescan, cache
         self.endpoint, self.token_file = endpoint, token_file
         self.job: str | None = None  # the job in progress
 
     async def handle(self, msg) -> None:
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.model.job":
-            errs = [f"not a model job: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.model.job", "model job")
         if errs:
-            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-            with contextlib.suppress(Exception):
-                await self.js.publish(f"dlq.{msg.subject}", msg.data)
-            with contextlib.suppress(Exception):
-                await msg.term()
+            await dead_letter(self.js, msg, errs)
             return
         meta = getattr(msg, "metadata", None)
         events = ModelEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
         job_id, data = cmd["job_id"], cmd["data"]
         self.job = job_id
-        beat = asyncio.create_task(self._wip(msg))
+        beat = asyncio.create_task(keep_alive(msg, WIP))
         failure = result = None
         try:
             if await cancels.requested(self.cancels_kv, job_id):
@@ -135,22 +112,12 @@ class ModelJobs:
             await self.rescan()
         except Exception:
             log.exception("rescan after model job %s failed", job_id)
-        log.info(
-            "model job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else ""
-        )
+        log.info("model job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else "")
         try:
             await events.status(status, failure, result if status == "succeeded" else None)
             await msg.ack_sync()
-        except (
-            Exception
-        ):  # not acked: redelivered after ACK_WAIT, and the job runs again (idempotent)
+        except Exception:  # not acked: redelivered after ACK_WAIT, and the job runs again (idempotent)
             log.exception("model job %s: could not report %s", job_id, status)
-
-    async def _wip(self, msg) -> None:
-        while True:
-            await asyncio.sleep(WIP)
-            with contextlib.suppress(Exception):
-                await msg.in_progress()
 
     def find(self, model: str):
         p = next((p for p in self.packs if p.spec["id"] == model), None)
@@ -218,11 +185,7 @@ class ModelJobs:
                     d = progress.data()
                     edge = (d["files_done"], d.get("file"))
                     since = time.monotonic() - at
-                    if (
-                        edge != sent
-                        or (since >= PROGRESS and d["done_bytes"] != last)
-                        or since >= HEARD
-                    ):
+                    if edge != sent or (since >= PROGRESS and d["done_bytes"] != last) or since >= HEARD:
                         await events.publish("progress", d)
                         sent, at, last = edge, time.monotonic(), d["done_bytes"]
                 if task.done():
@@ -261,9 +224,7 @@ class ModelJobs:
             out["files"] += one["files"]
             out["freed_bytes"] += one["freed_bytes"]
             if one.get("kept"):
-                out["kept"] = out.get("kept", []) + [
-                    k for k in one["kept"] if k not in out.get("kept", [])
-                ]
+                out["kept"] = out.get("kept", []) + [k for k in one["kept"] if k not in out.get("kept", [])]
         return out
 
     async def _delete(self, job_id, p, variants, deleted, root, checks) -> dict:
@@ -293,9 +254,7 @@ class ModelJobs:
             files, freed = await asyncio.to_thread(self.within, root, work)
         except models.InUse as e:
             raise JobError("in_use", str(e)) from None
-        log.info(
-            "model job %s: deleted %d files (%.1f GB), kept %s", job_id, files, freed / 1e9, kept
-        )
+        log.info("model job %s: deleted %d files (%.1f GB), kept %s", job_id, files, freed / 1e9, kept)
         return {"files": files, "freed_bytes": freed} | ({"kept": kept} if kept else {})
 
     def _unused(self, p) -> None:
@@ -321,9 +280,7 @@ class ModelJobs:
                 files, freed = files + f, freed + b
         except models.InUse as e:
             raise JobError("in_use", str(e)) from None
-        log.info(
-            "model job %s: deleted add-on %s (%d files, %.1f GB)", job_id, c, files, freed / 1e9
-        )
+        log.info("model job %s: deleted add-on %s (%d files, %.1f GB)", job_id, c, files, freed / 1e9)
         return {"files": files, "freed_bytes": freed}
 
     async def lora_delete(self, job_id: str, data: dict, events: ModelEvents) -> dict:
@@ -338,9 +295,7 @@ class ModelJobs:
                 if f in paths:
                     raise JobError("in_use", f"LoRA {name} is pre-fused into {p.spec['title']}")
         if self._loaded(lambda k: len(k) > 4 and any(s == sha for s, _ in k[4])):
-            raise JobError(
-                "in_use", f"LoRA {name} is baked into a loaded component: unload it first"
-            )
+            raise JobError("in_use", f"LoRA {name} is baked into a loaded component: unload it first")
         freed = 0
         for f in paths:
             if not any(models.inside(r, f) for r in packs.connected()):
@@ -349,21 +304,3 @@ class ModelJobs:
             await asyncio.to_thread(f.unlink, True)
         log.info("model job %s: deleted LoRA %s (%d files)", job_id, name, len(paths))
         return {"files": len(paths), "freed_bytes": freed}
-
-
-async def pull(sub, jobs: ModelJobs, stop: asyncio.Event) -> None:
-    """Fetch and handle model jobs one at a time until `stop`."""
-    import nats.errors
-
-    while not stop.is_set():
-        try:
-            msgs = await sub.fetch(1, timeout=2)
-        except nats.errors.TimeoutError:
-            continue
-        except Exception:
-            log.exception("model jobs fetch failed; retrying")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), 2)
-            continue
-        for m in msgs:
-            await jobs.handle(m)

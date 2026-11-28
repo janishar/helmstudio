@@ -9,6 +9,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AtSign, BookPlus, ClipboardPaste, Copy, Scissors, TextSelect } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { desktop } from "@/lib/desktop";
 
 export type MenuItem = {
   label: string;
@@ -410,13 +411,6 @@ export function textItems(f: Field): Item[] {
   ];
 }
 
-/** The Mac app's bridge (desktop/src/ui/studio-preload.js): the word under the pointer and its suggestions. */
-type Desktop = {
-  onSpelling: (cb: (s: { word: string; suggestions: string[] }) => void) => void;
-  replaceMisspelling: (word: string) => void;
-  addToDictionary: (word: string) => void;
-};
-const desktop = () => (globalThis as { helmDesktop?: Desktop }).helmDesktop;
 let spelling: { h: MenuHandle; menu: Menu } | null = null;
 
 /** The spelling items first (up to three suggestions, Add to dictionary), then the field's. */
@@ -426,8 +420,8 @@ export function spellItems(word: string, suggestions: string[]): Item[] {
   return [
     ...suggestions
       .slice(0, 3)
-      .map((s) => ({ label: s, bold: true, onPick: () => d.replaceMisspelling(s) })),
-    { label: "Add to dictionary", icon: BookPlus, onPick: () => d.addToDictionary(word) },
+      .map((s) => ({ label: s, bold: true, onPick: () => d.replaceMisspelling?.(s) })),
+    { label: "Add to dictionary", icon: BookPlus, onPick: () => d.addToDictionary?.(word) },
     "-",
   ];
 }
@@ -481,7 +475,7 @@ export function installMenus() {
   // after every element's handler, so a place's own menu goes first
   addEventListener("contextmenu", onContextMenu);
   addEventListener("keydown", onKey, true);
-  desktop()?.onSpelling(({ word, suggestions }) => {
+  desktop()?.onSpelling?.(({ word, suggestions }) => {
     const s = spelling;
     spelling = null;
     if (s && word)

@@ -1,6 +1,7 @@
 package lora
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -156,7 +157,7 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, re
 
 // tx runs fn as the caller, a plain user: an admin sees only their own LoRAs here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // own reads the owner's undeleted LoRAs (all with ids nil), explicitly scoped: tx may be the caller's or System.
@@ -296,17 +297,9 @@ func (s *Service) find(ctx context.Context, tx pgx.Tx, caller common.Caller, id 
 	}
 	rows, err := own(ctx, tx, caller.ID, []string{id})
 	if err != nil || len(rows) == 0 {
-		return Lora{}, cmpErr(err, errNotFound)
+		return Lora{}, cmp.Or[error](err, errNotFound)
 	}
 	return ownDTO(rows[0]), nil
-}
-
-// cmpErr is err, or fallback when err is nil.
-func cmpErr(err, fallback error) error {
-	if err != nil {
-		return err
-	}
-	return fallback
 }
 
 // uploadName is a file name's LoRA name: the base name without .safetensors (any case), control characters left out,

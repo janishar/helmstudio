@@ -4,12 +4,12 @@ batch would (the judge's examples and its memory node's notes read now, inside t
 verdict from the run's answer with the batch's own checks. A failed check is `{error, code: answer}`: a test never
 re-asks."""
 
-import json
 import logging
 
 import agents
 import memory
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -43,10 +43,9 @@ def verdict(req: dict) -> dict:
     if err or "error" in v:
         return {"error": (err or v["error"])[:2000], "code": "answer"}
     takes = [
-        {"take_id": t, "checks": a["checks"], "reason": a["reason"], "passes": v["passes"][i],
-         "rank": v["ranks"][i]}
+        {"take_id": t, "checks": a["checks"], "reason": a["reason"], "passes": v["passes"][i], "rank": v["ranks"][i]}
         for i, (t, a) in enumerate(zip(cands, value["takes"]))
-    ]  # fmt: skip
+    ]
     return {
         "verdict": v["verdict"],
         "first_failed": v["first_failed"],
@@ -56,12 +55,9 @@ def verdict(req: dict) -> dict:
 
 
 async def answer(store, body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.judge_test_errors("request", req):
-        return {"error": f"not a {SUBJECT} request", "code": "invalid"}
+    req, bad = request(body, schemas.judge_test_errors, SUBJECT)
+    if bad:
+        return bad
     try:
         reply = await prompt(store, req) if req["op"] == "prompt" else verdict(req)
     except Exception:
@@ -75,8 +71,4 @@ async def answer(store, body: bytes) -> dict:
 
 async def serve(nc, store):
     """Subscribe the responder; returns the subscription."""
-
-    async def on(msg) -> None:
-        await msg.respond(json.dumps(await answer(store, msg.data), ensure_ascii=False).encode())
-
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=on)
+    return await respond(nc, SUBJECT, lambda body: answer(store, body))

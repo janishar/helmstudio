@@ -28,3 +28,14 @@ export function safeUrl(u: string | null | undefined): string | undefined {
     return undefined; // "http://" and the like: no link rather than a render error
   }
 }
+
+/** Seconds as m:ss, rounded to the second ("1:52"; 119.6 s is "2:00"). */
+export const clock = (s: number) => {
+  const t = Math.max(0, Math.round(s));
+  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
+};
+
+/** "1 take", "2 takes". */
+export const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
+
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));

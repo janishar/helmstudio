@@ -60,10 +60,7 @@ class Padded:
         from diffusers.models.attention_dispatch import dispatch_attention_fn
         from diffusers.models.transformers.transformer_stable_audio3 import _apply_rotary_partial
 
-        q, k, v = (
-            x.unflatten(-1, (attn.heads, attn.dim_heads))
-            for x in attn.to_qkv(hidden_states).chunk(3, dim=-1)
-        )
+        q, k, v = (x.unflatten(-1, (attn.heads, attn.dim_heads)) for x in attn.to_qkv(hidden_states).chunk(3, dim=-1))
         q, k = (
             _apply_rotary_partial(attn.q_norm(q), rope),
             _apply_rotary_partial(attn.k_norm(k), rope),
@@ -145,9 +142,7 @@ def build(component: str, model) -> nn.Module:
     import warnings
 
     with accelerate.init_empty_weights(include_buffers=False), warnings.catch_warnings():
-        warnings.simplefilter(
-            "ignore", FutureWarning
-        )  # torch's old weight_norm, as diffusers builds it
+        warnings.simplefilter("ignore", FutureWarning)  # torch's old weight_norm, as diffusers builds it
         if component == "dit":
             return Dit()
         if component == "autoencoder":
@@ -243,9 +238,7 @@ def latent_length(seconds: float) -> int:
 
 def valid_latents(seconds: float, length: int) -> int:
     """sample_diffusion's padding mask: ceil(seconds of samples / RATIO) + the headroom's latents, at most `length`."""
-    return min(
-        -(-int(seconds * SAMPLE_RATE) // RATIO) + int(HEADROOM_S * SAMPLE_RATE / RATIO), length
-    )
+    return min(-(-int(seconds * SAMPLE_RATE) // RATIO) + int(HEADROOM_S * SAMPLE_RATE / RATIO), length)
 
 
 def waveform(value: dict) -> torch.Tensor:
@@ -287,13 +280,9 @@ def sample(
         torch.manual_seed(seed)
         x = torch.randn([1, 256, length], device=dev)
         tok = tokenizer(model.folder("text_encoder") / "t5gemma-b-b-ul2")
-        ids = tok(
-            [text], truncation=True, max_length=256, padding="max_length", return_tensors="pt"
-        )
+        ids = tok([text], truncation=True, max_length=256, padding="max_length", return_tensors="pt")
         mask = ids["attention_mask"].to(dev).bool()
-        emb = te(input_ids=ids["input_ids"].to(dev), attention_mask=mask)[
-            "last_hidden_state"
-        ].float()
+        emb = te(input_ids=ids["input_ids"].to(dev), attention_mask=mask)["last_hidden_state"].float()
         glob = dit.duration(torch.tensor([float(seconds)], device=dev))
         context = torch.cat([emb, glob[:, None]], dim=1)
         context_mask = torch.cat([mask, mask.new_ones(1, 1)], dim=1)
@@ -334,9 +323,8 @@ def sample(
 
 
 def take(wave: torch.Tensor) -> dict:
-    """A stereo Audio value (PCM 16-bit interleaved) of float (2, n), levels as the model gives them."""
-    pcm = (wave.T.numpy() * 32767).round().astype("<i2").tobytes()
-    return {"audio": {"wav": pcm, "sample_rate": SAMPLE_RATE, "channels": 2,
+    """A stereo Audio value (PCM 16-bit interleaved) of float (2, n), levels as the model gives them (sample clamps them to [-1, 1])."""
+    return {"audio": {"wav": media.pcm16(wave.T.numpy()), "sample_rate": SAMPLE_RATE, "channels": 2,
                       "duration_s": wave.shape[-1] / SAMPLE_RATE}}  # fmt: skip
 
 

@@ -81,9 +81,7 @@ def test_thumbnails_are_stored_once_by_content_and_listed_in_order():
     thumbs, seen = ask.looked_at(ctx, media)
     assert [s["take_id"] for s in seen] == ["t1", "t2"] and len(thumbs) == 2
     (key,) = ctx.stored
-    assert (
-        seen[0]["key"] == seen[1]["key"] == key == f"u/{OWNER}/llm/thumbs/{seen[0]['sha256']}.jpg"
-    )
+    assert seen[0]["key"] == seen[1]["key"] == key == f"u/{OWNER}/llm/thumbs/{seen[0]['sha256']}.jpg"
     assert hashlib.sha256(ctx.stored[key]).hexdigest() == seen[0]["sha256"]
     assert (seen[0]["width"], seen[0]["height"], seen[0]["frame"]) == (512, 512, None)
 
@@ -187,9 +185,7 @@ async def test_the_fake_answers_what_the_prompt_scripts_on_the_terminal_status()
 
 async def test_a_bad_scripted_answer_fails_twice_and_a_retry_script_passes_the_second_try():
     end, _ = await run(ask_command('ECHO-ANSWER: {"pick": 0}'))
-    assert end["status"] == "failed" and end["error"].startswith(
-        "answer did not match the schema: 0 is less"
-    )
+    assert end["status"] == "failed" and end["error"].startswith("answer did not match the schema: 0 is less")
     assert len(end["answer"]["tries"]) == 2
     end, _ = await run(ask_command('ECHO-ANSWER: {"pick": 0} ECHO-RETRY: {"pick": 1}'))
     assert end["status"] == "succeeded"
@@ -202,11 +198,9 @@ async def test_a_bad_scripted_answer_fails_twice_and_a_retry_script_passes_the_s
 
 async def test_media_takes_are_read_and_checked_and_a_repeat_is_a_cache_hit():
     data = png("red")
-    cmd = ask_command(
-        'ECHO-ANSWER: {"pick": 1}', media=[take(0, data), take(1, b"\0" * 10, "video/mp4")]
-    )
+    cmd = ask_command('ECHO-ANSWER: {"pick": 1}', media=[take(0, data), take(1, b"\0" * 10, "video/mp4")])
     c = consumer(FakeJS())
-    c.store.objects[cmd["data"]["workflow"]["nodes"]["ask"]["params"]["media"][0]["take"]["key"]] = (data, "image/png")  # fmt: skip
+    c.store.objects[cmd["data"]["workflow"]["nodes"]["ask"]["params"]["media"][0]["take"]["key"]] = (data, "image/png")
     end, _ = await run(cmd, c)
     assert end["status"] == "failed" and "is gone" in end["error"]  # the video's object is missing
     cmd["data"]["workflow"]["nodes"]["ask"]["params"]["media"].pop()
@@ -232,9 +226,7 @@ async def test_a_video_media_value_reaches_the_stage_as_its_bytes():
 
 # --- tool calling on the ask contract (API 1.15): the turn schema rides in `schema`; the fake scripts each turn
 
-TURNS = json.loads(
-    (Path(__file__).parents[2] / "contracts/fixtures/decisions/agent-schema.json").read_text()
-)["cases"]
+TURNS = json.loads((Path(__file__).parents[2] / "contracts/fixtures/decisions/agent-schema.json").read_text())["cases"]
 TURN_SCHEMA = TURNS[0]["expect"]  # gallery.search, library.read, rows.add, rows.edit, a list of 3
 SCRIPT = ('Find a fox. ECHO-TURN 1: {"say": "Looking.", "calls": [{"tool": "gallery_search", "args": {"text": "fox"}}]}'
           ' ECHO-TURN 2: {"say": "Two shots.", "calls": [{"tool": "set_items", "args": {"items": ["a", "b"]}}]}'
@@ -243,33 +235,21 @@ SCRIPT = ('Find a fox. ECHO-TURN 1: {"say": "Looking.", "calls": [{"tool": "gall
 
 async def test_the_fake_answers_each_agent_turn_from_its_script():
     for n, want in [(1, "gallery_search"), (2, "set_items"), (3, None)]:
-        end, _ = await run(
-            ask_command(f"{SCRIPT}\nThis is turn {n} of at most 6.", schema=TURN_SCHEMA)
-        )
+        end, _ = await run(ask_command(f"{SCRIPT}\nThis is turn {n} of at most 6.", schema=TURN_SCHEMA))
         assert end["status"] == "succeeded", end
         calls = json.loads(end["answer"]["tries"][0]["text"])["calls"]
         assert [c["tool"] for c in calls] == ([want] if want else [])
-    end, _ = await run(
-        ask_command(f'{SCRIPT} ECHO-ANSWER: {{"say": "x", "calls": []}}', schema=TURN_SCHEMA)
-    )
-    assert (
-        json.loads(end["answer"]["tries"][0]["text"])["say"] == "x"
-    )  # no turn line: stage A's rule
+    end, _ = await run(ask_command(f'{SCRIPT} ECHO-ANSWER: {{"say": "x", "calls": []}}', schema=TURN_SCHEMA))
+    assert json.loads(end["answer"]["tries"][0]["text"])["say"] == "x"  # no turn line: stage A's rule
 
 
 async def test_a_turn_outside_the_schema_is_asked_again_then_fails():
     bad = json.dumps({"say": "", "calls": [{"tool": "memory_write", "args": {}}]})  # not offered
-    end, _ = await run(
-        ask_command(f"ECHO-TURN 1: {bad}\nThis is turn 1 of at most 6.", schema=TURN_SCHEMA)
-    )
+    end, _ = await run(ask_command(f"ECHO-TURN 1: {bad}\nThis is turn 1 of at most 6.", schema=TURN_SCHEMA))
     assert end["status"] == "failed" and end["error"].startswith("answer did not match the schema")
     assert len(end["answer"]["tries"]) == 2
-    five = json.dumps(
-        {"say": "", "calls": [{"tool": "gallery_search", "args": {}}] * 5}
-    )  # > 4 calls per turn
-    end, _ = await run(
-        ask_command(f"ECHO-TURN 1: {five}\nThis is turn 1 of at most 6.", schema=TURN_SCHEMA)
-    )
+    five = json.dumps({"say": "", "calls": [{"tool": "gallery_search", "args": {}}] * 5})  # > 4 calls per turn
+    end, _ = await run(ask_command(f"ECHO-TURN 1: {five}\nThis is turn 1 of at most 6.", schema=TURN_SCHEMA))
     assert end["status"] == "failed"
 
 
@@ -284,9 +264,7 @@ async def test_the_tool_set_is_part_of_the_cache_key():
         end, _ = await run(cmd, c)
         assert end["status"] == "succeeded"
         reads.append(len(c.store.reads))
-    assert (
-        reads[1] == reads[0] and reads[2] > reads[1]
-    )  # same tools: cached; other tools: asked again
+    assert reads[1] == reads[0] and reads[2] > reads[1]  # same tools: cached; other tools: asked again
 
 
 def test_llguidance_unimplemented_keywords_are_dropped_from_the_grammar_only():

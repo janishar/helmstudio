@@ -5,7 +5,7 @@ lockfile in a scratch copy (nothing is written inside it; bytecode is not writte
 
     S=<scratch>/env; cp MiniMax-H3-Image-Studio/{pyproject.toml,uv.lock,.python-version} $S/
     (cd $S && uv sync --locked --no-install-project)
-    HF_HUB_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 $S/.venv/bin/python tests/golden/record_minimax.py --cases t2i-1024-s42
+    HF_HUB_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1 $S/.venv/bin/python runner_service/tests/golden/record_minimax.py --cases t2i-1024-s42
 
 One case per process. A render case does what `minimax-h3-image PROMPT [--input A] --mp 1` does (generate.main,
 generate.py:314-441, no warm worker): encode with the 51-layer int8 text encoder and free it, load the int8
@@ -32,16 +32,17 @@ from pathlib import Path
 STUDIO = Path("~/GenAI/MiniMax-H3-Image-Studio")
 sys.path.insert(0, str(STUDIO / "src"))
 
-import diffusers  # noqa: E402
-import torch  # noqa: E402
-import transformers  # noqa: E402
-from PIL import Image, ImageOps  # noqa: E402
+import itertools
 
-from minimax_h3_image import generate as g  # noqa: E402
+import diffusers
+import torch
+import transformers
+from minimax_h3_image import generate as g
+from PIL import Image, ImageOps
 
-REPO = Path(__file__).resolve().parents[2]
-GOLDEN = REPO / "runner_service" / "tests" / "golden"
-QWEN = REPO / "tests" / "golden" / "qwen-image"
+REPO = Path(__file__).resolve().parents[3]
+GOLDEN = Path(__file__).resolve().parent
+QWEN = GOLDEN / "qwen-image"
 MODELS = Path(os.environ.get("HELMSTUDIO_MODELS", "~/GenAI/models")).expanduser()
 MODEL = MODELS / "MiniMax-H3-Image"
 PE = MODELS / "MiniMax-H3-Image-PE"
@@ -93,7 +94,7 @@ class Phases:
 
     def report(self) -> tuple[dict, dict]:
         names = list(self.t)
-        timing = {a: round(self.t[b] - self.t[a], 1) for a, b in zip(names, names[1:])}
+        timing = {a: round(self.t[b] - self.t[a], 1) for a, b in itertools.pairwise(names)}
         timing["total"] = round(self.t["end"] - self.t["start"], 1)
         return timing, {k: round(v / 1e9, 2) for k, v in self.peak.items() if k != "end"}
 
@@ -127,8 +128,11 @@ def versions(device: str) -> dict:
 
 
 def render(case: dict, out: Path, device: str) -> dict:
-    from diffusers.modular_pipelines import MiniMaxH3ImageBlocks, MiniMaxH3ImageModularPipeline
-    from diffusers.modular_pipelines import SequentialPipelineBlocks
+    from diffusers.modular_pipelines import (
+        MiniMaxH3ImageBlocks,
+        MiniMaxH3ImageModularPipeline,
+        SequentialPipelineBlocks,
+    )
     from transformers import Qwen2TokenizerFast, Qwen3VLProcessor
 
     refs = case.get("refs") or []
@@ -179,6 +183,7 @@ def render(case: dict, out: Path, device: str) -> dict:
             return res
 
         sched.step = observed_step
+
         def on_first(*_) -> None:  # a pre-hook's non-None return would replace the args
             ph.mark("denoise")
             first.remove()
@@ -211,15 +216,38 @@ def render(case: dict, out: Path, device: str) -> dict:
     timing, peak = ph.report()
     meta = {
         **{k: case[k] for k in ("name", "seed", "mp", "sampler", "prompt")},
-        "width": width, "height": height, "steps": g.STEPS, "precision": "int8 (transformer blocks, text-encoder LM layers)",
-        "text_layers": g.TEXT_LAYERS, "generator": "torch.Generator('cpu').manual_seed(noise_seed); torch.manual_seed too",
-        "noise_seed": seed, "output_mode": image.mode, "output_size": list(image.size),
+        "width": width,
+        "height": height,
+        "steps": g.STEPS,
+        "precision": "int8 (transformer blocks, text-encoder LM layers)",
+        "text_layers": g.TEXT_LAYERS,
+        "generator": "torch.Generator('cpu').manual_seed(noise_seed); torch.manual_seed too",
+        "noise_seed": seed,
+        "output_mode": image.mode,
+        "output_size": list(image.size),
         "png_sha256": hashlib.sha256((out / f"{case['name']}.png").read_bytes()).hexdigest(),
-        **({"refs": [{"file": f"{r}", "source": f"tests/golden/qwen-image/{r}", "opened_as": "RGB",
-                      "size": list(im.size), "sha256": hashlib.sha256((QWEN / r).read_bytes()).hexdigest()}
-                     for r, im in zip(refs, images)]} if images else {}),  # fmt: skip
-        **meta, "model_dir": str(MODEL), "versions": versions(device), "timing_s": timing, "peak_gb_mps_driver": peak,
-    }  # fmt: skip
+        **(
+            {
+                "refs": [
+                    {
+                        "file": f"{r}",
+                        "source": f"tests/golden/qwen-image/{r}",
+                        "opened_as": "RGB",
+                        "size": list(im.size),
+                        "sha256": hashlib.sha256((QWEN / r).read_bytes()).hexdigest(),
+                    }
+                    for r, im in zip(refs, images)
+                ]
+            }
+            if images
+            else {}
+        ),
+        **meta,
+        "model_dir": str(MODEL),
+        "versions": versions(device),
+        "timing_s": timing,
+        "peak_gb_mps_driver": peak,
+    }
     for r in refs:
         shutil.copyfile(QWEN / r, out / f"input-{r}")
     return meta
@@ -241,7 +269,9 @@ def enhance_case(case: dict, out: Path, device: str) -> dict:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cases", nargs="+", required=True, help="one case per process: " + ", ".join(c["name"] for c in CASES))
+    ap.add_argument(
+        "--cases", nargs="+", required=True, help="one case per process: " + ", ".join(c["name"] for c in CASES)
+    )
     ap.add_argument("--out", type=Path, help="default: runner_service/tests/golden/<the case's dir>")
     args = ap.parse_args()
     device = g.pick_device("mps")
@@ -251,7 +281,9 @@ def main() -> None:
         out.mkdir(parents=True, exist_ok=True)
         meta = (enhance_case if case["name"].startswith("enhance") else render)(case, out, device)
         (out / f"{case['name']}.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
-        print(case["name"], json.dumps({"timing_s": meta["timing_s"], "peak_gb": meta["peak_gb_mps_driver"]}), flush=True)
+        print(
+            case["name"], json.dumps({"timing_s": meta["timing_s"], "peak_gb": meta["peak_gb_mps_driver"]}), flush=True
+        )
 
 
 if __name__ == "__main__":

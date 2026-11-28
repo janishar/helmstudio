@@ -2,6 +2,7 @@
 // Gallery: every take of the user (docs/mock/Gallery.dc.html, plan 9.1). Search and chips filter the list (the API
 // ANDs them), pages load as the grid scrolls, images (and wav, mp3 or m4a audio) upload from the picker or by dropping them
 // on the grid, and the side panel shows the selected take with the actions that exist so far.
+import { noSubscribe } from "@/lib/hydrated";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -274,8 +275,6 @@ export function TakeCard({
     </button>
   );
 }
-
-const noSubscribe = () => () => {};
 
 /** The Gallery screen; `initial` is the first page (of `batch` when given), read on the server. `batch`: the
  * Pipelines list's Open collection, shown as a clearable "Batch · <title>" chip. */

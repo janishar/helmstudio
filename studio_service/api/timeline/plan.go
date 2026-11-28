@@ -104,7 +104,7 @@ func FrameAt(doc Doc, f int, takes map[string]Take) Frame {
 		}
 		var src *float64
 		if kind == "video" {
-			src = f64(g.S(g.F(val(c.In)) + f - a))
+			src = new(g.S(g.F(val(c.In)) + f - a))
 		}
 		pic := Picture{Clip: c.ID, T: src, Opacity: mixIn}
 		if c.Offline {

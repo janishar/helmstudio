@@ -1,8 +1,6 @@
 package studio
 
 import (
-	"context"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -45,11 +43,11 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 			reply(ctx, http.StatusOK, out, err)
 		}
 	})
-	group.PATCH("/magic/boards/:id", magicIDBody(c.service.PatchMagicBoard))
+	group.PATCH("/magic/boards/:id", idBody(c.service.PatchMagicBoard, http.StatusOK))
 	group.DELETE("/magic/boards/:id", func(ctx *gin.Context) {
 		noContent(ctx, c.service.DeleteMagicBoard(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 	})
-	group.POST("/magic/boards/:id/edits", magicIDBody(c.service.EditMagicBoard))
+	group.POST("/magic/boards/:id/edits", idBody(c.service.EditMagicBoard, http.StatusOK))
 	group.GET("/magic/boards/:id/revisions", func(ctx *gin.Context) {
 		var before *int
 		limit := 20
@@ -66,9 +64,9 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		out, err := c.service.ListMagicRevisions(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), before, limit)
 		reply(ctx, http.StatusOK, out, err)
 	})
-	group.POST("/magic/boards/:id/restore", magicIDBody(c.service.RestoreMagicBoard))
-	group.POST("/magic/boards/:id/undo", magicIDBody(c.service.UndoMagicBoard))
-	group.POST("/magic/boards/:id/redo", magicIDBody(c.service.RedoMagicBoard))
+	group.POST("/magic/boards/:id/restore", idBody(c.service.RestoreMagicBoard, http.StatusOK))
+	group.POST("/magic/boards/:id/undo", idBody(c.service.UndoMagicBoard, http.StatusOK))
+	group.POST("/magic/boards/:id/redo", idBody(c.service.RedoMagicBoard, http.StatusOK))
 	group.GET("/magic/boards/:id/snapshots", func(ctx *gin.Context) {
 		out, err := c.service.ListMagicSnapshots(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 		reply(ctx, http.StatusOK, out, err)
@@ -118,7 +116,7 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		}
 		reply(ctx, http.StatusAccepted, out, err)
 	})
-	group.POST("/magic/boards/:id/plan", magicIDBody(c.service.PlanMagicBoard))
+	group.POST("/magic/boards/:id/plan", idBody(c.service.PlanMagicBoard, http.StatusOK))
 	// API 1.82: Send to Timeline
 	group.POST("/magic/boards/:id/send", func(ctx *gin.Context) {
 		body, err := strictBody[dto.MagicSendCreate](ctx, false)
@@ -167,21 +165,4 @@ func (c *controller) mountMagic(group *gin.RouterGroup) {
 		noContent(ctx, c.service.DeleteMagicSnapshot(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"),
 			ctx.Param("snapshot_id")))
 	})
-}
-
-// magicIDBody decodes a strict body and answers fn(:id) with 200; an op that cannot apply is MagicEditError's 422.
-func magicIDBody[B, T any](fn func(ctx context.Context, caller common.Caller, id string, body *B) (T, error)) gin.HandlerFunc {
-	return func(ctx *gin.Context) {
-		body, err := strictBody[B](ctx, false)
-		var out T
-		if err == nil {
-			out, err = fn(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
-		}
-		var failed *MagicEditError
-		if errors.As(err, &failed) {
-			network.SendJSON(ctx, http.StatusUnprocessableEntity, failed)
-			return
-		}
-		reply(ctx, http.StatusOK, out, err)
-	}
 }

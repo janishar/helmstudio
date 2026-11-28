@@ -81,15 +81,11 @@ def test_torch_registry_joins_the_four_music_and_sound_families():
     nodes = registry.node_schemas(values)
     for fam, cls in SOUND.items():
         (got,) = [m for m in values["models"]["models"] if m["family"] == fam]
-        (want,) = json.loads(
-            (CONTRACTS / f"fixtures/registry/{fam}.models.valid.json").read_text()
-        )["models"]
+        (want,) = json.loads((CONTRACTS / f"fixtures/registry/{fam}.models.valid.json").read_text())["models"]
         top = ("id", "family", "title", "media", "runtimes", "sound")
         assert {k: got.get(k) for k in top} == {k: want.get(k) for k in top} and got["sound"] == cls
         wfs = [w for w in values["workflows"]["workflows"] if w["family"] == fam]
-        assert wfs and {w["id"]: workflow_sound(w["nodes"], nodes) for w in wfs} == {
-            w["id"]: cls for w in wfs
-        }
+        assert wfs and {w["id"]: workflow_sound(w["nodes"], nodes) for w in wfs} == {w["id"]: cls for w in wfs}
 
 
 @pytest.mark.skipif(not CONTRACTS.is_dir(), reason="contracts/ is not next to the service")

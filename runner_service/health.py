@@ -17,8 +17,7 @@ async def _answer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, nc
     body = b'{"status":"ok"}' if ok else b'{"status":"unavailable"}'
     writer.write(
         b"HTTP/1.1 %s\r\nContent-Type: application/json\r\nContent-Length: %d\r\n"
-        b"Connection: close\r\n\r\n%s"
-        % (b"200 OK" if ok else b"503 Service Unavailable", len(body), body)
+        b"Connection: close\r\n\r\n%s" % (b"200 OK" if ok else b"503 Service Unavailable", len(body), body)
     )
     with contextlib.suppress(Exception):
         await writer.drain()
@@ -27,9 +26,7 @@ async def _answer(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, nc
 
 async def serve(nc) -> asyncio.Server:
     """Start the health endpoint."""
-    return await asyncio.start_server(
-        lambda r, w: _answer(r, w, nc), config.HEALTH_HOST, config.HEALTH_PORT
-    )
+    return await asyncio.start_server(lambda r, w: _answer(r, w, nc), config.HEALTH_HOST, config.HEALTH_PORT)
 
 
 def check() -> int:

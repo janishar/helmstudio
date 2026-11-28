@@ -8,28 +8,21 @@ import { ArrowDown, ArrowUp, Download, FolderOpen, Trash2 } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { openMenu, type Item } from "@/components/context-menu";
 import { api, message, ok, type S } from "@/lib/api";
+import { desktop } from "@/lib/desktop";
 import { diskText, foldersOf, pathName, pathProblem } from "@/lib/models";
 
 type Folder = S<"ModelFolder">;
 /** A row of the card: a folder of the list (`f`, as the runner reports it) or a path added and not saved yet. */
 type Row = { path: string; f?: Folder };
 
-/** The Mac app's bridge (desktop/src/ui/studio-preload.js): its folder dialog and Show in Finder, on its own host. */
-type Mac = {
-  localHost?: string;
-  chooseFolder?: (current?: string) => Promise<string | null>;
-  reveal?: (path: string) => Promise<boolean>;
-};
-const mac = () => (globalThis as { helmDesktop?: Mac }).helmDesktop;
-
 /** Why Open / Show in Finder is greyed for a path on `host`, or null when it can open. */
 export function revealOff(host: string, connected = true): string | null {
-  const d = mac();
+  const d = desktop();
   if (!d?.reveal) return "In the Mac app";
   if (d.localHost !== host) return "Not on this Mac";
   return connected ? null : "Not connected";
 }
-export const reveal = (path: string) => void mac()?.reveal?.(path);
+export const reveal = (path: string) => void desktop()?.reveal?.(path);
 
 /** Replaces the host's list: the paths in priority order and the index downloads go to. */
 const putFolders = (host: string, paths: string[], downloads: number) =>
@@ -298,7 +291,7 @@ export function EditFolders({
   const [addError, setAddError] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const d = mac();
+  const d = desktop();
   const browse = d?.chooseFolder && d.localHost === host ? d.chooseFolder : null;
 
   const move = (from: number, to: number) => {

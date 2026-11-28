@@ -257,13 +257,13 @@ export function runLine(r: BlockRun, n: number): { title: string; sub: string } 
   };
 }
 
-// the fake mode's Qwen Image variants (API 1.94; MagicBoard 7)
+// the tests' Qwen Image variants (API 1.94; MagicBoard 7)
 const QWEN_VARIANT = {
   path: VARIANT,
   param: { name: "variant", type: "enum" as const, default: "base", enum: ["base", "turbo"] },
 };
 
-/** The fake mode's kinds (MagicBoard frame 2's models; nothing runs them but the fake runs). */
+/** The tests' kinds (MagicBoard frame 2's models), as studio's /magic/kinds serves them. */
 export const FAKE_KINDS: Kinds = {
   kinds: [
     {

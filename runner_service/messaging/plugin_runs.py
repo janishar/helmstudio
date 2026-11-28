@@ -57,9 +57,7 @@ def find(dirs: list[Path], name: str) -> tuple[Path, dict]:
             break
     else:
         raise Refused(
-            "a .zip plugin can't start: unpack it into a folder"
-            if zipped
-            else "not found in its plugin folders"
+            "a .zip plugin can't start: unpack it into a folder" if zipped else "not found in its plugin folders"
         )
     try:
         m = json.loads(mf.read_text())
@@ -249,9 +247,7 @@ class Supervisor:
             if f.read_text().strip() == str(pid):
                 f.unlink()
 
-    async def reap(
-        self, name: str, argv: list[str] | None = None, folder: Path | None = None
-    ) -> None:
+    async def reap(self, name: str, argv: list[str] | None = None, folder: Path | None = None) -> None:
         """Stop the group a dead (or other) runner left for `name`, when its process is still that plugin's."""
         f = self.run / f"{name}.pid"
         try:
@@ -329,9 +325,7 @@ class Supervisor:
                 except TimeoutError:
                     await self.set(name, "running")
                     await proc.wait()
-                signal_group(
-                    proc.pid, signal.SIGKILL
-                )  # what it left behind (a server holding its port)
+                signal_group(proc.pid, signal.SIGKILL)  # what it left behind (a server holding its port)
                 self.forget(name, proc.pid)
                 stops += 1
                 if loop.time() - started >= self.reset_s:
@@ -384,9 +378,7 @@ class Supervisor:
         if not (isinstance(retry, dict) and all(type(n) is int for n in retry.values())):
             retry = {}
         if errs := schemas.registry_errors("plugin_runs", value):
-            log.error(
-                "host_settings %s is off-contract, ignored: %s", WANT_KEY, "; ".join(errs[:3])
-            )
+            log.error("host_settings %s is off-contract, ignored: %s", WANT_KEY, "; ".join(errs[:3]))
             return
         await self.want(value["plugins"])
         await self.retry(retry)

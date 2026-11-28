@@ -32,10 +32,7 @@ def test_the_detail_pass_needs_the_distilled_transformer():
     )
     wired = {"model", "cond", "seed", "latent", "reference"}
     stage2 = {"role": "stage2", "steps": 3, "detail": True}
-    assert (
-        common.check_sample(stage2, wired, {"model": dev})
-        == ".detail: needs model variant distilled"
-    )
+    assert common.check_sample(stage2, wired, {"model": dev}) == ".detail: needs model variant distilled"
     assert common.check_sample(stage2, wired, {"model": distilled}) is None
 
 
@@ -49,9 +46,7 @@ def test_the_duration_head_is_a_component_of_the_distilled_variants_only():
     assert len(SPEC["variants"]["dev"]["shares"]) == 8
 
 
-def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(
-    tmp_path, monkeypatch
-):
+def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(tmp_path, monkeypatch):
     from core import models
 
     monkeypatch.setattr("config.MODELS", tmp_path)
@@ -59,13 +54,9 @@ def test_the_detailer_is_an_optional_add_on_whose_published_source_has_no_dir(
     assert packs.addons(p) == ["ic_lora", "distilled_lora"]
     assert models.addon_dest(p, "ic_lora") == tmp_path / "ltx-2.5/loras"
     out = models.addon_entry(p, "ic_lora")
-    assert (
-        out["title"] == "Detailer" and out["presence"] == "missing" and "dir" not in out["source"]
-    )
+    assert out["title"] == "Detailer" and out["presence"] == "missing" and "dir" not in out["source"]
     (tmp_path / "ltx-2.5/loras").mkdir(parents=True)
-    (
-        tmp_path / "ltx-2.5/loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors"
-    ).write_bytes(b"x")
+    (tmp_path / "ltx-2.5/loras/ltx-2.5-22b-ic-lora-pixel-spatial-upscaler-x2-1.0.safetensors").write_bytes(b"x")
     marker = tmp_path / "ltx-2.5/loras" / models.MARKER
     marker.parent.mkdir(parents=True)
     marker.write_text("{}")
@@ -84,9 +75,7 @@ def test_the_distilled_lora_is_devs_add_on_not_a_file_of_distilled(tmp_path, mon
     lora = SPEC["components"]["distilled_lora"]["files"]
     src = SPEC["variants"]["distilled"]["source"]
     assert lora not in src["allow_patterns"] and src["bytes"] == 71098807670
-    assert [x["file"] for x in SPEC["lora"]["prefused"]] == [
-        lora
-    ]  # the bake's file is the add-on's
+    assert [x["file"] for x in SPEC["lora"]["prefused"]] == [lora]  # the bake's file is the add-on's
     out = models.addon_entry(p, "distilled_lora")
     assert (out["title"], out["dir"], out["variants"], out["source"]["bytes"]) == (
         "Distilled LoRA", "ltx-2.5", ["dev"], 8899889568)  # fmt: skip
@@ -114,9 +103,7 @@ def test_distill_needs_the_add_on_without_loading_it():
     stage = SPEC["stages"]["distill"]
     assert stage["addons"] == ["distilled_lora"] and "uses" not in stage
     pack = packs.Pack("ltx", LTX, SPEC, "mlx", None, "")
-    nodes = packs._nodes(
-        {"distill": stage}, "ltx", "c", pack, SimpleNamespace(distill=lambda *a: {})
-    )
+    nodes = packs._nodes({"distill": stage}, "ltx", "c", pack, SimpleNamespace(distill=lambda *a: {}))
     schema, node = nodes["ltx/distill"]
     assert schema["addons"] == ["distilled_lora"] and node.uses == ()
     with pytest.raises(ValueError, match="addons names no add-on"):
@@ -142,9 +129,7 @@ def test_ic_lora_adds_the_detailer_as_an_adapter_use(tmp_path, monkeypatch):
     monkeypatch.setattr(models, "hashes", models.Hashes())
     pack = packs.Pack("ltx", LTX, SPEC, "mlx", None, "")
     model = packs.ModelRef(pack, "distilled", "int8")
-    assert (
-        common.ic_lora(None, {"strength": 0.5}, {"model": model})["model"] is model
-    )  # not downloaded, no run
+    assert common.ic_lora(None, {"strength": 0.5}, {"model": model})["model"] is model  # not downloaded, no run
     f = tmp_path / "ltx-2.5" / SPEC["components"]["ic_lora"]["files"]
     f.parent.mkdir(parents=True)
     f.write_bytes(b"lora")

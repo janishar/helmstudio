@@ -12,6 +12,7 @@ import logging
 import uuid
 
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -58,10 +59,7 @@ async def put(store, owner_id, pipeline_id, item_id: str, value: dict) -> dict |
     space = ns(owner_id, pipeline_id)
     if await store.aget(_tomb(owner_id), str(pipeline_id)):
         return GONE
-    if (
-        not await store.aget(space, item_id)
-        and len(await items(store, owner_id, pipeline_id)) >= MAX_ITEMS
-    ):
+    if not await store.aget(space, item_id) and len(await items(store, owner_id, pipeline_id)) >= MAX_ITEMS:
         return FULL
     await store.aput(space, item_id, value, index=False)
     return None
@@ -70,9 +68,7 @@ async def put(store, owner_id, pipeline_id, item_id: str, value: dict) -> dict |
 def judge_example(batch_id, row: int, parked: dict, pick: dict) -> tuple[str, dict]:
     """A pick with a note at a judge, as an item (one per judge visit of a row: a pick delivered twice is one)."""
     kept = pick.get("take_ids") or []
-    iid = uuid.uuid5(
-        uuid.NAMESPACE_URL, f"helmstudio:pick:{batch_id}:{row}:{pick['gate']}:{pick['visit']}"
-    )
+    iid = uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:pick:{batch_id}:{row}:{pick['gate']}:{pick['visit']}")
     source = {"kind": "pick", "batch_id": str(batch_id), "row": row, "node": pick["gate"]}
     return str(iid), {
         "kind": "judge_example",
@@ -124,12 +120,9 @@ async def handle(store, req: dict) -> dict:
 
 
 async def answer(store, body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.memory_errors("request", req):
-        return {"error": "not a pipelines.memory request", "code": "invalid"}
+    req, bad = request(body, schemas.memory_errors, SUBJECT)
+    if bad:
+        return bad
     try:
         reply = await handle(store, req)
     except Exception:
@@ -157,8 +150,4 @@ def encode(reply: dict) -> bytes:
 
 async def serve(nc, store):
     """Subscribe the responder; returns the subscription."""
-
-    async def on(msg) -> None:
-        await msg.respond(encode(await answer(store, msg.data)))
-
-    return await nc.subscribe(SUBJECT, queue="pipelines", cb=on)
+    return await respond(nc, SUBJECT, lambda body: answer(store, body), encode)

@@ -21,6 +21,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import snr
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -78,13 +79,6 @@ def head(wav: bytes, seconds: float = KEEP_S) -> bytes:
         w.setframerate(rate)
         w.writeframes(frames)
     return out.getvalue()
-
-
-def snr(want: np.ndarray, got: np.ndarray) -> float:
-    if want.shape != got.shape:
-        return float("-inf")
-    noise = np.sum((want - got) ** 2)
-    return float("inf") if noise == 0 else float(10 * np.log10(np.sum(want**2) / noise))
 
 
 async def fetch(key: str, limit: int, etag: str | None = None) -> bytes | None:
@@ -164,10 +158,7 @@ def bench():
 def test_matches_the_golden(bench, name):
     from core import pack
 
-    if (
-        CASES[name]["variant"] == "xl-turbo"
-        and not (pack.models_root() / "ACE-Step-1.5-XL-Turbo").is_dir()
-    ):
+    if CASES[name]["variant"] == "xl-turbo" and not (pack.models_root() / "ACE-Step-1.5-XL-Turbo").is_dir():
         pytest.skip("ACE-Step 1.5 XL is not in the models folder")
     r = compare(bench, name)
     print(name, {k: r[k] for k in ("exact", "snr_db", "rms", "s", "peak_gb", "total_s")})

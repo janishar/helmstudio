@@ -762,7 +762,7 @@ export const usedIn = (d: Doc, asset: string) => {
 
 // ------------------------------------------------------------------------------------------------ takes and status
 
-/** A take as the board needs it. Phase B's are fake (lib/magic-fixture.ts); phase C reads them from studio. */
+/** A take as the board needs it, read from studio (lib/magic-standard.ts takesOf). */
 export type TakeInfo = {
   id: string;
   block: string;
@@ -963,3 +963,23 @@ export const everywhere = (h: History, f: (d: Doc) => Doc): History => ({
   now: f(h.now),
   future: h.future.map(f),
 });
+
+/** Seconds a run of each kind takes, a guess where studio's plan has none (≈ 1:50 a shot, 12 s a line, …). */
+export const EST_S: Record<Kind, number> = {
+  frame: 6,
+  image: 6,
+  video: 110,
+  voice: 12,
+  music: 40,
+  sound: 25,
+};
+
+/** "≈ 1 min 50 s", "≈ 6 min", "≈ 12 s"; `short`: "≈ 1:50". */
+export function estText(sec: number, short = false): string {
+  const r = Math.round(sec);
+  if (r < 60) return `≈ ${r} s`;
+  const m = Math.floor(r / 60);
+  const x = r % 60;
+  if (short && m < 5) return x ? `≈ ${m}:${String(x).padStart(2, "0")}` : `≈ ${m} min`;
+  return x && m < 5 ? `≈ ${m} min ${x} s` : `≈ ${Math.round(r / 60)} min`;
+}

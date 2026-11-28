@@ -2,7 +2,7 @@
 
 Run with the old studio's venv (read-only; nothing there is edited):
 
-    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python tests/golden/record_qwen.py
+    ~/GenAI/qwen-image-2.1-studio/.venv/bin/python runner_service/tests/golden/record_qwen.py
     ... record_qwen.py --cases turbo-768-s42 --out /tmp/repeat     # one case, elsewhere
     ... record_qwen.py --cases edit-e1 edit-e2 edit-e3              # the edit goldens
 
@@ -123,9 +123,7 @@ def record(case: dict, out: Path, device: str) -> dict:
             "use_kv_cache": True,
             "output_resolution": 1024,
             "generator": "torch.Generator('cpu').manual_seed(seed)",
-            "sigmas_arg": pipe.config.get(
-                "sample_sigmas"
-            ),  # Turbo's baked 8; None -> linspace(1, 1/n, n)
+            "sigmas_arg": pipe.config.get("sample_sigmas"),  # Turbo's baked 8; None -> linspace(1, 1/n, n)
             "sigmas_used": [round(float(s), 6) for s in sched.sigmas],
             "timesteps_used": [round(float(t), 4) for t in sched.timesteps],
             "scheduler": dict(sched.config),
@@ -169,9 +167,13 @@ def edit_meta(case: dict, images: list, seed: int, out_size) -> dict:
     cond = [calculate_dimensions(1024 * 1024, im.width / im.height)[:2] for im in images]
     return {
         "refs": [
-            {"file": f"qwen-image/{r}", "mode": im.mode, "size": list(im.size),
-             "sha256": hashlib.sha256((GOLDEN / "qwen-image" / r).read_bytes()).hexdigest(),
-             "condition_size": list(c)}  # fmt: skip
+            {
+                "file": f"qwen-image/{r}",
+                "mode": im.mode,
+                "size": list(im.size),
+                "sha256": hashlib.sha256((GOLDEN / "qwen-image" / r).read_bytes()).hexdigest(),
+                "condition_size": list(c),
+            }
             for r, im, c in zip(case["refs"], images, cond)
         ],
         "noise_seed": seed,

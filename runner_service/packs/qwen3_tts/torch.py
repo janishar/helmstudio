@@ -56,14 +56,10 @@ def build(component: str, model) -> nn.Module:
         if component == "talker":
             out = Talker(json.loads((folder / "config.json").read_text()))
         else:
-            cfg = json.loads((folder / "speech_tokenizer/config.json").read_text())[
-                "decoder_config"
-            ]
+            cfg = json.loads((folder / "speech_tokenizer/config.json").read_text())["decoder_config"]
             return CodecDecoder(CodecConfig.from_dict(cfg))
     for qwen in (out.model, out.code_predictor.model):
-        qwen.embed_tokens = nn.Embedding(
-            1, qwen.config.hidden_size, device=device(), dtype=torch.bfloat16
-        )
+        qwen.embed_tokens = nn.Embedding(1, qwen.config.hidden_size, device=device(), dtype=torch.bfloat16)
     return out
 
 
@@ -107,9 +103,7 @@ def check_speak(params: dict, wired: set, models: dict | None = None) -> str | N
     return None
 
 
-def say(
-    tts: Synthesizer, text: str, speaker: str, language: str, instruct: str, seed: int, on_frame
-) -> tuple:
+def say(tts: Synthesizer, text: str, speaker: str, language: str, instruct: str, seed: int, on_frame) -> tuple:
     """One piece as Synthesizer.stream speaks it: (float32 samples, codes [frames, 16] int64). `on_frame(n)` runs
     before each frame is kept (a cancel point)."""
     text_ids = tts._text_ids(text)
@@ -128,9 +122,7 @@ def say(
 
     torch.manual_seed(seed)
     with torch.inference_mode():
-        out = list(
-            tts._pieces(tapped(tts.talker.frames(prompt, pad, tts.sampling, max_frames)), stop)
-        )
+        out = list(tts._pieces(tapped(tts.talker.frames(prompt, pad, tts.sampling, max_frames)), stop))
     samples = np.concatenate(out) if out else np.zeros(0, dtype=np.float32)
     return samples, (torch.stack(codes).cpu() if codes else torch.zeros((0, 16), dtype=torch.long))
 
@@ -146,9 +138,7 @@ def voice_args(node: str, voice: dict, style: str, speakers: dict) -> tuple[str,
         if speaker not in speakers:
             raise RunError(f"{node}.voice: Qwen3-TTS has no speaker {voice.get('speaker')!r}")
         return speaker, style.strip()
-    design = " ".join(
-        x for x in ((voice.get("text") or "").strip(), (voice.get("style") or "").strip()) if x
-    )
+    design = " ".join(x for x in ((voice.get("text") or "").strip(), (voice.get("style") or "").strip()) if x)
     if not design:
         raise RunError(f"{node}.voice: a designed voice needs a description")
     return "", design
@@ -191,30 +181,23 @@ def utter(ctx, tts, text: str, speaker: str, language: str, instruct: str, seed:
     return np.concatenate(audio)
 
 
-def pcm16(samples: np.ndarray) -> bytes:
-    return (np.clip(samples, -1, 1) * 32767).round().astype("<i2").tobytes()
-
-
 def speak(ctx, params: dict, inputs: dict) -> dict:
     model, text = inputs["model"], inputs["text"].strip()
     if not text:
         raise RunError(f"{ctx.node}: nothing to say")
     if len(text) > MAX_CHARS:
-        raise RunError(
-            f"{ctx.node}: at most {MAX_CHARS} characters (about 60 s of speech), not {len(text)}"
-        )
+        raise RunError(f"{ctx.node}: at most {MAX_CHARS} characters (about 60 s of speech), not {len(text)}")
     voice = params["voice"]
     talker = ctx.component(model, "talker")
     codec = ctx.component(model, "speech_tokenizer")
     tts = synthesizer(model, talker, codec, float(params["temperature"]))
     speaker, instruct = voice_args(ctx.node, voice, params.get("style", ""), tts._speaker_ids)
     on_frame, planned = _frames_counter(ctx, len(text))
-    samples = utter(ctx, tts, text, speaker, language_of(params["language"], voice), instruct,
-                    inputs["seed"], on_frame)  # fmt: skip
+    samples = utter(ctx, tts, text, speaker, language_of(params["language"], voice), instruct, inputs["seed"], on_frame)
     ctx.progress(planned, planned, "speaking")
     return {
         "audio": {
-            "wav": pcm16(samples),
+            "wav": media.pcm16(samples),
             "sample_rate": SAMPLE_RATE,
             "duration_s": len(samples) / SAMPLE_RATE,
         }
@@ -252,10 +235,7 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
             raise RunError(f"{where}.voice: a Qwen3-TTS dialogue speaks preset voices only")
         speaker, instruct = voice_args(where, row["voice"], row.get("style", ""), tts._speaker_ids)
         language = language_of(params["language"], row["voice"])
-        spoken.append(
-            pcm16(utter(ctx, tts, text, speaker, language, instruct, inputs["seed"], on_frame))
-        )
+        spoken.append(media.pcm16(utter(ctx, tts, text, speaker, language, instruct, inputs["seed"], on_frame)))
     ctx.progress(planned, planned, "speaking")
     wav, cues = media.stitch(lines, spoken, SAMPLE_RATE)
-    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE,
-                      "cues": cues}}  # fmt: skip
+    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE, "cues": cues}}

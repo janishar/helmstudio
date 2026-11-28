@@ -121,7 +121,7 @@ func (c *controller) mountAssistant(group *gin.RouterGroup) {
 // noContent answers 204, or the error.
 func noContent(ctx *gin.Context, err error) {
 	if err != nil {
-		network.SendMixedError(ctx, err)
+		sendError(ctx, err)
 		return
 	}
 	network.SendNoContent(ctx)

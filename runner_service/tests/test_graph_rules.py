@@ -11,11 +11,7 @@ from core.graph import Cache, Ctx
 from core.pack import Node
 
 GRAPHS = CONTRACTS / "fixtures/graphs"
-PALETTE = {
-    n["kind"]: n
-    for g in json.loads((GRAPHS / "palette.json").read_text())["groups"]
-    for n in g["nodes"]
-}
+PALETTE = {n["kind"]: n for g in json.loads((GRAPHS / "palette.json").read_text())["groups"] for n in g["nodes"]}
 # a runner's palette is its own env (another env's kind is unknown to it), it gets no studio block, and it has no
 # user's LoRA library (studio resolved every LoRA before the run reached it)
 NOT_CHECKED = {"env_mismatch", "studio_unknown_path", "studio_duplicate", "preset_invalid",
@@ -31,9 +27,7 @@ def filled(nodes: dict) -> dict:
     return out
 
 
-@pytest.mark.parametrize(
-    "path", sorted(GRAPHS.glob("valid.*.json")) + sorted(GRAPHS.glob("invalid.*.json")), ids=str
-)
+@pytest.mark.parametrize("path", sorted(GRAPHS.glob("valid.*.json")) + sorted(GRAPHS.glob("invalid.*.json")), ids=str)
 def test_graph_fixture_problems(path):
     fx = json.loads(path.read_text())
     doc = fx["workflow"]

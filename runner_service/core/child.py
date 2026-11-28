@@ -40,9 +40,7 @@ log = logging.getLogger("child")
 POLL = 0.5  # seconds between cancel points and progress forwards
 KILL_S = 3.0  # SIGTERM → SIGKILL
 PROGRESS = re.compile(r"^(.*?)\s+(\d+)/(\d+)(?:\s|$)")
-INFO = re.compile(
-    r"\b(weights|loaded)\b.*\btensors\b"
-)  # a loose child's load report, never a reason
+INFO = re.compile(r"\b(weights|loaded)\b.*\btensors\b")  # a loose child's load report, never a reason
 LIVE: dict = {"pid": None}  # the running child, read by loaders_native.measure_gb
 # the child's environment: what a native binary needs, never the runner's secrets (NATS_URL, S3 keys)
 KEEP = ("PATH", "HOME", "TMPDIR", "LANG", "LC_ALL", "USER")
@@ -115,9 +113,7 @@ class _Child:
             ready,
         )
         self.seen, self.progress, self.diag, self.ready = time.monotonic(), None, [], None
-        self.tail = collections.deque(
-            maxlen=200
-        )  # every stderr line's last: logged when a server fails
+        self.tail = collections.deque(maxlen=200)  # every stderr line's last: logged when a server fails
         self.loose = loose
         self.lock = threading.Lock()
         self.reader = threading.Thread(target=self.read, name="child-stderr", daemon=True)

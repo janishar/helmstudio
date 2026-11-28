@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import snr
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -47,21 +48,12 @@ def samples(wav: bytes) -> tuple[np.ndarray, int, int]:
         return x, w.getframerate(), w.getnchannels()
 
 
-def snr(want: np.ndarray, got: np.ndarray) -> float:
-    if len(want) != len(got):
-        return float("-inf")
-    noise = np.sum((want - got) ** 2)
-    return float("inf") if noise == 0 else float(10 * np.log10(np.sum(want**2) / noise))
-
-
 class SoundBench(Bench):
     """Bench with every output node's value kept (the video workflow has two)."""
 
     def __init__(self) -> None:
         super().__init__()
-        test_qwen_golden.fetch = (
-            fetch  # Bench.run's ctx.fetch: u/golden/<file> is golden/mmaudio/<file>
-        )
+        test_qwen_golden.fetch = fetch  # Bench.run's ctx.fetch: u/golden/<file> is golden/mmaudio/<file>
         self.got: dict = {}
         out = self.impls["output"]
 

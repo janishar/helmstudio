@@ -69,9 +69,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         for name in {x for x in names if names.count(x) > 1}:
             add("duplicate_input", nid, param=name)
         inputs |= {i["name"]: i["type"] for i in nodes[nid]["inputs"]}
-    routers = lambda n: (
-        nodes[n]["kind"] == "decide" or (nodes[n]["kind"] == "agent" and "routes" in nodes[n])
-    )
+    routers = lambda n: nodes[n]["kind"] == "decide" or (nodes[n]["kind"] == "agent" and "routes" in nodes[n])
     succ, outdeg, capped, routed = (
         {n: [] for n in nodes},
         {},
@@ -89,14 +87,10 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             add("unknown_node", frm)
             continue
         fk = nodes[frm]["kind"]
-        if (kind == "branch" and fk not in ("gate", "judge")) or (
-            kind == "routes" and fk not in ("decide", "agent")
-        ):
+        if (kind == "branch" and fk not in ("gate", "judge")) or (kind == "routes" and fk not in ("decide", "agent")):
             add("branch_not_gate", frm)
             continue
-        if (
-            kind == "branch" and "then" not in to and fk != "judge"
-        ):  # API 1.28: only a judge's may Ask me
+        if kind == "branch" and "then" not in to and fk != "judge":  # API 1.28: only a judge's may Ask me
             add("edge_invalid", frm)
             continue
         if (routers(frm) and (kind != "routes" or set(to["routes"]) != set(nodes[frm]["routes"])
@@ -146,11 +140,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
     def dominates(a, b) -> bool:
         return root is None or a == root or (a != b and b not in reach(root, avoid=a))
 
-    lists = {
-        n: v["list"]["max"]
-        for n, v in nodes.items()
-        if v["kind"] in ("write", "agent") and "list" in v
-    }
+    lists = {n: v["list"]["max"] for n, v in nodes.items() if v["kind"] in ("write", "agent") and "list" in v}
     fan = {}  # fanned-out step -> its producer
     for nid in of("step"):
         if "each" in nodes[nid]:
@@ -162,8 +152,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
     branches = lambda s: lists[fan[s]] if s in fan else 1
     caps = lambda n: CAPS | n.get("caps", {})
     agents = of("agent")
-    runs = sum(n.get("seeds", 1) * branches(nid) * visits(nid) for nid, n in nodes.items()
-               if n["kind"] == "step")  # fmt: skip
+    runs = sum(n.get("seeds", 1) * branches(nid) * visits(nid) for nid, n in nodes.items() if n["kind"] == "step")
     calls = sum(visits(nid) for nid, n in nodes.items() if n["kind"] in LLM_KINDS)
     calls += sum(visits(a) * caps(nodes[a])["max_turns"] for a in agents)
     tool_calls = sum(visits(a) * caps(nodes[a])["max_tool_calls"] for a in agents)
@@ -197,9 +186,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             return "frame", nid
         if what == "picked" and k in ("gate", "judge"):
             return "takes", n.get("keep", 1)
-        if (what == "reasons" and k == "judge") or (
-            what == "notes" and k == "memory" and n["op"] == "read"
-        ):
+        if (what == "reasons" and k == "judge") or (what == "notes" and k == "memory" and n["op"] == "read"):
             return "text", None
         if what in ("item", "items") and nid in lists:
             return what, nid
@@ -208,13 +195,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
                 return "any", None
             f = registered[n["node"]]["output"]["properties"].get(what)
             fk = _field_kind(f) if f else None
-            return (
-                ("text", "custom")
-                if fk == "text"
-                else ("takes", f["maxItems"])
-                if fk == "takes"
-                else None
-            )
+            return ("text", "custom") if fk == "text" else ("takes", f["maxItems"]) if fk == "takes" else None
         return None
 
     def before(src: str, nid: str) -> bool:
@@ -236,9 +217,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             add("judge_criteria", nid)
         m = nodes[nid].get("memory")
         if m is not None and (
-            nodes.get(m, {}).get("kind") != "memory"
-            or nodes[m]["op"] != "read"
-            or not dominates(m, nid)
+            nodes.get(m, {}).get("kind") != "memory" or nodes[m]["op"] != "read" or not dominates(m, nid)
         ):
             add("bind_source", nid, "memory")
         if nodes[nid].get("model", "auto").startswith(("server:", "remote:")):
@@ -253,9 +232,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
             )
         ):
             add("write_target", nid)
-    texts = (
-        of("write") + of("decide") + agents + [m for m in of("memory") if nodes[m]["op"] == "write"]
-    )
+    texts = of("write") + of("decide") + agents + [m for m in of("memory") if nodes[m]["op"] == "write"]
     for nid in texts:
         for src in nodes[nid].get("from", []):
             s = source(src)
@@ -295,9 +272,7 @@ def problems(doc: dict, info: dict | None = None, custom: list[dict] | None = No
         info["bounds"] = {"runs": runs, "llm_calls": calls, "tool_calls": tool_calls,
                           "remote_calls": sum(r["calls"] for r in remote),
                           "remote_tokens": sum(r["tokens"] for r in remote)}  # fmt: skip
-        for a in sorted(
-            d for d in agents if nodes[d].get("director")
-        ):  # per batch, any model source
+        for a in sorted(d for d in agents if nodes[d].get("director")):  # per batch, any model source
             c, w = caps(nodes[a]), nodes[a].get("max_wakes", 100)
             info["bounds"]["chat"] = {"calls": w * c["max_turns"] * 2, "tokens": w * c["max_tokens"],
                                       "tool_calls": w * c["max_tool_calls"]}  # fmt: skip
@@ -326,17 +301,13 @@ def _egress(nodes, visits, caps, registered, providers) -> tuple[list, list]:
     egress, reserved = [], {}
     for nid in sorted(nodes):
         n = nodes[nid]
-        if n["kind"] == "custom" and (
-            registered.get(n["node"], {}).get("network") or n.get("network")
-        ):
+        if n["kind"] == "custom" and (registered.get(n["node"], {}).get("network") or n.get("network")):
             fields = sorted(set(n.get("inputs", {})) | set(n.get("bind", {})))
             egress.append({"node": nid, "where": "network", "provider": None, "model": None,
                            "fields": [f"input:{f}" for f in fields], "thumbnails": 0,
                            "per_row": {"calls": 0, "tokens": 0}, "chat": None})  # fmt: skip
         m = n.get("model", "auto") if n["kind"] in MODEL_KINDS else "auto"
-        if (
-            not m.startswith(("server:", "remote:")) or n["kind"] == "judge"
-        ):  # a judge on one: model_media
+        if not m.startswith(("server:", "remote:")) or n["kind"] == "judge":  # a judge on one: model_media
             continue
         where, _, rest = m.partition(":")
         name, _, model = rest.partition("/")
@@ -351,9 +322,7 @@ def _egress(nodes, visits, caps, registered, providers) -> tuple[list, list]:
         if n["kind"] == "agent":
             c = caps(n)
             fields = ["instruction"] + n.get("from", []) + (["routes"] if "routes" in n else [])
-            fields += [f"tool:{x}" for x in n.get("tools", [])] + (
-                ["chat"] if n.get("director") else []
-            )
+            fields += [f"tool:{x}" for x in n.get("tools", [])] + (["chat"] if n.get("director") else [])
             per_row = {"calls": v * c["max_turns"] * 2, "tokens": v * c["max_tokens"]}
             mw = n.get("max_wakes", 100)
             chat = n.get("director") and {
@@ -361,9 +330,7 @@ def _egress(nodes, visits, caps, registered, providers) -> tuple[list, list]:
                 "tokens": mw * c["max_tokens"],
             }
         else:
-            fields = (["instruction"] if n["kind"] == "write" else ["question", "routes"]) + n.get(
-                "from", []
-            )
+            fields = (["instruction"] if n["kind"] == "write" else ["question", "routes"]) + n.get("from", [])
             out_tokens = OUT_TOKENS["write-list" if "list" in n else n["kind"]]
             per_row, chat = {"calls": v * 2, "tokens": v * 2 * (PROMPT_TOKENS + out_tokens)}, None
         egress.append({"node": nid, "where": where, "provider": name, "model": model or None,
@@ -404,20 +371,13 @@ def plan(snapshot: dict) -> dict:
         else:
             branch[frm] = to
     root = next(n for n, v in nodes.items() if v["kind"] == "inputs")
-    fan = {
-        n: v["each"].split(".")[0]
-        for n, v in nodes.items()
-        if v["kind"] == "step" and v.get("each")
-    }
-    director = next(
-        (n for n, v in nodes.items() if v["kind"] == "agent" and v.get("director")), None
-    )
+    fan = {n: v["each"].split(".")[0] for n, v in nodes.items() if v["kind"] == "step" and v.get("each")}
+    director = next((n for n, v in nodes.items() if v["kind"] == "agent" and v.get("director")), None)
     return {
         "fan": fan,
         "director": director,
         "providers": p.get("providers") or {},
-        "remote": p.get("remote")
-        or {"enabled": False, "providers": [], "max_calls": 1, "max_tokens": 1000},
+        "remote": p.get("remote") or {"enabled": False, "providers": [], "max_calls": 1, "max_tokens": 1000},
         "pipeline": True,
         "pipeline_id": p.get("id"),
         "nodes": nodes,
@@ -430,7 +390,6 @@ def plan(snapshot: dict) -> dict:
         "gates": sorted(
             n
             for n, v in nodes.items()
-            if v["kind"] in ("gate", "judge", "decide")
-            or (v["kind"] == "agent" and v.get("routes"))
+            if v["kind"] in ("gate", "judge", "decide") or (v["kind"] == "agent" and v.get("routes"))
         ),
     }

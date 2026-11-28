@@ -83,7 +83,7 @@ func TestSearchInLists(t *testing.T) {
 
 	// chats (their titles come from a first message: written here as the projector would)
 	for user, title := range map[string]string{userA: "Rainy London still of @mara", userB: "London secret"} {
-		err := common.WithUser(context.Background(), e.pool, common.Caller{ID: user}, func(tx pgx.Tx) error {
+		err := common.WithUser(context.Background(), e.pool, user, func(tx pgx.Tx) error {
 			_, err := tx.Exec(context.Background(), `INSERT INTO assistant_threads (id, owner_id, title) VALUES ($1, $2, $3)`,
 				utility.NewID(), user, title)
 			return err

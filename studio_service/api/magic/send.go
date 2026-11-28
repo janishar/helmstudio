@@ -99,15 +99,43 @@ type v1Piece struct {
 	avail  int // a morph take's board frames
 }
 
+// sendBuild is BuildSend's work in progress: the board, its takes, the Send so far and its V1 shots.
+type sendBuild struct {
+	d         Doc
+	takes     map[string]timeline.Take
+	fps       float64
+	out       Send
+	shotsLane *Lane
+	shots     []*sendShot
+	byID      map[string]*sendShot
+}
+
+func (sb *sendBuild) warn(f string, a ...any) {
+	sb.out.Warnings = append(sb.out.Warnings, fmt.Sprintf(f, a...))
+}
+
+// s is board frames f in seconds.
+func (sb *sendBuild) s(f int) float64 { return float64(f) / sb.fps }
+
+// shown is the take a block or morph shows: its pinned one, else its latest ("" none).
+func shown(takes []string, pinned *string) string {
+	switch {
+	case pinned != nil:
+		return *pinned
+	case len(takes) > 0:
+		return takes[len(takes)-1]
+	}
+	return ""
+}
+
 // BuildSend is board d as a new sequence. takes are the takes it shows (a missing one is offline: a gap); status is
 // each block's derived status. A block's shown take is its pinned one, else its latest; turns are a dialogue's takes,
 // one per turn ("" none), played one after another (API 1.89).
 // keep: a dissolve whose takes have the media past each cut goes as the Timeline's own (false: every dissolve is baked,
 // for when the Timeline's rules refuse one).
 func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, turns map[string][]string, keep bool) Send {
-	out := Send{Goes: []SendGoes{}, Joins: []SendJoin{}, Effects: []SendEffect{}, Warnings: []string{}}
-	warn := func(f string, a ...any) { out.Warnings = append(out.Warnings, fmt.Sprintf(f, a...)) }
-	fps := float64(d.Target.FPS)
+	sb := &sendBuild{d: d, takes: takes, fps: float64(d.Target.FPS), out: Send{Goes: []SendGoes{}, Joins: []SendJoin{}, Effects: []SendEffect{}, Warnings: []string{}}}
+	out, warn, fps := &sb.out, sb.warn, sb.fps
 	target := timeline.Target{Width: d.Target.Width, Height: d.Target.Height, FPS: fps, SampleRate: d.Target.SampleRate}
 	if _, _, ok := timeline.Rate(fps); !ok {
 		warn("The Timeline has no %d fps: the sequence is 24 fps", d.Target.FPS)
@@ -117,16 +145,6 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		warn("The Timeline's sound is 44100 or 48000 Hz: the sequence is 48000 Hz")
 		target.SampleRate = 48000
 	}
-	s := func(f int) float64 { return float64(f) / fps }
-	shown := func(takes []string, pinned *string) string {
-		switch {
-		case pinned != nil:
-			return *pinned
-		case len(takes) > 0:
-			return takes[len(takes)-1]
-		}
-		return ""
-	}
 	var shotsLane *Lane
 	for _, l := range d.Lanes {
 		if l.Role == "shots" {
@@ -134,7 +152,54 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			break
 		}
 	}
-	// ---- V1: the first Shots lane's blocks in time
+	sb.shotsLane = shotsLane
+	sb.collectShots(status)
+	sb.joins(sb.v1Transitions(), keep)
+	sb.effectBakes()
+	v1, cursor := sb.layV1()
+	shots := sb.shots
+	tracks := []timeline.Track{{Kind: "video", Clips: v1}}
+	if shotsLane != nil {
+		n := 0
+		for _, sh := range shots {
+			if sh.take != "" {
+				n++
+			}
+		}
+		out.Goes = append(out.Goes, SendGoes{Lane: shotsLane.ID, Name: shotsLane.Name, Kind: "video", Blocks: n, Track: "V1"})
+	}
+	onV1 := map[string]bool{}
+	for _, c := range v1 {
+		onV1[c.ID] = true
+	}
+	tracks = sb.sound(tracks, turns, cursor, onV1)
+	// clip ids on the Timeline's pattern (c1, c2, … in track order); links and bakes follow
+	ids := map[string]string{}
+	for ti := range tracks {
+		for ci := range tracks[ti].Clips {
+			c := &tracks[ti].Clips[ci]
+			ids[c.ID] = "c" + strconv.Itoa(len(ids)+1)
+			c.ID = ids[c.ID]
+		}
+	}
+	for ti := range tracks[1:] {
+		for ci := range tracks[ti+1].Clips {
+			if c := &tracks[ti+1].Clips[ci]; c.Link != nil {
+				to := ids[*c.Link]
+				c.Link = &to
+			}
+		}
+	}
+	for i := range out.Bakes {
+		out.Bakes[i].Clip = ids[out.Bakes[i].Clip]
+	}
+	out.Doc = timeline.Doc{Target: target, Tracks: tracks}
+	return *out
+}
+
+// collectShots is V1: the first Shots lane's blocks in time, with what each shows.
+func (sb *sendBuild) collectShots(status map[string]string) {
+	d, takes, out, warn, fps, shotsLane := sb.d, sb.takes, &sb.out, sb.warn, sb.fps, sb.shotsLane
 	var shots []*sendShot
 	byID := map[string]*sendShot{}
 	if shotsLane != nil {
@@ -193,29 +258,39 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			byID[b.ID] = sh
 		}
 	}
-	// feasible: the frames of sh's own clip after its head and tail stay at least one
-	fits := func(sh *sendShot, head, tail int) bool { return sh.b.Length-head-tail >= 1 }
-	side := func(sh *sendShot, w0, w1 int) SendBakeSide {
-		// board frames [w0, w1) from sh's start: what its take has of them, its first or last frame held for the rest
-		lo, hi := max(w0, 0), min(w1, sh.avail-sh.srcOff)
-		if sh.kind == "image" {
-			return SendBakeSide{TakeID: sh.take, Filters: sh.filters}
-		}
-		held := hi <= lo
-		if held { // nothing of it there: its nearest frame held for the whole span
-			lo = max(min(lo, sh.avail-sh.srcOff-1), 0)
-			hi = lo + 1
-		}
-		pre, post := lo-w0, w1-hi
-		if held {
-			pre, post = 0, w1-w0-1
-		}
-		return SendBakeSide{TakeID: sh.take, Start: s(sh.srcOff+lo) * sh.rate, End: s(sh.srcOff+hi) * sh.rate, Rate: sh.rate,
-			Pre: pre, Post: post, Filters: sh.filters}
+	sb.shots, sb.byID = shots, byID
+}
+
+// fits: the frames of sh's own clip after its head and tail stay at least one.
+func fits(sh *sendShot, head, tail int) bool { return sh.b.Length-head-tail >= 1 }
+
+// side is board frames [w0, w1) from sh's start: what its take has of them, its first or last frame held for the rest.
+func (sb *sendBuild) side(sh *sendShot, w0, w1 int) SendBakeSide {
+	s := sb.s
+	lo, hi := max(w0, 0), min(w1, sh.avail-sh.srcOff)
+	if sh.kind == "image" {
+		return SendBakeSide{TakeID: sh.take, Filters: sh.filters}
 	}
-	addBake := func(clip, kind, title string, frames int, sides ...SendBakeSide) {
-		out.Bakes = append(out.Bakes, SendBake{Clip: clip, Kind: kind, Title: title, Frames: frames, Sides: sides})
+	held := hi <= lo
+	if held { // nothing of it there: its nearest frame held for the whole span
+		lo = max(min(lo, sh.avail-sh.srcOff-1), 0)
+		hi = lo + 1
 	}
+	pre, post := lo-w0, w1-hi
+	if held {
+		pre, post = 0, w1-w0-1
+	}
+	return SendBakeSide{TakeID: sh.take, Start: s(sh.srcOff+lo) * sh.rate, End: s(sh.srcOff+hi) * sh.rate, Rate: sh.rate,
+		Pre: pre, Post: post, Filters: sh.filters}
+}
+
+func (sb *sendBuild) addBake(clip, kind, title string, frames int, sides ...SendBakeSide) {
+	sb.out.Bakes = append(sb.out.Bakes, SendBake{Clip: clip, Kind: kind, Title: title, Frames: frames, Sides: sides})
+}
+
+// v1Transitions are the transitions on V1; a sound lane's are refused here (the Timeline has none).
+func (sb *sendBuild) v1Transitions() []*Transition {
+	d, out, warn, byID, shotsLane := sb.d, &sb.out, sb.warn, sb.byID, sb.shotsLane
 	var v1Transitions []*Transition
 	for _, t := range d.Transitions {
 		switch {
@@ -243,6 +318,12 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			}
 		}
 	}
+	return v1Transitions
+}
+
+// joins bakes, keeps or cuts each V1 transition.
+func (sb *sendBuild) joins(v1Transitions []*Transition, keep bool) {
+	takes, out, warn, fps, shots, byID, side, addBake := sb.takes, &sb.out, sb.warn, sb.fps, sb.shots, sb.byID, sb.side, sb.addBake
 	// the lane's fade in and out first (they take the first block's head and the last one's tail), then the joins
 	// in time, so a kept dissolve's handle (the second block's clip starting into its take) is known before that
 	// block's next join reads it
@@ -330,7 +411,11 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		}
 		out.Joins = append(out.Joins, join)
 	}
-	// effects: each shot's own clip between its head and tail is baked with them
+}
+
+// effectBakes: each shot's own clip between its head and tail is baked with its effects.
+func (sb *sendBuild) effectBakes() {
+	shots, side, addBake := sb.shots, sb.side, sb.addBake
 	for _, sh := range shots {
 		if len(sh.filters) == 0 && sh.rate == 1 || sh.take == "" {
 			continue
@@ -343,15 +428,18 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			addBake(sh.b.ID, "effects", short(sh.b)+" · effects", hi-lo, side(sh, lo, hi))
 		}
 	}
+}
+
+// layV1 lays V1 out in time; cursor is its end in board frames.
+func (sb *sendBuild) layV1() (v1 []timeline.Clip, cursor int) {
+	s, out, shots := sb.s, &sb.out, sb.shots
 	baked := map[string]bool{}
 	for _, bk := range out.Bakes {
 		baked[bk.Clip] = true
 	}
-	// ---- lay V1 out in time
-	var v1 []timeline.Clip
 	slot := func(id string, frames int) {
 		if frames > 0 {
-			v1 = append(v1, timeline.Clip{ID: id, Hold: f64(s(frames)), Alternatives: []string{}})
+			v1 = append(v1, timeline.Clip{ID: id, Hold: new(s(frames)), Alternatives: []string{}})
 		}
 	}
 	piece := func(p *v1Piece) {
@@ -364,10 +452,10 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		}
 		n := min(p.frames, p.avail)
 		take := p.take
-		v1 = append(v1, timeline.Clip{ID: p.id, TakeID: &take, In: f64(0), Out: f64(s(n)), Alternatives: []string{}})
+		v1 = append(v1, timeline.Clip{ID: p.id, TakeID: &take, In: new(0.0), Out: new(s(n)), Alternatives: []string{}})
 		slot(p.id+"-rest", p.frames-n)
 	}
-	cursor := 0
+	cursor = 0
 	for i, sh := range shots {
 		slot("gap-"+strconv.Itoa(i), sh.b.At-cursor)
 		piece(sh.headClip)
@@ -384,7 +472,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			n := min(own, max(sh.avail-sh.srcOff-sh.head, 0))
 			if n > 0 {
 				take := sh.take
-				c := timeline.Clip{ID: sh.b.ID, TakeID: &take, In: f64(s(sh.srcOff + sh.head)), Out: f64(s(sh.srcOff + sh.head + n)),
+				c := timeline.Clip{ID: sh.b.ID, TakeID: &take, In: new(s(sh.srcOff + sh.head)), Out: new(s(sh.srcOff + sh.head + n)),
 					Alternatives: []string{}}
 				if sh.dissolve > 0 {
 					c.TransitionIn = &timeline.Dissolve{Type: "dissolve", Frames: sh.dissolve}
@@ -394,32 +482,20 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			slot(sh.b.ID+map[bool]string{true: "-rest", false: ""}[n > 0], own-n)
 		case sh.kind == "image":
 			take := sh.take
-			v1 = append(v1, timeline.Clip{ID: sh.b.ID, TakeID: &take, Hold: f64(s(own)), Alternatives: []string{}})
+			v1 = append(v1, timeline.Clip{ID: sh.b.ID, TakeID: &take, Hold: new(s(own)), Alternatives: []string{}})
 		default:
 			slot(sh.b.ID, own)
 		}
 		piece(sh.after)
 		cursor = sh.b.At + sh.b.Length
 	}
-	if v1 == nil {
-		v1 = []timeline.Clip{}
-	}
-	tracks := []timeline.Track{{Kind: "video", Clips: v1}}
-	if shotsLane != nil {
-		n := 0
-		for _, sh := range shots {
-			if sh.take != "" {
-				n++
-			}
-		}
-		out.Goes = append(out.Goes, SendGoes{Lane: shotsLane.ID, Name: shotsLane.Name, Kind: "video", Blocks: n, Track: "V1"})
-	}
-	onV1 := map[string]bool{}
-	for _, c := range v1 {
-		onV1[c.ID] = true
-	}
-	// ---- sound: the voice, music and sound lanes (and free lanes' sound) on audio tracks, linked to their shots
-	end := cursor // V1's end in board frames; sound past it is cut there
+	return v1, cursor
+}
+
+// sound puts the voice, music and sound lanes (and free lanes' sound) on audio tracks after tracks, linked to their
+// shots; end is V1's end in board frames.
+func (sb *sendBuild) sound(tracks []timeline.Track, turns map[string][]string, end int, onV1 map[string]bool) []timeline.Track {
+	d, takes, out, warn, fps, s, shots, shotsLane := sb.d, sb.takes, &sb.out, sb.warn, sb.fps, sb.s, sb.shots, sb.shotsLane
 	links := map[string]string{}
 	for _, l := range d.Links {
 		if len(l.To) > 0 && onV1[l.To[0]] {
@@ -483,9 +559,9 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 				if made > 0 {
 					cid = b.ID + "." + strconv.Itoa(made)
 				}
-				c := timeline.Clip{ID: cid, TakeID: &take, In: f64(0), Out: f64(s(n)), At: f64(s(at)), Alternatives: []string{}}
+				c := timeline.Clip{ID: cid, TakeID: &take, In: new(0.0), Out: new(s(n)), At: new(s(at)), Alternatives: []string{}}
 				if b.GainDB != nil { // API 1.101: the block's level is its clips' gain
-					c.GainDB = f64(*b.GainDB)
+					c.GainDB = new(*b.GainDB)
 				}
 				if to, ok := links[b.ID]; ok && made == 0 {
 					c.Link = &to
@@ -528,28 +604,5 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			}
 		}
 	}
-	// clip ids on the Timeline's pattern (c1, c2, … in track order); links and bakes follow
-	ids := map[string]string{}
-	for ti := range tracks {
-		for ci := range tracks[ti].Clips {
-			c := &tracks[ti].Clips[ci]
-			ids[c.ID] = "c" + strconv.Itoa(len(ids)+1)
-			c.ID = ids[c.ID]
-		}
-	}
-	for ti := range tracks[1:] {
-		for ci := range tracks[ti+1].Clips {
-			if c := &tracks[ti+1].Clips[ci]; c.Link != nil {
-				to := ids[*c.Link]
-				c.Link = &to
-			}
-		}
-	}
-	for i := range out.Bakes {
-		out.Bakes[i].Clip = ids[out.Bakes[i].Clip]
-	}
-	out.Doc = timeline.Doc{Target: target, Tracks: tracks}
-	return out
+	return tracks
 }
-
-func f64(v float64) *float64 { return &v }

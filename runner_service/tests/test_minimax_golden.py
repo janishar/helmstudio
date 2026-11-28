@@ -43,9 +43,7 @@ def settings(name: str) -> dict:
 class MiniMaxBench(Bench):
     def __init__(self) -> None:
         super().__init__()
-        self.workflow = next(
-            w for p in self.packs for w in p.workflows if w["id"] == "minimax-h3-image"
-        )
+        self.workflow = next(w for p in self.packs for w in p.workflows if w["id"] == "minimax-h3-image")
 
     def nodes(self, case: dict) -> dict:
         """The workflow with a golden's settings: --mp 1 (1024 × 1024, rendered on the 4 MP canvas)."""

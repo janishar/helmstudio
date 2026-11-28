@@ -34,14 +34,6 @@ def caps(spec: dict) -> dict:
     return CAPS | spec.get("caps", {})
 
 
-def _sources(plan, state, spec) -> tuple[list | None, str | None]:
-    texts = [graph._text(plan, state, s) for s in spec.get("from", [])]
-    if None in texts:
-        src = spec["from"][texts.index(None)]
-        return None, f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
-    return list(zip(spec.get("from", []), texts)), None
-
-
 def _new_call(nid: str, visit: int, sources: list) -> dict:
     own = [t for s, t in sources if s.startswith("$")]  # only the user's texts bring mentions in
     return {
@@ -80,23 +72,15 @@ def submit_part(plan, nid, spec, chat: bool = False):
     async def submit(state: graph.Row, runtime: Runtime[graph.Context]) -> graph.Row:
         """One turn's model call (or the end of the visit at a cap); a row's first turn may be replayed."""
         ctx, call, up = runtime.context, state.get("call") or {}, {}
-        if not (
-            call.get("node") == nid and call.get("open")
-        ):  # a new visit (a row) or wake (the chat)
+        if not (call.get("node") == nid and call.get("open")):  # a new visit (a row) or wake (the chat)
             if chat:
                 visit, sources = state["wake"], []
             else:
                 visit = state.get("visits", {}).get(nid, 0) + 1
                 up["visits"] = state.get("visits", {}) | {nid: visit}
-                sources, error = _sources(plan, state, spec)
+                sources, error = graph._sources(plan, state, spec)
                 if error:
-                    cell = {"visit": visit, "status": "failed", "error": error}
-                    return (
-                        up
-                        | graph._end("failed", f"{nid}: {error}")
-                        | {"cells": graph._cell(state, nid, "agent", cell)}
-                        | graph._step(state, nid, "submit", visit, "finished", error, error=error)
-                    )
+                    return graph._failed(state, up, nid, "agent", "submit", visit, error)
             call = _new_call(nid, visit, sources)
         call, visit, turn = dict(call), call["visit"], call["turn"]
         used = call["tokens_in"] + call["tokens_out"]
@@ -123,9 +107,7 @@ def submit_part(plan, nid, spec, chat: bool = False):
         inputs = graph._with_source(spec, inputs, ask)
         if not chat and turn == 0 and not call["reask"]:
             call["first"] = inputs
-            h = agents.inputs_hash(
-                {"workflow": spec["workflow"], "template": agents.AGENT, "inputs": inputs}
-            )
+            h = agents.inputs_hash({"workflow": spec["workflow"], "template": agents.AGENT, "inputs": inputs})
             tail = f"{state['row']}:{nid}:{visit}:{h}"
             call["replay_key"] = f"{state['batch_id']}:{tail}"
             stored = (
@@ -135,9 +117,7 @@ def submit_part(plan, nid, spec, chat: bool = False):
                 and not remote  # remote answers are never treated as reproducible
                 and await ctx.replay(f"{ctx.replay_batch}:{tail}")
             )
-            if stored and stored.get(
-                "agent"
-            ):  # its end is reused; its tool calls are not run again
+            if stored and stored.get("agent"):  # its end is reused; its tool calls are not run again
                 a = stored["agent"]
                 call |= {"replayed_from": stored["id"], "open": False, "inputs": inputs, "items": a["items"] or None,
                          "final": {"route": a["route"], "say": a["say"]}}  # fmt: skip
@@ -148,17 +128,12 @@ def submit_part(plan, nid, spec, chat: bool = False):
                                   f"Replayed decision {stored['id']}; no model asked, no tool run again",
                                   changed=[f"call.{nid} = replayed"])
                 )  # fmt: skip
-        stop = (
-            "turns" if turn >= c["max_turns"]
-            else "tokens" if used + est + 16 > c["max_tokens"]
-            else None
-        )  # fmt: skip
+        stop = "turns" if turn >= c["max_turns"] else "tokens" if used + est + 16 > c["max_tokens"] else None
         if stop:
             return (
                 up
                 | {
-                    "call": call
-                    | {"stopped": stop, "open": False, "inputs": call["inputs"] or inputs},
+                    "call": call | {"stopped": stop, "open": False, "inputs": call["inputs"] or inputs},
                     "to": end,
                 }
                 | graph._step(
@@ -203,9 +178,7 @@ def wait_part(nid):
         pending = graph.parked_on(call)
         got = interrupt(pending) if pending else {}
         result = call["result"] or got.get(call["run"]) or graph.MISSING
-        what = {"succeeded": "answered", "failed": "the call failed", "cancelled": "cancelled"}[
-            result["status"]
-        ]
+        what = {"succeeded": "answered", "failed": "the call failed", "cancelled": "cancelled"}[result["status"]]
         what = f"Parked, then {what}" if pending else what.capitalize()
         return {"call": call | {"result": result}, "to": f"{nid}.tools"} | graph._step(
             state, nid, "wait", call["visit"], "resumed" if pending else "finished", what,
@@ -218,18 +191,13 @@ def wait_part(nid):
 def _turn_of(t: dict, local: bool) -> dict:
     """The model's answer as a turn: a local ask's JSON object, or a native answer normalised."""
     if not local:
-        native = [
-            {"function": {"name": x["name"], "arguments": x["arguments"]}}
-            for x in t.get("tool_calls") or []
-        ]
+        native = [{"function": {"name": x["name"], "arguments": x["arguments"]}} for x in t.get("tool_calls") or []]
         return agents.normalise_native({"content": t["text"], "tool_calls": native})
     value, err = agents.parse(t["text"], {"type": "object"})
     return value if err is None else {"error": err}
 
 
-async def run_tool(
-    state, ctx, spec, call: dict, c: dict, cid: str, chat: bool
-) -> tuple[dict | None, str | None]:
+async def run_tool(state, ctx, spec, call: dict, c: dict, cid: str, chat: bool) -> tuple[dict | None, str | None]:
     """One call as the batch's owner: (result, None) or (None, the refusal told to the model). Mutates `call`
     (items, memory read and written, rows touched, notices)."""
     w, args, row = c["tool"], c["args"], 0 if chat else state["row"]
@@ -243,11 +211,7 @@ async def run_tool(
         return {"items": len(args["items"])}, None
     if w == "memory_read":  # a row reads the batch's snapshot; only the director's chat reads live
         src = await ctx.memory_live() if chat and ctx.memory_live else ctx.memory
-        found = [
-            i
-            for i in src
-            if args.get("kind") in (None, i["kind"]) and args.get("key") in (None, i["key"])
-        ]
+        found = [i for i in src if args.get("kind") in (None, i["kind"]) and args.get("key") in (None, i["key"])]
         found = found[: args.get("limit", 8)]
         call["memory_read"] = (call["memory_read"] + [i["id"] for i in found])[-32:]
         items = [{k: i[k] for k in ("id", "kind", "key", "text", "created_at")} for i in found]
@@ -257,9 +221,7 @@ async def run_tool(
             return None, f"at most {MEMORY_WRITES} memory writes per {'wake' if chat else 'visit'}"
         if ctx.put_note is None:
             return None, "this batch has no pipeline memory"
-        iid = str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:memory:{cid}")
-        )  # a re-run overwrites it
+        iid = str(uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:memory:{cid}"))  # a re-run overwrites it
         source = {"kind": "node", "batch_id": state["batch_id"], "row": None if chat else row,
                   "node": call["node"], "visit": call["visit"]}  # fmt: skip
         value = {"kind": "note", "key": args["key"], "text": args["text"], "kept": [], "rejected": [],
@@ -288,9 +250,7 @@ async def _studio_tool(state, ctx, call: dict, w: str, args: dict, row: int, cid
     if "error" in reply:
         if w == "rows_add":
             n = await ctx.next_row() if ctx.next_row else None
-            call["notices"].append(
-                f"{f'Row {n}' if n else 'A row'} was not added: {reply['error']}"
-            )
+            call["notices"].append(f"{f'Row {n}' if n else 'A row'} was not added: {reply['error']}")
         elif w == "rows_edit":
             call["notices"].append(f"Row {args['row']} was not changed: {reply['error']}")
         return None, reply["error"]
@@ -316,9 +276,7 @@ def tools_part(plan, nid, spec, chat: bool = False):
         call["tokens_out"] += answer.get("tokens_out", 0)
         call["seconds"] += answer.get("seconds", 0)
         call["network_failures"] += res.get("network_failures", 0)
-        step = lambda what, **kw: graph._step(
-            state, nid, "tools", visit, "finished", what, turn=turn_no, **kw
-        )
+        step = lambda what, **kw: graph._step(state, nid, "tools", visit, "finished", what, turn=turn_no, **kw)
         err = None
         if call["tokens_in"] + call["tokens_out"] > c["max_tokens"]:  # reported tokens past the cap
             call |= {
@@ -334,11 +292,7 @@ def tools_part(plan, nid, spec, chat: bool = False):
             call |= {"open": False, "result": None, "answers": (call["answers"] + tries)[-64:]}
             if res.get("kind") == "cap":
                 call["stopped"] = "remote_cap"
-            call["failed"] = (
-                "cancelled"
-                if res["status"] == "cancelled"
-                else res.get("error") or "the call failed"
-            )
+            call["failed"] = "cancelled" if res["status"] == "cancelled" else res.get("error") or "the call failed"
             return {"call": call, "to": end} | step(
                 f"The call {'was cancelled' if res['status'] == 'cancelled' else 'failed'}"
             )
@@ -365,9 +319,7 @@ def tools_part(plan, nid, spec, chat: bool = False):
                 call |= {"open": False, "failed": None if call["stopped"] else err, "result": None}
                 return {"call": call, "to": end} | step(f"Answer invalid again: {err}", error=err)
             call |= {"reask": err, "result": None}
-            return {"call": call, "to": f"{nid}.submit"} | step(
-                f"Answer invalid, asking once more: {err}", error=err
-            )
+            return {"call": call, "to": f"{nid}.submit"} | step(f"Answer invalid, asking once more: {err}", error=err)
         call["answers"] = (call["answers"] + tries)[-64:]
         r0, w0, done = len(call["memory_read"]), len(call["memory_wrote"]), []
         for i, x in enumerate(r["calls"]):
@@ -420,9 +372,8 @@ def route_part(plan, nid, spec):
             return (
                 graph._end(status, None if status == "cancelled" else f"{nid}: {error}")
                 | {"cells": graph._cell(state, nid, "agent", cell)}
-                | graph._step(state, nid, "route", visit, "finished", f"Failed: {error}", error=error,
-                              decision=dec)
-            )  # fmt: skip
+                | graph._step(state, nid, "route", visit, "finished", f"Failed: {error}", error=error, decision=dec)
+            )
         up, loops, changed = {}, dict(state.get("loops") or {}), []
         if spec.get("routes"):
             r = plan["routes"][nid]
@@ -436,9 +387,7 @@ def route_part(plan, nid, spec):
             to = r["routes"][label]
             agent |= {"route": label, "to": to, "forced": forced}
             nxt, edge = graph._go(plan, nid, to, "then" if forced else "next")
-            what = f"Route {label}, on to {to}" + (
-                f" (forced: {r['max']} of {r['max']} turns used)" if forced else ""
-            )
+            what = f"Route {label}, on to {to}" + (f" (forced: {r['max']} of {r['max']} turns used)" if forced else "")
         else:
             nxt, edge = graph._go(plan, nid, plan["next"].get(nid), "next")
             what = f"Finished after {len(call['turns'])} turn{'s' * (len(call['turns']) != 1)}"
@@ -447,18 +396,15 @@ def route_part(plan, nid, spec):
             changed.append(f"items.{nid} = {len(call['items'])}")
             what += f" with a list of {len(call['items'])}"
         dec = graph._decision(plan, state, spec, dcall, agent=agent)
-        cell = _agent_cell(
-            call | {"final": final | {"route": agent["route"]}}, "succeeded", decision_id=dec["id"]
-        )
+        cell = _agent_cell(call | {"final": final | {"route": agent["route"]}}, "succeeded", decision_id=dec["id"])
         if agent["route"]:  # as a decide's cell (BatchCellAttempt.route)
             cell["route"] = {"label": agent["route"], "to": agent["to"]}
         return (
             up
             | nxt
             | {"loops": loops, "cells": graph._cell(state, nid, "agent", cell)}
-            | graph._step(state, nid, "route", visit, "finished", what, changed=changed, edge=edge,
-                          decision=dec)
-        )  # fmt: skip
+            | graph._step(state, nid, "route", visit, "finished", what, changed=changed, edge=edge, decision=dec)
+        )
 
     return route
 
@@ -486,9 +432,7 @@ def reply_part(nid):
         """The wake's messages (evt.pipeline.chat): a notice per rejected row and for a cap, then the reply.
         Ids are uuid5 of the wake, so a republish replaces, never duplicates."""
         call, wake, at = state["call"], state["wake"], now()
-        mid = lambda k: str(
-            uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:chat:{state['batch_id']}:{wake}:{k}")
-        )
+        mid = lambda k: str(uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:chat:{state['batch_id']}:{wake}:{k}"))
         base = {
             "wake": wake,
             "rows": call["rows"][-64:],
@@ -497,14 +441,10 @@ def reply_part(nid):
         }
         texts = [("notice", n) for n in call["notices"]]
         if call["stopped"]:
-            texts.append(
-                ("notice", f"The director stopped at its {call['stopped'].replace('_', ' ')} cap.")
-            )
+            texts.append(("notice", f"The director stopped at its {call['stopped'].replace('_', ' ')} cap."))
         elif call["failed"]:
             texts.append(("notice", f"The director could not answer: {call['failed']}"))
-        say = (call["final"] or {}).get("say") or (
-            call["turns"][-1]["say"] if call["turns"] else ""
-        )
+        say = (call["final"] or {}).get("say") or (call["turns"][-1]["say"] if call["turns"] else "")
         if say:
             texts.append(("director", say))
         calls = [x for t in call["turns"] for x in t["calls"]][:64]
@@ -518,8 +458,6 @@ def reply_part(nid):
             "outbox": out,
             "call": call | {"open": False},
             "to": None,
-        } | graph._step(
-            state, nid, "route", call["visit"], "finished", f"Replied ({len(out)} messages)"
-        )
+        } | graph._step(state, nid, "route", call["visit"], "finished", f"Replied ({len(out)} messages)")
 
     return reply

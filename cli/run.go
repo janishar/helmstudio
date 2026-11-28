@@ -533,9 +533,11 @@ func fetch(ctx context.Context, hc *http.Client, link, dest string) error {
 	return f.Close()
 }
 
-func deref(s *string) string {
-	if s == nil {
-		return ""
+// deref is *p, or the zero value when p is nil.
+func deref[T any](p *T) T {
+	if p == nil {
+		var zero T
+		return zero
 	}
-	return *s
+	return *p
 }

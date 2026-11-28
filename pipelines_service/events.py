@@ -36,9 +36,7 @@ class RunEvents:
                 resumed = self.names is not None and await self.names.on_run_finished(d)
             else:
                 resumed = await self.engine.on_run_finished(d)
-            log.info(
-                "run %s (%s) %s", d["run_id"], d["status"], "resumed" if resumed else "dropped"
-            )
+            log.info("run %s (%s) %s", d["run_id"], d["status"], "resumed" if resumed else "dropped")
             await msg.ack()
         except Exception:
             log.exception("run_finished %s failed; redelivering", d["run_id"])

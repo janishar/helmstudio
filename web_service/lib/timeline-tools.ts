@@ -2,6 +2,7 @@
 // tools, the key map (matched on e.code: macOS Option and Shift change e.key), held vs tapped tool keys, Trim's grab
 // zones, snapping with what it snapped to, clamping a drag to its bounds, merging key repeats into one op, the ids an
 // op makes, the live region's words and the zoom field's text. Pure: the components draw and send.
+import { clock } from "@/lib/format";
 import {
   Grid,
   apply,
@@ -432,7 +433,6 @@ export function rulerTicks(a: number, b: number, pps: number, g: Grid): Tick[] {
   }
   return out;
 }
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
 
 /** The blade's tag (§27.4): "0:10.12 · frame 252", at frame steps "0:10 · 7" (the frame in its second). */
 export function cutText(t: number, pps: number, g: Grid, all: boolean): string {

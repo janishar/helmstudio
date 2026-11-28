@@ -222,6 +222,113 @@ func fieldKind(raw json.RawMessage) (string, int) {
 	return "", 0
 }
 
+// pipeCheck is pipelineProblems' work in progress: the document's nodes, the problems found, what the rules learn and
+// the graph of its edges.
+type pipeCheck struct {
+	doc        dto.PipelineDoc
+	nodes      map[string]dto.PipelineNode
+	ids        []string // the node ids, sorted
+	found      map[[4]string]dto.Problem
+	info       *pipelineInfo
+	roots      []string          // the inputs nodes
+	inputs     map[string]string // input name → its type
+	root       string            // the one inputs node ("" without exactly one)
+	graph      pipelineGraph
+	registered map[string]registry.CustomNode
+}
+
+func (pc *pipeCheck) add(code, node, port, param, message string, args ...any) {
+	found := pc.found
+	blocks := "save"
+	if pipelineRunOnly[code] {
+		blocks = "run"
+	}
+	found[[4]string{code, node, port, param}] = dto.Problem{Code: code, Node: node, Port: port, Param: param,
+		Blocks: blocks, Message: fmt.Sprintf(message, args...)}
+}
+
+// of is the ids of the nodes of kind, sorted.
+func (pc *pipeCheck) of(kind string) []string {
+	nodes := pc.nodes
+	return slices.DeleteFunc(slices.Clone(pc.ids), func(id string) bool { return nodes[id].Kind != kind })
+}
+
+// routers: a decide, or an agent with routes: its one edge is a routes edge with its labels
+func (pc *pipeCheck) routers(id string) bool {
+	nodes := pc.nodes
+	return nodes[id].Kind == "decide" || (nodes[id].Kind == "agent" && nodes[id].Routes != nil)
+}
+
+func (pc *pipeCheck) reach(id string) map[string]bool { return pc.graph.reach(id, "", false) }
+
+// visits is how many times a row may reach id, its capped edges counted.
+func (pc *pipeCheck) visits(id string) int {
+	graph, reach := pc.graph, pc.reach
+	n := 1
+	for _, c := range graph.capped {
+		if (id == c.fail || reach(c.fail)[id]) && reach(id)[c.gate] {
+			n += c.max
+		}
+	}
+	return n
+}
+
+// dominates: a before b on every path from the inputs node (unchecked without exactly one inputs node)
+func (pc *pipeCheck) dominates(a, b string) bool {
+	root, graph := pc.root, pc.graph
+	return root == "" || a == root || (a != b && !graph.reach(root, a, false)[b])
+}
+
+// branches is how many branches a step runs in (its producer's list max when it fans out).
+func (pc *pipeCheck) branches(step string) int {
+	info := pc.info
+	if producer, ok := info.Fan[step]; ok {
+		return info.Lists[producer]
+	}
+	return 1
+}
+
+// source is what src names.
+func (pc *pipeCheck) source(src string) (sourced, bool) {
+	nodes, info, branches, inputs, registered := pc.nodes, pc.info, pc.branches, pc.inputs, pc.registered
+	if name, ok := strings.CutPrefix(src, "$"); ok {
+		typ, known := inputs[name]
+		return sourced{kind: "input", typ: typ}, known
+	}
+	id, what, _ := strings.Cut(src, ".")
+	n, known := nodes[id]
+	switch {
+	case !known:
+		return sourced{}, false
+	case what == "takes" && n.Kind == "step":
+		return sourced{kind: "takes", n: n.SeedsOr1() * branches(id)}, true
+	case what == "picked" && (n.Kind == "gate" || n.Kind == "judge"):
+		return sourced{kind: "takes", n: n.KeepOr1()}, true
+	case (what == "reasons" && n.Kind == "judge") || (what == "notes" && n.Kind == "memory" && n.Op == "read"):
+		return sourced{kind: "text"}, true
+	case (what == "item" || what == "items") && hasKey(info.Lists, id):
+		return sourced{kind: what, producer: id}, true
+	case n.Kind == "custom":
+		c, ok := registered[n.CustomNode]
+		if !ok {
+			return sourced{kind: "any"}, true
+		}
+		raw, ok := c.Output.Properties[what]
+		if !ok {
+			return sourced{}, false
+		}
+		switch fk, max := fieldKind(raw); fk {
+		case "text":
+			return sourced{kind: "text", custom: true}, true
+		case "takes":
+			return sourced{kind: "takes", n: max}, true
+		}
+	}
+	return sourced{}, false
+}
+
+func isTextInput(s sourced) bool { return s.kind == "input" && s.typ == "Text" }
+
 // pipelineProblems checks doc with every pipeline rule, sorted as the API answers them. workflows are the documents the
 // caller can run (templates and their own) by id; palette the live kinds; looks the looks the caller can use now, loras
 // the LoRA id → family the caller can use now in an env (the fit rule); env the providers, the remote switch and the
@@ -231,15 +338,8 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 	info := pipelineInfo{Models: map[string]string{}, Near: map[string]string{}, Fan: map[string]string{},
 		Lists: map[string]int{}, Egress: []dto.PipelineEgress{}, Reserved: []dto.PipelineReserved{}}
 	found := map[[4]string]dto.Problem{}
-	add := func(code, node, port, param, message string, args ...any) {
-		blocks := "save"
-		if pipelineRunOnly[code] {
-			blocks = "run"
-		}
-		found[[4]string{code, node, port, param}] = dto.Problem{Code: code, Node: node, Port: port, Param: param,
-			Blocks: blocks, Message: fmt.Sprintf(message, args...)}
-	}
-	nodes := doc.Nodes
+	pc := &pipeCheck{doc: doc, nodes: doc.Nodes, found: found, info: &info}
+	add, nodes := pc.add, pc.nodes
 	if len(nodes) > MaxPipelineNodes {
 		add("too_many_nodes", "", "", "", "the pipeline has %d nodes; at most %d", len(nodes), MaxPipelineNodes)
 	}
@@ -249,10 +349,51 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 	if len(found) > 0 {
 		return sortedProblems(found), info // nothing else is checked: the work stays bounded
 	}
-	ids := slices.Sorted(maps.Keys(nodes))
-	of := func(kind string) []string {
-		return slices.DeleteFunc(slices.Clone(ids), func(id string) bool { return nodes[id].Kind != kind })
+	pc.ids = slices.Sorted(maps.Keys(nodes))
+	pc.inputsNode()
+	pc.buildGraph()
+	pc.cycles()
+	if len(pc.roots) == 1 {
+		pc.root = pc.roots[0]
 	}
+	pc.bounds()
+	pc.reachable()
+	registered := map[string]registry.CustomNode{}
+	for _, c := range env.Custom {
+		registered[c.Name] = c
+	}
+	pc.registered = registered
+	pc.nodeRules()
+	remote := doc.RemoteFilled()
+	providers := map[string]providerInfo{}
+	for _, p := range env.Providers {
+		if p.Enabled == nil || *p.Enabled {
+			providers[p.Name] = p
+		}
+	}
+	// remoteOK is the deployment's switch, then the pipeline's (name "": a network custom node); it adds the problem
+	remoteOK := func(id, name string) bool {
+		switch {
+		case !env.RemoteOn:
+			add("remote_off", id, "", "", "%s: remote models are off on this deployment", id)
+		case !remote.Enabled || (name != "" && !slices.Contains(remote.Providers, name)):
+			add("remote_not_enabled", id, "", "", "%s: turn on remote calls for this pipeline and allow %s first", id, cmp.Or(name, "the network"))
+		default:
+			return true
+		}
+		return false
+	}
+	pipelineModels(doc, workflows, pc.of("step"), pc.dominates, providers, remoteOK, env.Auto, &info, add)
+	pc.customRules(remoteOK)
+	pipelineEgress(doc, registered, providers, pc.visits, &info)
+	pc.outputRules()
+	pc.stepRules(workflows, palette, looks, loras)
+	return sortedProblems(found), info
+}
+
+// inputsNode checks the one inputs node and its inputs' names.
+func (pc *pipeCheck) inputsNode() {
+	nodes, add, of := pc.nodes, pc.add, pc.of
 	roots, inputs := of("inputs"), map[string]string{}
 	if len(roots) != 1 {
 		add("inputs_node", "", "", "", "a pipeline needs exactly one inputs node; it has %d", len(roots))
@@ -266,11 +407,14 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			inputs[input.Name] = input.Type
 		}
 	}
-	// a decide, or an agent with routes: its one edge is a routes edge with its labels
-	routers := func(id string) bool {
-		return nodes[id].Kind == "decide" || (nodes[id].Kind == "agent" && nodes[id].Routes != nil)
-	}
-	graph := pipelineGraph{succ: map[string][]pipelineHop{}}
+	pc.roots, pc.inputs = roots, inputs
+}
+
+// buildGraph checks each edge and builds the graph of the good ones.
+func (pc *pipeCheck) buildGraph() {
+	doc, nodes, ids, add, routers := pc.doc, pc.nodes, pc.ids, pc.add, pc.routers
+	graph := &pc.graph
+	graph.succ = map[string][]pipelineHop{}
 	outdeg, routed := map[string]int{}, map[string]bool{}
 	for _, edge := range doc.Edges {
 		from, targets := edge.From, edge.Targets()
@@ -326,29 +470,22 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("decide_routes", id, "", "", "%s: a decide (or an agent with routes) needs its routes edge", id)
 		}
 	}
-	reach := func(id string) map[string]bool { return graph.reach(id, "", false) }
+}
+
+// cycles: a loop needs a capped fail edge.
+func (pc *pipeCheck) cycles() {
+	ids, add := pc.ids, pc.add
+	graph := pc.graph
 	for _, id := range ids { // ponytail: a walk per node, O(n·e); fine at 24 nodes
 		if graph.reach(id, "", true)[id] {
 			add("uncapped_cycle", id, "", "", "%s: it loops back to itself without a capped fail edge", id)
 		}
 	}
-	visits := func(id string) int {
-		n := 1
-		for _, c := range graph.capped {
-			if (id == c.fail || reach(c.fail)[id]) && reach(id)[c.gate] {
-				n += c.max
-			}
-		}
-		return n
-	}
-	root := ""
-	if len(roots) == 1 {
-		root = roots[0]
-	}
-	// a before b on every path from the inputs node (unchecked without exactly one inputs node)
-	dominates := func(a, b string) bool {
-		return root == "" || a == root || (a != b && !graph.reach(root, a, false)[b])
-	}
+}
+
+// bounds is each row's worst case: lists, fan-outs, runs and model calls.
+func (pc *pipeCheck) bounds() {
+	nodes, ids, add, info, of, dominates, branches, visits := pc.nodes, pc.ids, pc.add, pc.info, pc.of, pc.dominates, pc.branches, pc.visits
 	for _, id := range ids {
 		if n := nodes[id]; (n.Kind == "write" || n.Kind == "agent") && n.List != nil {
 			info.Lists[id] = n.List.Max
@@ -363,12 +500,6 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 				info.Fan[id] = producer
 			}
 		}
-	}
-	branches := func(step string) int {
-		if producer, ok := info.Fan[step]; ok {
-			return info.Lists[producer]
-		}
-		return 1
 	}
 	runs, calls, toolCalls := 0, 0, 0
 	for _, id := range ids {
@@ -403,6 +534,11 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 	if calls > MaxPipelineCalls {
 		add("too_many_calls", "", "", "", "a row may ask a model %d times; at most %d", calls, MaxPipelineCalls)
 	}
+}
+
+// reachable: every node is reached from the inputs node and reaches an output.
+func (pc *pipeCheck) reachable() {
+	nodes, ids, add, of, reach, root := pc.nodes, pc.ids, pc.add, pc.of, pc.reach, pc.root
 	if root != "" {
 		fromRoot := reach(root)
 		for _, id := range ids {
@@ -421,47 +557,11 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("dead_end", id, "", "", "%s: no path from here reaches an output", id)
 		}
 	}
-	registered := map[string]registry.CustomNode{}
-	for _, c := range env.Custom {
-		registered[c.Name] = c
-	}
-	source := func(src string) (sourced, bool) {
-		if name, ok := strings.CutPrefix(src, "$"); ok {
-			typ, known := inputs[name]
-			return sourced{kind: "input", typ: typ}, known
-		}
-		id, what, _ := strings.Cut(src, ".")
-		n, known := nodes[id]
-		switch {
-		case !known:
-			return sourced{}, false
-		case what == "takes" && n.Kind == "step":
-			return sourced{kind: "takes", n: n.SeedsOr1() * branches(id)}, true
-		case what == "picked" && (n.Kind == "gate" || n.Kind == "judge"):
-			return sourced{kind: "takes", n: n.KeepOr1()}, true
-		case (what == "reasons" && n.Kind == "judge") || (what == "notes" && n.Kind == "memory" && n.Op == "read"):
-			return sourced{kind: "text"}, true
-		case (what == "item" || what == "items") && hasKey(info.Lists, id):
-			return sourced{kind: what, producer: id}, true
-		case n.Kind == "custom":
-			c, ok := registered[n.CustomNode]
-			if !ok {
-				return sourced{kind: "any"}, true
-			}
-			raw, ok := c.Output.Properties[what]
-			if !ok {
-				return sourced{}, false
-			}
-			switch fk, max := fieldKind(raw); fk {
-			case "text":
-				return sourced{kind: "text", custom: true}, true
-			case "takes":
-				return sourced{kind: "takes", n: max}, true
-			}
-		}
-		return sourced{}, false
-	}
-	isTextInput := func(s sourced) bool { return s.kind == "input" && s.typ == "Text" }
+}
+
+// nodeRules checks gates, judges, writes, text sources and agents.
+func (pc *pipeCheck) nodeRules() {
+	nodes, ids, add, info, of, dominates, branches, source, inputs := pc.nodes, pc.ids, pc.add, pc.info, pc.of, pc.dominates, pc.branches, pc.source, pc.inputs
 	for _, id := range append(of("gate"), of("judge")...) {
 		gate := nodes[id]
 		step, known := nodes[gate.Takes]
@@ -523,26 +623,11 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("director_count", id, "", "", "%s: a pipeline has at most one director; it has %d", id, len(directors))
 		}
 	}
-	remote := doc.RemoteFilled()
-	providers := map[string]providerInfo{}
-	for _, p := range env.Providers {
-		if p.Enabled == nil || *p.Enabled {
-			providers[p.Name] = p
-		}
-	}
-	// remoteOK is the deployment's switch, then the pipeline's (name "": a network custom node); it adds the problem
-	remoteOK := func(id, name string) bool {
-		switch {
-		case !env.RemoteOn:
-			add("remote_off", id, "", "", "%s: remote models are off on this deployment", id)
-		case !remote.Enabled || (name != "" && !slices.Contains(remote.Providers, name)):
-			add("remote_not_enabled", id, "", "", "%s: turn on remote calls for this pipeline and allow %s first", id, cmp.Or(name, "the network"))
-		default:
-			return true
-		}
-		return false
-	}
-	pipelineModels(doc, workflows, of("step"), dominates, providers, remoteOK, env.Auto, &info, add)
+}
+
+// customRules checks each custom node's inputs and binds.
+func (pc *pipeCheck) customRules(remoteOK func(id, name string) bool) {
+	nodes, add, of, dominates, source, registered := pc.nodes, pc.add, pc.of, pc.dominates, pc.source, pc.registered
 	for _, id := range of("custom") {
 		n := nodes[id]
 		c, ok := registered[n.CustomNode]
@@ -584,7 +669,12 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			}
 		}
 	}
-	pipelineEgress(doc, registered, providers, visits, &info)
+}
+
+// outputRules: an output's from is a step's takes or a gate's pick before it.
+func (pc *pipeCheck) outputRules() {
+	nodes, add, of, reach, source, root := pc.nodes, pc.add, pc.of, pc.reach, pc.source, pc.root
+	outputs := of("output")
 	for _, id := range outputs {
 		from := nodes[id].From
 		src, _, _ := strings.Cut(from, ".")
@@ -592,6 +682,12 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("bind_source", id, "from", "", "%s.from: %s is not a step's takes or a gate's pick before this output", id, from)
 		}
 	}
+}
+
+// stepRules checks each step's binds, workflow, preset, looks, inputs and seeds.
+func (pc *pipeCheck) stepRules(workflows map[string]dto.WorkflowDoc, palette map[string]registry.PaletteNode,
+	looks []lookItem, loras func(env string) map[string]string) {
+	nodes, add, info, of, dominates, source := pc.nodes, pc.add, pc.info, pc.of, pc.dominates, pc.source
 	for _, id := range of("step") {
 		n := nodes[id]
 		binds := map[string]*sourced{}
@@ -686,7 +782,6 @@ func pipelineProblems(doc dto.PipelineDoc, workflows map[string]dto.WorkflowDoc,
 			add("step_seeds", id, "", "", "%s: seeds needs a workflow with a seed param", id)
 		}
 	}
-	return sortedProblems(found), info
 }
 
 // pipelineModels resolves each judge, write, decide and agent node's model (contracts/README.md, Agent nodes: model;

@@ -56,18 +56,14 @@ async def test_a_checked_key_is_written_to_the_first_folder_only(fake, keys, cap
     assert f.read_text() == KEY and (f.stat().st_mode & 0o777) == 0o600
     assert os.listdir(a) == ["deepseek"] and os.listdir(b) == []  # no temp file left
     sent = [r for r in fake.requests if r["path"].endswith("/models")]
-    assert (
-        len(sent) == 1 and sent[0]["headers"]["authorization"] == f"Bearer {KEY}"
-    )  # only the snapshot's URL
+    assert len(sent) == 1 and sent[0]["headers"]["authorization"] == f"Bearer {KEY}"  # only the snapshot's URL
     assert "key file deepseek written (check ok)" in caplog.text and KEY not in caplog.text
 
 
 @pytest.mark.parametrize("status", [401, 403])
 async def test_a_refused_key_writes_nothing(fake, keys, caplog, status):
     caplog.set_level(logging.DEBUG)
-    fake.script["__models"] = [
-        {"status": status, "body": {"error": {"message": f"bad key {KEY[:6]}…"}}}
-    ]
+    fake.script["__models"] = [{"status": status, "body": {"error": {"message": f"bad key {KEY[:6]}…"}}}]
     got = await ask(**save("openai", fake.url))
     assert got == {"found": False, "writable": True, "saved": False, "check": "refused",
                    "detail": "the provider refused this key; not saved"}  # fmt: skip

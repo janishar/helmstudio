@@ -90,7 +90,9 @@ def test_frames_views_and_assets(api, api_b):
         "view"
     ] == "Front"
     view_run = ok(api.get(f"{STUDIO}/runs/{v['started'][0]['run_id']}"))
-    assert view_run["inputs"]["prompt.text"].startswith("Mara. Front view, facing the camera. A single full-body figure")
+    assert view_run["inputs"]["prompt.text"].startswith(
+        "Mara. Front view, facing the camera. A single full-body figure"
+    )
 
     def viewed():
         board = ok(api.get(base))

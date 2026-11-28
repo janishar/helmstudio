@@ -14,9 +14,7 @@ from messaging.plugin_runs import Refused, Supervisor, resolve
 from messaging.publisher import now
 from messaging.schemas import registry_errors
 
-ENV_DUMP = (
-    "import json, os, time; print(json.dumps(dict(os.environ)), flush=True); time.sleep(60)\n"
-)
+ENV_DUMP = "import json, os, time; print(json.dumps(dict(os.environ)), flush=True); time.sleep(60)\n"
 
 
 def plugin(root, name, script=ENV_DUMP, cmd=None, host="mac"):
@@ -80,9 +78,7 @@ async def test_restarts_with_backoff(sup, tmp_path):
     await until(lambda: sup.states.get("crash", {}).get("restarts", 0) >= 2)
     st = sup.states["crash"]
     assert st["state"] in ("failed", "starting")
-    failed = [
-        p["plugins"]["crash"] for p in sup.published if p["plugins"]["crash"]["state"] == "failed"
-    ]
+    failed = [p["plugins"]["crash"] for p in sup.published if p["plugins"]["crash"]["state"] == "failed"]
     assert failed[0]["detail"] == "it stopped 1 times: exit 3: boom: no port"
     await sup.close()
 
@@ -96,8 +92,7 @@ async def test_first_folder_wins_and_refusals(tmp_path):
     (a / "sub/bin").mkdir()
     (a / "sub/bin/start.sh").write_text("")
     assert resolve([a], "sub", "mac")[0] == [str((a / "sub/bin/start.sh").resolve()), "x"]
-    for cmd in (["/bin/sh", "x"], ["../x"], ["./../b/web/main.py"], ["./nope.sh"], ["bin/x"],
-                [str(a / "web/main.py")]):  # fmt: skip
+    for cmd in (["/bin/sh", "x"], ["../x"], ["./../b/web/main.py"], ["./nope.sh"], ["bin/x"], [str(a / "web/main.py")]):
         plugin(a, "bad", cmd=cmd)
         with pytest.raises(Refused, match="not a file inside its folder"):
             resolve([a], "bad", "mac")
@@ -189,9 +184,7 @@ async def test_a_new_retry_nonce_starts_a_failed_plugin_at_once(tmp_path):
     async def publish(value):
         pass
 
-    s = Supervisor(
-        [tmp_path / "a"], tmp_path / "home", publish, up_s=0.3, backoff=(30, 60), host="mac"
-    )
+    s = Supervisor([tmp_path / "a"], tmp_path / "home", publish, up_s=0.3, backoff=(30, 60), host="mac")
     value = {"schema_version": 1, "host": "mac", "plugins": ["crash"], "updated_at": now()}
     await s.offer(json.dumps(value | {"retry": {"crash": 1}}).encode())
     await until(lambda: s.states.get("crash", {}).get("state") == "failed")
@@ -214,19 +207,14 @@ async def test_no_claude_or_not_signed_in_waits_for_try_again(sup, tmp_path, mon
     bin_ = tmp_path / "bin"
     bin_.mkdir()
     if claude:
-        (bin_ / "claude").write_text(
-            f"#!/bin/sh\n[ \"$1 $2\" = 'auth status' ] && echo '{claude}'\n"
-        )
+        (bin_ / "claude").write_text(f"#!/bin/sh\n[ \"$1 $2\" = 'auth status' ] && echo '{claude}'\n")
         (bin_ / "claude").chmod(0o755)
     monkeypatch.setenv("PATH", f"{bin_}:/usr/bin:/bin")
     monkeypatch.setenv("HOME", str(tmp_path))  # run.sh adds ~/.local/bin: never the real claude
     sup.dirs = [BRIDGE]
     await sup.want(["claude-code-bridge"])
     await until(lambda: sup.states.get("claude-code-bridge", {}).get("state") == "failed")
-    assert (
-        sup.states["claude-code-bridge"]["detail"]
-        == "Install Claude Code and sign in, then Try again"
-    )
+    assert sup.states["claude-code-bridge"]["detail"] == "Install Claude Code and sign in, then Try again"
     await asyncio.sleep(0.5)  # backoff 0.1: a plain crash would have restarted by now
     assert sup.states["claude-code-bridge"]["restarts"] == 0
     assert not (tmp_path / ".helm").exists()
@@ -255,9 +243,7 @@ def test_host_key_reads_only_the_named_var_of_its_own_file(tmp_path):
 
     manifest("bridge", {"file": "bridge.env", "var": "TOKEN"})
     assert ask("bridge")["code"] == "no_key"  # not made yet
-    (home / "bridge.env").write_text(
-        "OTHER=nope\nTOKEN=\nexport TOKEN='s3cret-Key_1'\nHOST=127.0.0.1\n"
-    )
+    (home / "bridge.env").write_text("OTHER=nope\nTOKEN=\nexport TOKEN='s3cret-Key_1'\nHOST=127.0.0.1\n")
     assert ask("bridge") == {"key": "s3cret-Key_1"}
     assert ask("bridge", host="box")["code"] == "refused"
     (home / "bridge.env").write_text("TOKEN_X=nope\n")

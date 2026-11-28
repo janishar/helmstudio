@@ -5,6 +5,7 @@ models entry. The real files' layout is in docs/reference-notes/nvidia-quantized
 import types
 
 import pytest
+from conftest import e4m3
 
 torch = pytest.importorskip("torch")
 import accelerate
@@ -27,11 +28,6 @@ BF16 = {
 TRANSFORMER = "unsloth_prequant_transformer_state_dict_v1"
 
 
-def e4m3(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
-    return (w.float() / scale).to(torch.float8_e4m3fn), scale
-
-
 def test_rename_maps_torchao_keys_to_the_core_fp8_linear():
     assert qi.rename("transformer", "transformer_blocks.0.attn.to_q._weight_qdata") == (
         "transformer_blocks.0.attn.to_q.weight"
@@ -44,9 +40,7 @@ def test_an_fp8_file_of_another_format_is_refused(tmp_path):
     path = tmp_path / "t.safetensors"
     model = types.SimpleNamespace(precision_of=lambda c: "fp8", files=lambda c: [path])
     for fmt in ("unsloth_prequant_transformer_state_dict_v2", None):
-        save_file(
-            {"a": torch.zeros(1)}, str(path), metadata={"unsloth_format": fmt} if fmt else None
-        )
+        save_file({"a": torch.zeros(1)}, str(path), metadata={"unsloth_format": fmt} if fmt else None)
         with pytest.raises(RunError, match="not a file this pack reads"):
             qi.tensor_hook("transformer", model)
     save_file({"a": torch.zeros(1)}, str(path), metadata={"unsloth_format": TRANSFORMER})
@@ -78,9 +72,7 @@ def test_a_tiny_transformer_loads_from_an_unsloth_layout_and_runs_as_its_dequant
     ref.load_state_dict(dequant)
     with accelerate.init_empty_weights(include_buffers=False):
         meta = cls(**cfg)
-    got = lt.load(
-        meta, [path], dev="cpu", dtype=torch.bfloat16, rename=lambda k: qi.rename("transformer", k)
-    )
+    got = lt.load(meta, [path], dev="cpu", dtype=torch.bfloat16, rename=lambda k: qi.rename("transformer", k))
     fp8 = {n for n, m in got.named_modules() if isinstance(m, lt.Fp8Linear)}
     assert fp8 == linears and "transformer_blocks.0.attn.to_q" in fp8
     assert got.img_in.weight.dtype == torch.bfloat16  # a bf16 Linear stays a plain one
@@ -94,9 +86,7 @@ def test_a_tiny_transformer_loads_from_an_unsloth_layout_and_runs_as_its_dequant
     assert torch.allclose(a.float(), b.float(), atol=1e-2, rtol=1e-2)
 
 
-def test_the_fp8_variants_publish_on_cuda_only_and_turbo_fp8_shares_from_base_fp8(
-    tmp_path, monkeypatch
-):
+def test_the_fp8_variants_publish_on_cuda_only_and_turbo_fp8_shares_from_base_fp8(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "MODELS", tmp_path)
     pack = next(p for p, _ in packs.for_env("torch") if p.spec["id"] == "qwen-image-2.1")
     monkeypatch.setattr(models, "device", lambda p: "mps")
@@ -106,9 +96,7 @@ def test_the_fp8_variants_publish_on_cuda_only_and_turbo_fp8_shares_from_base_fp
     v = {x["id"]: x for x in entry["variants"]}
     assert list(v) == ["base", "turbo", "base-fp8", "turbo-fp8"]
     assert v["base-fp8"]["precisions"] == ["fp8"] and v["base"]["precisions"] == ["bf16", "int8"]
-    comps = {
-        c["component"]: (c["from_variant"], c["precisions"]) for c in v["turbo-fp8"]["components"]
-    }
+    comps = {c["component"]: (c["from_variant"], c["precisions"]) for c in v["turbo-fp8"]["components"]}
     assert comps == {"transformer": ("turbo-fp8", ["fp8"]), "text_encoder": ("base-fp8", ["fp8"]),
                      "vae": ("base-fp8", ["bf16"])}  # fmt: skip
     ref = packs.ModelRef(pack, "turbo-fp8", "fp8")

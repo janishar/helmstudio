@@ -38,22 +38,14 @@ REF = [{"image": object()}]
 
 def test_the_lora_value_picks_the_add_on_by_partition(tmp_path):
     m = Model(tmp_path, FILES)
-    pick = lambda params, inputs=None: native.lora_file(
-        "generate", m, params, inputs or {"model": m}
-    )
+    pick = lambda params, inputs=None: native.lora_file("generate", m, params, inputs or {"model": m})
     assert pick({"lora": "none"}) is None and pick({}) is None  # the default asks for nothing
     assert pick({"lora": "turbo", "refs": []}) == (tmp_path / FILES["turbo"]).resolve()
     for rows in ("refs", "videos", "audios"):  # any reference runs Ref2VA: its own file
         assert pick({"lora": "turbo", rows: REF}) == (tmp_path / FILES["turbo_ref"]).resolve()
-    assert (
-        pick({"lora": "turbo"}, {"model": m, "first": object()})
-        == (tmp_path / FILES["turbo"]).resolve()
-    )
-    with pytest.raises(
-        RunError, match=f"^generate: Turbo Ref LoRA not downloaded on host {config.HOST}$"
-    ):
-        native.lora_file("generate", Model(tmp_path, {"turbo": "fl2v.safetensors"}), {"lora": "turbo", "refs": REF},
-                         {})  # fmt: skip
+    assert pick({"lora": "turbo"}, {"model": m, "first": object()}) == (tmp_path / FILES["turbo"]).resolve()
+    with pytest.raises(RunError, match=f"^generate: Turbo Ref LoRA not downloaded on host {config.HOST}$"):
+        native.lora_file("generate", Model(tmp_path, {"turbo": "fl2v.safetensors"}), {"lora": "turbo", "refs": REF}, {})
     with pytest.raises(RunError, match="^generate: Turbo LoRA not downloaded on host"):
         native.lora_file("generate", Model(tmp_path, {}), {"lora": "turbo"}, {})
 
@@ -61,9 +53,7 @@ def test_the_lora_value_picks_the_add_on_by_partition(tmp_path):
 def test_h3_gets_the_file_with_every_weight_copied_and_none_never_merges():
     assert native.lora_env(Path("/m/t.safetensors")) == {
         "H3_LORA": "/m/t.safetensors", "H3_LORA_STRENGTH": "1", "H3_ZERO_COPY_WEIGHTS": "0"}  # fmt: skip
-    assert native.lora_env(None) == {
-        "H3_LORA": ""
-    }  # a stray H3_LORA of the runner's environment is overridden
+    assert native.lora_env(None) == {"H3_LORA": ""}  # a stray H3_LORA of the runner's environment is overridden
 
 
 def test_generate_hands_h3_the_lora_env_and_8_steps(tmp_path, monkeypatch):
@@ -115,9 +105,7 @@ def test_sglang_gets_the_partitions_file_as_lora_path(tmp_path, monkeypatch):
     a = sgl.argv(m, "ref2va", 1, tmp_path, tmp_path / "ref2v.safetensors")
     assert a[a.index("--lora-path") + 1] == str(tmp_path / "ref2v.safetensors")
     got = {}
-    monkeypatch.setattr(
-        sgl, "generate", lambda ctx, model, body, out, tmp, lora=None: got.update(lora=lora, b=body)
-    )
+    monkeypatch.setattr(sgl, "generate", lambda ctx, model, body, out, tmp, lora=None: got.update(lora=lora, b=body))
     monkeypatch.setattr(native, "video_value", lambda out, tmp: {})
 
     class Ctx:
@@ -128,9 +116,7 @@ def test_sglang_gets_the_partitions_file_as_lora_path(tmp_path, monkeypatch):
     params = {"steps": 8, "lora": "none", "refs": [], "flow_shift": 12, "audio_flow_shift": 3}
     native.generate(Ctx(), params, inputs)
     assert got["lora"] is None and got["b"]["num_inference_steps"] == 8
-    assert (
-        "flow_shift" not in got["b"] and "audio_flow_shift" not in got["b"]
-    )  # the model's shifts: none sent
+    assert "flow_shift" not in got["b"] and "audio_flow_shift" not in got["b"]  # the model's shifts: none sent
     # 2026-11-25: SGLang fails at worker start with the Turbo LoRA; the add-ons are Base's (model.yaml variants)
     with pytest.raises(native.RunError, match="Turbo LoRA does not run on Base fp8"):
         native.generate(Ctx(), params | {"lora": "turbo"}, inputs)
@@ -175,9 +161,7 @@ def test_a_wrong_add_on_per_value_is_refused():
                         ({"addons_with": {"seed": {"turbo": ["turbo_ref"]}}}, "names no optional input"),
                         ({"addons_with": {"refs": {"none": ["turbo_ref"]}}}, "must key values of its addons"),
                         ({"addons": {"turbo": ["detailer"]}}, "names no add-on")]:  # fmt: skip
-        assert why in pack.value_addon_errors(
-            {**schema, "params": [schema["params"][0], lora | change]}, ok
-        )
+        assert why in pack.value_addon_errors({**schema, "params": [schema["params"][0], lora | change]}, ok)
     assert pack.value_addons(lora, "turbo", {"first"}) == ["turbo"]
     assert pack.value_addons(lora, "turbo", {"refs"}) == ["turbo_ref"]
     assert pack.value_addons(lora, "none", {"refs"}) == []
@@ -196,9 +180,7 @@ def test_two_add_ons_in_one_folder_go_by_their_own_files(tmp_path, monkeypatch):
     assert state() == {"turbo": "present", "turbo_ref": "missing"}
     assert models.addon_entry(p, "turbo")["bytes"] == 8  # never the other's file
     (root / models.MARKER).parent.mkdir(parents=True)
-    (root / models.MARKER).write_text(
-        '{"repo": "lightx2v/Minimax-h3-Turbo", "variant": "turbo_ref"}\n'
-    )
+    (root / models.MARKER).write_text('{"repo": "lightx2v/Minimax-h3-Turbo", "variant": "turbo_ref"}\n')
     (root / "minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16.safetensors").write_bytes(b"y" * 4)
     assert state() == {
         "turbo": "present",
@@ -206,16 +188,8 @@ def test_two_add_ons_in_one_folder_go_by_their_own_files(tmp_path, monkeypatch):
     }  # turbo_ref's download is unfinished
     (root / models.MARKER).unlink()
     assert state() == {"turbo": "present", "turbo_ref": "present"}
-    copy = (
-        root
-        / models.SGLANG_COPIES
-        / "minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16-0123456789ab.safetensors"
-    )
-    other = (
-        root
-        / models.SGLANG_COPIES
-        / "minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16-0123456789ab.safetensors"
-    )
+    copy = root / models.SGLANG_COPIES / "minimax_h3_ref2v_turbo_8step_v1.1_768p_bf16-0123456789ab.safetensors"
+    other = root / models.SGLANG_COPIES / "minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16-0123456789ab.safetensors"
     for f in (copy, other):
         f.parent.mkdir(parents=True, exist_ok=True)
         f.write_bytes(b"z")
@@ -251,9 +225,7 @@ def test_sglang_gets_a_lora_copy_with_alpha_folded(tmp_path):
     for name, (with_alpha, meta, scale) in cases.items():
         src = lora(name, with_alpha, meta)
         out = sgl.ready_lora(tmp_path / name)
-        assert out.parent == tmp_path / ".cache/helmstudio/sglang" and out.name.startswith(
-            name[:-12] + "-"
-        )
+        assert out.parent == tmp_path / ".cache/helmstudio/sglang" and out.name.startswith(name[:-12] + "-")
         got = load_file(str(out))
         assert not any(k.endswith(".alpha") for k in got)
         assert sorted({k.rsplit(".lora_", 1)[0] for k in got}) == [
@@ -268,11 +240,7 @@ def test_sglang_gets_a_lora_copy_with_alpha_folded(tmp_path):
             want = src[k].float() * (scale(r) if ".lora_B." in k else 1)
             assert torch.equal(v, want.bfloat16()), (name, k)
     t = out.stat().st_mtime_ns
-    assert (
-        sgl.ready_lora(tmp_path / "none.safetensors") == out and out.stat().st_mtime_ns == t
-    )  # reused
-    lora(
-        "none.safetensors", False, {"format": "pt", "x": "1"}
-    )  # replaced: a new copy, the old one gone
+    assert sgl.ready_lora(tmp_path / "none.safetensors") == out and out.stat().st_mtime_ns == t  # reused
+    lora("none.safetensors", False, {"format": "pt", "x": "1"})  # replaced: a new copy, the old one gone
     new = sgl.ready_lora(tmp_path / "none.safetensors")
     assert new != out and not out.exists() and new.exists()

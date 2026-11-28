@@ -168,9 +168,7 @@ async def test_a_replaced_object_is_gone():  # re-PUT after studio recorded its 
         await images.read(v, OWNER, store.get)
 
 
-@pytest.mark.parametrize(
-    ("w", "h"), [(40, 20), (4032, 3024), (3024, 4032), (1, 1), (1000, 1000), (16384, 3)]
-)
+@pytest.mark.parametrize(("w", "h"), [(40, 20), (4032, 3024), (3024, 4032), (1, 1), (1000, 1000), (16384, 3)])
 def test_auto_size_is_the_pipelines_calculate_dimensions(w, h):
     pipeline = pytest.importorskip("diffusers.pipelines.qwenimage21.pipeline_qwenimage21")
     assert images.auto_size(w, h) == pipeline.calculate_dimensions(1024 * 1024, w / h)[:2]
@@ -179,9 +177,7 @@ def test_auto_size_is_the_pipelines_calculate_dimensions(w, h):
 def test_decoded_image_mode_is_kept():
     buf = io.BytesIO()
     Image.new("RGBA", (8, 8), (1, 2, 3, 4)).save(buf, "PNG")
-    assert (
-        images.decode(buf.getvalue(), TAKE).mode == "RGBA"
-    )  # the pack's noise seed hashes the mode
+    assert images.decode(buf.getvalue(), TAKE).mode == "RGBA"  # the pack's noise seed hashes the mode
 
 
 # --- the graph: images reach the node as PIL, the cache follows (owner, key, etag)
@@ -199,17 +195,14 @@ async def run_edit(q: FakeQwen, cache: Cache, store: FakeStore, refs: list[dict]
     async def output(index, data, **meta):
         pass
 
-    c = Ctx(progress=progress, output=output, check=lambda: None, owner=OWNER,
-            residency=Residency(100))  # fmt: skip
+    c = Ctx(progress=progress, output=output, check=lambda: None, owner=OWNER, residency=Residency(100))
     c.fetch = store.get
     await graph.run(nodes, q.impls, q.schemas, c, cache)
     q.seen = list(q.calls)
     return q.ran()
 
 
-async def test_encode_gets_pil_images_and_reruns_only_when_a_reference_changes(
-    tmp_path, monkeypatch
-):
+async def test_encode_gets_pil_images_and_reruns_only_when_a_reference_changes(tmp_path, monkeypatch):
     q, cache = FakeQwen(tmp_path, monkeypatch), Cache()
     a, b = png(color="red"), png(color="blue")
     va, vb = ref(a, 1), ref(b, 2)
@@ -357,11 +350,7 @@ def test_a_864_x_480_still_gets_a_webp_of_its_own_size():
     buf = io.BytesIO()
     Image.new("RGB", (864, 480), (40, 90, 160)).save(buf, "PNG", compress_level=0)
     data, w, h = images.thumb_of(buf.getvalue())
-    assert (
-        (w, h) == (864, 480)
-        and Image.open(io.BytesIO(data)).format == "WEBP"
-        and len(data) < len(buf.getvalue())
-    )
+    assert (w, h) == (864, 480) and Image.open(io.BytesIO(data)).format == "WEBP" and len(data) < len(buf.getvalue())
 
 
 async def test_an_image_output_writes_its_thumb_before_the_png_and_reports_it():

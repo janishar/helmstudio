@@ -5,6 +5,7 @@
 import { api, ok, type S } from "@/lib/api";
 import {
   about,
+  deleteCard,
   done,
   failed,
   ordinal,
@@ -274,28 +275,6 @@ async function generateCard(c: CreateCtx): Promise<Outcome | Asked> {
     },
   };
 }
-
-const deleteCard = (
-  title: string,
-  goes: string,
-  stays: string,
-  fine: string,
-  yes: () => Promise<Outcome>,
-): Asked => ({
-  card: {
-    kind: "delete",
-    title,
-    rows: [
-      ["Goes", goes],
-      ["Stays", stays],
-    ],
-    tags: [],
-    go: "DELETE",
-    danger: true,
-    fine,
-  },
-  yes,
-});
 
 /** Create's registration: its actions, Sees chips, ids and summary. */
 export function createTools(c: CreateCtx): ScreenSpec {

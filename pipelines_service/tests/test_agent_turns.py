@@ -15,9 +15,7 @@ SCHEMAS = json.loads((G / "agent-schema.json").read_text())["cases"]
 @pytest.mark.parametrize("c", TURNS, ids=[c["description"] for c in TURNS])
 def test_agent_turns_match_the_fixtures(c):
     turn = agents.normalise_native(c["native"]) if "native" in c else c["answer"]
-    got = agents.agent_turn(
-        turn, c["node"], c["calls_left"], c.get("items_set", False), c.get("chat", False)
-    )
+    got = agents.agent_turn(turn, c["node"], c["calls_left"], c.get("items_set", False), c.get("chat", False))
     want = c["expect"]
     assert got == want or ("error" in want and got.get("error", "").startswith(want["error"]))
 
@@ -35,6 +33,4 @@ def test_an_injected_tool_result_never_changes_the_offered_tools():
     prompt = agents.agent_prompt(node, [], evil, 2)
     assert "<<<\n{" in prompt and agents.DATA in prompt  # the result sits fenced, as data
     bad = {"say": "", "calls": [{"tool": "rows_add", "args": {"inputs": {"prompt": "x"}}}]}
-    assert agents.agent_turn(bad, node, 12, False)["error"].startswith(
-        "answer did not match the schema"
-    )
+    assert agents.agent_turn(bad, node, 12, False)["error"].startswith("answer did not match the schema")

@@ -15,7 +15,6 @@
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import mimetypes
 import os
@@ -23,7 +22,8 @@ import time
 
 from core import graph
 from core.graph import GPU, Cache, Cancelled, Ctx, RunError
-from messaging import cancels, schemas
+from messaging import cancels
+from messaging.delivery import dead_letter, decode
 from messaging.hosts import Host
 from messaging.publisher import RunEvents
 
@@ -80,13 +80,7 @@ class Consumer:
 
     async def handle(self, msg) -> None:
         """Validate one delivery, run it, ack it; or dead-letter, report and term it."""
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.run.execute":
-            errs = [f"not a run command: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.run.execute", "run command")
         if not errs:
             errs = graph.validate(cmd["data"]["workflow"]["nodes"], self.node_schemas)
         if errs:
@@ -105,22 +99,15 @@ class Consumer:
 
     async def reject(self, msg, cmd, errs: list[str]) -> None:
         """Dead-letter an invalid command, report its run failed when it still names one, term it."""
-        log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-        try:
-            await self.js.publish(f"dlq.{msg.subject}", msg.data)
-        except Exception:
-            log.exception("could not dead-letter a %s message", msg.subject)
-        if isinstance(cmd, dict) and cmd.get("type") == "cmd.run.execute":
+
+        async def report() -> None:
             try:
                 await RunEvents(self.js, cmd).status("failed", "rejected: " + "; ".join(errs[:3]))
             except Exception:
-                log.warning(
-                    "could not report rejected run %s failed", cmd.get("job_id"), exc_info=True
-                )
-        try:
-            await msg.term()
-        except Exception:  # NATS away: the command is not redelivered anyway (max_deliver 1)
-            log.warning("could not term a %s message", msg.subject, exc_info=True)
+                log.warning("could not report rejected run %s failed", cmd.get("job_id"), exc_info=True)
+
+        named = isinstance(cmd, dict) and cmd.get("type") == "cmd.run.execute"
+        await dead_letter(self.js, msg, errs, report if named else None)
 
     async def run(self, msg, cmd: dict) -> None:
         """Execute one valid command and publish its events, terminal status included."""
@@ -128,9 +115,7 @@ class Consumer:
         events = RunEvents(self.js, cmd)
         self.cancel_requested = False
         self.host.run_id, self.host.attempt = run_id, data["attempt"]
-        if (
-            self.residency is not None
-        ):  # what the host's other envs leave (the hand-over); done() drops it
+        if self.residency is not None:  # what the host's other envs leave (the hand-over); done() drops it
             self.residency.cap = data.get("budget_gb")
         await self.host.put()
         stop_watch = None
@@ -157,9 +142,7 @@ class Consumer:
             await events.status("running")
             log.info("run %s: running (seed %s)", run_id, ctx.seed)
 
-            async def output(
-                index: int, body: bytes, *, ext: str, poster=None, last=None, thumb=None, **meta
-            ) -> None:
+            async def output(index: int, body: bytes, *, ext: str, poster=None, last=None, thumb=None, **meta) -> None:
                 key = f"{data['output_prefix']}{index}.{ext}"
 
                 async def upload() -> None:
@@ -175,9 +158,7 @@ class Consumer:
                             await self.store.put(pkey, png, "image/png")
                             meta["video"] = meta["video"] | {name: {"key": pkey, "width": meta["width"],
                                                                     "height": meta["height"], "bytes": len(png)}}  # fmt: skip
-                    await self.store.put(
-                        key, body, CONTENT_TYPES.get(ext) or mimetypes.types_map[f".{ext}"]
-                    )
+                    await self.store.put(key, body, CONTENT_TYPES.get(ext) or mimetypes.types_map[f".{ext}"])
 
                 # an upload still going after SAVING s says so: progress step 1 of 1, phase "saving" (a slow link)
                 up = asyncio.create_task(upload())
@@ -189,9 +170,7 @@ class Consumer:
                 await up
                 # the S3 ETag of this single-part PUT, off the loop (a large body takes a while)
                 etag = await asyncio.to_thread(lambda: hashlib.md5(body).hexdigest())
-                await events.output(
-                    index=index, key=key, bytes=len(body), etag=etag, seed=ctx.seed, **meta
-                )
+                await events.output(index=index, key=key, bytes=len(body), etag=etag, seed=ctx.seed, **meta)
 
             ctx._output = output
             try:
@@ -225,9 +204,7 @@ class Consumer:
                 self.cache.clear()
             if self.residency is not None and not self.stalled:
                 try:
-                    await asyncio.get_running_loop().run_in_executor(
-                        GPU, self.residency.after_run, self.after_run
-                    )
+                    await asyncio.get_running_loop().run_in_executor(GPU, self.residency.after_run, self.after_run)
                 except Exception:
                     log.exception("after-run unload failed")
             self.ctx, self.idle_since = None, time.monotonic()

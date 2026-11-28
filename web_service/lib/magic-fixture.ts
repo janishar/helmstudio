@@ -1,31 +1,9 @@
-// Phase B's fake takes (plan 39 §45.11): the sample board of MagicBoard frame 1 ("The Last Tide"), its takes as
-// pictures drawn in CSS, and the GPU-time guess per kind. Phase C replaces all of this with studio's boards, takes and
-// estimate (§45.10); nothing here is sent anywhere.
+// The sample board of MagicBoard frame 1 ("The Last Tide"; plan 39 §45.11): the Sample board menu item makes it in
+// studio, and the tests draw its takes as pictures in CSS; a new board's empty document.
 import { inputsOf, type Block, type Doc, type Kind, type TakeInfo, type Takes } from "@/lib/magic";
 
 const FPS = 24;
 const s = (x: number) => Math.round(x * FPS);
-
-/** Seconds a run of each kind takes, as the board's sample shows (≈ 1:50 a shot, 12 s a line, …). */
-export const EST_S: Record<Kind, number> = {
-  frame: 6,
-  image: 6,
-  video: 110,
-  voice: 12,
-  music: 40,
-  sound: 25,
-};
-export const EST_HOST = "mac-studio";
-
-/** "≈ 1 min 50 s", "≈ 6 min", "≈ 12 s"; `short`: "≈ 1:50". */
-export function estText(sec: number, short = false): string {
-  const r = Math.round(sec);
-  if (r < 60) return `≈ ${r} s`;
-  const m = Math.floor(r / 60);
-  const x = r % 60;
-  if (short && m < 5) return x ? `≈ ${m}:${String(x).padStart(2, "0")}` : `≈ ${m} min`;
-  return x && m < 5 ? `≈ ${m} min ${x} s` : `≈ ${Math.round(r / 60)} min`;
-}
 
 /** The art a fake take of a block shows: a picture made of gradients, one per block name. */
 export function artFor(name: string, kind: Kind): string {

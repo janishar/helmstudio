@@ -31,9 +31,7 @@ from core.graph import RunError
 ZONOS3 = Path(__file__).resolve().parents[2] / "vendor/zonos3"
 BINARY = ZONOS3 / "build/zonos3-server"
 READY = re.compile(r"zonos3-server: listening on http://127\.0\.0\.1:(\d+)")
-READY_S = (
-    120  # ~1.4 s warm; the first run after a build or a boot compiles the Metal libraries (~4 s)
-)
+READY_S = 120  # ~1.4 s warm; the first run after a build or a boot compiles the Metal libraries (~4 s)
 SAMPLE_RATE = 44100
 MAX_CHARS = 900  # max_seconds 60 at the plan's 15 characters a second
 PIECE_CHARS = 200  # at most, a request (about 13 s at 15 characters a second)
@@ -98,11 +96,7 @@ def body(text: str, seed: int, params: dict, voice: dict) -> dict:
 def embedding(node: str, voice: dict, gguf: Path) -> Path:
     """A preset's default-voice embedding: the voice id is its name lower-cased (voices/defaults.yaml)."""
     name = str(voice.get("item_id", "")).removeprefix("zonos3/")
-    hits = [
-        p
-        for p in (gguf / "voices").glob("*/*.embedding.npy")
-        if p.name.split("_")[0].lower() == name
-    ]
+    hits = [p for p in (gguf / "voices").glob("*/*.embedding.npy") if p.name.split("_")[0].lower() == name]
     if voice.get("family") != "zonos3" or len(hits) != 1:
         raise RunError(f"{node}.voice: ZONOS3 has no default voice {voice.get('item_id')}")
     return hits[0]
@@ -116,8 +110,7 @@ def clip_part(node: str, clip: dict) -> tuple[float, float]:
     # within 1e-9 s of a limit is at it (studio's snapMedia: 4.1 - 1.1 is 2.9999999999999996)
     if not CLIP_S[0] - 1e-9 <= end - start <= CLIP_S[1] + 1e-9:
         raise RunError(
-            f"{node}.voice: the clip lasts {end - start:.1f} s; a voice clip is {CLIP_S[0]:.0f} to "
-            f"{CLIP_S[1]:.0f} s"
+            f"{node}.voice: the clip lasts {end - start:.1f} s; a voice clip is {CLIP_S[0]:.0f} to {CLIP_S[1]:.0f} s"
         )
     return start, end - start
 
@@ -128,21 +121,19 @@ def cut_clip(node: str, clip: dict, dest: Path) -> Path:
     start, seconds = clip_part(node, clip)
     src = dest.with_name(dest.stem + "-take")
     src.write_bytes(clip["data"])
-    a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(src),
+    a = ["-protocol_whitelist", "file", "-i", str(src),
          "-ss", f"{start:.6f}", "-t", f"{seconds:.6f}", "-map", "0:a:0", "-ac", "1", "-c:a", "pcm_s16le",
          "-map_metadata", "-1", "-fflags", "+bitexact", "-flags", "+bitexact", str(dest)]  # fmt: skip
     try:
-        r = subprocess.run(a, capture_output=True, text=True, check=False, timeout=120)
+        media.ffmpeg(a, timeout=120)
+    except media.MediaError as e:
+        raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: {e}") from None
     except subprocess.TimeoutExpired:
-        raise RunError(
-            f"{node}.voice: cutting the clip of take {clip.get('take_id')} took over 120 s"
-        ) from None
+        raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} took over 120 s") from None
     finally:
         src.unlink(missing_ok=True)
-    if r.returncode or not dest.is_file():
-        raise RunError(
-            f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: {media.last_line(r.stderr)}"
-        )
+    if not dest.is_file():
+        raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: ffmpeg failed")
     return dest
 
 
@@ -178,9 +169,7 @@ def generate(node: str, port: int, request: dict) -> bytes:
         except ValueError:
             msg = raw
         msg = msg if isinstance(msg, str) else json.dumps(msg)
-        raise RunError(
-            f"{node}: zonos3-server refused the request ({e.code}): {media.last_line(msg)}"
-        ) from None
+        raise RunError(f"{node}: zonos3-server refused the request ({e.code}): {media.last_line(msg)}") from None
     except (
         TimeoutError,
         urllib.error.URLError,
@@ -229,9 +218,7 @@ def _ready(node: str) -> None:
 
 def _serve(ctx, gguf: Path):
     ctx.progress(1, 1, "starting zonos3")  # a phase without steps: 1 of 1
-    return child.serve(
-        ctx, argv(gguf), cwd=BINARY.parent, name="zonos3", ready=READY, ready_s=READY_S
-    )
+    return child.serve(ctx, argv(gguf), cwd=BINARY.parent, name="zonos3", ready=READY, ready_s=READY_S)
 
 
 def speak(ctx, params: dict, inputs: dict) -> dict:
@@ -239,16 +226,13 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     if not text:
         raise RunError(f"{ctx.node}: nothing to say")
     if len(text) > MAX_CHARS:
-        raise RunError(
-            f"{ctx.node}: at most {MAX_CHARS} characters (about 60 s of speech), not {len(text)}"
-        )
+        raise RunError(f"{ctx.node}: at most {MAX_CHARS} characters (about 60 s of speech), not {len(text)}")
     _ready(ctx.node)
     gguf = inputs["model"].folder().resolve() / "gguf"
     with tempfile.TemporaryDirectory(prefix="zonos3-") as tmp:
         voice = speaker(ctx.node, params["voice"], gguf, Path(tmp).resolve())
         with _serve(ctx, gguf) as port:
-            data = utter(ctx, port, text, inputs["seed"], params, voice,
-                         lambda i, n: ctx.progress(i, n, "speaking"))  # fmt: skip
+            data = utter(ctx, port, text, inputs["seed"], params, voice, lambda i, n: ctx.progress(i, n, "speaking"))
     return {
         "audio": {
             "wav": data,
@@ -316,5 +300,4 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
                 spoken.append(utter(ctx, port, row["text"].strip(), inputs["seed"], line, voice))
                 ctx.progress(i, len(lines), "speaking")
     wav, cues = media.stitch(lines, spoken, SAMPLE_RATE)
-    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE,
-                      "cues": cues}}  # fmt: skip
+    return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE, "cues": cues}}

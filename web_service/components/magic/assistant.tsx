@@ -3,6 +3,7 @@
 // the screen's actions and summary (tools/actions.json `magic`), the Assistant's change drawn on the board from its
 // board_edit card (dashed green new, dashed blue moved, faded removed) with Apply and Discard, which answer the card,
 // and History: the board's kept revisions, "by Assistant" for the Assistant's, Restore rev N.
+import { noSubscribe } from "@/lib/hydrated";
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Clock3, History as HistoryIcon, RotateCcw } from "lucide-react";
 import { openMenu } from "@/components/context-menu";
@@ -41,14 +42,13 @@ export function proposalOf(doc: Doc, ops: Op[]): Proposal | { error: string } {
 }
 
 const NONE: ServerCards = { cards: [], key: "", answer: () => undefined };
-const noSub = () => () => undefined;
 
 /** The Assistant's board_edit card for this board (if one waits), its change drawn, and its answer; the board is read
  * again whenever the chat moves on (an edit applied, a restore, runs started). */
 export function useProposal(board: { id: string; doc: Doc; revision: number; reload: () => void }) {
   const reg = useRegistry();
   const server = useSyncExternalStore(
-    reg ? (f: () => void) => reg.subscribe(f) : noSub,
+    reg ? (f: () => void) => reg.subscribe(f) : noSubscribe,
     () => reg?.server ?? NONE,
     () => NONE,
   );

@@ -31,9 +31,7 @@ class Custom:
     help: str
     input: type[BaseModel]
     output: type[BaseModel]
-    run: Callable[
-        [BaseModel, object], Awaitable[BaseModel]
-    ]  # (input, Context) -> output; or a compiled subgraph
+    run: Callable[[BaseModel, object], Awaitable[BaseModel]]  # (input, Context) -> output; or a compiled subgraph
     network: bool = False
     version: str = ""
 
@@ -105,9 +103,7 @@ async def run(name: str, values: dict, ctx) -> tuple[dict | None, str | None]:
     except ValueError as e:
         return None, f"invalid input: {str(e).splitlines()[0]}"[:2000]
     try:
-        got = await (
-            c.run.ainvoke(inp.model_dump()) if hasattr(c.run, "ainvoke") else c.run(inp, ctx)
-        )
+        got = await (c.run.ainvoke(inp.model_dump()) if hasattr(c.run, "ainvoke") else c.run(inp, ctx))
         out = c.output.model_validate(got if isinstance(got, dict) else got.model_dump())
     except Exception as e:  # noqa: BLE001 - the pack's own code failed: an item failure, never the service
         return None, f"{type(e).__name__}: {e}"[:2000]

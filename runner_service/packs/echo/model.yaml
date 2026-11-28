@@ -22,7 +22,7 @@ media: [image]
 # (contract_tests/fake_hub, HF_ENDPOINT in deploy/compose/fake.yml), a few small safetensors files each. plus and
 # gated share tiny's vae (the same bytes on the hub: shared by content hash); gated needs the host's (placeholder)
 # token; every source has the echo-test licence to accept. The fake host starts with all three missing; echo/tiny
-# (workflow echo-tiny) loads both components through packs/echo/loader.py (plain bytes, no GPU), so they are resident.
+# (workflow echo-tiny) loads both components through core/loaders_fake.py (plain bytes, no GPU), so they are resident.
 licences:
   echo-test: {title: Echo Test Licence}
 model:

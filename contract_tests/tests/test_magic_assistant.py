@@ -212,7 +212,11 @@ def test_the_assistant_designs_a_characters_voice_and_keeps_the_picked_take(api_
 
     def waiting():
         got = ok(user.get(turl))
-        cards = [e["card"] for e in got["entries"] if e["kind"] == "card" and e["card"]["state"] == "waiting"]
+        cards = [
+            e["card"]
+            for e in got["entries"]
+            if e["kind"] == "card" and e["card"]["state"] == "waiting"
+        ]
         return cards[0] if cards else None
 
     def say(text: str) -> None:
@@ -253,13 +257,18 @@ def test_the_assistant_designs_a_characters_voice_and_keeps_the_picked_take(api_
         card = wait_for(waiting, timeout=60, what="the board_edit card")
         assert card["kind"] == "board_edit" and card["board"]["ops"] == [
             {"op": "asset", "id": "mara", "set": {"voice_id": voice["id"]}}], card  # fmt: skip
-        assert "voice_id" not in ok(user.get(url, params={"view": "agent"}))["assets"][0]  # nothing before the Yes
+        assert (
+            "voice_id" not in ok(user.get(url, params={"view": "agent"}))["assets"][0]
+        )  # nothing before the Yes
         ok(user.post(f"{turl}/messages", json={"kind": "answer", "client_id": TAB, "card_id": card["id"],
                                                "answer": "yes"}), 202)  # fmt: skip
         wait_for(idle, timeout=60, what="the answer after Yes")
         assert ok(user.get(url, params={"view": "agent"}))["assets"][0]["voice_id"] == voice["id"]
         kept = ok(user.get(f"{STUDIO}/library/{voice['id']}"))
-        assert kept["voice"]["clip"]["take_id"] == tid and kept["voice"]["design"] == voice["voice"]["design"]
+        assert (
+            kept["voice"]["clip"]["take_id"] == tid
+            and kept["voice"]["design"] == voice["voice"]["design"]
+        )
     finally:
         user.delete(turl)
         user.delete(url)

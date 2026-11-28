@@ -4,9 +4,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AudioLines, ImageOff, Mic, Play, X } from "lucide-react";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import { thumbOf } from "@/lib/media";
-import { clock } from "@/lib/runs";
 import { coverOf, soundOf } from "@/lib/takes";
 import type { S } from "@/lib/api";
 

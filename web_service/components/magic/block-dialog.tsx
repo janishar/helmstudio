@@ -18,7 +18,6 @@ import { StatusChip, refText } from "@/components/magic/lanes";
 import { runMenu, takeMenu, type Act } from "@/components/magic/menus";
 import { EstimateLine, RequestForm, useVariant } from "@/components/magic/request";
 import { SoundMark, soundLook } from "@/components/magic/sound-mark";
-import { estText } from "@/lib/magic-fixture";
 import {
   AUDIO_KINDS,
   clock,
@@ -29,6 +28,7 @@ import {
   type MagicRequest,
   type Ref,
   type TakeInfo,
+  estText,
 } from "@/lib/magic";
 import {
   FORM_KINDS,
@@ -461,7 +461,7 @@ function Body({
                 request={req}
                 onChange={setReq}
                 advancedOpen
-                runOn={!!a.gallery} // in studio: the fake mode has no hosts
+                runOn={!!a.gallery} // in studio: hosts to run on
                 turnStatuses={
                   req.turns ? turnStatuses(d, { ...b, request: req }, a.takes) : undefined
                 }

@@ -1,12 +1,26 @@
 // @vitest-environment jsdom
-// The Magic page on the sample board (MagicBoard frames 1, 2, 5, 11): lanes and blocks with their statuses, select
-// and delete then Undo, Add at a point with Music and Sound greyed, the shorten warning, the side panel's toggle
-// remembered, a new board's empty state.
+// The Magic page on the sample board (MagicBoard frames 1, 2, 5, 11), in a mock of studio (./magic-api.ts): lanes and
+// blocks with their statuses, select and delete then Undo, Add at a point with Music and Sound, the shorten warning,
+// the side panel's toggle remembered, a new board's empty state.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MagicBoard } from "@/components/magic/board";
-import { loadStore } from "@/components/magic/use-board";
-import { closeMenu } from "@/components/context-menu";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { finishRuns, reset, seedSample, studio } from "./magic-api";
+
+vi.mock("@/lib/api", async (orig) => ({
+  ...(await orig<typeof import("@/lib/api")>()),
+  api: (await import("./magic-api")).api,
+}));
+vi.mock("@/lib/runs", async (orig) => ({
+  ...(await orig<typeof import("@/lib/runs")>()),
+  followSession: (await import("./magic-api")).followSession,
+}));
+vi.mock("@/lib/library", async (orig) => ({
+  ...(await orig<typeof import("@/lib/library")>()),
+  useVoices: () => [],
+}));
+
+const { MagicBoard } = await import("@/components/magic/board");
+const { closeMenu } = await import("@/components/context-menu");
 
 /** The Model select (MagicBoard 2c: a select, the other models its hint): its picked name, and a pick by name. */
 const modelName = (dlg: HTMLElement) => {
@@ -43,7 +57,10 @@ beforeAll(() => {
   HTMLElement.prototype.hidePopover ??= () => undefined;
   document.elementsFromPoint ??= () => [];
 });
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  reset();
+});
 afterEach(() => {
   act(closeMenu);
   cleanup();
@@ -52,6 +69,14 @@ afterEach(() => {
 /** a popover by its label (popovers are not shown in jsdom, so role queries skip them) */
 const popOf = (label: string) => document.querySelector<HTMLElement>(`[aria-label="${label}"]`)!;
 const blockEl = (name: RegExp) => screen.getByRole("button", { name });
+/** the page on the sample board, loaded */
+async function board(ui = <MagicBoard />) {
+  if (!studio.boards.length) seedSample();
+  const r = render(ui);
+  await screen.findByRole("toolbar", { name: "Board tools" });
+  await act(async () => {}); // the kinds and the plan
+  return r;
+}
 /** a click on a block: down on it, up on the window (the board's drag listens there) */
 function click(el: Element, init: PointerEventInit = {}) {
   fireEvent.pointerDown(el, { button: 0, clientX: 100, clientY: 10, ...init });
@@ -59,8 +84,8 @@ function click(el: Element, init: PointerEventInit = {}) {
 }
 
 describe("the board", () => {
-  it("draws every lane, its blocks and their statuses (frame 1)", () => {
-    render(<MagicBoard local />);
+  it("draws every lane, its blocks and their statuses (frame 1)", async () => {
+    await board();
     for (const lane of ["Storyboard", "Shots", "Mara's lines", "Music", "Sound", "Lane 7"])
       expect(screen.getByRole("group", { name: `Lane ${lane}` })).toBeTruthy();
     const shot3 = blockEl(/Video block Shot 3/);
@@ -76,8 +101,8 @@ describe("the board", () => {
     expect(screen.getByRole("region", { name: "Player, floating" })).toBeTruthy();
   });
 
-  it("select a shot: its details and what is tied to it; Delete closes the gap; Undo puts it back", () => {
-    render(<MagicBoard local />);
+  it("select a shot: its details and what is tied to it; Delete closes the gap; Undo puts it back", async () => {
+    await board();
     click(blockEl(/Video block Shot 2/));
     const side = screen.getByRole("complementary", { name: "Block details" });
     expect(within(side).getByRole("heading", { name: "Shot 2 · umbrella" })).toBeTruthy();
@@ -89,15 +114,21 @@ describe("the board", () => {
     expect(screen.getByRole("status").textContent).toBe("Deleted Shot 2 · umbrella");
     // Shot 3 moved into the gap: it now meets Shot 1 at 0:08
     expect(blockEl(/Video block Shot 3/).style.left).toBe(`${8 * 26 + 2}px`);
-    fireEvent.click(screen.getByRole("button", { name: "Undo" }));
-    expect(blockEl(/Video block Shot 2/)).toBeTruthy();
+    const undo = screen.getByRole("button", { name: "Undo" }) as HTMLButtonElement;
+    await waitFor(() => expect(undo.disabled).toBe(false));
+    fireEvent.click(undo);
+    expect(await screen.findByRole("button", { name: /Video block Shot 2/ })).toBeTruthy();
     expect(blockEl(/Video block Shot 3/).style.left).toBe(`${16 * 26 + 2}px`);
-    fireEvent.click(screen.getByRole("button", { name: "Redo" }));
-    expect(screen.queryByRole("button", { name: /Video block Shot 2/ })).toBeNull();
+    const redo = screen.getByRole("button", { name: "Redo" }) as HTMLButtonElement;
+    await waitFor(() => expect(redo.disabled).toBe(false));
+    fireEvent.click(redo);
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: /Video block Shot 2/ })).toBeNull(),
+    );
   });
 
-  it("Add at a point: the kind with its orb, Music and Sound on (phase H), Insert pushes what is after", () => {
-    render(<MagicBoard local />);
+  it("Add at a point: the kind with its orb, Music and Sound on (phase H), Insert pushes what is after", async () => {
+    await board();
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
     const dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     const music = within(dlg).getByRole("button", { name: /Music/ }) as HTMLButtonElement;
@@ -117,12 +148,12 @@ describe("the board", () => {
     });
     fireEvent.click(within(two).getByRole("button", { name: "Generate" }));
     const still = blockEl(/Image block Still 1, 10 s/);
-    expect(still.textContent).toMatch(/\d+%/);
+    await waitFor(() => expect(still.textContent).toMatch(/\d+%/));
     expect(screen.getByRole("group", { name: "Lane Lane 7" }).textContent).toContain("1 block");
   });
 
-  it("phase H: Music's step 2 (frame 2f) with Style, Lyrics, Key and BPM; a sound from a shot's video (2g)", () => {
-    render(<MagicBoard local />);
+  it("phase H: Music's step 2 (frame 2f) with Style, Lyrics, Key and BPM; a sound from a shot's video (2g)", async () => {
+    await board();
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
     let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     fireEvent.click(within(dlg).getByRole("button", { name: /Music/ }));
@@ -154,11 +185,11 @@ describe("the board", () => {
       target: { value: "D minor" },
     });
     fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
-    expect(blockEl(/Music block Cue 2, 5 s/).textContent).toMatch(/\d+%/);
+    await waitFor(() => expect(blockEl(/Music block Cue 2, 5 s/).textContent).toMatch(/\d+%/));
   });
 
-  it("phase H: a sound added under Shot 2 starts from its video, on MMAudio (frame 2g)", () => {
-    render(<MagicBoard local />);
+  it("phase H: a sound added under Shot 2 starts from its video, on MMAudio (frame 2g)", async () => {
+    await board();
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 120 + 10 * 26 });
     let dlg = screen.getByRole("dialog", { name: /Add at/ });
     fireEvent.click(within(dlg).getByRole("button", { name: /Sound/ }));
@@ -175,8 +206,8 @@ describe("the board", () => {
     );
   });
 
-  it("Add step 2 greys what the model can't take, with why (frame 2d); a board frame is added as a draft", () => {
-    render(<MagicBoard local />);
+  it("Add step 2 greys what the model can't take, with why (frame 2d); a board frame is added as a draft", async () => {
+    await board();
     fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
     let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
     fireEvent.click(within(dlg).getByRole("button", { name: "Next" }));
@@ -196,10 +227,9 @@ describe("the board", () => {
     expect(within(blockEl(/Board block Frame 4/)).getByText("Draft")).toBeTruthy();
   });
 
-  it("API 1.89: a dialogue's lines run one each, with their statuses; Compare takes side by side", () => {
-    vi.useFakeTimers();
-    try {
-      render(<MagicBoard local />);
+  it("API 1.89: a dialogue's lines run one each, with their statuses; Compare takes side by side", async () => {
+    {
+      await board();
       fireEvent.click(screen.getByText("Empty · click to add"), { clientX: 0 });
       let dlg = screen.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
       fireEvent.click(within(dlg).getByRole("button", { name: /Dialogue/ }));
@@ -215,9 +245,12 @@ describe("the board", () => {
         target: { value: "Yo." },
       });
       fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
-      expect(blockEl(/Voice block Dialogue \d/).textContent).toMatch(/\d+%/);
-      act(() => vi.advanceTimersByTime(6000));
-      expect(within(blockEl(/Voice block Dialogue \d/)).getByText("Done")).toBeTruthy();
+      await waitFor(() => expect(blockEl(/Voice block Dialogue \d/).textContent).toMatch(/\d+%/));
+      expect(studio.boards[0].runs.filter((r) => r.turn != null)).toHaveLength(2);
+      finishRuns();
+      await waitFor(() =>
+        expect(within(blockEl(/Voice block Dialogue \d/)).getByText("Done")).toBeTruthy(),
+      );
       fireEvent.doubleClick(blockEl(/Voice block Dialogue \d/));
       dlg = screen.getByRole("dialog", { name: /^Voice · Dialogue \d/ });
       const rows = within(within(dlg).getByRole("list", { name: "Lines" })).getAllByRole(
@@ -237,8 +270,12 @@ describe("the board", () => {
       // Shot 2 again: two takes, compared side by side
       fireEvent.doubleClick(blockEl(/Video block Shot 2/));
       dlg = screen.getByRole("dialog", { name: /^Video · Shot 2/ });
-      fireEvent.click(within(dlg).getByRole("button", { name: "Generate" }));
-      act(() => vi.advanceTimersByTime(6000));
+      fireEvent.click(within(dlg).getByRole("button", { name: /^Generate/ }));
+      await waitFor(() => expect(studio.boards[0].runs.at(-1)?.block).toBe("s2"));
+      finishRuns();
+      await waitFor(() =>
+        expect(within(dlg).getByRole("button", { name: "Compare" })).toBeTruthy(),
+      );
       fireEvent.click(within(dlg).getByRole("button", { name: "Compare" }));
       const cmp = screen.getByRole("dialog", { name: /Compare takes · Shot 2/ });
       const left = within(cmp).getByRole("combobox", { name: "Left take" }) as HTMLSelectElement;
@@ -250,16 +287,12 @@ describe("the board", () => {
         }),
       );
       expect(within(cmp).getByText(/is pinned/)).toBeTruthy();
-    } finally {
-      vi.useRealTimers();
     }
   });
 
-  it("shortening a shot shows the warning; Trim fits the line (frame 5b)", () => {
-    const s = loadStore();
-    const b = s.boards[0];
-    b.doc.blocks.find((x) => x.id === "s1")!.length = 4 * 24;
-    render(<MagicBoard initial={s} />);
+  it("shortening a shot shows the warning; Trim fits the line (frame 5b)", async () => {
+    seedSample((d) => void (d.blocks.find((x) => x.id === "s1")!.length = 4 * 24));
+    await board();
     // the bottom-left warning icon counts it; its list holds the row with the fixes
     expect(screen.getByRole("button", { name: /to fix: .*1 doesn't fit/ })).toBeTruthy();
     const list = popOf("Blocks to fix");
@@ -271,8 +304,8 @@ describe("the board", () => {
     expect(blockEl(/Voice block Line 1, 3.4 s/)).toBeTruthy();
   });
 
-  it("what to fix is one warning icon at the bottom left, its list upward with each fix (frame 11)", () => {
-    render(<MagicBoard local />);
+  it("what to fix is one warning icon at the bottom left, its list upward with each fix (frame 11)", async () => {
+    await board();
     const icon = screen.getByRole("button", { name: "1 block to fix: 1 out of date" });
     expect(icon.getAttribute("aria-expanded")).toBe("false");
     // no bar under the toolbar any more
@@ -292,8 +325,8 @@ describe("the board", () => {
     closeMenu();
   });
 
-  it("Play beside Run board plays the board from the playhead and turns into Pause (frame 1)", () => {
-    render(<MagicBoard local />);
+  it("Play beside Run board plays the board from the playhead and turns into Pause (frame 1)", async () => {
+    await board();
     const bar = screen.getByRole("toolbar", { name: "Board tools" });
     const play = within(bar).getByRole("button", { name: "Play the board" });
     expect(play.nextElementSibling?.textContent).toContain("Run board");
@@ -302,33 +335,33 @@ describe("the board", () => {
       within(bar).getByRole("button", { name: /Pause the board|Play the board/ }),
     ).toBeTruthy();
   });
-  it("the player goes full screen from ⛶ (frame 1)", () => {
+  it("the player goes full screen from ⛶ (frame 1)", async () => {
     const req = vi.fn(() => Promise.resolve());
     Object.defineProperty(HTMLElement.prototype, "requestFullscreen", {
       value: req,
       configurable: true,
     });
-    render(<MagicBoard local />);
+    await board();
     const fp = screen.getByRole("region", { name: "Player, floating" });
     fireEvent.click(within(fp).getByRole("button", { name: "Full screen" }));
     expect(req).toHaveBeenCalledTimes(1);
   });
-  it("the side panel's toggle is remembered in this browser", () => {
-    const { unmount } = render(<MagicBoard local />);
+  it("the side panel's toggle is remembered in this browser", async () => {
+    const { unmount } = await board();
     const toggle = screen.getByRole("button", { name: "Side panel" });
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
     fireEvent.click(toggle);
     expect(screen.queryByRole("complementary", { name: "Block details" })).toBeNull();
     expect(localStorage.getItem("magic-side-panel")).toBe("0");
     unmount();
-    render(<MagicBoard local />);
+    await board();
     expect(screen.getByRole("button", { name: "Side panel" }).getAttribute("aria-expanded")).toBe(
       "false",
     );
   });
 
-  it("a new board is empty, with a lane to start (frame 11)", () => {
-    render(<MagicBoard local />);
+  it("a new board is empty, with a lane to start (frame 11)", async () => {
+    await board();
     fireEvent.click(screen.getByRole("button", { name: "The Last Tide" }));
     fireEvent.click(screen.getByRole("button", { name: "New board", hidden: true }));
     // frame 12: its size and fps first, set once
@@ -339,7 +372,12 @@ describe("the board", () => {
       target: { value: "30" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Create", hidden: true }));
-    expect(screen.getByRole("heading", { name: "A new board" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { name: "A new board" })).toBeTruthy();
+    expect(
+      studio.calls.find((c) => c.method === "POST" && c.path === "/v1/studio/magic/boards")?.body,
+    ).toEqual({
+      target: { width: 720, height: 1280, fps: 30, sample_rate: 48000 },
+    });
     expect(screen.getByTitle("Set when the board was made").textContent).toMatch(
       /^720 × 1280 · 30 fps/,
     );

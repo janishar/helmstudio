@@ -42,13 +42,11 @@ def main() -> None:
     from diffusers import ModularPipeline
 
     from core import loaders_torch as lt
-    from packs.minimax_music3.torch import pcm16
+    from core.media import pcm16
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--weights", type=Path, default=Path.home() / "GenAI/models")
-    ap.add_argument(
-        "--samples", type=Path, default=Path.home() / "GenAI/model-samples/minimax-music3"
-    )
+    ap.add_argument("--samples", type=Path, default=Path.home() / "GenAI/model-samples/minimax-music3")
     ap.add_argument("--out", type=Path, default=HERE / "minimax-music3")
     args = ap.parse_args()
     folder, dev = str(args.weights / "MiniMax-Music3"), lt.device()
@@ -63,7 +61,7 @@ def main() -> None:
     audio = pipe(prompt=case["prompt"], lyrics=case["lyrics"], audio_duration=case["seconds"],
                  generator=torch.Generator(dev).manual_seed(case["seed"]), output="audios")[0]  # fmt: skip
     gen_s = time.perf_counter() - t
-    rate, pcm = pipe.sampling_rate, pcm16(audio)
+    rate, pcm = pipe.sampling_rate, pcm16(audio.T)
     args.out.mkdir(parents=True, exist_ok=True)
     with wave.open(str(args.out / f"{NAME}.wav"), "wb") as w:
         w.setnchannels(2)

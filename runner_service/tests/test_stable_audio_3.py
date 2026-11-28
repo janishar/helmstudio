@@ -22,15 +22,8 @@ import torch
 FIXTURES = CONTRACTS / "fixtures/registry"
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_models_entry_matches_the_fixture(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "stable-audio-3"]
+def test_models_entry_matches_the_fixture(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "stable-audio-3"]
     (want,) = json.loads((FIXTURES / "stable-audio-3.models.valid.json").read_text())["models"]
     keys = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got[k] for k in keys} == {k: want[k] for k in keys}
@@ -86,11 +79,7 @@ def test_the_gated_download_asks_for_the_token_and_fetches_only_its_patterns(pac
         run("hf_sa3")
         assert hub.requests and all(r[3] for r in hub.requests)  # the token went with every call
     folder = config.MODELS / "Stable-Audio-3-Small-SFX"
-    got = sorted(
-        str(p.relative_to(folder))
-        for p in folder.rglob("*")
-        if p.is_file() and ".cache" not in p.parts
-    )
+    got = sorted(str(p.relative_to(folder)) for p in folder.rglob("*") if p.is_file() and ".cache" not in p.parts)
     want = sorted(pack.spec["variants"]["small-sfx"]["source"]["allow_patterns"])
     assert got == want  # no README, thumbnail or generation config
     entry = packs.models_entry(pack)
@@ -110,24 +99,14 @@ def test_the_licence_is_shipped_with_the_pack(pack):
 def test_rename_splits_the_one_checkpoint():
     r = sa3.rename
     assert (
-        r("dit", "model.model.transformer.layers.3.ff.ff.0.proj.weight")
-        == "dit.transformer_blocks.3.ff.proj_in.weight"
+        r("dit", "model.model.transformer.layers.3.ff.ff.0.proj.weight") == "dit.transformer_blocks.3.ff.proj_in.weight"
     )
-    assert (
-        r("dit", "model.model.transformer.layers.3.ff.ff.2.bias")
-        == "dit.transformer_blocks.3.ff.proj_out.bias"
-    )
+    assert r("dit", "model.model.transformer.layers.3.ff.ff.2.bias") == "dit.transformer_blocks.3.ff.proj_out.bias"
     assert r("dit", "model.model.transformer.project_in.weight") == "dit.proj_in.weight"
     assert r("dit", "model.model.transformer.memory_tokens") == "dit.memory_tokens"
     assert r("dit", "model.model.to_cond_embed.2.weight") == "dit.to_cond_embed.2.weight"
-    assert (
-        r("dit", "conditioner.conditioners.prompt.padding_embedding")
-        == "dit.prompt_padding_embedding"
-    )
-    assert (
-        r("dit", "conditioner.conditioners.seconds_total.embedder.embedding.1.weight")
-        == "duration.linear.weight"
-    )
+    assert r("dit", "conditioner.conditioners.prompt.padding_embedding") == "dit.prompt_padding_embedding"
+    assert r("dit", "conditioner.conditioners.seconds_total.embedder.embedding.1.weight") == "duration.linear.weight"
     assert r("dit", "pretransform.model.bottleneck.bias") is None
     assert r("autoencoder", "model.model.preprocess_conv.weight") is None
     assert r("autoencoder", "pretransform.model.encoder.layers.0.transformers.2.self_attn.to_qkv.weight") == (
@@ -139,10 +118,7 @@ def test_rename_splits_the_one_checkpoint():
     assert r("autoencoder", "pretransform.model.decoder.layers.1.weight") == "decoder.proj.weight"
     assert r("autoencoder", "pretransform.model.bottleneck.scaling_factor") == "bottleneck.scale"
     assert r("autoencoder", "pretransform.model.bottleneck.noise_scaling_factor") is None
-    assert (
-        r("text_encoder", "model.encoder.layers.0.mlp.up_proj.weight")
-        == "encoder.layers.0.mlp.up_proj.weight"
-    )
+    assert r("text_encoder", "model.encoder.layers.0.mlp.up_proj.weight") == "encoder.layers.0.mlp.up_proj.weight"
     assert r("text_encoder", "model.decoder.layers.0.mlp.up_proj.weight") is None
 
 
@@ -164,9 +140,7 @@ def test_every_kept_tensor_has_its_place_and_shape(component):
     model = types.SimpleNamespace(folder=lambda c=None: root)
     module = sa3.build(component, model)
     have = {n: tuple(t.shape) for n, t in [*module.named_parameters(), *module.named_buffers()]}
-    path = root / (
-        "t5gemma-b-b-ul2/model.safetensors" if component == "text_encoder" else "model.safetensors"
-    )
+    path = root / ("t5gemma-b-b-ul2/model.safetensors" if component == "text_encoder" else "model.safetensors")
     kept = {}
     for key, t in packs.header(path).items():
         if (name := sa3.rename(component, key)) is not None:
@@ -235,10 +209,4 @@ def test_stages_refuse_an_empty_prompt_and_a_too_long_extend(monkeypatch):
 def test_take_is_stereo_pcm16():
     out = sa3.take(torch.tensor([[0.5, -1.0], [0.0, 1.0]]))["audio"]
     assert out["channels"] == 2 and out["sample_rate"] == 44100 and out["duration_s"] == 2 / 44100
-    assert (
-        out["wav"]
-        == torch.tensor([16384, 0, -32767, 32767], dtype=torch.int16)
-        .numpy()
-        .astype("<i2")
-        .tobytes()
-    )
+    assert out["wav"] == torch.tensor([16384, 0, -32767, 32767], dtype=torch.int16).numpy().astype("<i2").tobytes()

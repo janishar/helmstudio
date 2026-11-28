@@ -39,6 +39,13 @@ type catalogTool struct {
 	Surfaces []string `json:"surfaces"`
 	ServedBy string   `json:"served_by"`
 	Roles    []string `json:"roles"`
+	Routes   []string `json:"routes"`
+	Input    struct {
+		Properties map[string]struct {
+			Format string `json:"format"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	} `json:"input"`
 }
 
 var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
@@ -147,8 +154,7 @@ func (s *Service) localCall(ctx context.Context, caller common.Caller, method, p
 	if failure.OpIndex != nil {
 		failure.Detail = fmt.Sprintf("ops[%d]: %s", *failure.OpIndex, failure.Detail)
 	}
-	code := map[int]string{http.StatusNotFound: "not_found", http.StatusUnprocessableEntity: "invalid", http.StatusForbidden: "forbidden",
-		http.StatusConflict: "conflict", http.StatusBadRequest: "invalid"}[recorder.Code]
+	code := toolCodes[recorder.Code]
 	if code == "" {
 		code, failure.Detail = "internal", "internal error"
 	}
@@ -261,31 +267,6 @@ type toolArgs struct {
 	Family     *string `json:"family"` // read_model_guide (API 1.71)
 }
 
-// toolInputs are the args each read tool takes, and which it needs.
-var toolInputs = map[string][2][]string{
-	"sessions":           {{"session_id", "limit"}},
-	"list_workflows":     {},
-	"get_workflow":       {{"workflow_id"}, {"workflow_id"}},
-	"get_run":            {{"run_id"}, {"run_id"}},
-	"plan_run":           {{"workflow_id", "inputs", "host"}, {"workflow_id"}},
-	"models":             {},
-	"hosts":              {},
-	"search_takes":       {{"q", "kind", "starred", "session_id", "batch_id", "order", "limit"}},
-	"get_take":           {{"take_id"}, {"take_id"}},
-	"list_library":       {{"kind", "pipeline_id"}},
-	"pipelines":          {{"pipeline_id"}},
-	"batch_status":       {{"batch_id", "row", "limit"}},
-	"list_timelines":     {},
-	"show_timeline":      {{"timeline_id"}, {"timeline_id"}},
-	"timeline_revisions": {{"timeline_id", "revision", "before", "limit"}, {"timeline_id"}},
-	"custom_nodes":       {},
-	"model_sources":      {},
-	"model_jobs":         {},
-	"use_skill":          {{"skill"}, {"skill"}},                 // API 1.64
-	"read_skill_file":    {{"skill", "file"}, {"skill", "file"}}, // API 1.64
-	"read_model_guide":   {{"family"}, {"family"}},               // API 1.71
-}
-
 // readTool runs one read tool through its routes.
 func (s *Service) readTool(ctx context.Context, caller common.Caller, name string, raw json.RawMessage) message.ToolsReply {
 	var top map[string]json.RawMessage
@@ -296,23 +277,8 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	if err := json.Unmarshal(raw, &top); err != nil || top == nil || strictArgs(raw, &args) != nil {
 		return toolErr("invalid", "args must be an object of the tool's input")
 	}
-	takes := toolInputs[name]
-	for key := range top {
-		if !slices.Contains(takes[0], key) {
-			return toolErr("invalid", "args: %s does not take %s", name, key)
-		}
-	}
-	for _, key := range takes[1] {
-		if _, ok := top[key]; !ok {
-			return toolErr("invalid", "args: %s is required", key)
-		}
-	}
-	uuids := map[string]*string{"session_id": args.SessionID, "run_id": args.RunID, "batch_id": args.BatchID,
-		"take_id": args.TakeID, "pipeline_id": args.PipelineID, "timeline_id": args.TimelineID}
-	for key, value := range uuids {
-		if value != nil && !utility.IsUUID(*value) {
-			return toolErr("invalid", "args: %s must be a uuid", key)
-		}
+	if refused := checkArgs(name, top); refused != nil {
+		return *refused
 	}
 	limit := 10
 	switch {
@@ -348,7 +314,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("takes", fmt.Sprintf("/sessions/%s/takes?limit=%d", esc(args.SessionID), limit))
 		}
 	case "list_workflows":
-		return single(get("", "/workflows"), refused)
+		return orRefused(refused, get("", "/workflows"))
 	case "get_workflow":
 		body := get("workflow", "/workflows/"+esc(args.WorkflowID))
 		var wf struct {
@@ -379,13 +345,13 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			}
 		}
 	case "get_run":
-		return single(get("", "/runs/"+esc(args.RunID)), refused)
+		return orRefused(refused, get("", "/runs/"+esc(args.RunID)))
 	case "plan_run":
 		body, failed := s.localCall(ctx, caller, http.MethodPost, "/v1/studio/runs/plan",
-			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmpAny(args.Inputs, map[string]any{}), "host": args.Host})
-		return single(body, failed)
+			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmp.Or[any](args.Inputs, map[string]any{}), "host": args.Host})
+		return orRefused(failed, body)
 	case "models":
-		return single(get("", "/models"), refused)
+		return orRefused(refused, get("", "/models"))
 	case "hosts":
 		hosts := get("", "/hosts")
 		var list map[string][]map[string]any
@@ -407,7 +373,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		if args.Starred != nil {
 			query.Set("starred", fmt.Sprint(*args.Starred))
 		}
-		return single(get("", "/takes?"+query.Encode()), refused)
+		return orRefused(refused, get("", "/takes?"+query.Encode()))
 	case "get_take":
 		get("take", "/takes/"+esc(args.TakeID))
 		get("uses", "/takes/"+esc(args.TakeID)+"/uses")
@@ -446,7 +412,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("chat", "/batches/"+id+"/chat")
 		}
 	case "list_timelines":
-		return single(get("", "/timelines"), refused)
+		return orRefused(refused, get("", "/timelines"))
 	case "show_timeline": // API 1.49: the agent view
 		get("timeline", "/timelines/"+esc(args.TimelineID)+"?view=agent")
 		get("exports", "/timelines/"+esc(args.TimelineID)+"/exports")
@@ -464,17 +430,17 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("revisions", fmt.Sprintf("%s?limit=%d", base, limit))
 		}
 	case "use_skill": // API 1.64
-		return single(get("", "/skills/"+esc(args.Skill)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)))
 	case "read_skill_file":
-		return single(get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)))
 	case "read_model_guide": // API 1.71
-		return single(get("", "/model-guides/"+esc(args.Family)), refused)
+		return orRefused(refused, get("", "/model-guides/"+esc(args.Family)))
 	case "custom_nodes":
-		return single(get("", "/custom-nodes"), refused)
+		return orRefused(refused, get("", "/custom-nodes"))
 	case "model_sources":
-		return single(get("", "/model-sources"), refused)
+		return orRefused(refused, get("", "/model-sources"))
 	case "model_jobs":
-		return single(get("", "/admin/model-jobs"), refused)
+		return orRefused(refused, get("", "/admin/model-jobs"))
 	}
 	if refused != nil {
 		return *refused
@@ -482,20 +448,29 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	return message.ToolsReply{Result: result}
 }
 
-// single is a tool whose output is one route's answer.
-func single(body json.RawMessage, refused *message.ToolsReply) message.ToolsReply {
-	if refused != nil {
-		return *refused
+// checkArgs checks a tool's args against its catalog input: no key it does not take, every key it needs, and each uuid
+// key a uuid (null only when the key is optional).
+func checkArgs(name string, top map[string]json.RawMessage) *message.ToolsReply {
+	input := toolCatalog()[name].Input
+	refuse := func(format string, a ...any) *message.ToolsReply { r := toolErr("invalid", format, a...); return &r }
+	for key := range top {
+		if _, ok := input.Properties[key]; !ok {
+			return refuse("args: %s does not take %s", name, key)
+		}
 	}
-	return message.ToolsReply{Result: body}
-}
-
-// cmpAny is v, or fallback when v is nil.
-func cmpAny(v, fallback any) any {
-	if v == nil {
-		return fallback
+	for _, key := range input.Required {
+		if _, ok := top[key]; !ok {
+			return refuse("args: %s is required", key)
+		}
 	}
-	return v
+	for key, p := range input.Properties {
+		var id *string
+		if raw, ok := top[key]; ok && p.Format == "uuid" &&
+			(json.Unmarshal(raw, &id) != nil || (id == nil && slices.Contains(input.Required, key)) || (id != nil && !utility.IsUUID(*id))) {
+			return refuse("args: %s must be a uuid", key)
+		}
+	}
+	return nil
 }
 
 // lookAt is look_at after the user's Yes: one interactive ask run of the takes (the owner's image and video takes, in

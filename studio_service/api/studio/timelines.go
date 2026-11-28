@@ -78,6 +78,7 @@ type TimelineError struct {
 }
 
 func (e *TimelineError) Error() string { return e.Detail }
+func (*TimelineError) unprocessable()  {}
 
 var problemText = map[string]string{
 	"too_large":        fmt.Sprintf("the sequence is over %d bytes", timeline.MaxBytes),

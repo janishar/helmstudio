@@ -60,14 +60,8 @@ def _check(x, where: str, folder: Path) -> dict:
     if not isinstance(look["text"], str) or len(look["text"]) > 2000:
         raise ValueError(f"{where}: text must be at most 2000 characters")
     if _control(look["name"]) or _control(look["text"].translate(KEPT)):
-        raise ValueError(
-            f"{where}: name must not contain control characters, text none but newlines and tabs"
-        )
-    if (
-        not isinstance(look["version"], int)
-        or isinstance(look["version"], bool)
-        or look["version"] < 1
-    ):
+        raise ValueError(f"{where}: name must not contain control characters, text none but newlines and tabs")
+    if not isinstance(look["version"], int) or isinstance(look["version"], bool) or look["version"] < 1:
         raise ValueError(f"{where}: version must be an integer >= 1")
     if (lora := look["lora"]) is not None:
         if not isinstance(lora, dict) or set(lora) - {"file", "strength"}:
@@ -130,16 +124,14 @@ def thumb_key(family: str, look: dict) -> str:
 def lora_id(pack, file: str, library, models: Path | list[Path]) -> str | None:
     """The SHA-256 of `file` in the host's shared LoRA index, looked up in <models>/loras/ and the loras/ folder of
     each of the family's model folders, whatever family it indexes to (another one is logged); else None (logged)."""
-    tops = (
-        models if isinstance(models, list) else [models]
-    )  # API 1.78: every connected model folder
+    tops = models if isinstance(models, list) else [models]  # API 1.78: every connected model folder
     folders = [f for m in tops for f in [m / "loras"] + [m / v["dir"] / "loras" for v in pack.spec.get("variants", {}).values()]]  # fmt: skip
     families = {e["id"]: e["family"] for e in library.entries}
     for p in (f / file for f in folders):
         if (sha := library.files.get(p)) is None:
             continue
         if families.get(sha) != pack.family:
-            log.warning("look LoRA %s is for %s, not %s: studio greys the look", p, families.get(sha), pack.family)  # fmt: skip
+            log.warning("look LoRA %s is for %s, not %s: studio greys the look", p, families.get(sha), pack.family)
         return sha
     log.warning("look LoRA %s is not on this host: published unavailable", file)
     return None
@@ -168,8 +160,6 @@ async def put_thumbs(loaded, store) -> None:
     """PUT each look image to its content-addressed key unless the key exists (never overwritten)."""
     for p in loaded:
         for look in p.looks:
-            if (img := look["image"]) and await store.get(
-                key := thumb_key(p.family, look), 0
-            ) is None:
+            if (img := look["image"]) and await store.get(key := thumb_key(p.family, look), 0) is None:
                 await store.put(key, img["data"], img["content_type"])
                 log.info("look thumbnail %s stored", key)
