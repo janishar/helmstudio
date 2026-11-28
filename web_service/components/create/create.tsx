@@ -129,7 +129,6 @@ import { downloaded, precisionPins } from "@/lib/models";
 import { clock, safeUrl } from "@/lib/format";
 import {
   KIND_LABEL,
-  SIDES,
   audioFormat,
   createKinds,
   kindOf,
@@ -140,7 +139,6 @@ import {
   soundText,
   workflowFor,
   type Kind,
-  type Side,
 } from "@/lib/media";
 import {
   applyEvent,
@@ -172,6 +170,7 @@ import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
 import { useAddonGates } from "@/components/create/use-addon-gates";
+import { useDrafts } from "@/components/create/use-drafts";
 import {
   chosenVariants,
   clashNote,
@@ -294,9 +293,6 @@ export type CreateInitial = {
 
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
 const DRAWER = "create-settings-drawer";
-/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
- * (picture, sound: sideOf), so neither replaces the other. */
-const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
  * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
@@ -668,49 +664,16 @@ export function Create({
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
-  // a half-written prompt survives a reload (owner, 2026-11-25): kept in this browser per session (a reload starts
-  // with an empty leftForm), dropped once Generate sends it; switching to another session brings back its own
-  const promptKey = (
-    all.find((f) => f.param.type === "text" && f.param.name === "text") ??
-    all.find((f) => f.param.type === "text")
-  )?.key;
-  const draft = promptKey ? held[promptKey] : undefined;
-  const sentDraft = useRef<unknown>(undefined);
-  const draftRead = useRef<string | null | undefined>(undefined); // the session whose draft was read
-  // each side's draft (alpha.2 item 14): the open workflow's side goes into the form, the other waits in keptTexts
-  // for a switch (carryKind), so a script never lands in a picture prompt after a reload, nor the reverse
-  const side = workflow ? sideOf(workflow) : undefined;
-  useEffect(() => {
-    if (!workflows || !side || draftRead.current === sessionId) return;
-    const first = draftRead.current === undefined;
-    draftRead.current = sessionId;
-    if (first && (back || reuse || use)) return;
-    try {
-      for (const s of SIDES) {
-        const d = JSON.parse(localStorage.getItem(draftKey(sessionId, s)) ?? "null");
-        if (!d?.key || typeof d.text !== "string") continue;
-        // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
-        if (s === side) setRaws((h) => ({ ...h, [d.key]: d.text }));
-        else keptTexts.current[s] = { [d.key]: d.text };
-      }
-    } catch {
-      /* no storage here: the draft is not kept */
-    }
-  }, [workflows, side, back, reuse, use, sessionId]);
-  useEffect(() => {
-    if (draftRead.current !== sessionId || !promptKey || !side) return;
-    try {
-      if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
-        localStorage.setItem(
-          draftKey(sessionId, side),
-          JSON.stringify({ key: promptKey, text: draft }),
-        );
-      else localStorage.removeItem(draftKey(sessionId, side));
-    } catch {
-      /* no storage here */
-    }
-  }, [draft, promptKey, sessionId, side]);
+  const draftSent = useDrafts({
+    sessionId,
+    workflows,
+    workflow,
+    all,
+    held,
+    setRaws,
+    keptRef: keptTexts,
+    restored: !!(back || reuse || use),
+  });
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
   const rules = ruleErrors(workflow, all, raws, fields);
@@ -1402,9 +1365,7 @@ export function Create({
       if ((w.studio?.count?.default ?? 1) > 1 && queuedIds.length > 1)
         setVariations({ runs: queuedIds, kept: [] });
       setReuseNote("");
-      sentDraft.current = prompt ? raws[prompt.key] : undefined;
-      stored.set(draftKey(sessionId, sideOf(workflow)), null);
-      stored.set(draftKey(sid, sideOf(workflow)), null);
+      draftSent(prompt ? raws[prompt.key] : undefined, sid, sideOf(workflow));
       return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before
