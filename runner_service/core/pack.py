@@ -276,11 +276,12 @@ def share_owner(pack: Pack, variant: str) -> str:
 
 def owns_copy(pack: Pack, variant: str, component: str) -> bool:
     """Whether the variant's own folder holds files of `component` (a shared one kept separate); a link (into the
-    owner's folder, as a hand-made share) is not a copy."""
+    owner's folder, as a hand-made share) is not a copy. The folder itself may be a link (a model moved to the T9,
+    ~/GenAI/models/<dir> pointing there): its files are still its own, so only links below it count."""
     from core.models import linked
 
     first, d = share_owner(pack, variant), pack.spec["variants"][variant]["dir"]
-    root = place(d)
+    root = place(d).resolve()
     if variant != first and d == pack.spec["variants"][first]["dir"]:
         return False  # one folder for both (LTX dev beside distilled): one copy, the lender's
     globs = component_globs(pack, variant, component)

@@ -537,7 +537,7 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 			if len(t.Facts) > 0 && string(t.Facts) != "null" {
 				facts = append(facts, map[string]any{"take_id": t.ID, "facts": t.Facts})
 			}
-			thumbs += map[bool]int{true: 3, false: 1}[t.Kind == "video"]
+			thumbs++ // a video is one grid
 		}
 		sessionID := takes[0].SessionID
 		if sessionID == nil {

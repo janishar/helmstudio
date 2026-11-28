@@ -600,7 +600,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",
@@ -1727,7 +1727,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",
@@ -3035,7 +3035,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",

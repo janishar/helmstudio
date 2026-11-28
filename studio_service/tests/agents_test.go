@@ -79,7 +79,7 @@ func TestAgentNodes(t *testing.T) {
 		t.Fatal(snapshot)
 	}
 
-	// the judge's ask run: its workflow and branch checked, a video counted as 3 thumbnails, made once per key
+	// the judge's ask run: its workflow and branch checked, a video counted as 1 picture (its grid), made once per key
 	still, clip := e.image(userA), e.image(userA, "video")
 	media := []any{map[string]any{"take": map[string]any{"take_id": still}}, map[string]any{"take": map[string]any{"take_id": clip}}}
 	askInputs := map[string]any{"ask.prompt": "ECHO-ANSWER: {}", "ask.media": media}
@@ -100,8 +100,8 @@ func TestAgentNodes(t *testing.T) {
 	if refusal != nil || !run.Created {
 		t.Fatal(refusal)
 	}
-	if e.count(`SELECT count(*) FROM runs WHERE id = $1 AND thumbs = 4`, run.RunID) != 1 {
-		t.Fatal("an image and a video: 4 thumbnails")
+	if e.count(`SELECT count(*) FROM runs WHERE id = $1 AND thumbs = 2`, run.RunID) != 1 {
+		t.Fatal("an image and a video: 2 pictures")
 	}
 	_, sent := e.sent() // released with the video take resolved into the image form
 	if len(sent) != 1 || sent[0].Type != "cmd.run.execute" || !jsonContains(sent[0].Data, `"key":"u/`+userA+`/uploads/`+clip+`.png"`) {

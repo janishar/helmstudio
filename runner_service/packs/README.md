@@ -163,7 +163,7 @@ stages:                           # one node kind each: <family>/<stage>; the fu
       prompt: {type: string, label: Prompt, default: "", max: 32768,
                help: "The filled template (pipelines writes it). Not scanned for mentions."}
       media: {type: rows, label: Takes, default: [], min: 0, max: 8, item: {take: Media},
-              help: "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."}
+              help: "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."}
       schema: {type: string, label: Answer schema, default: "", max: 16384,
                help: "A JSON schema the answer must match; empty = plain text."}
       max_tokens: {type: int, label: Max tokens, default: 800, min: 16, max: 4096}

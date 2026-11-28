@@ -1858,7 +1858,7 @@
                                   "images": {
                                     "type": "integer",
                                     "minimum": 0,
-                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
+                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes; from 1.105 each video take 1, its frame grid) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
                                   }
                                 }
                               },

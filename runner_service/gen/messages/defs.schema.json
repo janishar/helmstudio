@@ -1875,7 +1875,7 @@
           "items": {
             "$ref": "#/$defs/seenItem"
           },
-          "description": "every thumbnail sent, in order (media items in order, a video's 3 keyframes in frame order)"
+          "description": "every thumbnail sent, in order (media items in order; a video until 1.104 its 3 keyframes in frame order, from 1.104 its one frame grid)"
         },
         "tokens_in": {
           "type": "integer",

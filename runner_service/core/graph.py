@@ -891,8 +891,8 @@ def stage_sizes(nodes: dict, schemas: dict, nid: str, inputs: dict) -> dict:
     fps = next((v.fps for v in inputs.values() if isinstance(getattr(v, "fps", None), (int, float))),
                video["fps"] if video else 24)  # fmt: skip
     mp_in = max((v["width"] * v["height"] / 1e6 for v in refs), default=0.0)
-    # a video take reaches an ask stage as its keyframes: each one is an image (core.ask.KEYFRAMES)
-    n = sum(3 if images.video(v) else 1 for v in refs)
+    # a video take reaches an ask stage as one picture, its grid of 12 frames (core.ask.frame_grid)
+    n = len(refs)
     return {"mp": mp, "images": n, "frames": frames, "mp_in": mp_in, "fps": fps}
 
 

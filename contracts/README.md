@@ -2244,7 +2244,7 @@ project memory, saved checklists, thumbnails for server or remote models.
   a terminal `studio.runs.create` reply.
 - **Memory plans**: a models `memory` item may name a `workflow` (it plans only runs of that workflow; else the item
   of the run's precision without one; a workflow that loads no component, `echo-ask`, has no item of its own) and `planned_at.images` (more thumbnails than that: no plan, P = B; studio counts
-  1 per image and 3 per video item of the run's `media`). `llm`: kept 15.4, peak 27.2 at 4 × 1024 px (fit from two
+  1 per image and 3 per video item of the run's `media`; from 1.105 1 per item, a video being one frame grid). `llm`: kept 15.4, peak 27.2 at 4 × 1024 px (fit from two
   points, extrapolated: measure before relying on it). `qwen-image-ask`: components `[text_encoder]`, peak = kept +
   2.5 + 1.5 × 4 (a bound, not measured). The dispatcher treats `llm` as one more family on env mlx; with no `lora`
   block, resident = any `model` entry of that model, variant and precision.

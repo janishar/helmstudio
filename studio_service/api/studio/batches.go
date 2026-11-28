@@ -757,10 +757,7 @@ func (s *Service) CreateBatchRun(ctx context.Context, req *message.RunsCreate) (
 				refused = invalid(detail)
 				return nil
 			}
-			thumbs, err := thumbCount(ctx, tx, req.OwnerID, graphs[0].Nodes)
-			if err != nil {
-				return err
-			}
+			thumbs := thumbCount(graphs[0].Nodes)
 			if run, err = createBatchRun(ctx, tx, s.registry, workflow, version, graphs[0], looks, batch.Status, batch.Control, req,
 				thumbs, pin); err != nil {
 				return err
@@ -830,25 +827,14 @@ func createBatchRun(ctx context.Context, tx pgx.Tx, reg *registry.Registry, work
 	return run, nil
 }
 
-// thumbCount is how many thumbnails an ask run sends (contracts/README.md, Memory plans): 1 per image take and 3 per
-// video take of its graph; nil for a run that is not a text workflow's.
-func thumbCount(ctx context.Context, tx pgx.Tx, ownerID string, nodes map[string]registry.Node) (*int, error) {
+// thumbCount is how many pictures an ask run sends (contracts/README.md, Memory plans): 1 per take of its graph, an
+// image or a video (from API 1.104 a video is one grid of 12 frames); nil for a run that is not a text workflow's.
+func thumbCount(nodes map[string]registry.Node) *int {
 	if !registry.IsText(nodes) {
-		return nil, nil
+		return nil
 	}
-	refs := images(nodes)
-	ids := make([]string, len(refs))
-	for i, ref := range refs {
-		ids[i] = ref.TakeID
-	}
-	rows, _ := tx.Query(ctx, `SELECT id::text FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND kind = 'video'`,
-		uuids(ids), ownerID)
-	videos, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	n := 0
-	for _, ref := range refs {
-		n += map[bool]int{true: 3, false: 1}[slices.Contains(videos, ref.TakeID)]
-	}
-	return &n, err
+	n := len(images(nodes))
+	return &n
 }
 
 // checkRowImages checks the Image values of every row's graph (element images included) as Create does, each distinct

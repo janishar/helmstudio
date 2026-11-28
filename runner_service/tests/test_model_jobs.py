@@ -218,6 +218,15 @@ def test_a_symlinked_folder_in_the_variant_is_never_written_through(pack):
     assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[:999]  # base's file untouched
 
 
+def test_a_variant_folder_that_is_a_link_still_owns_its_copy(pack, tmp_path):
+    # the model moved to a drive and ~/GenAI/models/<dir> links there: its own vae is still its own copy
+    drive = tmp_path / "drive/Tiny-Turbo/vae"
+    drive.mkdir(parents=True)
+    (drive / "v.safetensors").write_bytes(b"t")
+    (config.MODELS / "Tiny-Turbo").symlink_to(drive.parent)
+    assert packs.owns_copy(pack, "turbo", "vae")
+
+
 def test_a_stream_longer_than_declared_or_a_filling_disk_fails(pack, monkeypatch):
     progress = Progress()
     progress.size, progress.file = 10, "a.bin"

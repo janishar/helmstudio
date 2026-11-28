@@ -29,7 +29,7 @@
           },
           "params": {
             "system": "You are a careful reviewer for an image and video studio. Answer only with JSON that matches the given schema.",
-            "prompt": "The brief: \"the fox turns its head\". You see 2 takes, in order: take 1 ... take 2 (a video take is 3 frames in order). ...",
+            "prompt": "The brief: \"the fox turns its head\". You see 2 takes, in order: take 1 ... take 2 (a video take is one picture of its frames). ...",
             "media": [
               {
                 "take": {

@@ -53,7 +53,7 @@ type Run struct {
 	Loras           json.RawMessage // its LoRA values as resolved when it was made ([]lora.Used); null when none
 	Looks           json.RawMessage // the look ids it was asked with (Run.looks); null when none
 	Answer          json.RawMessage // an ask run's defs answer; null otherwise
-	Thumbs          *int            // an ask run: the thumbnails it sends (an image 1, a video 3); nil otherwise
+	Thumbs          *int            // an ask run: the thumbnails it sends (an image 1, a video 1: its grid of 12 frames); nil otherwise
 	PinHost         *string         // a server-ask run: the only host it may go to (its provider's; API 1.15)
 	LostHost        *string         // attempt 1's host after it stopped responding (API 1.18); nil otherwise
 	MediaAt         json.RawMessage // API 1.19: the largest media facts {mp, frames} its memory plan counts; null: none

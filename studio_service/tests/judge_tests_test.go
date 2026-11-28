@@ -55,9 +55,9 @@ func TestJudgeTests(t *testing.T) {
 		string(asked[0].Criteria) != `{"must":["A fox"],"nice":["Sharp"]}` {
 		t.Fatalf("%+v", asked)
 	}
-	if e.count(`SELECT count(*) FROM runs WHERE id = $1 AND thumbs = 4 AND workflow_id = 'echo-ask' AND session_id = $2
+	if e.count(`SELECT count(*) FROM runs WHERE id = $1 AND thumbs = 2 AND workflow_id = 'echo-ask' AND session_id = $2
 		AND inputs->>'ask.prompt' = 'ECHO-ANSWER: {}' AND jsonb_array_length(inputs->'ask.media') = 2`, runID, session) != 1 {
-		t.Fatal("the ask run: the template, the takes as media, an image and a video counted as 4 thumbnails")
+		t.Fatal("the ask run: the template, the takes as media, an image and a video counted as 2 pictures (a video is one grid)")
 	}
 	path := "/v1/studio/judge-tests/" + test["id"].(string)
 	e.call(userB, "GET", path, nil, 404)
