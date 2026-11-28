@@ -10,5 +10,6 @@ Research Inc., with BigVGAN v2 and Synchformer, both MIT; see its VENDORED.md).
 
 Model weights are not part of this repository and keep their own licences, shown and accepted before a download
 (runner_service/packs/<pack>/licences/): ACE-Step 1.5 MIT; MiniMax Music 3 Community License; Stable Audio 3 Stability
-AI Community License (with Gemma's terms); MMAudio CC BY-NC 4.0, DFN5B Apple's research licence, BigVGAN MIT; and each
-other pack's model as its licences folder says.
+AI Community License (with Gemma's terms); MMAudio CC BY-NC 4.0, DFN5B Apple's research licence, BigVGAN MIT; Qwen3-Omni and Qwen3-ASR
+Apache-2.0; Qwen2.5-Omni-3B the Qwen Research License (non-commercial); and each other pack's model as its licences
+folder says.
