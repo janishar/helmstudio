@@ -69,7 +69,16 @@ import {
   Sequences,
   planLine,
 } from "@/components/timeline/dialogs";
-import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
+import {
+  ApiError,
+  api,
+  editTimeline,
+  editTimelineRetry,
+  getTimeline,
+  message,
+  ok,
+  type S,
+} from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
@@ -300,36 +309,36 @@ export function TimelineEditor({ id }: { id?: string }) {
   /** Saves `op` on the latest stored revision through /edits; a 409 reloads and tries once more on the new one. */
   const save = useCallback(
     async (op: Op): Promise<void> => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const cur = tlRef.current;
-        if (!cur) return;
-        const r = apply(cur, op, factsOf(cur.takes));
-        // it no longer fits the newer revision (a slide past a handle another tab just trimmed): dropped, and said
-        // (plan 23 §27.7)
-        if (!("document" in r))
-          return setNotice(
-            `The sequence changed: your ${noun(op)} no longer fits and was not saved.`,
-          );
-        try {
-          const t = await editTimeline(cur, [op]);
-          tlRef.current = t;
-          setTl(t);
-          if (attempt)
-            setNotice(
-              "The sequence changed since you opened it: reloaded, and your edit applied to it.",
-            );
-          return;
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 409 && !attempt) {
-            const t = await getTimeline(cur.id);
+      let cur = tlRef.current;
+      try {
+        await editTimelineRetry(
+          async (retried) => {
+            cur = tlRef.current;
+            if (!cur) return;
+            const r = apply(cur, op, factsOf(cur.takes));
+            // it no longer fits the newer revision (a slide past a handle another tab just trimmed): dropped, and said
+            // (plan 23 §27.7)
+            if (!("document" in r))
+              return setNotice(
+                `The sequence changed: your ${noun(op)} no longer fits and was not saved.`,
+              );
+            const t = await editTimeline(cur, [op]);
             tlRef.current = t;
             setTl(t);
-            continue;
-          }
-          setError(message(e));
-          await reload().catch(() => undefined);
-          return;
-        }
+            if (retried)
+              setNotice(
+                "The sequence changed since you opened it: reloaded, and your edit applied to it.",
+              );
+          },
+          async () => {
+            const t = await getTimeline(cur!.id);
+            tlRef.current = t;
+            setTl(t);
+          },
+        );
+      } catch (e) {
+        setError(message(e));
+        await reload().catch(() => undefined);
       }
     },
     [reload],

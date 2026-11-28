@@ -42,6 +42,21 @@ export const editTimeline = (
     }),
   ).then((r) => r.timeline);
 
+/** Runs a timeline save `run`; on a 409 (another tab or the assistant saved first) calls `reload` and runs it once
+ * more with `retried` true. Any other error, and a second 409, is thrown. */
+export async function editTimelineRetry<T>(
+  run: (retried: boolean) => Promise<T>,
+  reload: () => Promise<unknown>,
+): Promise<T> {
+  try {
+    return await run(false);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 409)) throw e;
+  }
+  await reload();
+  return run(true);
+}
+
 /** A failed API call: `message` is fit to show the user, `status` is the HTTP status. */
 export class ApiError extends Error {
   constructor(

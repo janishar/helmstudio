@@ -3,7 +3,7 @@
 // once more), each with Undo (the sequence's own undo); the playhead and range are lines; New shot, every take
 // action (extend, retake, insert, replace, redo), New line, Re-render and Export are cards whose Yes is the docked
 // form's own Generate (or the dialog's own button); Save as voice opens the clone dialog prefilled.
-import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
+import { api, editTimeline, editTimelineRetry, getTimeline, message, ok, type S } from "@/lib/api";
 import { done, failed, ordinal, placeInLine, type Asked, type Outcome } from "@/lib/assistant";
 import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
@@ -177,46 +177,46 @@ export function editText(ops: Op[]): string {
  * new clip ids); a 409 reloads and tries once more. Returns how many revisions it made (what Undo takes back), or
  * why not. */
 async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | { error: string }> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const cur = c.get();
-    if (!cur) return { error: "no sequence is open" };
-    let d: Norm | null = cur;
-    const list: Op[] = [];
-    for (const [i, raw] of ops.entries()) {
-      if (!d) {
-        list.push(raw);
-        continue;
-      }
-      const o = withIds(raw, d);
-      list.push(o);
-      if (o.op === "add") {
-        d = null;
-        continue;
-      }
-      let r: ReturnType<typeof apply>;
-      try {
-        r = apply(d, o, factsOf(cur.takes));
-      } catch {
-        return { error: `edit ${i + 1} is not a Timeline edit` };
-      }
-      if ("error" in r) return { error: say(r.error) };
-      if ("problems" in r) return { error: say(r.problems[0][0]) };
-      d = r.document;
-    }
-    try {
-      c.set(await editTimeline(cur, list, "assistant"));
-      return { revisions: 1 };
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && !attempt) {
+  try {
+    return await editTimelineRetry(
+      async (): Promise<{ revisions: number } | { error: string }> => {
+        const cur = c.get();
+        if (!cur) return { error: "no sequence is open" };
+        let d: Norm | null = cur;
+        const list: Op[] = [];
+        for (const [i, raw] of ops.entries()) {
+          if (!d) {
+            list.push(raw);
+            continue;
+          }
+          const o = withIds(raw, d);
+          list.push(o);
+          if (o.op === "add") {
+            d = null;
+            continue;
+          }
+          let r: ReturnType<typeof apply>;
+          try {
+            r = apply(d, o, factsOf(cur.takes));
+          } catch {
+            return { error: `edit ${i + 1} is not a Timeline edit` };
+          }
+          if ("error" in r) return { error: say(r.error) };
+          if ("problems" in r) return { error: say(r.problems[0][0]) };
+          d = r.document;
+        }
+        c.set(await editTimeline(cur, list, "assistant"));
+        return { revisions: 1 };
+      },
+      async () => {
         const now = c.get();
         if (now) c.set(await getTimeline(now.id));
         c.notice("The sequence changed since you opened it: reloaded, and the edit applied to it.");
-        continue;
-      }
-      return { error: message(e) };
-    }
+      },
+    );
+  } catch (e) {
+    return { error: message(e) };
   }
-  return { error: "the sequence keeps changing" };
 }
 
 /** The sequence's own undo (or redo) `n` times, refused when it changed since (then it is the screen's Undo). */
@@ -571,10 +571,7 @@ export function timelineTools(c: TimelineCtx): ScreenSpec {
               rows: [
                 ["Mode", p.stream_copy ? "stream copy" : "re-encode"],
                 ["Size", `${t.width} × ${t.height} · ${t.fps} fps`],
-                [
-                  "Length",
-                  `${timecode(p.duration_s)} · about ${mb(p.estimated_bytes)} MB`,
-                ],
+                ["Length", `${timecode(p.duration_s)} · about ${mb(p.estimated_bytes)} MB`],
                 ["Runs on", p.host ?? "no host can run it now"],
               ],
               tags: ["uses the machine"],
