@@ -20,7 +20,14 @@ function toggleFull(el: HTMLElement | null) {
   if (document.fullscreenElement) return void document.exitFullscreen().catch(() => undefined);
   // the window filled instead when the browser refuses (an embedded browser can swallow requestFullscreen)
   if (el.classList.contains("fp-max")) return el.classList.remove("fp-max");
-  const fill = () => !document.fullscreenElement && el.classList.add("fp-max");
+  // filled unless it truly covers the screen: an embedded browser can accept requestFullscreen and show nothing bigger
+  const fill = () => {
+    const r = el.getBoundingClientRect();
+    if (document.fullscreenElement && r.width >= innerWidth - 4 && r.height >= innerHeight - 4)
+      return;
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    el.classList.add("fp-max");
+  };
   if (!el.requestFullscreen) return fill();
   el.requestFullscreen().then(() => setTimeout(fill, 300), fill);
 }
