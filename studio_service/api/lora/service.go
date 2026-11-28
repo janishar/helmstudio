@@ -157,7 +157,7 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, re
 
 // tx runs fn as the caller, a plain user: an admin sees only their own LoRAs here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // own reads the owner's undeleted LoRAs (all with ids nil), explicitly scoped: tx may be the caller's or System.

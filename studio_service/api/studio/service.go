@@ -85,7 +85,7 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, registry *registry.Regi
 
 // tx runs fn in a transaction scoped to the caller as a plain user: an admin sees only their own rows here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // collect runs query and scans every row into T by position.
@@ -263,7 +263,7 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 	}
 	mine := map[string]bool{}
 	if len(ids) > 0 {
-		err := common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, func(tx pgx.Tx) (err error) {
+		err := common.WithUser(ctx, s.db, caller.ID, func(tx pgx.Tx) (err error) {
 			mine, err = lora.Owned(ctx, tx, ids)
 			return err
 		})

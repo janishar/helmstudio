@@ -72,7 +72,7 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, re
 
 // tx runs fn scoped to the caller as a plain user: an admin sees only their own takes here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // takes runs query and scans every row.

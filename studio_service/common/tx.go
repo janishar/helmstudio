@@ -7,15 +7,11 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// WithUser runs fn in a transaction with app.user_id / app.role set for row-level security; commits when fn
-// returns nil. Every query on owned tables goes through here.
-func WithUser(ctx context.Context, pool *pgxpool.Pool, caller Caller, fn func(tx pgx.Tx) error) error {
-	role := "user"
-	if caller.IsAdmin() {
-		role = "admin"
-	}
+// WithUser runs fn in a transaction as ownerID, a plain user (app.user_id, app.role 'user'), for row-level security;
+// commits when fn returns nil. Every query on owned tables goes through here; an admin sees only their own rows too.
+func WithUser(ctx context.Context, pool *pgxpool.Pool, ownerID string, fn func(tx pgx.Tx) error) error {
 	return pgx.BeginFunc(ctx, pool, func(tx pgx.Tx) error {
-		if _, err := tx.Exec(ctx, `SELECT set_config('app.user_id', $1, true), set_config('app.role', $2, true)`, caller.ID, role); err != nil {
+		if _, err := tx.Exec(ctx, `SELECT set_config('app.user_id', $1, true), set_config('app.role', 'user', true)`, ownerID); err != nil {
 			return err
 		}
 		return fn(tx)
