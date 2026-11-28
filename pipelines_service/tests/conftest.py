@@ -11,10 +11,13 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
+import fake_openai
 import psycopg
 import pytest
 
+import config
 import main
+import providers
 from engine import Engine
 from messaging import schemas
 from messaging.publisher import Publisher, now
@@ -244,3 +247,144 @@ async def pool():
         await p.close()
         with psycopg.connect(url, autocommit=True) as c:
             c.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+# --- the stage B helpers (test_stage_b, test_review_fixes)
+
+PIPELINE = "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a01"
+REG = json.loads((CONTRACTS / "fixtures/registry/workflows.valid.json").read_text())["workflows"]
+REG += json.loads((CONTRACTS / "fixtures/registry/server.workflows.valid.json").read_text())["workflows"]
+WF = {w["id"]: {k: v for k, v in w.items() if k != "media"} for w in REG}
+CAPS = {"max_turns": 6, "max_tool_calls": 12, "max_tokens": 16000}
+LOCAL = {
+    "model": "echo-ask",
+    "workflow": "echo-ask",
+    "source": {"kind": "local", "workflow": "echo-ask"},
+}
+
+
+def agent(**kw) -> dict:
+    return {"kind": "agent", "instruction": "Turn the script into a shot list.", "from": ["$script"],
+            "tools": ["gallery.search", "library.read", "memory.read", "memory.write", "rows.add"],
+            "list": {"max": 3}, "caps": dict(CAPS), "director": False} | LOCAL | kw  # fmt: skip
+
+
+def doc(edges=None, remote=None, providers_=None, **nodes) -> dict:
+    n = {
+        "inputs": {"kind": "inputs", "inputs": [{"name": "script", "type": "Text"}]},
+        "plan": agent(),
+        "shots": {"kind": "step", "workflow": "echo", "seeds": 1, "inputs": {}, "each": "plan.items",
+                  "fanout_max": 3, "bind": {"prompt.text": "plan.item"}, "seed_param": None},
+        "out": {"kind": "output", "from": "shots.takes", "collection": "Shots"},
+    } | nodes  # fmt: skip
+    n = {k: v for k, v in n.items() if v is not None}
+    edges = edges or [["inputs", "plan"], ["plan", "shots"], ["shots", "out"]]
+    used = {v["workflow"] for v in n.values() if v.get("workflow") in WF}
+    p = {"id": PIPELINE, "title": "Shots", "version": 1, "nodes": n, "edges": edges,
+         "workflows": {w: WF[w] for w in used | {"echo"}}}  # fmt: skip
+    p["remote"] = remote or {
+        "enabled": False,
+        "providers": [],
+        "max_calls": 200,
+        "max_tokens": 400000,
+    }
+    if providers_:
+        p["providers"] = providers_
+    return p
+
+
+def submit(b: str, p: dict, n: int = 1, replay_from=None, script="a fox @rex wakes") -> dict:
+    cmd = command("submit", b, n)
+    rows = [{"row": i, "inputs": {"inputs.script": f"{script} {i}"}} for i in range(1, n + 1)]
+    cmd["data"] |= {"snapshot": {"workflow_id": "echo", "workflow": WF["echo"], "pipeline": p}}
+    cmd["data"] |= {"inputs": {}, "rows": rows}
+    if replay_from:
+        cmd["data"]["replay_from"] = replay_from
+    assert not schemas.message_errors(cmd), schemas.message_errors(cmd)
+    return cmd
+
+
+def turn(say="", **calls) -> str:
+    return json.dumps({"say": say, "calls": [{"tool": t, "args": a} for t, a in calls.items()]})
+
+
+class Script:
+    """Scripted ask answers per (node, row), in order; the last one repeats."""
+
+    def __init__(self, **by_node):
+        self.q = {k: list(v) for k, v in by_node.items()}
+        self.prompts: list[str] = []
+
+    def __call__(self, req) -> str:
+        self.prompts.append(req["inputs"]["ask.prompt"])
+        k = req["idempotency_key"].split(":")
+        q = self.q.get(f"{k[3]}:{k[1]}") or self.q[k[3]]
+        return q.pop(0) if len(q) > 1 else q[0]
+
+
+def node_of(k: str) -> str:
+    return k.split(":")[3]
+
+
+async def finish(e, studio, node: str, rows=(0, 1, 2, 3)) -> list[str]:
+    keys = [k for r in rows for k in studio.open_keys(r) if node_of(k) == node]
+    for k in keys:
+        assert await e.on_run_finished(studio.finish(int(k.split(":")[1]), key=k))
+    await idle(e)
+    return keys
+
+
+def director(**kw) -> dict:
+    return agent(director=True, tools=["gallery.search", "memory.read", "memory.write", "rows.add", "rows.edit"],
+                 list={"max": 1}, wake_on_rows="all", max_wakes=100) | kw  # fmt: skip
+
+
+def chat_cmd(b: str, text: str) -> dict:
+    return {"batch_id": b, "message_id": str(uuid.uuid4()), "text": text, "at": now()}
+
+
+@pytest.fixture
+def fake():
+    srv, state = fake_openai.serve()
+    state.url = f"http://127.0.0.1:{srv.server_address[1]}/v1"
+    yield state
+    srv.shutdown()
+
+
+def server_provider(url: str) -> dict:
+    return {"kind": "server", "api": "openai", "base_url": url, "timeout_s": 5, "host": "mac",
+            "memory_gb": 6.5, "key_secret": None}  # fmt: skip
+
+
+def remote_doc(url: str, rem: dict | None = None) -> dict:
+    prov = {"kind": "remote", "api": "openai", "base_url": url, "timeout_s": 5, "key_secret": "fakeai.key",
+            "max_in_flight": 2}  # fmt: skip
+    rem = {"enabled": True, "providers": ["fakeai"], "max_calls": 200, "max_tokens": 400000} | (rem or {})
+    check = {"kind": "decide", "question": "Is the script usable?", "from": ["$script"],
+             "routes": {"keep": "use it", "drop": "do not"}, "model": "remote:fakeai/fake-large",
+             "workflow": "remote", "source": {"kind": "remote", "provider": "fakeai", "model": "fake-large"}}  # fmt: skip
+    still = {"kind": "step", "workflow": "echo", "seeds": 1, "inputs": {}, "bind": {"prompt.text": "$script"},
+             "seed_param": None}  # fmt: skip
+    return doc(plan=None, shots=None, check=check, still=still,
+               out={"kind": "output", "from": "still.takes", "collection": "x"},
+               edges=[["inputs", "check"], ["check", {"routes": {"keep": "still", "drop": "still"}, "max": 1,
+                                                       "then": "keep"}], ["still", "out"]],
+               remote=rem, providers_={"fakeai": prov})  # fmt: skip
+
+
+@pytest.fixture
+def remote_on(monkeypatch, tmp_path, fake):
+    """Remote models switched on, a key file, short retries; the fake stands in for https (the host rule's
+    https check is tested on its own)."""
+    monkeypatch.setattr(config, "REMOTE_MODELS", True)
+    monkeypatch.setattr(config, "REMOTE_ALLOW_PRIVATE", True)  # the fake is on loopback (as the fake overlay's)
+    monkeypatch.setattr(config, "PROVIDER_KEYS_DIRS", [tmp_path])
+    monkeypatch.setattr(providers, "DELAYS", [0.01, 0.01, 0.01])
+    (tmp_path / "fakeai.key").write_text("test-key\n")
+    real = providers.check_host
+
+    async def check(name, p):
+        await real(name, p | {"kind": "server"})  # loopback only, as a server
+
+    monkeypatch.setattr(providers, "check_host", check)
+    return fake

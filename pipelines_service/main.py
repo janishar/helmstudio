@@ -9,7 +9,7 @@ continue from their checkpoints on the next start (after the user's Resume).
 Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test and (API 1.51) pipelines.providers.key, sends
 queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
-API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py). API 1.44: the
+API 1.28: answers pipelines.judge.test (judge.py). API 1.43: names untitled sessions (names.py). API 1.44: the
 in-app assistant (assistant.py): pulls cmd.assistant.> from CMD (durable `pipelines-assistant`, chats handled
 concurrently, each in order) and answers pipelines.assistant.memory (assistant_memory.py) and pipelines.assistant.cache (assistant.py)."""
 
@@ -45,7 +45,7 @@ import consumer
 import custom
 import events
 import health
-import judge_test
+import judge
 import memory
 import names
 import providers
@@ -179,7 +179,7 @@ async def main() -> None:
             await states.serve(nc, engine),
             await memory.serve(nc, store),
             *await providers.serve(nc),
-            await judge_test.serve(nc, store),
+            await judge.serve(nc, store),
             await assistant_memory.serve(nc, store),
             await assistant.serve_cache(nc, pool),  # API 1.66
         ]

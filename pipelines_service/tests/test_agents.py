@@ -592,7 +592,7 @@ async def test_a_pick_at_ask_me_goes_on(pool):
 
 async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict(pool):
     """pipelines.judge.test (API 1.28): the prompt as a batch's judge would ask, and the verdict from the answer."""
-    import judge_test
+    import judge
 
     e = engine(pool, FakeStudio(), FakeJS())
     for text, key in (("faces left", "briefs"), ("ignore me", "other")):
@@ -607,21 +607,21 @@ async def test_judge_test_fills_the_template_with_memory_and_derives_the_verdict
     crit = {"must": MUST, "nice": NICE}
     req = {"op": "prompt", "owner_id": OWNER, "pipeline_id": PIPELINE, "node": "judge", "criteria": crit,
            "n": 4, "brief": "a fox", "memory": {"limit": 8, "key": "briefs"}}  # fmt: skip
-    got = await judge_test.answer(e.store, json.dumps(req).encode())
+    got = await judge.answer(e.store, json.dumps(req).encode())
     assert got["prompt"] == agents.judge_prompt("a fox", 4, crit, [], "faces left")
     assert got["template"] == agents.JUDGE and got["max_tokens"] == agents.judge_tokens(4, 3)
     assert json.loads(got["schema"]) == agents.judge_schema(4, 3)
     other = req | {"owner_id": str(uuid.uuid4())}  # another owner's namespace is empty
-    assert "faces left" not in (await judge_test.answer(e.store, json.dumps(other).encode()))["prompt"]
+    assert "faces left" not in (await judge.answer(e.store, json.dumps(other).encode()))["prompt"]
     ids = [str(uuid.uuid4()) for _ in range(4)]
     v = {"op": "verdict", "criteria": crit, "keep": 1, "take_ids": ids, "text": PASS3}
-    got = await judge_test.answer(e.store, json.dumps(v).encode())
+    got = await judge.answer(e.store, json.dumps(v).encode())
     assert got["verdict"] == "pass" and got["picked"] == [ids[2]]
     assert [t["passes"] for t in got["takes"]] == [False, True, True, False]
     assert got["takes"][0]["reason"] == "reason 1"
-    bad = await judge_test.answer(e.store, json.dumps(v | {"text": "not json"}).encode())
+    bad = await judge.answer(e.store, json.dumps(v | {"text": "not json"}).encode())
     assert bad["code"] == "answer" and bad["error"].startswith("answer did not match")
-    nope = await judge_test.answer(e.store, json.dumps(v | {"keep": 0}).encode())
+    nope = await judge.answer(e.store, json.dumps(v | {"keep": 0}).encode())
     assert nope["code"] == "invalid"
 
 

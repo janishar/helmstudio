@@ -7,22 +7,25 @@ import json
 import uuid
 
 import pytest
-from conftest import FakeJS, FakeStudio, FakeTools, engine, idle, until
-from test_stage_b import (
+from conftest import (
     CAPS,
+    FakeJS,
+    FakeStudio,
+    FakeTools,
     Script,
     agent,
     chat_cmd,
     director,
     doc,
-    fake,  # noqa: F401 - the fixture
+    engine,
     finish,
+    idle,
     node_of,
     remote_doc,
-    remote_on,  # noqa: F401 - the fixture
     server_provider,
     submit,
     turn,
+    until,
 )
 
 import agent_loop
@@ -49,7 +52,7 @@ def test_text_inside_a_block_can_never_close_it():
 # --- providers: the host rule at connect, no redirects, tools as a list, usage, tool calls
 
 
-async def test_a_redirect_is_never_followed(fake):  # noqa: F811
+async def test_a_redirect_is_never_followed(fake):
     fake.script["m"] = [{"status": 307, "headers": {"Location": "https://attacker.example/v1/chat/completions"}}]
     with pytest.raises(providers.CallError) as err:
         await providers.chat("local", server_provider(fake.url), {"model": "m", "system": "s", "prompt": "p",
@@ -72,7 +75,7 @@ async def test_the_connection_goes_only_to_a_checked_address(monkeypatch):
     assert err.value.kind == "refused"
 
 
-async def test_tools_go_out_as_a_list_usage_is_estimated_and_extra_calls_refuse_the_turn(fake):  # noqa: F811
+async def test_tools_go_out_as_a_list_usage_is_estimated_and_extra_calls_refuse_the_turn(fake):
     p = server_provider(fake.url)
     tools = agents.compact(agents.native_tools(agent()))  # as submit puts them in ask.tools: JSON text
     calls = [{"name": "memory_read", "arguments": {}}] * 13  # one over providers.MAX_TOOL_CALLS (12)
@@ -109,7 +112,7 @@ async def test_pause_between_retries_puts_the_call_back():
 # --- the remote queue: tokens reserved, a shutdown keeps calls in flight
 
 
-async def test_queued_calls_reserve_their_tokens(pool, remote_on):  # noqa: F811
+async def test_queued_calls_reserve_their_tokens(pool, remote_on):
     studio, js = FakeStudio(), FakeJS()
     e = engine(pool, studio, js)
     b = str(uuid.uuid4())
@@ -122,7 +125,7 @@ async def test_queued_calls_reserve_their_tokens(pool, remote_on):  # noqa: F811
     assert got["kind"] == "cap" and got["error"] == "remote cap reached: 1500 tokens"
 
 
-async def test_a_shutdown_keeps_a_call_in_flight_sent(pool, remote_on):  # noqa: F811
+async def test_a_shutdown_keeps_a_call_in_flight_sent(pool, remote_on):
     srv = remote_on
     srv.script["fake-large"] = [{"content": '{"route": "keep", "reason": "ok"}', "delay_s": 1.0}]
     studio, js = FakeStudio(), FakeJS()
@@ -226,7 +229,7 @@ async def test_a_wake_resumed_after_a_failure_clears_its_inbox(pool):
     assert json.loads(json.dumps(await e._one("SELECT wakes FROM directors")))["wakes"] == 1
 
 
-async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_in_the_system(fake):  # noqa: F811
+async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_in_the_system(fake):
     p = server_provider(fake.url)
     schema = json.dumps({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
     fake.script["m"] = [
