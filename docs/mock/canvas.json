@@ -591,6 +591,16 @@
       "x": 3040,
       "y": 0,
       "page": "brand"
+    },
+    "AudioFades.dc.html": {
+      "expand": "fill",
+      "h": 5340,
+      "is_interactive": true,
+      "title": "Timeline and Magic \u00b7 audio fades: fade handles, crossfade between music blocks (a dip for older takes), ducking music under voice, the right-click rows (plan 41)",
+      "w": 1440,
+      "x": 3040,
+      "y": 7440,
+      "page": "timeline"
     }
   },
   "createdOnFiles": {
@@ -713,6 +723,7 @@
     "TimelineTools.dc.html",
     "Magic.dc.html",
     "ContextMenus.dc.html",
+    "AudioFades.dc.html",
     "Pipelines.dc.html",
     "Pipeline.dc.html",
     "PipelineGraph.dc.html",
