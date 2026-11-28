@@ -43,7 +43,7 @@ import {
 import { mod, openMenu, type Item } from "@/components/context-menu";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
-import { say, timelineTools, type FormSlot, type Want } from "@/components/timeline/assistant";
+import { timelineTools } from "@/components/timeline/assistant";
 import { until, useScreenTools } from "@/components/assistant/tools";
 import { useLibraryDialog } from "@/components/assistant/library";
 import { markRange, rangeInTake, removeTrack } from "@/lib/source";
@@ -104,7 +104,10 @@ import {
   type Problem,
   type Track,
   retitled,
+  say,
   shotBusy,
+  type FormSlot,
+  type Want,
 } from "@/lib/timeline";
 import {
   MERGE_MS,

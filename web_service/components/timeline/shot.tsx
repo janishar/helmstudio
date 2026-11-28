@@ -26,7 +26,7 @@ import {
   toRaw,
   type Raw,
 } from "@/lib/workflow";
-import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
+import type { FormSlot, Started, Want } from "@/lib/timeline";
 import {
   Grid,
   kindOf,

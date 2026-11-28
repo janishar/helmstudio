@@ -7,7 +7,7 @@
 import Link from "next/link";
 import { X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
+import type { FormSlot, Started, Want } from "@/lib/timeline";
 import { ErrorNote } from "@/components/kit";
 import { TileWords, tileClass } from "@/components/create/elements";
 import { VoiceTile } from "@/components/create/voices";

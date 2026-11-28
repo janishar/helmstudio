@@ -18,71 +18,16 @@ import {
   shortTime,
   shotBusy,
   timecode,
+  say,
   type Clip,
+  type Docked,
+  type FormSlot,
   type Norm,
   type Op,
+  type Want,
 } from "@/lib/timeline";
 
 type Timeline = S<"Timeline">;
-
-/** What a refused edit says (lib/timeline codes; studio's 422 carries its own messages). */
-const WORDS: Record<string, string> = {
-  split_none: "No clip is under the playhead.",
-  split_edge: "The playhead is on a cut: move it into a clip to split.",
-  split_shot: "A clip being generated cannot be split.",
-  too_many_tracks: "A sequence has at most 8 audio tracks.",
-  not_alternative: "That take was not made for this slot.",
-  dissolve_first: "The first clip cannot dissolve in.",
-  dissolve_gap: "A dissolve needs a clip on both sides of the cut.",
-  dissolve_handles: "Not enough footage past the cut for that dissolve: trim the clips first.",
-  dissolve_length: "The dissolve is longer than the clip.",
-  overlap: "Clips on an audio track cannot overlap.",
-  past_end: "Sound cannot run past the end of the picture.",
-  trim: "That trim is outside the take.",
-  hold: "A still lasts at least one frame.",
-  no_audio: "That take has no sound.",
-  // 1.50, the tools (plan 23)
-  roll_first: "The first clip has no cut before it to roll.",
-  roll_track: "Roll works on V1's cuts.",
-  slide_end: "Slide needs a clip on both sides.",
-  slide_track: "Slide works on V1.",
-  slip_still: "A still or an empty slot has nothing to slip.",
-  least: "That leaves a clip shorter than its dissolves.",
-  overwrite_shot: "A clip being generated cannot be overwritten.",
-  overwrite_track: "Overwrite keeps a clip on its kind of track.",
-  range_empty: "The range is empty.",
-  range_shot: "A clip being generated is inside the range.",
-  link_start: "A linked sound clip would start before 0.",
-  marker_past_end: "A marker would be past the end of the picture.",
-  too_many_markers: "A sequence has at most 200 markers.",
-};
-export const say = (code: string) =>
-  WORDS[code] ?? `The edit was refused (${code.replace(/_/g, " ")}).`;
-
-/** A docked form's Generate started: the sequence with the slot's placeholder, or why not. */
-export type Started = { error: string } | { timeline: Timeline; clip: string };
-
-/** A docked form (New shot, a take action's form, New line) as the assistant reads it for its card; Generate is
- * the form's own. */
-export type Docked = {
-  model: string;
-  size?: string;
-  /** "at 0:12 · 2.0 s · 1 seed" */
-  detail: string;
-  prompt: string;
-  /** the run for /runs/plan (time and memory); null when the form does not resolve yet */
-  run: S<"RunRequest"> | null;
-  generate: () => Promise<Started>;
-};
-/** What the assistant asks of a docked form: its prompt, length, where the result goes, the voice. */
-export type Want = {
-  kind?: "extend" | "retake" | "insert" | "replace";
-  prompt?: string;
-  seconds?: number;
-  voice?: string;
-};
-/** The form the assistant asked for, once it is open; "none" when the clip offers no such action. */
-export type FormSlot = Docked | "none" | null;
 
 /** What the Timeline already works out, read when an action runs. */
 export type TimelineCtx = {

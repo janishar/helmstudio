@@ -26,7 +26,7 @@ import { newId, shortTime, timecode, type Clip, type Norm } from "@/lib/timeline
 import { useHosts } from "@/components/create/memory-chip";
 import { DOWN_KEY, useHealth } from "@/lib/health";
 import { runnerWhy } from "@/lib/run-on";
-import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
+import type { FormSlot, Started, Want } from "@/lib/timeline";
 import {
   blockNotes,
   buildInputs,
