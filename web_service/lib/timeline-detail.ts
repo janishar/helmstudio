@@ -207,6 +207,9 @@ export function peaksOf(take: string, url: string | undefined, duration: number)
   return null;
 }
 
+/** The peaks of `take` were asked for and will never come (offline, too long, undecodable). */
+export const peaksFailed = (take: string) => peaks.get(take) === "none";
+
 async function decode(url: string): Promise<Peaks | null> {
   const r = await fetch(url);
   if (!r.ok) return null;
