@@ -11,3 +11,4 @@ The app's left rail (shell.tsx `AppShell`): floating panels, the logo above the 
 - A window shorter than 800px (the folded rail's height, 787px) scrolls the whole rail. On a phone the menu is a sideways bar with no logo.
 
 The consumer provides the current path; labels are one word.
+- Size (owner, 2026-11-28: "just reduce the size by 10%", "icon"): the rail's tiles are 32px (11px corners), 10% under the shared 36px tile, with 18px glyphs; the items' boxes and gaps are unchanged, so the fold heights stay.

@@ -2336,6 +2336,13 @@
       overflow-y: auto;
     }
   }
+  /* the rail's tiles 10% under the shared tile (owner, 2026-11-28: "just reduce the size by 10%", "icon") */
+  .dock-item .tile,
+  .rail-logo .tile {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
+  }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);
   }

@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T12:00:00Z",
+  "at": "2026-11-28T11:00:00Z",
   "via": "Claude Code",
-  "note": "StatusTile, Rail: the status tile under the rail is gone; the logo carries the state (a red dot, \"helmstudio · Runner down\", a click opens the status popover); same tile sizes (owner, 2026-11-28: \"let go with this option same size, shut down item merge on the brand logo\")"
+  "note": "Rail: its tiles 32px with 18px glyphs, 10% under the shared tile; spacing unchanged (owner, 2026-11-28: \"just reduce the size by 10%\")"
  }
 }

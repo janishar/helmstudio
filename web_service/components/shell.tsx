@@ -98,7 +98,7 @@ function DockLink({ it: { href, label, Icon, tile }, path }: { it: Item; path: s
       className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
-        <Icon size={20} strokeWidth={1.75} aria-hidden />
+        <Icon size={18} strokeWidth={1.75} aria-hidden />
       </span>
       {label}
     </Link>
@@ -132,7 +132,7 @@ function SetupGear({ admin, path }: { admin: boolean; path: string }) {
       className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": SETTINGS.tile } as React.CSSProperties}>
-        <Settings size={20} strokeWidth={1.75} aria-hidden />
+        <Settings size={18} strokeWidth={1.75} aria-hidden />
       </span>
       Setup
     </button>
@@ -267,7 +267,7 @@ export function AppShell({
                         } as React.CSSProperties
                       }
                     >
-                      <Bot size={20} strokeWidth={1.75} aria-hidden />
+                      <Bot size={18} strokeWidth={1.75} aria-hidden />
                     </span>
                     Assistant
                     {a.cardWaits && !a.open && (
