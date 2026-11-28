@@ -73,9 +73,7 @@ def main() -> None:
         variant = case.get("variant", "custom_voice")
         t0 = time.monotonic()
         if variant not in synths:
-            synths[variant] = Synthesizer.load(
-                pack.models_root() / DIRS[variant], torch.device(dev), compile=False
-            )
+            synths[variant] = Synthesizer.load(pack.models_root() / DIRS[variant], torch.device(dev), compile=False)
         load_s, synth = time.monotonic() - t0, synths[variant]
         synth.sampling = dataclasses.replace(synth.sampling, seed=case["seed"], temperature=case["temperature"],
                                              code_temperature=case["temperature"])  # fmt: skip
@@ -102,9 +100,7 @@ def main() -> None:
                 }
             else:
                 voice = {"source": "design", "text": case["design"]}
-            speaker, instruct = tts.voice_args(
-                name, voice, case.get("style", ""), synth._speaker_ids
-            )
+            speaker, instruct = tts.voice_args(name, voice, case.get("style", ""), synth._speaker_ids)
             language = tts.language_of(case["language"], voice)
             pcm, cues = tts.pcm16(synth.speak(case["text"], speaker, language, instruct)), None
             np.save(OUT / f"{name}{suffix}.codes.npy", torch.stack(codes).cpu().numpy())
@@ -125,9 +121,7 @@ def main() -> None:
                 "load_s": round(load_s, 2), "speak_s": round(speak_s, 2),
                 "versions": {"torch": torch.__version__, "python": sys.version.split()[0],
                              "port": "AI-EXP 16b31cc3 src/qwen3_tts"}, "device": dev}  # fmt: skip
-        (OUT / f"{name}{suffix}.json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False) + "\n"
-        )
+        (OUT / f"{name}{suffix}.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
         print(f"{name}{suffix}: {meta['duration_s']} s, sha256 {meta['wav_sha256'][:16]}…")
 
 

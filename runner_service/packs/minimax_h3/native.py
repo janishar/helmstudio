@@ -63,9 +63,7 @@ DEFAULTS = (("layers", 50), ("reuse", 1), ("token_reduction", False), ("render",
 # clip and of its part (frames on the 5 + 17k grid), all reference sound
 MAX_REFS, MAX_SOUNDS, SOUND_FRAMES, MAX_SOUND_S = 12, 3, 56, 15.0
 # generate's lora param (API 1.41): which add-on each value asks for, by partition (model.yaml `addons`, `addons_with`)
-LORA = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]["generate"][
-    "params"
-]["lora"]
+LORA = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]["generate"]["params"]["lora"]
 
 
 def render_size(width: int, height: int, render: str) -> tuple[int, int] | None:
@@ -75,9 +73,7 @@ def render_size(width: int, height: int, render: str) -> tuple[int, int] | None:
     if render == "Full":
         return width, height
     g = math.gcd(width // 32, height // 32)
-    k = min(
-        math.floor(g * RENDER[render] + 0.5), g - 1
-    )  # g x 0.75 and g x 0.625 are exact binary fractions
+    k = min(math.floor(g * RENDER[render] + 0.5), g - 1)  # g x 0.75 and g x 0.625 are exact binary fractions
     return (width * k // g, height * k // g) if k > 0 else None
 
 
@@ -110,9 +106,7 @@ def generate_error(node: str, refs: int, first: bool, last: bool, width: int, he
     if sounds and frames < SOUND_FRAMES:
         return f"{node}: a video reference with sound needs a clip of at least {SOUND_FRAMES} frames ({frames})"
     for i, (x, s, _) in enumerate(videos, 1):
-        if (
-            s and (n := round(x * FPS)) < SOUND_FRAMES
-        ):  # h3 keeps 5 + 17k frames, reads the sound that long
+        if s and (n := round(x * FPS)) < SOUND_FRAMES:  # h3 keeps 5 + 17k frames, reads the sound that long
             return (
                 f"{node}: a video reference with sound needs a part of at least {SOUND_FRAMES} frames at {FPS} fps "
                 f"(video {i} reads {n})"
@@ -227,17 +221,13 @@ def sound(row: dict) -> bool | str:
     return s == "keep" and bool(row["video"].get("has_audio"))
 
 
-def cut(
-    node: str, v: dict, dest: Path, *, picture: bool, audio: bool, soundtrack: dict | None = None
-) -> Path:
+def cut(node: str, v: dict, dest: Path, *, picture: bool, audio: bool, soundtrack: dict | None = None) -> Path:
     """Write the media value's in..out part to `dest`: the picture as lossless H.264 (frame exact: -ss after -i),
     the sound as 16-bit PCM, either one left out when not wanted. API 1.37: with `soundtrack` (a media value), the
     picture is cut alone, then the soundtrack's part comes in as a second input and is mapped as its PCM track,
     the shorter of the two setting the length (-shortest)."""
     if soundtrack is not None:
-        bare = cut(
-            node, v, dest.with_name(dest.stem + "-picture" + dest.suffix), picture=True, audio=False
-        )
+        bare = cut(node, v, dest.with_name(dest.stem + "-picture" + dest.suffix), picture=True, audio=False)
         track = dest.with_name(dest.stem + "-soundtrack")
         track.write_bytes(soundtrack["data"])
         a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(bare),
@@ -255,18 +245,12 @@ def cut(
     src.write_bytes(v["data"])
     a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(src),
          "-ss", f"{v.get('in', 0):.6f}", "-t", f"{part(v):.6f}"]  # fmt: skip
-    a += (
-        ["-map", "0:v:0", "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0"]
-        if picture
-        else ["-vn"]
-    )
+    a += ["-map", "0:v:0", "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0"] if picture else ["-vn"]
     a += ["-map", "0:a:0", "-c:a", "pcm_s16le"] if audio else ["-an"]
     r = subprocess.run([*a, str(dest)], capture_output=True, text=True, check=False, timeout=600)
     src.unlink()
     if r.returncode or not dest.is_file():
-        raise RunError(
-            f"{node}: cutting reference take {v['take_id']} failed: {media.last_line(r.stderr)}"
-        )
+        raise RunError(f"{node}: cutting reference take {v['take_id']} failed: {media.last_line(r.stderr)}")
     return dest
 
 
@@ -276,10 +260,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
     videos, audios = params.get("videos") or [], [r["audio"] for r in params.get("audios") or []]
     first, last = inputs.get("first"), inputs.get("last")
     w, h = size["width"], size["height"]
-    facts = [
-        [part(r["video"]), sound(r), part(r["soundtrack"]) if r.get("soundtrack") else None]
-        for r in videos
-    ]
+    facts = [[part(r["video"]), sound(r), part(r["soundtrack"]) if r.get("soundtrack") else None] for r in videos]
     fp8 = inputs["model"].variant == "base-fp8"
     speed = None if fp8 else [params.get(k, d_) for k, d_ in DEFAULTS]
     if why := generate_error(ctx.node, len(refs), first is not None, last is not None, w, h, d["frames"], facts,
@@ -303,9 +284,7 @@ def generate(ctx, params: dict, inputs: dict) -> dict:
         # audios before videos: h3 numbers <Audio n> across every sound input in argv order, a kept video soundtrack
         # included, so this keeps audio row n as <Audio n> (h3_multimodal.c)
         for i, a in enumerate(audios):
-            images.append(
-                ("--ref-audio", cut(ctx.node, a, tmp / f"audio-{i}.wav", picture=False, audio=True))
-            )
+            images.append(("--ref-audio", cut(ctx.node, a, tmp / f"audio-{i}.wav", picture=False, audio=True)))
         for i, (row, (_, keep, _)) in enumerate(zip(videos, facts, strict=True)):
             track = row.get("soundtrack") if keep == "replace" else None
             path = cut(ctx.node, row["video"], tmp / f"video-{i}.mkv", picture=True, audio=keep is True,

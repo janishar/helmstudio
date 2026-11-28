@@ -71,23 +71,15 @@ from core.graph import RunError
 
 SYSTEM = "Comprehend and analyze the provided prompt."
 TEMPLATE = f"<|im_start|>system\n{SYSTEM}<|im_end|>\n<|im_start|>user\n{{}}<|im_end|>\n<|im_start|>assistant\n"
-SLOT = (
-    "<image{}><|vision_start|><|image_pad|><|vision_end|>"  # one reference's place in the user turn
-)
-AREA = (
-    1024 * 1024
-)  # references, and an auto-sized edit, are about this many pixels (output_resolution²)
+SLOT = "<image{}><|vision_start|><|image_pad|><|vision_end|>"  # one reference's place in the user turn
+AREA = 1024 * 1024  # references, and an auto-sized edit, are about this many pixels (output_resolution²)
 SCALE = 16  # the VAE compresses 16x; sizes are floored to multiples of 32
 # tiled: auto tiles above this many MP (the studio tiled only when asked; the goldens are <= 1 MP)
 AUTO_TILE_MP = 2.5
 # enhance (module docstring): the component and max_new_tokens, by whether there are references
 PE = {False: ("text_enhancer", 16256), True: ("edit_enhancer", 24000)}
-PE_IMAGE_PIXELS = (
-    1024 * 1024
-)  # a reference reaches the enhancer at most this many pixels (as trained)
-PE_ANSWER = (
-    2048  # think off: progress counts to this (an answer is ~700 tokens); on, to max_new_tokens
-)
+PE_IMAGE_PIXELS = 1024 * 1024  # a reference reaches the enhancer at most this many pixels (as trained)
+PE_ANSWER = 2048  # think off: progress counts to this (an answer is ~700 tokens); on, to max_new_tokens
 RATIOS = (1, 4 / 3, 3 / 4, 3 / 2, 2 / 3, 16 / 9, 9 / 16)  # W/H of the old studio's ASPECT_RATIOS
 log = logging.getLogger("qwen")
 
@@ -126,14 +118,10 @@ def tensor_hook(component: str, model):
 @dataclass
 class Cond:
     embeds: torch.Tensor  # [1, L, 4096] bf16 on the device; one unpadded prompt, so no mask
-    pads: (
-        torch.Tensor
-    )  # [1, L] bool: which positions hold a reference's vision tokens (none in text-to-image)
+    pads: torch.Tensor  # [1, L] bool: which positions hold a reference's vision tokens (none in text-to-image)
     latents: torch.Tensor | None = None  # [1, sum(h*w), 64]: the references' VAE latents, in order
     shapes: list = field(default_factory=list)  # (1, h, w) of each reference's latents
-    refs: list = field(
-        default_factory=list
-    )  # the references as given (PIL), for auto size and the noise seed
+    refs: list = field(default_factory=list)  # the references as given (PIL), for auto size and the noise seed
 
 
 @dataclass
@@ -150,18 +138,14 @@ def build(component: str, model):
 
         folder = model.folder(component)
         with accelerate.init_empty_weights():
-            out = AutoModelForImageTextToText.from_config(
-                AutoConfig.from_pretrained(folder), dtype=torch.bfloat16
-            )
+            out = AutoModelForImageTextToText.from_config(AutoConfig.from_pretrained(folder), dtype=torch.bfloat16)
         out.generation_config = GenerationConfig.from_pretrained(folder)
         return out
     sub = model.folder(component) / component
     with accelerate.init_empty_weights(include_buffers=False):
         if component == "text_encoder":
             return Qwen3VLForConditionalGeneration(AutoConfig.from_pretrained(sub))
-        cls = {"transformer": QwenImage21Transformer2DModel, "vae": AutoencoderKLQwenImage21}[
-            component
-        ]
+        cls = {"transformer": QwenImage21Transformer2DModel, "vae": AutoencoderKLQwenImage21}[component]
         return cls.from_config(cls.load_config(sub))
 
 
@@ -286,9 +270,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
     # a seed repeats across devices; an edit mixes in its references
     generator = torch.Generator("cpu").manual_seed(noise_seed(inputs["seed"], cond.refs))
     channels = dit.config.in_channels
-    noise = randn_tensor(
-        (1, 1, channels, h, w), generator=generator, device=dev, dtype=embeds.dtype
-    )
+    noise = randn_tensor((1, 1, channels, h, w), generator=generator, device=dev, dtype=embeds.dtype)
     latents = noise.view(1, channels, h * w).transpose(1, 2)
 
     folder = model.folder()
@@ -319,9 +301,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         mode = None if cache is None else ("extract" if i == 0 else "cached")
         with dit.cache_context("cond"):
             pred = dit(
-                hidden_states=latents
-                if cond.latents is None
-                else torch.cat([cond.latents, latents], 1),
+                hidden_states=latents if cond.latents is None else torch.cat([cond.latents, latents], 1),
                 timestep=t.expand(1).to(latents.dtype) / 1000,
                 encoder_hidden_states=embeds,
                 encoder_hidden_states_mask=None,
@@ -336,9 +316,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
         latents = scheduler.step(pred[:, -latents.size(1) :], t, latents, return_dict=False)[0]
         latents = latents.to(dtype)  # MPS returns fp32 here (pytorch#99272)
         if dev != "cpu":
-            getattr(
-                torch, dev
-            ).synchronize()  # so progress, ETA and cancel follow the GPU, not the queue
+            getattr(torch, dev).synchronize()  # so progress, ETA and cancel follow the GPU, not the queue
         ctx.progress(i + 1, n, "sampling")
     return {"latent": Latent(latents.clone(), width, height)}
 
@@ -388,9 +366,7 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
 
     def generate(prompt: str, thumbs: list) -> tuple[str, int, int]:
         turns = (
-            [{"role": "system", "content": [{"type": "text", "text": params["system"]}]}]
-            if params["system"]
-            else []
+            [{"role": "system", "content": [{"type": "text", "text": params["system"]}]}] if params["system"] else []
         )
         content = [{"type": "image"} for _ in thumbs] + [{"type": "text", "text": prompt}]
         turns.append({"role": "user", "content": content})
@@ -429,11 +405,7 @@ def pe_answer(gen: str) -> tuple[str, str, str] | None:
             obj, _ = dec.raw_decode(answer, i)
         except json.JSONDecodeError:
             continue
-        text = (
-            (obj.get("rewritten_prompt") or obj.get("rewrited_prompt"))
-            if isinstance(obj, dict)
-            else None
-        )
+        text = (obj.get("rewritten_prompt") or obj.get("rewrited_prompt")) if isinstance(obj, dict) else None
         if isinstance(text, str) and text.strip():
             found = (
                 text.strip(),
@@ -509,7 +481,7 @@ def enhance(ctx, params: dict, inputs: dict) -> dict:
     out = pe.generate(**batch, max_new_tokens=max_new, do_sample=True, temperature=1.0, top_p=0.95, top_k=20,
                       stopping_criteria=StoppingCriteriaList([_Tokens(ctx, n_in, total)]))  # fmt: skip
     gen = proc.tokenizer.decode(out[0, n_in:], skip_special_tokens=True)
-    log.info("enhance %s: %d prompt tokens, %d new in %.0f s", name, n_in, out.shape[1] - n_in, time.monotonic() - t)  # fmt: skip
+    log.info("enhance %s: %d prompt tokens, %d new in %.0f s", name, n_in, out.shape[1] - n_in, time.monotonic() - t)
     del out, batch
     if (answer := pe_answer(gen)) is None:
         log.warning("enhancer output without an answer: %s", gen[-2000:])

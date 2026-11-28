@@ -50,9 +50,7 @@ def test_the_stage_in_use_is_never_evicted_and_short_fails_with_numbers():
     res.get(A, 4, 0, object)
     with pytest.raises(RunError, match=r"needs 8.0 GB more, 4.0 GB in use .* budget 10.0 GB"):
         res.admit({A: 4, C: 4}, 4, set())
-    assert list(res.entries) == [A] and freed == [
-        1
-    ]  # short: the device cache went back, no weights
+    assert list(res.entries) == [A] and freed == [1]  # short: the device cache went back, no weights
 
 
 def test_peak_and_load_transient_count():
@@ -78,14 +76,10 @@ def test_cached_results_are_dropped_before_components():
     assert dropped == []  # fits: nothing dropped
     res.done()
     res.admit({C: 4}, 0, set())
-    assert dropped == [1] and list(res.entries) == [
-        B
-    ]  # A evicted; C is loaded by get(), not admit()
+    assert dropped == [1] and list(res.entries) == [B]  # A evicted; C is loaded by get(), not admit()
 
 
-@pytest.mark.parametrize(
-    ("policy", "left"), [("keep_warm", [A, B]), ("keep_pinned", [B]), ("unload", [])]
-)
+@pytest.mark.parametrize(("policy", "left"), [("keep_warm", [A, B]), ("keep_pinned", [B]), ("unload", [])])
 def test_after_run_policies(policy, left):
     res, _ = manager(pins={"b"})
     res.get(A, 2, 0, object)
@@ -210,20 +204,13 @@ def test_unload_named_frees_exactly_those_held_and_not_in_use():
             2,
             0,
             object,
-            loras=[{"lora_id": "x", "strength": 1.0, "name": "n", "bytes": 1}]
-            if key == K
-            else None,
+            loras=[{"lora_id": "x", "strength": 1.0, "name": "n", "bytes": 1}] if key == K else None,
         )
     res.in_use = {B}
     names = [{"component": n, "model": "m", "variant": "base", "precision": "bf16"} for n in "abc"]
     names.append(names[0] | {"loras": [{"lora_id": "x", "strength": 1}]})
     out, gb = res.unload_named(names)  # C is pinned: named, it goes too
-    assert (
-        out == [names[0], names[2], names[3]]
-        and gb == 6
-        and list(res.entries) == [B]
-        and freed == [1]
-    )
+    assert out == [names[0], names[2], names[3]] and gb == 6 and list(res.entries) == [B] and freed == [1]
     assert res.unload_named(names) == ([], 0)
 
 
@@ -257,16 +244,12 @@ def test_what_the_device_measures_beyond_the_entries_counts(after_free, left):
     res.free = free
     res.get(A, 4, 0, object)
     res.done()
-    res.admit(
-        {B: 4}, 6, set()
-    )  # 4 + 10 beyond + 10 > 20: the cache goes back first, then A only if still short
+    res.admit({B: 4}, 6, set())  # 4 + 10 beyond + 10 > 20: the cache goes back first, then A only if still short
     assert list(res.entries) == left and freed[0] == 1
 
 
 def test_a_need_short_of_what_the_device_measures_fails_with_those_numbers():
-    res, freed = manager(
-        budget=20, measure=lambda: 12.0
-    )  # the runtime and live tensors: nothing to evict
+    res, freed = manager(budget=20, measure=lambda: 12.0)  # the runtime and live tensors: nothing to evict
     with pytest.raises(RunError, match=r"needs 15.0 GB more, 12.0 GB in use .* budget 20.0 GB"):
         res.admit({}, 15, set())
     assert freed == [1]  # the device cache was given back before failing

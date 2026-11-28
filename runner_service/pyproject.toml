@@ -47,6 +47,6 @@ markers = ["gpu: loads real weights on the GPU (run with -m gpu)"]
 addopts = "-m 'not gpu'"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py314"
 extend-exclude = ["gen", "packs/ltx/vendor", "packs/qwen3_tts/vendor", "packs/mmaudio/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)

@@ -164,10 +164,7 @@ def bench():
 def test_matches_the_golden(bench, name):
     from core import pack
 
-    if (
-        CASES[name]["variant"] == "xl-turbo"
-        and not (pack.models_root() / "ACE-Step-1.5-XL-Turbo").is_dir()
-    ):
+    if CASES[name]["variant"] == "xl-turbo" and not (pack.models_root() / "ACE-Step-1.5-XL-Turbo").is_dir():
         pytest.skip("ACE-Step 1.5 XL is not in the models folder")
     r = compare(bench, name)
     print(name, {k: r[k] for k in ("exact", "snr_db", "rms", "s", "peak_gb", "total_s")})

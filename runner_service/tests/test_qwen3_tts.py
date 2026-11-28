@@ -30,17 +30,11 @@ def test_models_and_voices_match_the_fixtures(values):
     keys = ("id", "title", "precisions", "source", "dir")
     assert {k: got[k] for k in ("id", "family", "title", "media", "runtimes")} == {
         k: want[k] for k in ("id", "family", "title", "media", "runtimes")}  # fmt: skip
-    assert [{k: v[k] for k in keys} for v in got["variants"]] == [
-        {k: v[k] for k in keys} for v in want["variants"]
-    ]
+    assert [{k: v[k] for k in keys} for v in got["variants"]] == [{k: v[k] for k in keys} for v in want["variants"]]
     for g, w in zip(got["variants"], want["variants"], strict=True):
-        if (
-            g["presence"] == "present"
-        ):  # on a host with the weights: the same sizes and memory plans
+        if g["presence"] == "present":  # on a host with the weights: the same sizes and memory plans
             assert (g["components"], g["memory"]) == (w["components"], w["memory"])
-    assert [v for v in values["voices"]["voices"] if v["family"] == "qwen3-tts"] == fixture(
-        "voices"
-    )["voices"]
+    assert [v for v in values["voices"]["voices"] if v["family"] == "qwen3-tts"] == fixture("voices")["voices"]
 
 
 def model(variant: str):
@@ -123,10 +117,7 @@ def test_voice_args():
 
 def test_rename():
     assert tts.rename("talker", "talker.model.codec_embedding.weight") == "codec_embedding.weight"
-    assert (
-        tts.rename("talker", "talker.model.layers.0.mlp.up_proj.weight")
-        == "model.layers.0.mlp.up_proj.weight"
-    )
+    assert tts.rename("talker", "talker.model.layers.0.mlp.up_proj.weight") == "model.layers.0.mlp.up_proj.weight"
     assert tts.rename("speech_tokenizer", "decoder.pre_conv.conv.weight") == "pre_conv.conv.weight"
     assert tts.rename("speech_tokenizer", "encoder.layers.0.weight") is None
 
@@ -138,9 +129,7 @@ def test_speak_refuses_empty_and_too_long_text():
         ("a" * 901, "^speak: at most 900 characters"),
     ):
         with pytest.raises(RunError, match=why):
-            tts.speak(
-                ctx, {"voice": PRESET}, {"model": model("custom_voice"), "text": text, "seed": 1}
-            )
+            tts.speak(ctx, {"voice": PRESET}, {"model": model("custom_voice"), "text": text, "seed": 1})
 
 
 def test_pieces_cut_long_cjk_sentences_after_their_commas():
@@ -153,9 +142,7 @@ def test_pieces_cut_long_cjk_sentences_after_their_commas():
 
 
 def test_voice_args_refuses_a_voice_without_a_source_and_reads_a_null_text():
-    with pytest.raises(
-        RunError, match=r"^speak.voice: Qwen3-TTS cannot speak a voice of source None$"
-    ):
+    with pytest.raises(RunError, match=r"^speak.voice: Qwen3-TTS cannot speak a voice of source None$"):
         tts.voice_args("speak", {"item_id": "x"}, "", {})
     with pytest.raises(RunError, match="needs a description"):
         tts.voice_args("speak", DESIGN | {"text": None}, "", {})
@@ -172,13 +159,9 @@ def test_language_auto_uses_the_voices_own():
 def test_speak_fails_when_no_speech_comes_out(monkeypatch):
     import numpy as np
 
-    monkeypatch.setattr(
-        tts, "synthesizer", lambda *a: types.SimpleNamespace(_speaker_ids={"ryan": 1})
-    )
+    monkeypatch.setattr(tts, "synthesizer", lambda *a: types.SimpleNamespace(_speaker_ids={"ryan": 1}))
     monkeypatch.setattr(tts, "say", lambda *a: (np.zeros(0, dtype=np.float32), None))
-    ctx = types.SimpleNamespace(
-        node="speak", component=lambda *a: None, check=lambda: None, progress=lambda *a: None
-    )
+    ctx = types.SimpleNamespace(node="speak", component=lambda *a: None, check=lambda: None, progress=lambda *a: None)
     params = {"voice": PRESET, "temperature": 0.3, "language": "auto", "style": ""}
     with pytest.raises(RunError, match=r"^speak: no speech came out$"):
         tts.speak(ctx, params, {"model": model("custom_voice"), "text": "Hi.", "seed": 1})

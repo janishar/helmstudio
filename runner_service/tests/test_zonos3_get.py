@@ -12,9 +12,7 @@ import pytest
 RUNNER = Path(__file__).parent.parent
 TAR = "zonos3-server-9.9.9-linux-x86_64-cuda13.tar.gz"
 
-pytestmark = pytest.mark.skipif(
-    not (shutil.which("curl") and shutil.which("make")), reason="no curl or make"
-)
+pytestmark = pytest.mark.skipif(not (shutil.which("curl") and shutil.which("make")), reason="no curl or make")
 
 
 def get(tmp: Path, release: Path) -> subprocess.CompletedProcess:
@@ -42,9 +40,7 @@ def test_zonos3_get_checks_the_sum_and_hints_without_a_release(tmp_path):
     (release / "SHA256SUMS").write_text(f"{good}  other.dmg\n{good}  {TAR}\n")
     r = get(tmp_path, release)
     assert r.returncode == 0, r.stdout + r.stderr
-    assert (tmp_path / "build/zonos3-server").is_file() and (
-        tmp_path / "build/lib/libcudart.so.13"
-    ).is_file()
+    assert (tmp_path / "build/zonos3-server").is_file() and (tmp_path / "build/lib/libcudart.so.13").is_file()
 
     (release / TAR).unlink()
     r = get(tmp_path, release)

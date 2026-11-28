@@ -108,12 +108,8 @@ def probe(path: Path) -> dict:
             "field_order": _null(v.get("field_order")),
             "frame_rate": v.get("r_frame_rate", "0/0"),
             "time_base": v.get("time_base", "0/0"),
-            "color": {
-                k: _null(v.get(f"color_{k}")) for k in ("range", "space", "primaries", "transfer")
-            },
-            "extradata_sha256": h.split(":")[1]
-            if h.startswith("SHA256:")
-            else hashlib.sha256(b"").hexdigest(),
+            "color": {k: _null(v.get(f"color_{k}")) for k in ("range", "space", "primaries", "transfer")},
+            "extradata_sha256": h.split(":")[1] if h.startswith("SHA256:") else hashlib.sha256(b"").hexdigest(),
         }
     frames = int(v.get("nb_read_packets", 0)) if v else 0
     return {"container": first, "video": v, "audio": a, "stream": stream, "frames": frames}
@@ -130,11 +126,7 @@ def check_kind(info: dict, kind: str) -> None:
     if kind == "audio":
         ok = v is None and info["audio"] is not None and info["container"] in ("wav", "mp3", "mp4")
     elif kind == "video":
-        ok = (
-            v is not None
-            and info["container"] in ("mp4", "mov")
-            and v.get("codec_name") not in IMAGE_CODECS
-        )
+        ok = v is not None and info["container"] in ("mp4", "mov") and v.get("codec_name") not in IMAGE_CODECS
     else:
         ok = v is not None and v.get("codec_name") in IMAGE_CODECS and info["frames"] <= 1
     if not ok:
@@ -184,14 +176,10 @@ DENY = re.compile(r"\b(a?movie|subtitles|ass|lut1d|lut3d|haldclutsrc|a?sendcmd|a
 SLOT = re.compile(r"\{in:(\d+)\}")
 
 
-OUTPUT_LIMIT = (
-    32 << 30
-)  # bytes: the largest output ffmpeg may write (studio blocks an export estimated over 16 GiB)
+OUTPUT_LIMIT = 32 << 30  # bytes: the largest output ffmpeg may write (studio blocks an export estimated over 16 GiB)
 
 
-def build(
-    args: list[str], inputs: list[Path], *, out: Path, venc_args: list[str], listfile: Path | None
-) -> list[str]:
+def build(args: list[str], inputs: list[Path], *, out: Path, venc_args: list[str], listfile: Path | None) -> list[str]:
     """Studio's argument list with `{in:n}`, `{list}`, `{out}` and `{venc}` substituted (whole arguments only),
     after checking it. MediaError invalid for an unknown option, an `-i` not followed by a placeholder, a codec
     other than CODECS outside {venc}, a format other than FORMATS, -progress other than pipe:1, a filter that opens
@@ -310,14 +298,8 @@ MAX_TAKE_S = 600  # the longest audio take the output node stores (core.nodes._w
 def lines_problem(lines: list[dict]) -> str | None:
     """A dialogue stage's check before loading (`check_<stage>` text, after the node id): its lines planned as
     speech_seconds plans them (15 characters a second plus the pauses), refused above MAX_TAKE_S."""
-    planned = sum(len(r.get("text", "")) for r in lines) / 15 + sum(
-        r.get("pause_s", 0) for r in lines[:-1]
-    )
-    return (
-        f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s"
-        if planned > MAX_TAKE_S
-        else None
-    )
+    planned = sum(len(r.get("text", "")) for r in lines) / 15 + sum(r.get("pause_s", 0) for r in lines[:-1])
+    return f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s" if planned > MAX_TAKE_S else None
 
 
 def _ffmpeg(args: list[str], stdin: bytes | None = None, timeout: int = 300) -> bytes:

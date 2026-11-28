@@ -16,9 +16,7 @@ from core.pack import LoraUse
 FIXTURES = CONTRACTS / "fixtures/loras"
 MODELS = json.loads((CONTRACTS / "fixtures/registry/qwen-image.models.valid.json").read_text())
 BLOCK, FAMILY = MODELS["models"][0]["lora"], MODELS["models"][0]["family"]
-LTX_BLOCK = json.loads((CONTRACTS / "fixtures/registry/ltx.models.valid.json").read_text())[
-    "models"
-][0]["lora"]
+LTX_BLOCK = json.loads((CONTRACTS / "fixtures/registry/ltx.models.valid.json").read_text())["models"][0]["lora"]
 BLOCKS = {FAMILY: BLOCK, "ltx": LTX_BLOCK}
 
 
@@ -92,9 +90,7 @@ def test_every_key_of_a_model_lora_applies(style):
 
 def comfy_name(module: str) -> str:
     """An LTX module's name in a ComfyUI file: the official key's part, as the old renaming map undid it."""
-    r = next(
-        (r for r in LTX_BLOCK["renames"] if module.endswith(r["to"])), None
-    )  # audio_ff's come before ff's
+    r = next((r for r in LTX_BLOCK["renames"] if module.endswith(r["to"])), None)  # audio_ff's come before ff's
     return module[: -len(r["to"])] + r["from"] if r else module
 
 
@@ -105,10 +101,7 @@ def test_every_key_of_an_ltx_lora_applies_and_none_is_dropped():
     rng = random.Random("ltx")
     mods = lora.expand(LTX_BLOCK["modules"])
     shapes = dict.fromkeys(mods, (64, 96))
-    pick = (
-        rng.sample(mods, 60)
-        + [m for m in mods if m.endswith(("to_out", "proj_in", "proj_out", "linear1"))][:12]
-    )
+    pick = rng.sample(mods, 60) + [m for m in mods if m.endswith(("to_out", "proj_in", "proj_out", "linear1"))][:12]
     h = {}
     for m in pick:
         base = "diffusion_model." + comfy_name(m)
@@ -120,9 +113,7 @@ def test_every_key_of_an_ltx_lora_applies_and_none_is_dropped():
     for _ in range(20):
         k = rng.choice(sorted(h))
         removed = {x: v for x, v in h.items() if x != k}
-        renamed = removed | {
-            k.replace("transformer_blocks.", "blocks.") if "blocks." in k else "x" + k: h[k]
-        }
+        renamed = removed | {k.replace("transformer_blocks.", "blocks.") if "blocks." in k else "x" + k: h[k]}
         added = h | {k.rsplit(".", 2)[0] + ".lora_mid.weight": h[k]}
         for broken in (removed, renamed, added):
             res = lora.normalise("x", broken, LTX_BLOCK, "ltx", shapes)
@@ -131,14 +122,8 @@ def test_every_key_of_an_ltx_lora_applies_and_none_is_dropped():
     kohya = {f"lora_unet_{k.removeprefix('diffusion_model.').removesuffix(suf).replace('.', '_')}{to}": v
              for k, v in h.items() for suf, to in ((".lora_A.weight", ".lora_down.weight"),
                                                   (".lora_B.weight", ".lora_up.weight")) if k.endswith(suf)}  # fmt: skip
-    res = lora.normalise(
-        "k", kohya, LTX_BLOCK, "ltx", shapes
-    )  # `_0` / `net_2` parts match no rename: refused
-    assert (
-        res["key_style"] == "kohya"
-        and res["error"]
-        and any("to_out_0" in k for k in res["unapplied"])
-    )
+    res = lora.normalise("k", kohya, LTX_BLOCK, "ltx", shapes)  # `_0` / `net_2` parts match no rename: refused
+    assert res["key_style"] == "kohya" and res["error"] and any("to_out_0" in k for k in res["unapplied"])
 
 
 def test_a_shape_that_does_not_fit_the_linear_is_unapplied():
@@ -242,9 +227,7 @@ async def test_own_lora_is_fetched_once_checked_and_cached(tmp_path):
     p = await lib.path(u, "o1", progress)
     assert p.read_bytes() == b"lora-bytes" and p.name == f"{u.sha256}.safetensors"
     assert await lib.path(u, "o1", progress) == p
-    assert store.reads == [u.key] and told == [
-        "fetching LoRA mine"
-    ]  # the second use is a cache hit
+    assert store.reads == [u.key] and told == ["fetching LoRA mine"]  # the second use is a cache hit
     with pytest.raises(RunError, match="LoRA mine is not the run owner's"):
         await lib.path(u, "o2")
     store.objects[u.key] = (b"other-bytes", "x")
@@ -269,9 +252,7 @@ def test_own_lora_cache_drops_the_least_recently_used(tmp_path):
 
 def test_alpha_only_or_deeply_nested_files_are_refused_and_never_stop_the_scan(tmp_path):
     models = tmp_path / "models"
-    safetensors_file(
-        models / "loras" / "alpha.safetensors", {"transformer.img_in.alpha": ("BF16", [])}
-    )
+    safetensors_file(models / "loras" / "alpha.safetensors", {"transformer.img_in.alpha": ("BF16", [])})
     nested = b"[" * 200000
     write(models / "loras" / "nested.safetensors", len(nested).to_bytes(8, "little") + nested)
     with pytest.raises(lora.LoraFileError, match=r"no LoRA keys found \(is it a full model\?\)"):
@@ -297,9 +278,7 @@ def test_an_ic_lora_is_left_out_of_the_index_but_still_reads(tmp_path, caplog):
     ic.write_bytes(len(blob).to_bytes(8, "little") + blob + raw[8 + n :])
     entries = lora.Library(models, tmp_path / "cache").scan(BLOCKS)
     assert [(e["name"], e["family"]) for e in entries] == [("style", "ltx")]
-    assert (
-        f"{ic} left out: an IC-LoRA (it needs a reference video), not a stack LoRA" in caplog.text
-    )
+    assert f"{ic} left out: an IC-LoRA (it needs a reference video), not a stack LoRA" in caplog.text
     assert lora.read_header(ic)[1] == {"reference_downscale_factor": "2"}
 
 

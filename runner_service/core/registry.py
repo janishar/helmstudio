@@ -33,13 +33,9 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     core = packs.core_nodes()
     pack_nodes = {kind: n for _, nodes in loaded for kind, n in nodes.items()}
     # a pack with two runtimes ships each workflow for one of them (ltx's are MLX's): the other's are not published
-    workflows = [
-        w for p, _ in loaded for w in p.workflows if w["env"] == env or len(p.spec["runtimes"]) == 1
-    ]
+    workflows = [w for p, _ in loaded for w in p.workflows if w["env"] == env or len(p.spec["runtimes"]) == 1]
     used = {n["kind"] for w in workflows for n in w["nodes"].values()}
-    offered = {
-        k for p, _ in loaded for k in p.spec.get("publish", [])
-    }  # core nodes a pack offers unused
+    offered = {k for p, _ in loaded for k in p.spec.get("publish", [])}  # core nodes a pack offers unused
     if unknown := offered - core.keys():
         raise ValueError(f"publish: unknown core nodes {sorted(unknown)}")
     used |= offered
@@ -54,9 +50,7 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
     node_schemas = {k: s for k, (s, _) in every.items()}
     impls = {k: n for k, (_, n) in every.items()}
     values["models"] = models_value([p for p, _ in loaded], impls, node_schemas, env)
-    values["voices"] = (
-        {"schema_version": 1} | meta | {"voices": voices.entries([p for p, _ in loaded])}
-    )
+    values["voices"] = {"schema_version": 1} | meta | {"voices": voices.entries([p for p, _ in loaded])}
     for kind, value in values.items():
         if errs := schemas.registry_errors(kind, value):
             raise ValueError(f"registry {kind} is off-contract: {'; '.join(errs[:3])}")
@@ -66,24 +60,18 @@ def build(env: str = ENV) -> tuple[dict[str, dict], dict, list]:
             raise ValueError(f"{kind}: ids {sorted(dup)} are shipped by two packs")
     look_ids = {f"{p.family}/{x['id']}" for p, _ in loaded for x in p.looks}
     if clash := look_ids & {f"{p.family}/{x['id']}" for p, _ in loaded for x in p.voices}:
-        raise ValueError(
-            f"voices: ids {sorted(clash)} are also look ids (one /library/<family>/<id> URL)"
-        )
+        raise ValueError(f"voices: ids {sorted(clash)} are also look ids (one /library/<family>/<id> URL)")
     for w in workflows:
         if w["env"] != env:
             raise ValueError(f"workflow {w['id']}: env {w['env']}, this runner is {env}")
         if (want := graph.workflow_media(w["nodes"], node_schemas)) != w.get("media", "image"):
-            raise ValueError(
-                f"workflow {w['id']}: media {w.get('media', 'image')}, its graph makes {want}"
-            )
+            raise ValueError(f"workflow {w['id']}: media {w.get('media', 'image')}, its graph makes {want}")
         if errs := graph.validate(w["nodes"], node_schemas, run=False):
             raise ValueError(f"workflow {w['id']} does not fit its nodes: {'; '.join(errs[:3])}")
         if errs := standard_errors(w, node_schemas):
             raise ValueError(f"workflow {w['id']}: {'; '.join(errs[:3])}")
     values["guides"] = (
-        {"schema_version": 1}
-        | meta
-        | {"guides": guides([p for p, _ in loaded], workflows, node_schemas)}
+        {"schema_version": 1} | meta | {"guides": guides([p for p, _ in loaded], workflows, node_schemas)}
     )
     if errs := schemas.registry_errors("guides", values["guides"]):
         raise ValueError(f"registry guides is off-contract: {'; '.join(errs[:3])}")
@@ -128,9 +116,7 @@ def standard_errors(workflow: dict, node_schemas: dict) -> list[str]:
         return []
     errs = []
     if STANDARD_MEDIA[st["kind"]] != workflow.get("media", "image"):
-        errs.append(
-            f"standard: kind {st['kind']} does not make {workflow.get('media', 'image')} takes"
-        )
+        errs.append(f"standard: kind {st['kind']} does not make {workflow.get('media', 'image')} takes")
 
     def param(path: str) -> tuple[dict | None, str | None]:
         nid, name = path.split(".", 1)
@@ -201,12 +187,8 @@ def guides(loaded, workflows: list, node_schemas: dict) -> list[dict]:
             )
         for r in p.spec.get("recipes", []):
             if r["workflow"] not in {w["id"] for w in p.workflows}:
-                raise ValueError(
-                    f"{p.name} recipe {r['name']}: no workflow {r['workflow']} in the pack"
-                )
-            if r["workflow"] in here and (
-                errs := recipe_errors(r, here[r["workflow"]], node_schemas)
-            ):
+                raise ValueError(f"{p.name} recipe {r['name']}: no workflow {r['workflow']} in the pack")
+            if r["workflow"] in here and (errs := recipe_errors(r, here[r["workflow"]], node_schemas)):
                 raise ValueError(f"{p.name} recipe {r['name']}: {'; '.join(errs[:3])}")
         out.append({"family": p.family, "title": p.spec["title"], "card": c, "guide": text,
                     "recipes": p.spec.get("recipes", [])})  # fmt: skip
@@ -246,9 +228,7 @@ def changed(old: dict | None, new: dict) -> bool:
     return strip(old) != strip(new)
 
 
-ASK_IMAGES = (
-    4  # a text workflow is planned at 4 thumbnails of 1024 px (contracts/README.md, memory plans)
-)
+ASK_IMAGES = 4  # a text workflow is planned at 4 thumbnails of 1024 px (contracts/README.md, memory plans)
 
 
 def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: dict) -> list[dict]:
@@ -256,12 +236,8 @@ def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: 
     workflows, and one per text (ask) workflow, named by `workflow` and planned at ASK_IMAGES thumbnails, and one per
     media workflow model.yaml `planned_alone` names; a pack with only text workflows (llm) has one item without
     `workflow`. A media param is planned at model.yaml `plan_media` (its accepted kind's facts)."""
-    allowed = [
-        w for w in pack.workflows if allows(pack, w, variant, precision, impls, node_schemas)
-    ]
-    alone = set(
-        pack.spec.get("planned_alone", [])
-    )  # model.yaml: media workflows with an item of their own
+    allowed = [w for w in pack.workflows if allows(pack, w, variant, precision, impls, node_schemas)]
+    alone = set(pack.spec.get("planned_alone", []))  # model.yaml: media workflows with an item of their own
     text = [w for w in allowed if w.get("media") == "text" or w["id"] in alone]
     media = [w for w in allowed if w not in text]
     if not media and not text:
@@ -272,8 +248,7 @@ def memory_plans(pack, variant: str, precision: str, impls: dict, node_schemas: 
         plans = []
     else:
         plans = [memory_plan(pack, variant, precision, impls, node_schemas, media)]
-    plans += [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]}
-              for w in text]  # fmt: skip
+    plans += [memory_plan(pack, variant, precision, impls, node_schemas, [w]) | {"workflow": w["id"]} for w in text]
     # a workflow that loads nothing (echo-ask) has no plan; a native stage (`uses: []`, a child process) has its
     # peak_gb only (contracts/README.md, The native runtime)
     return [p for p in plans if p["components"] or p["peak_gb"] > 0.01]
@@ -291,18 +266,14 @@ def spliced(nodes: dict, impls: dict) -> dict:
     return nodes
 
 
-def allows(
-    pack, workflow: dict, variant: str, precision: str, impls: dict, node_schemas: dict
-) -> bool:
+def allows(pack, workflow: dict, variant: str, precision: str, impls: dict, node_schemas: dict) -> bool:
     """Whether a workflow is planned at (variant, precision): its model node's `only` (README, Media inputs) allows
     both and no stage's pack check refuses that model (LTX text to video needs the distilled variant)."""
     nodes = spliced(json.loads(json.dumps(workflow["nodes"])), impls)
     for n in nodes.values():
         if n["kind"] == f"{pack.family}/model":
             only = n.get("only", {})
-            if variant not in only.get("variant", [variant]) or precision not in only.get(
-                "precision", [precision]
-            ):
+            if variant not in only.get("variant", [variant]) or precision not in only.get("precision", [precision]):
                 return False
             n["params"] = n.get("params", {}) | {"variant": variant, "precision": precision}
     for n in nodes.values():
@@ -311,17 +282,13 @@ def allows(
             continue
         types = {i["name"]: i["type"] for i in node_schemas[n["kind"]]["inputs"]}
         models = {p: graph._model(nodes, impls, node_schemas, r) for p, r in n.get("in", {}).items() if types.get(p) == "Model"}  # fmt: skip
-        params = {s["name"]: s.get("default") for s in node_schemas[n["kind"]]["params"]} | n.get(
-            "params", {}
-        )
+        params = {s["name"]: s.get("default") for s in node_schemas[n["kind"]]["params"]} | n.get("params", {})
         if impl.check(params, set(n.get("in", {})), models):
             return False
     return True
 
 
-def memory_plan(
-    pack, variant: str, precision: str, impls: dict, node_schemas: dict, workflows=None
-) -> dict:
+def memory_plan(pack, variant: str, precision: str, impls: dict, node_schemas: dict, workflows=None) -> dict:
     """The models key's `memory` item of (variant, precision) (contracts/README.md, Two envs on one host: the
     hand-over): over the pack's workflows at their default sizes, run in `graph.run`'s order, the components a run
     loads in the order of their last use (`unloads_after` when the stage that last uses one unloads it) and
@@ -341,16 +308,10 @@ def memory_plan(
             for spec in node_schemas[node["kind"]]["params"]:
                 if "default" in spec:
                     params.setdefault(spec["name"], spec["default"])
-                if (
-                    spec["type"] == "media" and params.get(spec["name"]) is None
-                ):  # planned at model.yaml plan_media
+                if spec["type"] == "media" and params.get(spec["name"]) is None:  # planned at model.yaml plan_media
                     params[spec["name"]] = {"take_id": "", "key": "", "kind": spec["accepts"][0]} | pack.spec.get(
                         "plan_media", {}).get(spec["accepts"][0], {})  # fmt: skip
-                if (
-                    spec["type"] == "rows"
-                    and "Media" in spec["item"].values()
-                    and w.get("media") == "text"
-                ):
+                if spec["type"] == "rows" and "Media" in spec["item"].values() and w.get("media") == "text":
                     thumb = {
                         "take_id": "",
                         "key": "",
@@ -358,9 +319,7 @@ def memory_plan(
                         "width": 1024,
                         "height": 1024,
                     }
-                    params[spec["name"]] = [
-                        {"take": thumb}
-                    ] * ASK_IMAGES  # sized as planned_at.images says
+                    params[spec["name"]] = [{"take": thumb}] * ASK_IMAGES  # sized as planned_at.images says
             if node["kind"] == f"{pack.family}/model":
                 params |= {"variant": variant, "precision": precision}
         sinks = [n for n in graph.order(nodes) if not node_schemas[nodes[n]["kind"]]["outputs"]]
@@ -369,15 +328,11 @@ def memory_plan(
             if not (impl.uses or impl.peak is not None):
                 continue
             keys = graph._components(nodes, impls, node_schemas, nid)
-            peak = graph.stage_peak(
-                nodes, node_schemas, nid, impl, nodes[nid]["params"], {}, plan=True
-            )
+            peak = graph.stage_peak(nodes, node_schemas, nid, impl, nodes[nid]["params"], {}, plan=True)
             stages.append((set(keys), peak, impl.alone))
             if impl.peak is not None:
                 sizes = graph.stage_sizes(nodes, node_schemas, nid, {})
-                if nodes[nid]["kind"].endswith(
-                    "/extend"
-                ):  # README Media inputs: planned_at counts an extend's + 8N
+                if nodes[nid]["kind"].endswith("/extend"):  # README Media inputs: planned_at counts an extend's + 8N
                     p = nodes[nid]["params"]
                     sizes["frames"] += 8 * math.ceil(p["seconds"] * sizes["fps"] / 8)
                 at = {
@@ -400,11 +355,8 @@ def memory_plan(
         merged.pop(k := (c["component"], c["variant"], c["precision"]), None)
         merged[k] = c
     items = [c | {"gb": round(c["gb"], 2)} for c in merged.values()]
-    at = {"mp": round(at["mp"], 4), "frames": at["frames"]} | (
-        {"images": ASK_IMAGES} if asks else {}
-    )
-    return {"precision": precision, "peak_gb": round(max(peak, 0.01), 2), "components": items,
-            "planned_at": at}  # fmt: skip
+    at = {"mp": round(at["mp"], 4), "frames": at["frames"]} | ({"images": ASK_IMAGES} if asks else {})
+    return {"precision": precision, "peak_gb": round(max(peak, 0.01), 2), "components": items, "planned_at": at}
 
 
 def scanned_value(kind: str, entries: list[dict], env: str = ENV) -> dict:
@@ -431,9 +383,7 @@ def fill_prefused(values: dict[str, dict], loaded, files: dict) -> None:
             continue
         found = [(x, packs.place(p.spec["variants"][x["variant"]]["dir"]) / x["file"])
                  for x in p.spec["lora"]["prefused"]]  # fmt: skip
-        block["prefused"] = [
-            {"lora_id": files[f], "variant": x["variant"]} for x, f in found if f in files
-        ]
+        block["prefused"] = [{"lora_id": files[f], "variant": x["variant"]} for x, f in found if f in files]
     if errs := schemas.registry_errors("models", values["models"]):
         raise ValueError(f"registry models is off-contract: {'; '.join(errs[:3])}")
 

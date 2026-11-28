@@ -39,13 +39,9 @@ def test_models_match_the_fixture(values):
     top = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got.get(k) for k in top} == {k: want.get(k) for k in top}
     keys = ("id", "title", "precisions", "source", "dir")
-    assert [{k: v[k] for k in keys} for v in got["variants"]] == [
-        {k: v[k] for k in keys} for v in want["variants"]
-    ]
+    assert [{k: v[k] for k in keys} for v in got["variants"]] == [{k: v[k] for k in keys} for v in want["variants"]]
     for g, w in zip(got["variants"], want["variants"], strict=True):
-        if (
-            g["presence"] == "present"
-        ):  # on a host with the weights: the same sizes and memory plans
+        if g["presence"] == "present":  # on a host with the weights: the same sizes and memory plans
             assert (g["components"], g["memory"]) == (w["components"], w["memory"])
     assert got["sound"] == "music"
 
@@ -60,10 +56,7 @@ def test_rename_maps_the_checkpoint_layout_onto_the_pipeline_modules():
             == "condition_encoder.lyric_encoder.layers.0.self_attn.norm_q.weight")  # fmt: skip
     assert r("transformer", "null_condition_emb") == "condition_encoder.null_condition_emb"
     assert r("transformer", "tokenizer.quantizer.x") == "audio_tokenizer.quantizer.x"
-    assert (
-        r("transformer", "detokenizer.embed_tokens.weight")
-        == "audio_token_detokenizer.embed_tokens.weight"
-    )
+    assert r("transformer", "detokenizer.embed_tokens.weight") == "audio_token_detokenizer.embed_tokens.weight"
     assert r("transformer", "something.else") is None
     assert r("lm", "layers.0.mlp.up_proj.weight") == "model.layers.0.mlp.up_proj.weight"
     assert r("text_encoder", "norm.weight") == "norm.weight"
@@ -188,9 +181,7 @@ def test_compose_and_decode_make_seeded_stereo_with_sections(tiny, monkeypatch):
     a = ace.compose(ctx, {"reference": [], "steps": 2}, ins)["latent"]
     assert a.latents.shape == (1, 100, 4)  # 4 s at 25 Hz
     assert [s[2] for s in ctx.steps] == ["sampling", "sampling"]
-    assert torch.equal(
-        ace.compose(ctx, {"reference": [], "steps": 2}, ins)["latent"].latents, a.latents
-    )
+    assert torch.equal(ace.compose(ctx, {"reference": [], "steps": 2}, ins)["latent"].latents, a.latents)
     # random weights align anyhow: the tags, in time order, from 0 to the end
     assert {s["label"] for s in a.sections} <= {"verse", "chorus"}
     if a.sections:
@@ -215,24 +206,14 @@ def test_repaint_and_extend_keep_the_source_outside_the_window(tiny, monkeypatch
     ctx = ctx_of(tiny, monkeypatch, "repaint")
     src = np.random.default_rng(1).uniform(-0.3, 0.3, (2, 3 * 48000)).astype(np.float32)
     ins = {"model": tiny.model, "song": song(), "text": "rock", "seed": 3}
-    lat = ace.repaint(
-        ctx, {"source": media_of(src), "span": {"start": 1.0, "end": 2.0}, "steps": 1}, ins
-    )["latent"]
+    lat = ace.repaint(ctx, {"source": media_of(src), "span": {"start": 1.0, "end": 2.0}, "steps": 1}, ins)["latent"]
     assert lat.window == (1.0, 2.0) and lat.latents.shape[1] == 75
-    out = wav_of(ace.decode(ctx, {}, {"model": tiny.model, "latent": lat})["audio"]).astype(
-        np.float64
-    )
+    out = wav_of(ace.decode(ctx, {}, {"model": tiny.model, "latent": lat})["audio"]).astype(np.float64)
     kept = np.round(src.T * 32767) / 32767
     ratio = out[:40000] / 32767 / np.where(np.abs(kept[:40000]) > 0.05, kept[:40000], np.nan)
     assert np.nanstd(ratio) < 0.01  # the kept part is the source, scaled by the levelling only
-    ext = ace.extend(
-        ctx, {"source": media_of(src), "seconds": 2, "where": "start", "steps": 1}, ins
-    )["latent"]
-    assert (
-        ext.window == (0.0, 2.0)
-        and ext.keep.shape == (2, 5 * 48000)
-        and not ext.keep[:, :96000].any()
-    )
+    ext = ace.extend(ctx, {"source": media_of(src), "seconds": 2, "where": "start", "steps": 1}, ins)["latent"]
+    assert ext.window == (0.0, 2.0) and ext.keep.shape == (2, 5 * 48000) and not ext.keep[:, :96000].any()
     with pytest.raises(RunError, match=r"^repaint.seconds: the song would last over 600 s$"):
         ace.extend(ctx, {"source": media_of(src), "seconds": 598, "where": "end", "steps": 1}, ins)
 
@@ -285,9 +266,7 @@ class Tok:
 
 
 def lm_ctx():
-    return types.SimpleNamespace(
-        node="plan", device="cpu", check=lambda: None, progress=lambda *a: None
-    )
+    return types.SimpleNamespace(node="plan", device="cpu", check=lambda: None, progress=lambda *a: None)
 
 
 def test_think_blocks_audio_codes_and_stops_at_think_end():
@@ -299,19 +278,14 @@ def test_think_blocks_audio_codes_and_stops_at_think_end():
 
 def flat_lm(input_ids, attention_mask, past_key_values, use_cache):
     """Every token alike: what is drawn is the generator's."""
-    return types.SimpleNamespace(
-        logits=torch.zeros(input_ids.shape[0], 1, 217204), past_key_values="kv"
-    )
+    return types.SimpleNamespace(logits=torch.zeros(input_ids.shape[0], 1, 217204), past_key_values="kv")
 
 
 def test_codes_writes_exactly_n_with_cfg_and_repeats_by_seed():
     lm = ScriptLM([ace.CODE0 + 9])
     out = ace.codes(lm_ctx(), lm, Tok(), "c", "u", 7, torch.Generator().manual_seed(3))
     assert out == "<|audio_code_9|>" * 7 and set(lm.batches) == {2}  # cond + uncond in one batch
-    a, b, c = (
-        ace.codes(lm_ctx(), flat_lm, Tok(), "c", "u", 20, torch.Generator().manual_seed(s))
-        for s in (5, 5, 6)
-    )
+    a, b, c = (ace.codes(lm_ctx(), flat_lm, Tok(), "c", "u", 20, torch.Generator().manual_seed(s)) for s in (5, 5, 6))
     assert a == b != c
 
 
@@ -325,9 +299,7 @@ def test_parse_and_settle_the_thought():
     mine = ace.settle(song(seconds=40.0, bpm=120, key="C major", time="3/4", language="hi"), said)
     assert (mine["bpm"], mine["duration"], mine["keyscale"], mine["timesignature"], mine["language"]) == (
         120, 40, "C major", 3, "hi")  # fmt: skip
-    bad = ace.settle(
-        song(seconds=0.0, language="auto"), {"bpm": "fast", "duration": "9", "keyscale": "H major"}
-    )
+    bad = ace.settle(song(seconds=0.0, language="auto"), {"bpm": "fast", "duration": "9", "keyscale": "H major"})
     assert (bad["bpm"], bad["duration"], bad["keyscale"], bad["timesignature"]) == (
         None,
         None,
@@ -339,9 +311,7 @@ def test_parse_and_settle_the_thought():
     assert ace.settle(song(seconds=0.0, language="auto"), {"language": " EN "})["language"] == "en"
     schema = yaml.safe_load((Path(ace.__file__).parent / "model.yaml").read_text())
     assert set(schema["stages"]["song"]["params"]["language"]["enum"]) - {"auto"} == ace.LANGUAGES
-    assert ace.cot(metas).startswith("<think>\nbpm: 96\ncaption: dreamy") and ace.cot(
-        metas
-    ).endswith("</think>")
+    assert ace.cot(metas).startswith("<think>\nbpm: 96\ncaption: dreamy") and ace.cot(metas).endswith("</think>")
     assert ace.plan_line(metas) == "96 BPM · F# minor · 4/4 · 1:15 · en"
 
 
@@ -415,9 +385,7 @@ def full_nucleus(logits: torch.Tensor, gen: torch.Generator) -> int:
     return int(order[torch.multinomial(probs, 1, generator=gen)])
 
 
-@pytest.mark.parametrize(
-    "scale", [0.5, 3.0, 12.0]
-)  # flat (the full sort), peaked, very peaked (top-k)
+@pytest.mark.parametrize("scale", [0.5, 3.0, 12.0])  # flat (the full sort), peaked, very peaked (top-k)
 def test_nucleus_draws_what_the_full_sort_draws(scale):
     logits = torch.randn(217204, generator=torch.Generator().manual_seed(1)) * scale
     for seed in range(5):
@@ -474,9 +442,7 @@ def test_xl_download_fetches_the_shared_components_into_the_2b_folder(hub_pack, 
         presence = {x["id"]: x["presence"] for x in models.entry(hub_pack)["variants"]}
         assert presence == {"turbo-2b": "partial", "xl-turbo": "present"}
         two_b, big = config.MODELS / "ACE-Step-1.5", config.MODELS / "ACE-Step-1.5-XL-Turbo"
-        assert (two_b / "acestep-5Hz-lm-1.7B/model.safetensors").is_file() and not (
-            big / "vae"
-        ).exists()
+        assert (two_b / "acestep-5Hz-lm-1.7B/model.safetensors").is_file() and not (big / "vae").exists()
         assert not (big / "modeling_acestep_v15_xl_turbo.py").exists()
         run("turbo-2b")
         assert (two_b / "acestep-v15-turbo/silence_latent.pt").is_file()

@@ -59,9 +59,7 @@ class SoundBench(Bench):
 
     def __init__(self) -> None:
         super().__init__()
-        test_qwen_golden.fetch = (
-            fetch  # Bench.run's ctx.fetch: u/golden/<file> is golden/mmaudio/<file>
-        )
+        test_qwen_golden.fetch = fetch  # Bench.run's ctx.fetch: u/golden/<file> is golden/mmaudio/<file>
         self.got: dict = {}
         out = self.impls["output"]
 

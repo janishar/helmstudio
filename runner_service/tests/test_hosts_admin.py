@@ -69,9 +69,7 @@ def test_a_pin_is_an_admission_victim_only_as_a_last_resort():
     res.admit({C: 4.0}, 0, set())  # 4 + 4 + 4 > 10: one goes, the unpinned B
     assert list(res.entries) == [A]
     res.done()
-    res.admit(
-        {C: 4.0}, 4.0, set()
-    )  # 4 + 4 + 4 > 10 with only the pin left: the pin goes, the run fits
+    res.admit({C: 4.0}, 4.0, set())  # 4 + 4 + 4 > 10 with only the pin left: the pin goes, the run fits
     assert list(res.entries) == []
 
 
@@ -84,18 +82,10 @@ async def test_admin_unload_frees_pinned_entries_and_cached_only_keeps_them():
     c = consumer(FakeJS(), residency=res)
     c.host.extra = res.state
     c.cache["k"] = {"x": 1}
-    reply = await main.unload_reply(
-        c, c.host, {"for_env": "fake", "by": "admin", "cached_only": True}
-    )
-    assert (
-        schemas.errors(UNLOAD + "reply", reply) == []
-        and len(reply["resident"]) == 2
-        and not c.cache
-    )
+    reply = await main.unload_reply(c, c.host, {"for_env": "fake", "by": "admin", "cached_only": True})
+    assert schemas.errors(UNLOAD + "reply", reply) == [] and len(reply["resident"]) == 2 and not c.cache
     name = {k: PIN[k] for k in ("component", "model", "variant", "precision")}
-    reply = await main.unload_reply(
-        c, c.host, {"for_env": "fake", "by": "admin", "components": [name]}
-    )
+    reply = await main.unload_reply(c, c.host, {"for_env": "fake", "by": "admin", "components": [name]})
     assert reply["freed"] == [name] and [r["component"] for r in reply["resident"]] == ["vae"]
 
 
@@ -115,9 +105,7 @@ def test_the_fake_runner_gets_a_residency_manager_and_a_cpu_device():
     import main
     import packs.echo.fake  # noqa: F401  registers core.loaders_fake
 
-    res, dev, loader = main.residency_for(
-        [types.SimpleNamespace(runtime="fake", spec={"components": {"x": {}}})]
-    )
+    res, dev, loader = main.residency_for([types.SimpleNamespace(runtime="fake", spec={"components": {"x": {}}})])
     assert dev == "cpu" and res.total_gb == loader.total_gb() > 0
     assert loader.device_info()["kind"] == "cpu"
 

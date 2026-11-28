@@ -38,13 +38,9 @@ def test_models_entry_matches_the_fixture(values):
     keys = ("id", "family", "title", "media", "runtimes", "sound", "licences")
     assert {k: got.get(k) for k in keys} == {k: want.get(k) for k in keys}
     vkeys = ("id", "title", "precisions", "source", "dir")
-    assert [{k: v[k] for k in vkeys} for v in got["variants"]] == [
-        {k: v[k] for k in vkeys} for v in want["variants"]
-    ]
+    assert [{k: v[k] for k in vkeys} for v in got["variants"]] == [{k: v[k] for k in vkeys} for v in want["variants"]]
     for g, w in zip(got["variants"], want["variants"], strict=True):
-        if (
-            g["presence"] == "present"
-        ):  # on a host with the weights: the same sizes and memory plans
+        if g["presence"] == "present":  # on a host with the weights: the same sizes and memory plans
             assert (g["components"], g["memory"]) == (w["components"], w["memory"])
 
 
@@ -103,9 +99,7 @@ def test_the_download_fetches_the_diffusers_folders_only(tmp_path, monkeypatch):
         download.download(p, "base", endpoint=hub.url, token=None, cache=tmp_path / "cache", host="t",
                           progress=Progress())  # fmt: skip
     root = tmp_path / "models/MiniMax-Music3"
-    got = sorted(
-        str(f.relative_to(root)) for f in root.rglob("*") if f.is_file() and ".cache" not in f.parts
-    )
+    got = sorted(str(f.relative_to(root)) for f in root.rglob("*") if f.is_file() and ".cache" not in f.parts)
     assert got == sorted(k for k in files if k not in SGLANG)
     assert not [r for r in hub.requests if any(s in r[1] for s in SGLANG)]  # never asked for
 
@@ -141,8 +135,7 @@ def tiny() -> dict:
                                           fourier_embedding_dim=16, in_channels=8, num_attention_heads=2,
                                           num_layers=1, rotary_dim=4)  # fmt: skip
     voc = MiniMaxMusic3Vocoder(decoder_hidden_dim=16, decoder_input_dim=8, latent_channels=8)
-    out = {"language_model": lm, "rvq_depth_decoder": rvq, "condition_encoder": ce, "transformer": dit,
-           "vocoder": voc}  # fmt: skip
+    out = {"language_model": lm, "rvq_depth_decoder": rvq, "condition_encoder": ce, "transformer": dit, "vocoder": voc}
     return {k: m.eval().requires_grad_(False) for k, m in out.items()}
 
 
@@ -151,9 +144,7 @@ def parts(tmp_path_factory):
     from diffusers import FlowMatchEulerDiscreteScheduler
 
     folder = tmp_path_factory.mktemp("mm3")
-    FlowMatchEulerDiscreteScheduler(invert_sigmas=True, num_train_timesteps=1).save_config(
-        folder / "scheduler"
-    )
+    FlowMatchEulerDiscreteScheduler(invert_sigmas=True, num_train_timesteps=1).save_config(folder / "scheduler")
     return tiny(), folder
 
 
@@ -180,9 +171,7 @@ def test_the_stages_give_the_one_call_pipelines_audio(parts, monkeypatch):
     pipe.update_components(tokenizer=Tokens(), scheduler=mm.scheduler(folder), **comps)
     want = pipe(prompt="pop", lyrics="[verse]\nla la", audio_duration=2.0,
                 generator=torch.Generator("cpu").manual_seed(3), output="audios")[0]  # fmt: skip
-    assert (
-        audio["wav"] == mm.pcm16(want) and audio["channels"] == 2 and audio["sample_rate"] == 44100
-    )
+    assert audio["wav"] == mm.pcm16(want) and audio["channels"] == 2 and audio["sample_rate"] == 44100
     assert audio["duration_s"] == want.shape[-1] / 44100 and len(audio["wav"]) == want.shape[-1] * 4
     phases = [s[2] for s in steps]
     assert phases.count("composing") >= 2 and "flow matching" in phases and phases[-1] == "decoding"

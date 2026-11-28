@@ -99,12 +99,7 @@ async def idle_unload(consumer: Consumer, host: Host, stop: asyncio.Event) -> No
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), IDLE_CHECK)
         idle, limit = time.monotonic() - consumer.idle_since, consumer.idle_unload_s
-        if (
-            consumer.ctx is None
-            and limit
-            and idle > limit
-            and any(not res.pinned(k) for k in list(res.entries))
-        ):
+        if consumer.ctx is None and limit and idle > limit and any(not res.pinned(k) for k in list(res.entries)):
             log.info("idle %.0f s: unloading", idle)
             await loop.run_in_executor(GPU, res.unload, True)
             await host.put()
@@ -151,18 +146,14 @@ async def unload_reply(consumer: Consumer, host: Host, request: dict) -> dict:
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if why := config.plain_with_ca():
         raise SystemExit(why)
     download.environment(config.CACHE)  # before huggingface_hub is imported
     await asyncio.to_thread(child.sweep)  # a child (h3) a killed runner of this env left running
     models.hashes = models.Hashes(config.CACHE / f"model-hashes-{ENV}.json")
     models.hashes.start()  # hashes what no sidecar records, in the background
-    values, impls, packs = (
-        registry.build()
-    )  # an off-contract pack stops the runner before it connects
+    values, impls, packs = registry.build()  # an off-contract pack stops the runner before it connects
     residency, device, loader = residency_for(packs)
     machine = models.machine(device, ram_gb())
     store = Store()
@@ -235,8 +226,7 @@ async def main() -> None:
         """Rebuild the loras and models values from disk; publish those that changed; rewrite the hosts key."""
         async with scan_lock:
             loras = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
-            new = {"loras": loras, "models": await asyncio.to_thread(
-                registry.models_value, packs, impls, node_schemas)}  # fmt: skip
+            new = {"loras": loras, "models": await asyncio.to_thread(registry.models_value, packs, impls, node_schemas)}
             registry.fill_prefused(new, packs, library.files)
             if changed := {k: v for k, v in new.items() if registry.changed(values[k], v)}:
                 values.update(changed)
@@ -297,8 +287,7 @@ async def main() -> None:
             ack_policy=AckPolicy.EXPLICIT, ack_wait=media_jobs.ACK_WAIT, max_deliver=3, max_ack_pending=1,
             deliver_policy=DeliverPolicy.ALL))  # fmt: skip
         media_sub = await js.pull_subscribe_bind(durable=media_jobs.DURABLE, stream="CMD")
-        mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store,
-                                     encoders=can_media["encoders"])  # fmt: skip
+        mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store, encoders=can_media["encoders"])
         side_jobs.append(model_jobs.pull(media_sub, mjobs, stop))
         log.info("media jobs on %s (ffmpeg %s, %s)", media_jobs.SUBJECT, can_media["ffmpeg"],
                  ", ".join(can_media["encoders"]))  # fmt: skip
@@ -350,9 +339,7 @@ async def main() -> None:
                 paths = json.loads(msg.data or b"{}").get("paths")
             except ValueError, AttributeError:
                 paths = None
-            await msg.respond(
-                json.dumps(await asyncio.to_thread(models.check_folders, paths)).encode()
-            )
+            await msg.respond(json.dumps(await asyncio.to_thread(models.check_folders, paths)).encode())
 
         await nc.subscribe(f"runner.folders.check.{HOST}", cb=on_folders)
     server = await health.serve(nc)

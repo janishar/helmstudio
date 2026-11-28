@@ -34,9 +34,9 @@ def draw(text: str, width: int = SIZE, height: int = SIZE) -> Image.Image:
     """`text` in white on a width x height gradient (36 px type at 512, scaled with the shorter side)."""
     ramp = Image.linear_gradient("L").resize((width, height))
     image = Image.merge(
-        "RGB", (ramp, ramp.transpose(Image.Transpose.ROTATE_90).resize((width, height)),
-                Image.new("L", (width, height), 150)),
-    )  # fmt: skip
+        "RGB",
+        (ramp, ramp.transpose(Image.Transpose.ROTATE_90).resize((width, height)), Image.new("L", (width, height), 150)),
+    )
     lines = textwrap.fill(textwrap.shorten(text, 200, placeholder=" …") or "(empty)", 22)
     ImageDraw.Draw(image).multiline_text(
         (width / 2, height / 2),
@@ -102,9 +102,7 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
     for i, row in enumerate(params["images"], 1):
         frame, where = round(row.get("seconds", 0) * d["fps"]), f"{ctx.node}.images[{i}].seconds"
         if frame > d["frames"]:
-            raise RunError(
-                f"{where}: frame {frame} is past the clip's last frame {d['frames'] - 1}"
-            )
+            raise RunError(f"{where}: frame {frame} is past the clip's last frame {d['frames'] - 1}")
         frame = min(frame, d["frames"] - 1)
         if frame in seen:
             raise RunError(f"{where}: frame {frame} is already used by row {seen[frame]}")
@@ -186,9 +184,7 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
     k = max(1, math.ceil(seconds * fps / 8 - 1e-9))
     total, add = n + 8 * k, 8 * k / fps
     if total > MAX_FRAMES:
-        raise RunError(
-            f"{ctx.node}.seconds: the clip would be {total} frames; at most {MAX_FRAMES}"
-        )
+        raise RunError(f"{ctx.node}.seconds: the clip would be {total} frames; at most {MAX_FRAMES}")
     _steps(ctx, params)
     poster = draw(
         f"{inputs['text']} [extend {params['direction']} {seconds:g} s]",
@@ -222,9 +218,7 @@ def a2v(ctx, params: dict, inputs: dict) -> dict:
                             "-movflags", "+faststart", str(tmp / "out.mp4")],
                            capture_output=True, text=True, check=False, timeout=120)  # fmt: skip
         if r.returncode:
-            raise RunError(
-                f"{ctx.node}.source: the sound could not be read ({media.last_line(r.stderr)})"
-            )
+            raise RunError(f"{ctx.node}.source: the sound could not be read ({media.last_line(r.stderr)})")
         data = (tmp / "out.mp4").read_bytes()
     return _clip(poster, frames, A2V_FPS, data, take_id=src["take_id"], offset_s=-start, new_in_s=0,
                  new_out_s=end - start)  # fmt: skip
@@ -267,9 +261,7 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
                 tones[c] = _tone(110 + (ord(c) * 37 + voice) % 770, phase)
         ctx.progress(step, steps, "speaking")
     pcm = b"".join(tones[c] for c in text)
-    return {
-        "audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(text) / CHARS_PER_STEP}
-    }
+    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(text) / CHARS_PER_STEP}}
 
 
 def dialogue(ctx, params: dict, inputs: dict) -> dict:
@@ -291,8 +283,7 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
         spoken.append(b"".join(tones[c] for c in text))
         ctx.progress(i, len(lines), "speaking")
     pcm, cues = media.stitch(lines, spoken, SPEECH_RATE)
-    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE,
-                      "cues": cues}}  # fmt: skip
+    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE, "cues": cues}}
 
 
 MUSIC_RATE, SOUND_RATE = 48000, 44100  # ACE-Step's rate; Stable Audio 3's and MMAudio's
@@ -312,10 +303,7 @@ def _pitch(text: str, seed: int) -> float:
 
 
 def _audio(pcm: bytes, rate: int, **extra) -> dict:
-    return {
-        "audio": {"wav": pcm, "sample_rate": rate, "channels": 2, "duration_s": len(pcm) / 4 / rate}
-        | extra
-    }
+    return {"audio": {"wav": pcm, "sample_rate": rate, "channels": 2, "duration_s": len(pcm) / 4 / rate} | extra}
 
 
 def sections(lyrics: str, seconds: float) -> list[dict]:
@@ -323,10 +311,7 @@ def sections(lyrics: str, seconds: float) -> list[dict]:
     none without a tag)."""
     tags = [t.strip().lower() for t in TAG.findall(lyrics)][:40]
     step = seconds / len(tags) if tags else 0
-    return [
-        {"label": t, "start_s": round(i * step, 3), "end_s": round((i + 1) * step, 3)}
-        for i, t in enumerate(tags)
-    ]
+    return [{"label": t, "start_s": round(i * step, 3), "end_s": round((i + 1) * step, 3)} for i, t in enumerate(tags)]
 
 
 def music(ctx, params: dict, inputs: dict) -> dict:
@@ -343,9 +328,7 @@ def music(ctx, params: dict, inputs: dict) -> dict:
 def sound(ctx, params: dict, inputs: dict) -> dict:
     """echo/sound: Length seconds of two tones at 44.1 kHz stereo."""
     _steps(ctx, params)
-    return _audio(
-        _stereo(params["seconds"], SOUND_RATE, _pitch(inputs["text"], params["seed"])), SOUND_RATE
-    )
+    return _audio(_stereo(params["seconds"], SOUND_RATE, _pitch(inputs["text"], params["seed"])), SOUND_RATE)
 
 
 def foley(ctx, params: dict, inputs: dict) -> dict:
@@ -384,9 +367,7 @@ def vary(ctx, params: dict, inputs: dict) -> dict:
     """echo/vary: the source at 44.1 kHz stereo, each sample moved toward a tone of the text by Change."""
     _steps(ctx, params)
     src = array.array("h", _source(params, SOUND_RATE))
-    tone = array.array(
-        "h", _stereo(len(src) / 2 / SOUND_RATE, SOUND_RATE, _pitch(inputs["text"], params["seed"]))
-    )
+    tone = array.array("h", _stereo(len(src) / 2 / SOUND_RATE, SOUND_RATE, _pitch(inputs["text"], params["seed"])))
     c = params["change"]
     return _audio(array.array("h", (round((1 - c) * x + c * y) for x, y in zip(src, tone, strict=False))).tobytes(),
                   SOUND_RATE)  # fmt: skip

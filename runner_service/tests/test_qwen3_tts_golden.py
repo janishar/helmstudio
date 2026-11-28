@@ -73,13 +73,9 @@ class TTSBench(Bench):
             wf = next(w for p in self.packs for w in p.workflows if w["id"] == "qwen3-tts-dialogue")
             nodes = json.loads(json.dumps(wf["nodes"]))
             nodes["seed"]["params"]["seed"] = case["seed"]
-            nodes["dialogue"]["params"] |= {
-                k: case[k] for k in ("lines", "language", "temperature", "pause")
-            }
+            nodes["dialogue"]["params"] |= {k: case[k] for k in ("lines", "language", "temperature", "pause")}
             return nodes
-        wf = next(
-            w for p in self.packs for w in p.workflows if w["id"] == WORKFLOW[case["variant"]]
-        )
+        wf = next(w for p in self.packs for w in p.workflows if w["id"] == WORKFLOW[case["variant"]])
         nodes = json.loads(json.dumps(wf["nodes"]))
         nodes["prompt"]["params"]["text"] = case["text"]
         nodes["seed"]["params"]["seed"] = case["seed"]
@@ -108,9 +104,7 @@ def stem(bench: TTSBench, name: str) -> str:
     if bench.lt.device() != "cuda":
         return name
     if not (GOLDEN / f"{name}.cuda.json").is_file():
-        pytest.fail(
-            f"no CUDA golden for {name}: run tests/golden/record_qwen3_tts.py on this host first"
-        )
+        pytest.fail(f"no CUDA golden for {name}: run tests/golden/record_qwen3_tts.py on this host first")
     return f"{name}.cuda"
 
 
@@ -121,15 +115,11 @@ def case(bench: TTSBench, name: str) -> dict:
     r = bench.speak(s)
     r["total_s"] = round(time.monotonic() - t, 2)
     want_wav = (GOLDEN / f"{name}.wav").read_bytes()
-    if (
-        "lines" in s
-    ):  # a dialogue: the reference's codes are not kept; its WAV and cues are the golden
+    if "lines" in s:  # a dialogue: the reference's codes are not kept; its WAV and cues are the golden
         r["codes_exact"] = r["meta"]["audio"].get("cues") == s["cues"]
     else:
         want_codes = np.load(GOLDEN / f"{name}.codes.npy")
-        r["codes_exact"] = len(r["codes"]) == 1 and np.array_equal(
-            r["codes"][0].numpy(), want_codes
-        )
+        r["codes_exact"] = len(r["codes"]) == 1 and np.array_equal(r["codes"][0].numpy(), want_codes)
     r["wav_exact"] = r["wav"] == want_wav
     r["snr_db"] = snr(samples(want_wav), samples(r["wav"]))
     r["ok"] = r["codes_exact"] and (r["wav_exact"] or r["snr_db"] >= BAR)

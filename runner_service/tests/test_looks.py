@@ -54,9 +54,7 @@ def test_echo_pack_publishes_the_canonical_looks_fixture(tmp_path):
     value = registry.scanned_value("looks", looks.entries(loaded, lib, models))
     want = json.loads((FIXTURES / "registry/looks.valid.json").read_text())
     strip = {"published_at", "published_by"}
-    assert {k: v for k, v in value.items() if k not in strip} == {
-        k: v for k, v in want.items() if k not in strip
-    }
+    assert {k: v for k, v in value.items() if k not in strip} == {k: v for k, v in want.items() if k not in strip}
 
 
 def test_qwen_pack_looks_have_text_a_thumb_and_are_on_contract(tmp_path):
@@ -79,9 +77,7 @@ def test_qwen_pack_looks_have_text_a_thumb_and_are_on_contract(tmp_path):
 
 
 def test_a_look_lora_is_looked_up_in_the_index_by_file(tmp_path):
-    lib, models = library(
-        tmp_path, {"loras/echo-grain.safetensors": "", "Other/loras/far.safetensors": ""}
-    )
+    lib, models = library(tmp_path, {"loras/echo-grain.safetensors": "", "Other/loras/far.safetensors": ""})
     yaml_text = """
 - {id: a, group: film, name: A, lora: {file: echo-grain.safetensors}}
 - {id: b, group: film, name: B, text: x, lora: {file: missing.safetensors, strength: 0.5}}
@@ -89,12 +85,8 @@ def test_a_look_lora_is_looked_up_in_the_index_by_file(tmp_path):
 """
     p = fake_pack(tmp_path, {"film.yaml": yaml_text})
     a, b, c = looks.entries([p], lib, models)
-    sha = lib.files[
-        models / "loras/echo-grain.safetensors"
-    ]  # far is the same bytes: one LoRA, two names
-    assert a["loras"] == [
-        {"file": "echo-grain.safetensors", "name": "echo-grain", "strength": 1, "lora_id": sha}
-    ]
+    sha = lib.files[models / "loras/echo-grain.safetensors"]  # far is the same bytes: one LoRA, two names
+    assert a["loras"] == [{"file": "echo-grain.safetensors", "name": "echo-grain", "strength": 1, "lora_id": sha}]
     assert b["loras"][0]["lora_id"] is None and b["loras"][0]["strength"] == 0.5
     assert c["loras"][0]["lora_id"] is None  # not in a loras/ folder of this family's models
 
@@ -103,9 +95,7 @@ def test_a_look_lora_of_another_family_keeps_its_id(tmp_path):
     # contracts README, Looks: lora_id = the file's SHA-256 from the index; studio's fit says "is for <family>"
     lib, models = library(tmp_path, {"loras/x.safetensors": ""})
     lib.entries[0]["family"] = "qwen-image"
-    p = fake_pack(
-        tmp_path, {"a.yaml": "- {id: a, group: film, name: A, lora: {file: x.safetensors}}"}
-    )
+    p = fake_pack(tmp_path, {"a.yaml": "- {id: a, group: film, name: A, lora: {file: x.safetensors}}"})
     assert looks.entries([p], lib, models)[0]["loras"][0]["lora_id"] == lib.entries[0]["id"]
 
 
@@ -190,11 +180,7 @@ async def test_an_image_becomes_a_content_addressed_thumb_put_once(tmp_path):
         ({"a.yaml": '- {id: a, group: film, name: A, text: "a\\0b"}'}, "control characters"),
         ({"a.yaml": '- {id: a, group: film, name: "A\\tB", text: t}'}, "control characters"),
         (
-            {
-                "a.yaml": "\n".join(
-                    f"- {{id: a{i}, group: film, name: A, text: t}}" for i in range(201)
-                )
-            },
+            {"a.yaml": "\n".join(f"- {{id: a{i}, group: film, name: A, text: t}}" for i in range(201))},
             "at most 200",
         ),
     ],
@@ -207,19 +193,13 @@ def test_a_broken_looks_file_stops_the_pack(tmp_path, files, error):
 async def test_a_command_resolved_with_looks_runs_unchanged_on_the_echo_pack():
     """The resolver's output (contracts fixtures: a prompt with look lines, a user LoRA row and a look's LoRA row at
     its saved strength) placed in the echo + LoRA graph runs as an ordinary command: no look logic here."""
-    text = json.loads((FIXTURES / "mentions/resolve.looks-text.json").read_text())["expect"][
-        "inputs"
-    ]["prompt.text"]
+    text = json.loads((FIXTURES / "mentions/resolve.looks-text.json").read_text())["expect"]["inputs"]["prompt.text"]
     rows = json.loads((FIXTURES / "mentions/resolve.looks-images-loras.json").read_text())["expect"]["inputs"]["lora.rows"]  # fmt: skip
-    graph = json.loads((FIXTURES / "mentions/fit.json").read_text())["workflows"]["echo-stack"][
-        "nodes"
-    ]
+    graph = json.loads((FIXTURES / "mentions/fit.json").read_text())["workflows"]["echo-stack"]["nodes"]
     graph["prompt"]["params"]["text"] = text
     shared = {"source": "shared", "name": "ink-wash", "sha256": "3f0a" + "0" * 60, "bytes": 1024}
     # studio fills every default before it sends (graph.problems: param_missing), so the look row gets mode adapter
-    look_row = (
-        {"mode": "adapter"} | rows[2] | {"lora": rows[2]["lora"] | shared | {"name": "noir-lut"}}
-    )
+    look_row = {"mode": "adapter"} | rows[2] | {"lora": rows[2]["lora"] | shared | {"name": "noir-lut"}}
     graph["lora"]["params"]["rows"] = [rows[0] | {"lora": rows[0]["lora"] | shared}, look_row]
     graph["echo"]["params"] = {"steps": 1, "delay_ms": 0, "fail": False, "refs": []}
     graph["output"]["params"] = {}
@@ -228,11 +208,7 @@ async def test_a_command_resolved_with_looks_runs_unchanged_on_the_echo_pack():
     assert schemas.message_errors(cmd) == []
     seen = []
     echo = IMPLS["echo/echo"]
-    impls = IMPLS | {
-        "echo/echo": pack.Node(
-            lambda ctx, p, i: seen.append(i["text"]) or echo.fn(ctx, p, i), code="t"
-        )
-    }
+    impls = IMPLS | {"echo/echo": pack.Node(lambda ctx, p, i: seen.append(i["text"]) or echo.fn(ctx, p, i), code="t")}
     js = FakeJS()
     await consumer(js, impls=impls).handle(FakeMsg(cmd, js))
     assert js.events()[-1]["data"]["status"] == "succeeded"

@@ -39,9 +39,7 @@ class Tiny(nn.Module):
 def meta_tiny() -> Tiny:
     with torch.device("meta"):
         m = Tiny()
-    m.register_buffer(
-        "freqs", torch.arange(4.0)
-    )  # a real CPU buffer, as init_empty_weights leaves it
+    m.register_buffer("freqs", torch.arange(4.0))  # a real CPU buffer, as init_empty_weights leaves it
     return m
 
 
@@ -81,11 +79,8 @@ def test_load_gives_the_allocator_cache_back_as_it_goes(weights, monkeypatch):
     _, path = weights
     freed = []
     monkeypatch.setattr(lt, "free", lambda: freed.append(1))
-    monkeypatch.setattr(
-        lt, "FREE_EVERY_GB", 1000 / 2**30
-    )  # every 1000 bytes read: the 32x32 fp32 weights
-    lt.load(meta_tiny(), [path], dev=lt.device(), dtype=torch.bfloat16,
-            rename=lambda key: key.removeprefix("model."))  # fmt: skip
+    monkeypatch.setattr(lt, "FREE_EVERY_GB", 1000 / 2**30)  # every 1000 bytes read: the 32x32 fp32 weights
+    lt.load(meta_tiny(), [path], dev=lt.device(), dtype=torch.bfloat16, rename=lambda key: key.removeprefix("model."))
     # after blocks.0.weight and head.weight (4096 bytes each; the biases add up to less), and once at the end
     assert len(freed) == 3
 
@@ -114,9 +109,7 @@ def test_load_stops_at_a_cancel_point(weights):
 
 
 def test_load_component_builds_through_the_pack_and_reports_its_phase(tmp_path, monkeypatch):
-    q = FakeQwen(
-        tmp_path, monkeypatch
-    )  # its transformer file: transformer_blocks.0.ff.weight [64, 32]
+    q = FakeQwen(tmp_path, monkeypatch)  # its transformer file: transformer_blocks.0.ff.weight [64, 32]
 
     def build(component, model):
         with torch.device("meta"):
@@ -127,9 +120,7 @@ def test_load_component_builds_through_the_pack_and_reports_its_phase(tmp_path, 
 
     q.pack.module.build = build
     events = []
-    ctx = types.SimpleNamespace(
-        device="cpu", check=lambda: None, progress=lambda *a: events.append(a)
-    )
+    ctx = types.SimpleNamespace(device="cpu", check=lambda: None, progress=lambda *a: events.append(a))
     m = lt.load_component(pack.ModelRef(q.pack, "turbo", "int8"), "transformer", ctx)
     assert isinstance(m.transformer_blocks[0].ff, lt.Int8Linear)
     assert events == [(1, 1, "loading transformer")]
@@ -242,9 +233,7 @@ def test_staging_beyond_the_host_ram_budget_fails_with_the_contract_text(tmp_pat
     save_file({"w": torch.zeros(1024, 1024)}, str(path))  # 4 MB
     monkeypatch.setattr(lt, "rss_gb", lambda: 9.9)
     monkeypatch.setattr(lt, "host_ram", lambda: {"budget_gb": 9.9, "used_gb": 9.9})
-    with pytest.raises(
-        lt.RunError, match=rf"^needs 9\.9 GB of host RAM at its peak; host {config.HOST} has 9\.9"
-    ):
+    with pytest.raises(lt.RunError, match=rf"^needs 9\.9 GB of host RAM at its peak; host {config.HOST} has 9\.9"):
         list(lt.staged(path, "cpu"))
     monkeypatch.setattr(lt, "host_ram", lambda: {"budget_gb": 10.0, "used_gb": 9.9})
     assert next(lt.staged(path, "cpu"))[1].shape == (1024, 1024)
@@ -331,9 +320,7 @@ def test_fp8_linear_dequantizes_to_its_bf16_reference():
     m = lt.Fp8Linear(linear)
     m.qweight, m.scale = e4m3(linear.weight.data)
     x = torch.randn(5, 64, dtype=torch.bfloat16)
-    ref = F.linear(
-        x, (m.qweight.float() * m.scale).to(torch.bfloat16), linear.bias.to(torch.bfloat16)
-    )
+    ref = F.linear(x, (m.qweight.float() * m.scale).to(torch.bfloat16), linear.bias.to(torch.bfloat16))
     got = m(x)
     assert got.dtype == torch.bfloat16 and ((got - ref).abs().max() / ref.abs().max()) < 0.01
     exact = linear(x.float())  # e4m3 keeps 3 mantissa bits: a few percent from the float weights
@@ -359,17 +346,9 @@ def test_load_makes_fp8_linears_from_the_headers_and_keeps_them_as_stored(tmp_pa
                "head.weight": e4m3(ref.head.weight.data)[0], "head.bias": ref.head.bias.data}, str(path))  # fmt: skip
     m = lt.load(meta_tiny(), [path], dev="cpu", dtype=torch.bfloat16, quantize=lambda n: True)
     b, h = m.blocks[0], m.head
-    assert isinstance(b, lt.Fp8Linear) and isinstance(
-        h, lt.Fp8Linear
-    )  # header-driven, never Int8Linear
-    assert (
-        b.qweight.dtype == torch.float8_e4m3fn
-        and b.scale.dtype == torch.float32
-        and torch.equal(b.scale, s)
-    )
-    assert (
-        torch.equal(h.scale, torch.ones(4, 1)) and b.bias.dtype == torch.bfloat16
-    )  # a plain cast: ones
+    assert isinstance(b, lt.Fp8Linear) and isinstance(h, lt.Fp8Linear)  # header-driven, never Int8Linear
+    assert b.qweight.dtype == torch.float8_e4m3fn and b.scale.dtype == torch.float32 and torch.equal(b.scale, s)
+    assert torch.equal(h.scale, torch.ones(4, 1)) and b.bias.dtype == torch.bfloat16  # a plain cast: ones
     assert "blocks.0" in lt.linears(m)
     with pytest.raises(lt.RunError, match="LoRA bake is not available on fp8"):
         lt.load(meta_tiny(), [path], dev="cpu", dtype=torch.bfloat16, bake={"blocks.0": []})
@@ -397,9 +376,7 @@ def test_fp8_weights_count_one_byte_and_a_scale_per_row(tmp_path):
         None,
     )
     gb, _ = pack.size_gb(p, ("t", "v", "c", "fp8"), (tmp_path / "f.safetensors",))
-    assert (
-        round(gb * 2**30) == 64 * 32 + 64 * 4 + 64 * 2 + 64 * 2
-    )  # weight + its row scale; the scale key; the norm
+    assert round(gb * 2**30) == 64 * 32 + 64 * 4 + 64 * 2 + 64 * 2  # weight + its row scale; the scale key; the norm
     p.module = type("M", (), {"DENSE": ("l.",)})  # the pack keeps l dense: its F8 weight loads bf16
     pack._sizes.clear()
     gb, _ = pack.size_gb(p, ("t", "v", "c", "fp8"), (tmp_path / "f.safetensors",))
@@ -445,16 +422,12 @@ def test_a_pack_hook_loads_a_pth_after_the_core_checks_and_phase(tmp_path, monke
     def load_component(component, model, ctx):
         with torch.device("meta"):
             m = nn.Linear(3, 2)
-        m.load_state_dict(
-            lt.state_dict(model.files(component)[0]), assign=True
-        )  # the mapped file's tensors
+        m.load_state_dict(lt.state_dict(model.files(component)[0]), assign=True)  # the mapped file's tensors
         return m.to(ctx.device, lt.dtype_of(model.pack.component(component)["dtype"]))
 
     m = pth_pack(tmp_path, monkeypatch, types.SimpleNamespace(load_component=load_component))
     events = []
-    ctx = types.SimpleNamespace(
-        device="cpu", check=lambda: None, progress=lambda *a: events.append(a)
-    )
+    ctx = types.SimpleNamespace(device="cpu", check=lambda: None, progress=lambda *a: events.append(a))
     out = lt.load_component(m, "c", ctx)
     assert events == [(1, 1, "loading c")]
     assert out.weight.dtype == torch.bfloat16 and out.weight[1, 2].item() == 5.0
@@ -473,9 +446,7 @@ def test_a_pth_without_the_hook_or_without_files_fails_the_load(tmp_path, monkey
 def test_state_dict_reads_weights_and_refuses_code(tmp_path):
     torch.save({"w": torch.ones(4)}, tmp_path / "ok.pt")
     assert lt.state_dict(tmp_path / "ok.pt")["w"].sum().item() == 4
-    torch.save(
-        {"w": torch.ones(1), "f": print}, tmp_path / "code.pt"
-    )  # a pickled callable: not weights
+    torch.save({"w": torch.ones(1), "f": print}, tmp_path / "code.pt")  # a pickled callable: not weights
     with pytest.raises(Exception, match="Weights only load failed"):
         lt.state_dict(tmp_path / "code.pt")
 

@@ -46,9 +46,7 @@ def main() -> None:
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--weights", type=Path, default=Path.home() / "GenAI/models")
-    ap.add_argument(
-        "--samples", type=Path, default=Path.home() / "GenAI/model-samples/minimax-music3"
-    )
+    ap.add_argument("--samples", type=Path, default=Path.home() / "GenAI/model-samples/minimax-music3")
     ap.add_argument("--out", type=Path, default=HERE / "minimax-music3")
     args = ap.parse_args()
     folder, dev = str(args.weights / "MiniMax-Music3"), lt.device()

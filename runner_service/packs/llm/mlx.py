@@ -33,9 +33,7 @@ def processor(folder: str, eos):
     """The tokenizer and image processor (small files, no weights), read once per folder."""
     from mlx_vlm.utils import load_image_processor, load_processor
 
-    proc = load_processor(
-        Path(folder), True, eos_token_ids=list(eos) if isinstance(eos, tuple) else eos
-    )
+    proc = load_processor(Path(folder), True, eos_token_ids=list(eos) if isinstance(eos, tuple) else eos)
     if (images := load_image_processor(Path(folder))) is not None:
         proc.image_processor = images
     return proc
@@ -66,11 +64,7 @@ def constrained(proc, schema: str) -> list:
         try:
             return [build_json_schema_logits_processor(proc.tokenizer, grammar)]
         except Exception as e:  # noqa: BLE001 (an unsupported keyword: the answer is still validated)
-            keys = (
-                set(re.findall(r'"([^"]+)"', m.group(1)))
-                if (m := UNIMPLEMENTED.search(str(e)))
-                else set()
-            )
+            keys = set(re.findall(r'"([^"]+)"', m.group(1))) if (m := UNIMPLEMENTED.search(str(e))) else set()
             if not keys or keys <= dropped:
                 log.warning("llguidance cannot constrain this schema (%s): prompt + check only", e)
                 return []
@@ -93,9 +87,7 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
     def generate(prompt: str, thumbs: list) -> tuple[str, int, int]:
         turns = [{"role": "system", "content": params["system"]}] if params["system"] else []
         turns.append({"role": "user", "content": prompt})
-        text = apply_chat_template(
-            proc, model.config, turns, num_images=len(thumbs), enable_thinking=False
-        )
+        text = apply_chat_template(proc, model.config, turns, num_images=len(thumbs), enable_thinking=False)
         mx.random.seed(asks.SEED)
         parts, last = [], None
         for last in stream_generate(model, proc, text, image=thumbs or None, temperature=0.0,

@@ -32,9 +32,7 @@ SEED = 0  # pinned; greedy decoding makes it moot
 RETRY = "Your answer was invalid: {}. Answer again with JSON only."
 SCHEMA_HINT = "Answer only with JSON matching this schema: {}"
 MAX_TEXT, MAX_ERROR = 32768, 2000
-_put: set[str] = (
-    set()
-)  # thumbnail keys this process already stored (content-addressed: a re-PUT is harmless)
+_put: set[str] = set()  # thumbnail keys this process already stored (content-addressed: a re-PUT is harmless)
 
 
 class Answer(str):
@@ -58,9 +56,7 @@ def thumbnail(img: Image.Image) -> Image.Image:
     flat.paste(rgba, mask=rgba.getchannel("A"))
     s = min(1.0, THUMB / max(flat.size))
     w, h = (max(32, int(x * s) // 32 * 32) for x in flat.size)
-    if (
-        w * h < MIN_AREA
-    ):  # a tiny take: up to the processor's minimum at its own aspect, still on the grid
+    if w * h < MIN_AREA:  # a tiny take: up to the processor's minimum at its own aspect, still on the grid
         f = math.sqrt(MIN_AREA / (flat.width * flat.height))
         w, h = (min(THUMB, max(32, math.ceil(x * f / 32) * 32)) for x in flat.size)
     return flat.resize((w, h), Image.Resampling.LANCZOS)
@@ -97,7 +93,7 @@ def keyframes(mp4: bytes, take_id: str) -> list[tuple[int, Image.Image]]:
     size = w * h * 3
     if dec.returncode or len(dec.stdout) != size * len(frames):
         raise RunError(f"input video {take_id} is not a readable video")
-    return [(f, Image.frombytes("RGB", (w, h), dec.stdout[i * size : (i + 1) * size])) for i, f in enumerate(frames)]  # fmt: skip
+    return [(f, Image.frombytes("RGB", (w, h), dec.stdout[i * size : (i + 1) * size])) for i, f in enumerate(frames)]
 
 
 def looked_at(ctx, media: list[dict]) -> tuple[list[Image.Image], list[dict]]:
@@ -107,9 +103,7 @@ def looked_at(ctx, media: list[dict]) -> tuple[list[Image.Image], list[dict]]:
     for row in media:
         take = row["take"]
         if "mp4" in take:
-            shown += [
-                (take["take_id"], f, img) for f, img in keyframes(take["mp4"], take["take_id"])
-            ]
+            shown += [(take["take_id"], f, img) for f, img in keyframes(take["mp4"], take["take_id"])]
         else:
             shown.append((take["take_id"], None, take["image"]))
     if len(shown) > MAX_THUMBS:
@@ -169,9 +163,7 @@ def ask(ctx, params: dict, generate, see: bool = True) -> dict:
     for n in range(2):
         ctx.check()
         started = time.monotonic()
-        text, t_in, t_out = generate(
-            prompt if n == 0 else f"{prompt}\n\n{RETRY.format(why)}", thumbs
-        )
+        text, t_in, t_out = generate(prompt if n == 0 else f"{prompt}\n\n{RETRY.format(why)}", thumbs)
         seconds += time.monotonic() - started
         tokens_in, tokens_out = tokens_in + t_in, tokens_out + t_out
         why = problem(text, check)

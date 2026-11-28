@@ -57,13 +57,8 @@ def case(bench: MusicBench) -> dict:
     r["head_exact"] = pcm[: len(head)] == head
     r["duration_s"] = round(len(pcm) / 4 / rate, 4)
     r["rms"], r["peak"] = round(float(np.sqrt((x**2).mean())), 4), round(float(np.abs(x).max()), 4)
-    close = (
-        abs(r["rms"] - s["rms"]) <= 0.02 * s["rms"]
-        and abs(r["peak"] - s["peak"]) <= 0.02 * s["peak"]
-    )
-    r["ok"] = (
-        rate == s["sample_rate"] and r["duration_s"] == s["duration_s"] and (r["exact"] or close)
-    )
+    close = abs(r["rms"] - s["rms"]) <= 0.02 * s["rms"] and abs(r["peak"] - s["peak"]) <= 0.02 * s["peak"]
+    r["ok"] = rate == s["sample_rate"] and r["duration_s"] == s["duration_s"] and (r["exact"] or close)
     return r
 
 

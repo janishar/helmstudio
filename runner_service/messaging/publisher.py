@@ -48,11 +48,7 @@ class RunEvents:
         """The next evt.run.<kind> message, seq included. ValueError when it is off-contract (the
         seq is not used up)."""
         cmd, seq = self.cmd, self.seq + 1
-        trace = {
-            k: v
-            for k, v in cmd["trace"].items()
-            if k in ("traceparent", "tracestate", "correlation_id")
-        }
+        trace = {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")}
         msg = {
             "type": f"evt.run.{kind}",
             "version": 1,

@@ -58,9 +58,7 @@ def test_the_canvas_and_length_sglang_can_make():
         "aspect_ratio": "16:9",
         "duration_seconds": 124 / 24,
     }
-    assert (
-        sgl.target("ref2va", 1344, 768, 345)["aspect_ratio"] == "16:9"
-    )  # area-capped: still exact
+    assert sgl.target("ref2va", 1344, 768, 345)["aspect_ratio"] == "16:9"  # area-capped: still exact
     assert sgl.target("t2va", 512, 512, 107)["aspect_ratio"] == "1:1"
     assert sgl.target("t2va", 480, 864, 107)["aspect_ratio"] == "9:16"
     assert sgl.target("fl2va", 800, 480, 107)["aspect_ratio"] == "5:3"  # keyframes: any W:H
@@ -76,9 +74,7 @@ def test_a_runs_inputs_map_onto_the_canonical_request():
     t2v = sgl.request("a fox", 7, 6, {"width": 864, "height": 480}, 124, None, None, [], [], [])
     assert t2v == {"prompt": "a fox", "task": "t2va", "conditions": [], "seed": 7, "num_inference_steps": 6,
                    "target": {"short_edge": 480, "aspect_ratio": "16:9", "duration_seconds": 124 / 24}}  # fmt: skip
-    fl = sgl.request(
-        "x", 1, 2, {"width": 800, "height": 480}, 107, p("f.png"), p("l.png"), [], [], []
-    )
+    fl = sgl.request("x", 1, 2, {"width": 800, "height": 480}, 107, p("f.png"), p("l.png"), [], [], [])
     assert fl["task"] == "fl2va" and fl["conditions"] == [
         {"type": "image", "role": "keyframe", "uri": "/tmp/f.png", "frame_index": 0},
         {"type": "image", "role": "keyframe", "uri": "/tmp/l.png", "frame_index": -1},
@@ -184,9 +180,7 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     assert a[a.index("--component-weights-paths.transformer") + 1] == str(
         (folder / "transformer_fl2va.safetensors").resolve()
     )
-    assert a[a.index("--component-weights-paths.text_encoder") + 1].endswith(
-        "text_encoder.safetensors"
-    )
+    assert a[a.index("--component-weights-paths.text_encoder") + 1].endswith("text_encoder.safetensors")
     assert a[a.index("--layerwise-offload-components") + 1] == "text_encoder"
     assert "text_encoder=torch_sdpa" in a and a[a.index("--host") + 1] == "127.0.0.1"
     assert "SGLANG_FAKE_LOG" in run["env"] and "NATS_URL" not in run["env"]
@@ -205,10 +199,7 @@ def test_generate_serves_the_partition_and_returns_its_video(fake, monkeypatch):
     assert key["frame_index"] == 0 and key["uri"].endswith(".png") and key["uri"].startswith("/")
     assert not Path(key["uri"]).exists()  # the per-run folder went
     assert v["mp4"][4:8] == b"ftyp" and v["has_audio"] and v["poster"].size == (256, 256)
-    assert (
-        ctx.seen[0] == (1, 1, "starting sglang", "encode")
-        and (40, 100, "sampling", "sample") in ctx.seen
-    )
+    assert ctx.seen[0] == (1, 1, "starting sglang", "encode") and (40, 100, "sampling", "sample") in ctx.seen
     assert child.LIVE["pid"] is None
     # references: the Ref2VA server
     refs = params | {"refs": [{"image": Image.new("RGB", (8, 8))}]}
@@ -226,9 +217,7 @@ def test_generate_refusals_failures_and_cancel(fake, monkeypatch):
         native.generate(ctx, params, inputs | {"duration": {"frames": 22, "fps": 24}})
     assert not log.exists()  # refused before the server starts
     monkeypatch.setenv("SGLANG_FAKE_MODE", "refuse")
-    with pytest.raises(
-        RunError, match="^generate: SGLang refused the request \\(400\\): conditions"
-    ):
+    with pytest.raises(RunError, match="^generate: SGLang refused the request \\(400\\): conditions"):
         native.generate(ctx, params, inputs)
     monkeypatch.setenv("SGLANG_FAKE_MODE", "fail")
     with pytest.raises(RunError, match="^generate: SGLang failed: CUDA out of memory$"):
@@ -261,9 +250,7 @@ def test_find_and_child_env(tmp_path):
     assert env["CUDA_HOME"] == str(cuda)
 
 
-def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(
-    tmp_path, monkeypatch
-):
+def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(tmp_path, monkeypatch):
     """alpha.6 row 3: the two cu13 links are made once (a second call changes nothing), an unwritable venv names the
     ln command, a long hostname and a missing gcc fail fast; a missing SGLang is refused before any of it."""
     exe = tmp_path / "venv/bin/sglang"
@@ -275,10 +262,7 @@ def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(
     monkeypatch.setattr(sgl.socket, "gethostname", lambda: "gpu1")
     monkeypatch.setattr(sgl.shutil, "which", lambda c, path=None: f"/usr/bin/{c}")
     sgl.preflight("generate", exe)
-    assert (
-        os.readlink(cuda / "lib64") == "lib"
-        and os.readlink(cuda / "lib/libcudart.so") == "libcudart.so.13"
-    )
+    assert os.readlink(cuda / "lib64") == "lib" and os.readlink(cuda / "lib/libcudart.so") == "libcudart.so.13"
     assert (cuda / "lib64/libcudart.so").resolve() == (cuda / "lib/libcudart.so.13").resolve()
     sgl.preflight("generate", exe)  # already there: a no-op
     (cuda / "lib64").unlink()
@@ -289,9 +273,7 @@ def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(
     finally:
         cuda.chmod(0o755)
     monkeypatch.setattr(sgl.socket, "gethostname", lambda: "h" * 64)
-    with pytest.raises(
-        RunError, match="hostname 64 characters long .*sudo hostnamectl set-hostname gpu1$"
-    ):
+    with pytest.raises(RunError, match="hostname 64 characters long .*sudo hostnamectl set-hostname gpu1$"):
         sgl.preflight("generate", exe)
     monkeypatch.setattr(sgl.socket, "gethostname", lambda: "gpu1")
     monkeypatch.setattr(sgl.shutil, "which", lambda c, path=None: None if c == "gcc" else c)
@@ -301,7 +283,5 @@ def test_preflight_makes_the_cuda_links_and_refuses_a_long_hostname_or_no_gcc(
     monkeypatch.setattr(sgl, "preflight", lambda *a: called.append(a))
     monkeypatch.setattr(sgl, "SGLANG", Path("/nonexistent/sglang"))
     with pytest.raises(RunError, match="SGLang is not found"):
-        sgl.generate(
-            type("Ctx", (), {"node": "generate"})(), None, {"task": "t2va"}, tmp_path, tmp_path
-        )
+        sgl.generate(type("Ctx", (), {"node": "generate"})(), None, {"task": "t2va"}, tmp_path, tmp_path)
     assert not called

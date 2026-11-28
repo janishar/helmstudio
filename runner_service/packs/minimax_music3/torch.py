@@ -167,5 +167,4 @@ def vocode(ctx, params: dict, inputs: dict) -> dict:
         for h in hooks:
             h.remove()
     rate = int(vocoder.config.sampling_rate)
-    return {"audio": {"wav": pcm16(audio), "sample_rate": rate, "duration_s": audio.shape[-1] / rate,
-                      "channels": 2}}  # fmt: skip
+    return {"audio": {"wav": pcm16(audio), "sample_rate": rate, "duration_s": audio.shape[-1] / rate, "channels": 2}}

@@ -75,10 +75,7 @@ def write_wav(path: Path, pcm: bytes) -> None:
 
 def read_wav(path: Path) -> np.ndarray:
     with wave.open(str(path)) as w:
-        return (
-            np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32)
-            / 32768
-        )
+        return np.frombuffer(w.readframes(w.getnframes()), "<i2").reshape(-1, 2).T.astype(np.float32) / 32768
 
 
 def main() -> None:

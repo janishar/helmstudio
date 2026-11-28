@@ -43,34 +43,17 @@ def test_the_curve_table_is_read_linearly_at_t():
 
 def test_renames_of_the_community_files():
     te = lambda k: mm.rename("text_encoder", k)
-    assert (
-        te("model.layers.3.self_attn.q_proj.weight")
-        == "model.language_model.layers.3.self_attn.q_proj.qweight"
-    )
-    assert (
-        te("model.layers.3.mlp.down_proj.weight_scale")
-        == "model.language_model.layers.3.mlp.down_proj.scale"
-    )
-    assert (
-        te("model.layers.3.input_layernorm.weight")
-        == "model.language_model.layers.3.input_layernorm.weight"
-    )
+    assert te("model.layers.3.self_attn.q_proj.weight") == "model.language_model.layers.3.self_attn.q_proj.qweight"
+    assert te("model.layers.3.mlp.down_proj.weight_scale") == "model.language_model.layers.3.mlp.down_proj.scale"
+    assert te("model.layers.3.input_layernorm.weight") == "model.language_model.layers.3.input_layernorm.weight"
     assert te("model.layers.3.mlp.down_proj.comfy_quant") is None
     assert te("model.embed_tokens.weight") == "model.language_model.embed_tokens.weight"
     assert te("visual.blocks.0.attn.qkv.weight") == "model.visual.blocks.0.attn.qkv.weight"
     official = "model.language_model.layers.3.self_attn.q_proj.weight"
-    assert (
-        te(official) == official
-        and te("model.visual.merger.norm.weight") == "model.visual.merger.norm.weight"
-    )
+    assert te(official) == official and te("model.visual.merger.norm.weight") == "model.visual.merger.norm.weight"
     dit = lambda k: mm.rename("transformer", k)
-    assert (
-        dit("transformer_blocks.0.attn.to_q._weight_qdata")
-        == "transformer_blocks.0.attn.to_q.weight"
-    )
-    assert (
-        dit("transformer_blocks.0.ff.net.2._weight_scale") == "transformer_blocks.0.ff.net.2.scale"
-    )
+    assert dit("transformer_blocks.0.attn.to_q._weight_qdata") == "transformer_blocks.0.attn.to_q.weight"
+    assert dit("transformer_blocks.0.ff.net.2._weight_scale") == "transformer_blocks.0.ff.net.2.scale"
     assert dit("context_embedder._weight_qdata") == "context_embedder.weight"
     assert dit("token_refiner.refiner_blocks.0.attn.to_q._weight_scale") is None  # read by the hook
     assert dit("time_embedder.table") == "time_embedder.table"
@@ -96,9 +79,7 @@ def unsloth_file(ref, path) -> None:
             stored[k] = v.clone()
     grid = torch.linspace(0, 1, mm.CURVE[0])
     with torch.no_grad():
-        stored["time_embedder.table"] = torch.nn.functional.silu(
-            ref.time_embedder(ref.time_proj(grid))
-        )
+        stored["time_embedder.table"] = torch.nn.functional.silu(ref.time_embedder(ref.time_proj(grid)))
     save_file(stored, str(path), metadata={"unsloth_format": mm.FP8_FORMAT})
 
 
@@ -122,9 +103,7 @@ def test_a_tiny_dit_in_unsloth_layout_runs_as_the_dense_model_it_was_made_from(t
     assert got.transformer_blocks[0].adaln_proj.linear.in_features == 8
     text, image = 3, 4
     seq = text + image
-    t = torch.tensor(
-        [256 / 1024, 1.0]
-    )  # two noise levels, both on the grid: the text (as refs) at 1
+    t = torch.tensor([256 / 1024, 1.0])  # two noise levels, both on the grid: the text (as refs) at 1
     kw = {"timestep": t, "timestep_indices": torch.tensor([1] * text + [0] * image),
           "token_tags": torch.tensor([1] * text + [0] * image), "position_ids": torch.zeros(seq, 3, dtype=torch.long),
           "image_indices": torch.arange(text, seq), "text_indices": torch.arange(text), "pdd_step_index": 1,
@@ -202,9 +181,7 @@ def test_base_fp8_publishes_on_cuda_only_and_base_everywhere(tmp_path, monkeypat
     )
     ref = packs.ModelRef(pack, "base-fp8", "fp8")
     assert mm.community(ref) and not mm.community(packs.ModelRef(pack, "base", "int8"))
-    assert (
-        ref.precision_of("text_encoder") == "int8" and mm.rotated("text_encoder", ref)("x") == 256
-    )
+    assert ref.precision_of("text_encoder") == "int8" and mm.rotated("text_encoder", ref)("x") == 256
     assert mm.rotated("text_encoder", packs.ModelRef(pack, "base", "int8"))("x") is None
 
 
@@ -212,18 +189,14 @@ FP8_FILE = packs.models_root() / "MiniMax-H3-Image-FP8/MiniMax-H3-Image-FP8.safe
 DENSE_DIR = packs.models_root() / "MiniMax-H3-Image/transformer_diffusers"
 
 
-@pytest.mark.skipif(
-    not (FP8_FILE.is_file() and DENSE_DIR.is_dir()), reason="needs the official and the FP8 DiT"
-)
+@pytest.mark.skipif(not (FP8_FILE.is_file() and DENSE_DIR.is_dir()), reason="needs the official and the FP8 DiT")
 def test_the_curve_form_equals_the_dense_adaln_at_the_sampling_timesteps():
     """Block 0's and norm_out's adaLN: the official W·silu(time MLP(t)) against unsloth's W8·curve(t) at the six
     sampling timesteps and t = 1 (references). Measured once by range reads (2026-11-21): relative error <= 9e-4;
     reading the table at 1 - t instead is 2-37 % off."""
     from diffusers.models.embeddings import Timesteps
 
-    weight_map = json.loads(
-        (DENSE_DIR / "diffusion_pytorch_model.safetensors.index.json").read_text()
-    )["weight_map"]
+    weight_map = json.loads((DENSE_DIR / "diffusion_pytorch_model.safetensors.index.json").read_text())["weight_map"]
 
     def dense(key):
         with safe_open(DENSE_DIR / weight_map[key], "pt") as f:
@@ -231,15 +204,11 @@ def test_the_curve_form_equals_the_dense_adaln_at_the_sampling_timesteps():
 
     with safe_open(FP8_FILE, "pt") as f:
         curve = {k: f.get_tensor(k) for k in packs.header(FP8_FILE) if k.startswith(("time_embedder.", "transformer_blocks.0.adaln", "norm_out.linear"))}  # fmt: skip
-    sigmas = json.loads((DENSE_DIR.parent / "modular_model_index.json").read_text())[
-        "sample_sigmas"
-    ][:-1]
+    sigmas = json.loads((DENSE_DIR.parent / "modular_model_index.json").read_text())["sample_sigmas"][:-1]
     t = torch.tensor([1 - s for s in sigmas] + [1.0])
     temb = Timesteps(num_channels=256, flip_sin_to_cos=True, downscale_freq_shift=0)(t)
     mlp = [dense(f"time_embedder.linear_{i}.{a}") for i in (1, 2) for a in ("weight", "bias")]
-    temb = torch.nn.functional.linear(
-        torch.nn.functional.silu(torch.nn.functional.linear(temb, *mlp[:2])), *mlp[2:]
-    )
+    temb = torch.nn.functional.linear(torch.nn.functional.silu(torch.nn.functional.linear(temb, *mlp[:2])), *mlp[2:])
     table = mm.CurveTable()
     table.table = curve["time_embedder.table"]
     for name in ("transformer_blocks.0.adaln_proj.linear", "norm_out.linear"):

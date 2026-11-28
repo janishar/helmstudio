@@ -210,9 +210,7 @@ class FakeQwen:
                     safetensors_file(path, {name: ("BF16", shape)})
         self.calls: list[tuple[str, dict]] = []
         self.loads: list[tuple] = []
-        self.active: list[
-            tuple
-        ] = []  # (component, ((sha256, strength), ...)) per ctx.component activation
+        self.active: list[tuple] = []  # (component, ((sha256, strength), ...)) per ctx.component activation
 
         def stage(name: str, out: str):
             def fn(ctx, params, inputs):
@@ -241,9 +239,7 @@ class FakeQwen:
         )
         self.pack = pack.Pack("qwen_image", models, spec, "torch", module, "c0de")
         monkeypatch.setattr(pack.ModelRef, "load", lambda ref, c, ctx: self._load(ref, c, ctx))
-        monkeypatch.setattr(
-            pack.ModelRef, "activate", lambda ref, c, m, ctx: self._activate(ref, c)
-        )
+        monkeypatch.setattr(pack.ModelRef, "activate", lambda ref, c, m, ctx: self._activate(ref, c))
         core = pack.core_nodes()
         model = pack.model_schema(self.pack)
         stages = pack._nodes(spec["stages"], self.pack.family, "c0de", self.pack, module)

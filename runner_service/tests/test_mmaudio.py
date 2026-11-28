@@ -29,19 +29,13 @@ def values():
 
 def test_the_models_entry_matches_the_fixture(values):
     (got,) = [m for m in values["models"]["models"] if m["family"] == "mmaudio"]
-    (want,) = json.loads((CONTRACTS / "fixtures/registry/mmaudio.models.valid.json").read_text())[
-        "models"
-    ]
+    (want,) = json.loads((CONTRACTS / "fixtures/registry/mmaudio.models.valid.json").read_text())["models"]
     top = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got[k] for k in top} == {k: want[k] for k in top}
     keys = ("id", "title", "precisions", "source", "sources", "dir")
-    assert [{k: v[k] for k in keys} for v in got["variants"]] == [
-        {k: v[k] for k in keys} for v in want["variants"]
-    ]
+    assert [{k: v[k] for k in keys} for v in got["variants"]] == [{k: v[k] for k in keys} for v in want["variants"]]
     for g, w in zip(got["variants"], want["variants"], strict=True):
-        if (
-            g["presence"] == "present"
-        ):  # on a host with the weights: the same sizes and memory plans
+        if g["presence"] == "present":  # on a host with the weights: the same sizes and memory plans
             assert (g["components"], g["memory"]) == (w["components"], w["memory"])
 
 
@@ -69,9 +63,7 @@ def test_the_download_fills_three_folders_with_only_the_loaded_files(tmp_path, m
     (tmp_path / "models").mkdir()
     p, _ = packs.load(packs.PACKS / "mmaudio", "torch")
     v = p.spec["variants"]["large_44k_v2"]
-    revs = {v["source"]["repo"]: v["source"]["revision"]} | {
-        s["repo"]: s["revision"] for s in v["sources"]
-    }
+    revs = {v["source"]["repo"]: v["source"]["revision"]} | {s["repo"]: s["revision"] for s in v["sources"]}
     repos = {name: Repo(files, commit=revs[name]) for name, files in hub_files().items()}
     assert v["source"]["must_accept"] and models.licences([p])[0]["id"] == "mmaudio-weights"
     with FakeHub(repos) as hub:
@@ -84,19 +76,13 @@ def test_the_download_fills_three_folders_with_only_the_loaded_files(tmp_path, m
                     "MMAudio/ext_weights/synchformer_state_dict.pth", "MMAudio/ext_weights/v1-44.pth",
                     "MMAudio/weights/mmaudio_large_44k_v2.pth", "bigvgan_v2_44khz_128band_512x/bigvgan_generator.pt",
                     "bigvgan_v2_44khz_128band_512x/config.json"]  # fmt: skip
-    assert result["files"] == 7 and not any(
-        r[3] for r in hub.requests
-    )  # no token asked: none is gated
+    assert result["files"] == 7 and not any(r[3] for r in hub.requests)  # no token asked: none is gated
     entry = models.entry(p)
     assert entry["variants"][0]["presence"] == "present"
     # the components read from their own folders: the CLIP and the vocoder from their `dir`
     m = packs.ModelRef(p, "large_44k_v2", "bf16")
-    assert m.files("clip") == [
-        tmp_path / "models/DFN5B-CLIP-ViT-H-14-384/open_clip_pytorch_model.bin"
-    ]
-    assert m.files("bigvgan") == [
-        tmp_path / "models/bigvgan_v2_44khz_128band_512x/bigvgan_generator.pt"
-    ]
+    assert m.files("clip") == [tmp_path / "models/DFN5B-CLIP-ViT-H-14-384/open_clip_pytorch_model.bin"]
+    assert m.files("bigvgan") == [tmp_path / "models/bigvgan_v2_44khz_128band_512x/bigvgan_generator.pt"]
     assert m.gb("net") == (len(BLOB) // 4 * 2 / 2**30, 0.0)  # stored fp32, loads bf16
 
 
@@ -115,22 +101,10 @@ def clip(tmp_path):
 
 def test_read_frames_picks_8_and_25_fps_and_truncates_to_the_last_frame(clip):
     f = mm.read_frames(clip, 96, 64, 24, 1.0)
-    assert (
-        f.clip.shape == (1, 8, 3, 384, 384)
-        and f.sync.shape == (1, 25, 3, 224, 224)
-        and f.seconds == 1.0
-    )
-    assert (
-        0 <= f.clip.min() and f.clip.max() <= 1 and -1 <= f.sync.min() and f.first.size == (96, 64)
-    )
-    whole = mm.read_frames(
-        clip, 96, 64, 24, 1.5
-    )  # the last frame is at 35 / 24 s: 37 sync slots, 1.48 s
-    assert (
-        whole.seconds == pytest.approx(1.48)
-        and whole.sync.shape[1] == 37
-        and whole.clip.shape[1] == 11
-    )
+    assert f.clip.shape == (1, 8, 3, 384, 384) and f.sync.shape == (1, 25, 3, 224, 224) and f.seconds == 1.0
+    assert 0 <= f.clip.min() and f.clip.max() <= 1 and -1 <= f.sync.min() and f.first.size == (96, 64)
+    whole = mm.read_frames(clip, 96, 64, 24, 1.5)  # the last frame is at 35 / 24 s: 37 sync slots, 1.48 s
+    assert whole.seconds == pytest.approx(1.48) and whole.sync.shape[1] == 37 and whole.clip.shape[1] == 11
 
 
 def source(path) -> dict:
@@ -147,9 +121,7 @@ def run_foley(monkeypatch, clip, seconds: float) -> tuple[dict, list]:
         return np.full(round(secs * mm.RATE), 0.25, dtype=np.float32)
 
     monkeypatch.setattr(mm, "generate", generate)
-    ctx = types.SimpleNamespace(
-        node="foley", component=lambda *a: None, check=lambda: None, progress=lambda *a: None
-    )
+    ctx = types.SimpleNamespace(node="foley", component=lambda *a: None, check=lambda: None, progress=lambda *a: None)
     params = {"source": source(clip), "seconds": seconds, "avoid": "", "guidance": 4.5, "steps": 25}
     return mm.foley(ctx, params, {"model": None, "text": " a truck ", "seed": 1}), seen
 
@@ -161,21 +133,13 @@ def test_foley_cuts_the_picture_to_length_and_muxes_the_sound(monkeypatch, clip,
     v = out["video"]
     (tmp_path / "out.mp4").write_bytes(v["mp4"])
     info = media.probe(tmp_path / "out.mp4")
-    assert (
-        info["stream"]["codec"] == "h264"
-        and info["audio"]["codec_name"] == "aac"
-        and v["has_audio"]
-    )
-    assert (
-        24 <= v["frames"] <= 27 and v["fps"] == 24 and v["poster"].size == (96, 64)
-    )  # stream copy: a packet or two
+    assert info["stream"]["codec"] == "h264" and info["audio"]["codec_name"] == "aac" and v["has_audio"]
+    assert 24 <= v["frames"] <= 27 and v["fps"] == 24 and v["poster"].size == (96, 64)  # stream copy: a packet or two
 
 
 def test_foley_auto_takes_the_whole_video_and_refuses_a_length_past_it(monkeypatch, clip):
     out, seen = run_foley(monkeypatch, clip, 0)
-    assert (
-        seen[0][1] == pytest.approx(1.48) and out["video"]["frames"] == 36
-    )  # the picture as it is
+    assert seen[0][1] == pytest.approx(1.48) and out["video"]["frames"] == 36  # the picture as it is
     with pytest.raises(RunError, match=r"^foley: Length 2 s is past the video's end \(1\.50 s\)$"):
         run_foley(monkeypatch, clip, 2.0)
 

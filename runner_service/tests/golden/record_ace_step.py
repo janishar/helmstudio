@@ -18,12 +18,8 @@ HERE = Path(__file__).resolve().parent
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
-    ap.add_argument(
-        "samples", type=Path, help="the model-samples folder (ace-step-1.5/song.mp3, results.md)"
-    )
-    ap.add_argument(
-        "models", type=Path, help="the weights root (ACE-Step-1.5, ACE-Step-1.5-XL-Turbo)"
-    )
+    ap.add_argument("samples", type=Path, help="the model-samples folder (ace-step-1.5/song.mp3, results.md)")
+    ap.add_argument("models", type=Path, help="the weights root (ACE-Step-1.5, ACE-Step-1.5-XL-Turbo)")
     ap.add_argument("cases", nargs="*")
     args = ap.parse_args()
     os.environ["HELMSTUDIO_MODELS"] = str(args.models.expanduser())  # before core reads config
@@ -56,9 +52,7 @@ if __name__ == "__main__":
                 "wav": f"{name}.wav", "kept_s": g.KEEP_S,
                 "versions": {"torch": torch.__version__, "python": sys.version.split()[0]},
                 "device": b.lt.device()}  # fmt: skip
-        (g.GOLDEN / f"{name}.json").write_text(
-            json.dumps(meta, indent=2, ensure_ascii=False) + "\n"
-        )
+        (g.GOLDEN / f"{name}.json").write_text(json.dumps(meta, indent=2, ensure_ascii=False) + "\n")
         (g.GOLDEN / f"{name}.wav").write_bytes(g.head(cold["wav"]))
         print(
             name,

@@ -40,9 +40,7 @@ log = logging.getLogger("models")
 
 SIDECARS = Path(".cache/huggingface/download")
 MARKER = Path(".cache/helmstudio/download.json")
-SGLANG_COPIES = Path(
-    ".cache/helmstudio/sglang"
-)  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
+SGLANG_COPIES = Path(".cache/helmstudio/sglang")  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILES = 4096  # registry: files[] maxItems
 
@@ -188,9 +186,7 @@ def own_files(folder: Path) -> list[Path]:
     return sorted(
         p.relative_to(folder)
         for p in folder.rglob("*")
-        if p.is_file()
-        and not p.is_symlink()
-        and not any(x.startswith(".") for x in p.relative_to(folder).parts)
+        if p.is_file() and not p.is_symlink() and not any(x.startswith(".") for x in p.relative_to(folder).parts)
     )
 
 
@@ -208,9 +204,7 @@ def own_globs(pack, vid: str) -> list[str] | None:
     """The globs of a variant's own files when its folder is another variant's too: its components it does not
     share. None: the whole folder is its own (a folder of its own, or the first variant's)."""
     v, root = pack.spec["variants"][vid], folder(pack, vid)
-    if not v.get("shares") or not any(
-        x != vid and folder(pack, x) == root for x in pack.spec["variants"]
-    ):
+    if not v.get("shares") or not any(x != vid and folder(pack, x) == root for x in pack.spec["variants"]):
         return None
     return [g for c in packs.needed(pack, vid) if c not in v["shares"] for g in globs(pack, c, vid)]
 
@@ -243,9 +237,7 @@ def own_folder(pack, component: str) -> bool:
     """Whether the add-on's folder is its own alone: a `dir` of its own that no other add-on names (API 1.41: MiniMax
     H3's Turbo LoRA and Turbo Ref LoRA share MiniMax-H3-Turbo, so each goes by its own file there)."""
     own = pack.component(component).get("dir")
-    return bool(own) and not any(
-        c != component and pack.component(c).get("dir") == own for c in packs.addons(pack)
-    )
+    return bool(own) and not any(c != component and pack.component(c).get("dir") == own for c in packs.addons(pack))
 
 
 def marked(pack, component: str, root: Path) -> bool:
@@ -381,8 +373,7 @@ def variant_entry(pack, vid: str) -> dict:
         owner = ref.owner(c)
         ok = ok and bool(found)
         unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
-        item = {"component": c, "from_variant": owner,
-                "precisions": packs.component_precisions(pack, vid, c)}  # fmt: skip
+        item = {"component": c, "from_variant": owner, "precisions": packs.component_precisions(pack, vid, c)}
         if d := stored_dtype(found):
             item["stored"] = d
         if found:
@@ -421,11 +412,7 @@ def addon_entry(pack, c: str) -> dict:
     root = addon_folder(pack, c)
     if mismatch:
         presence = "mismatch"
-    elif (
-        addon_weights(pack, c)
-        and not marked(pack, c, root)
-        and not marked(pack, c, addon_dest(pack, c))
-    ):
+    elif addon_weights(pack, c) and not marked(pack, c, root) and not marked(pack, c, addon_dest(pack, c)):
         presence = "present"
     else:
         presence = "partial" if files else "missing"
@@ -471,10 +458,7 @@ def entry(pack) -> dict:
             for vid in spec["variants"] if runs_here(pack, vid)
         ]  # fmt: skip
         if (extra := listed_addons(pack)) and out["variants"]:
-            out["addons"] = [
-                with_copies(lambda x=c: addon_entry(pack, x), addon_dir(pack, c), None)
-                for c in extra
-            ]
+            out["addons"] = [with_copies(lambda x=c: addon_entry(pack, x), addon_dir(pack, c), None) for c in extra]
         # API 1.39: the components a non-default compute keys apart
         if compute := packs.compute_spec(pack):
             out["compute"] = {"components": compute["components"]}
@@ -502,9 +486,7 @@ def licences(loaded) -> list[dict]:
 
 # --- model folders (API 1.78, contracts/README.md "Model folders")
 
-seen: dict[
-    str, list[str]
-] = {}  # folder id → its model folders when last connected (CACHE/folders-seen.json)
+seen: dict[str, list[str]] = {}  # folder id → its model folders when last connected (CACHE/folders-seen.json)
 
 
 def refresh_seen() -> None:
@@ -546,8 +528,7 @@ def variant_freed(pack, vid: str) -> int:
     _kept, only = kept_components(pack, {vid})
     sel = only if (own := own_globs(pack, vid)) is None else own
     root = folder(pack, vid)
-    return sum((root / f).stat().st_size for f in variant_files(pack, vid)
-               if sel is None or matches(f.as_posix(), sel))  # fmt: skip
+    return sum((root / f).stat().st_size for f in variant_files(pack, vid) if sel is None or matches(f.as_posix(), sel))
 
 
 def with_copies(make, d: str, freed) -> dict:
@@ -662,8 +643,7 @@ def machine(device: str, ram_gb: float) -> dict:
     mac = sys.platform == "darwin"
     accel = "cuda" if device == "cuda" else "metal" if mac and device in ("mps", "gpu") else "cpu"
     packaging = "container" if Path("/.dockerenv").exists() else "native"
-    return {"os": "macos" if mac else "linux", "accel": accel, "packaging": packaging,
-            "ram_gb": round(ram_gb, 1)}  # fmt: skip
+    return {"os": "macos" if mac else "linux", "accel": accel, "packaging": packaging, "ram_gb": round(ram_gb, 1)}
 
 
 # --- delete
@@ -683,21 +663,13 @@ def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | Non
     owner = None
     for vid, v in pack.spec["variants"].items():
         lender = packs.share_owner(pack, vid)
-        if (
-            vid not in deleted
-            and lender in deleted
-            and v.get("shares")
-            and variant_files(pack, vid)
-        ):
+        if vid not in deleted and lender in deleted and v.get("shares") and variant_files(pack, vid):
             owner = lender
-            kept += [c for c in v["shares"]
-                     if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
+            kept += [c for c in v["shares"] if c not in kept and not packs.owns_copy(pack, vid, c)]
     if not kept:
         return [], None
     # a folder shared with a kept variant: only these files (its own ones stay); else their folders
-    same = any(
-        folder(pack, v) == folder(pack, owner) for v in pack.spec["variants"] if v not in deleted
-    )
+    same = any(folder(pack, v) == folder(pack, owner) for v in pack.spec["variants"] if v not in deleted)
     only = [g if same else (g.rsplit("/", 1)[0] + "/" if "/" in g else g)
             for c in pack.spec["components"] if c not in kept for g in globs(pack, c, owner)]  # fmt: skip
     return kept, only
@@ -744,9 +716,7 @@ def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int
     if not base.exists():
         return 0, 0
     if base.is_symlink() or not inside(root, base) or base.resolve() == root.resolve():
-        raise InUse(
-            f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand"
-        )
+        raise InUse(f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand")
 
     # API 1.78: a link in any folder of the list keeps what it points to (one in ~/GenAI/models into the T9's copy)
     lent = set().union(*(linked_from_outside(r, base) for r in {root, *packs.connected()}))
@@ -773,17 +743,11 @@ def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int
                 continue
             size, link = p.lstat().st_size, p.is_symlink()
             p.unlink()
-            if not link and not rel.startswith(
-                ".cache/"
-            ):  # sidecars and markers are not the model's
+            if not link and not rel.startswith(".cache/"):  # sidecars and markers are not the model's
                 files, freed = files + 1, freed + size
         for name in dirnames:
             with_empty = d / name
-            if (
-                not with_empty.is_symlink()
-                and with_empty.is_dir()
-                and not any(with_empty.iterdir())
-            ):
+            if not with_empty.is_symlink() and with_empty.is_dir() and not any(with_empty.iterdir()):
                 with_empty.rmdir()
     if not any(base.iterdir()):
         base.rmdir()
