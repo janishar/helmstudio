@@ -35,11 +35,11 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 
 from core import pack as packs
+from core.folders import MARKER
 
 log = logging.getLogger("models")
 
 SIDECARS = Path(".cache/huggingface/download")
-MARKER = Path(".cache/helmstudio/download.json")
 SGLANG_COPIES = Path(".cache/helmstudio/sglang")  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILES = 4096  # registry: files[] maxItems
