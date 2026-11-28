@@ -172,7 +172,7 @@ func (c *controller) seeHandler(request micro.NatsRequest) {
 		micro.RespondNatsMessage(request, &SeeReply{Error: "bad request: invalid JSON", Code: "invalid"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second) // API 1.108: it may measure the take's facts on demand
 	defer cancel()
 	out := c.service.See(ctx, body)
 	micro.RespondNatsMessage(request, &out)
@@ -198,7 +198,7 @@ func (c *controller) toolsHandler(request micro.NatsRequest) {
 		micro.RespondNatsMessage(request, &message.ToolsReply{Error: "bad request: invalid JSON", Code: "invalid"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second) // API 1.108: get_take and look_at may measure facts on demand
 	defer cancel()
 	out := c.service.Tool(ctx, body)
 	micro.RespondNatsMessage(request, &out)

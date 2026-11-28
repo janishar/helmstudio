@@ -59,13 +59,14 @@ var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
 })
 
 // offeredTools are the tools a turn offers (contracts check.py offered_tools): surface assistant, every role it needs
-// held, web_search only when on, look_at only when an ask workflow can run now, use_skill and read_skill_file only while
-// a skill is on (API 1.64), read_model_guide only while a model guide is published (API 1.71); sorted.
-func offeredTools(roles []string, webSearch, lookAt, skillOn, guides bool) []string {
+// held, web_search only when on, look_at only when an ask workflow can run now, listen only when a listen workflow can
+// (API 1.108), use_skill and read_skill_file only while a skill is on (API 1.64), read_model_guide only while a model
+// guide is published (API 1.71); sorted.
+func offeredTools(roles []string, webSearch, lookAt, listen, skillOn, guides bool) []string {
 	out := []string{}
 	for name, t := range toolCatalog() {
 		if slices.Contains(t.Surfaces, "assistant") && !slices.ContainsFunc(t.Roles, func(r string) bool { return !slices.Contains(roles, r) }) &&
-			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) &&
+			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) && (name != "listen" || listen) &&
 			(name != "use_skill" && name != "read_skill_file" || skillOn) && (name != "read_model_guide" || guides) {
 			out = append(out, name)
 		}
@@ -75,8 +76,8 @@ func offeredTools(roles []string, webSearch, lookAt, skillOn, guides bool) []str
 }
 
 // OfferedTools is offeredTools, for the contract's offer fixtures.
-func OfferedTools(roles []string, webSearch, lookAt, skills, guides bool) []string {
-	return offeredTools(roles, webSearch, lookAt, skills, guides)
+func OfferedTools(roles []string, webSearch, lookAt, listen, skills, guides bool) []string {
+	return offeredTools(roles, webSearch, lookAt, listen, skills, guides)
 }
 
 // turnGuides are a turn's model cards (API 1.71) and whether any guide is published (read_model_guide is offered).
@@ -475,10 +476,14 @@ func checkArgs(name string, top map[string]json.RawMessage) *message.ToolsReply 
 	return nil
 }
 
-// withFacts adds look_at's `facts` (API 1.104) when any of its takes has them.
-func withFacts(result map[string]any, facts []any) map[string]any {
+// withFacts adds look_at's `facts` (API 1.104) when any of its takes has them, and (API 1.108) `facts_note`, why some
+// have none yet.
+func withFacts(result map[string]any, facts []any, note string) map[string]any {
 	if len(facts) > 0 {
 		result["facts"] = facts
+	}
+	if note != "" {
+		result["facts_note"] = note
 	}
 	return result
 }
@@ -507,6 +512,8 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 	if !ok {
 		return toolErr("conflict", "no ask workflow can run now: install Qwen Image or start its machine")
 	}
+	// API 1.108: the takes without facts are measured on demand first; a note says why some have none
+	note := MeasureFacts(ctx, s.db, s.registry, caller.ID, args.TakeIDs)
 	var out message.ToolsReply
 	var run dto.Run
 	var facts []any // API 1.104: the facts of its takes that have them, in order
@@ -561,7 +568,7 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 			return err
 		}
 		out = message.ToolsReply{Tool: "look_at", Result: withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID,
-			"workflow_id": run.WorkflowID, "host": nil, "position": nil}, facts)}
+			"workflow_id": run.WorkflowID, "host": nil, "position": nil}, facts, note)}
 		_, err = tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply) VALUES ($1, $2, $3, $4, $5)`,
 			req.CallID, req.ThreadID, caller.ID, req.Tool, toJSON(out))
 		return err
@@ -578,7 +585,7 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 	}
 	if err := s.placeQueued(ctx, &run); err == nil {
 		result := withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID,
-			"host": run.Host, "position": run.Position}, facts)
+			"host": run.Host, "position": run.Position}, facts, note)
 		out = message.ToolsReply{Tool: "look_at", Result: result}
 		_ = common.System(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `UPDATE assistant_tool_calls SET reply = $2 WHERE call_id = $1`, req.CallID, toJSON(out))

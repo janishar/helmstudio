@@ -90,7 +90,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `pipelines.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.memory`) | studio → pipelines (5 s; API 1.14) |
 | `cmd.pipeline.chat` | stream `CMD` (work queue) | `cmd.pipeline.chat`, `Nats-Msg-Id <batch_id>:<n>` (the batch's command counter) | studio outbox relay → pipelines (durable `pipelines`; API 1.15) |
 | `evt.pipeline.<batch_id>.chat` | stream `EVT` | `evt.pipeline.chat`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`; API 1.15) |
-| `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
+| `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s, 25 s for get_take and look_at from 1.108; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
 | `pipelines.providers.key` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.key`) | studio → pipelines (5 s; API 1.51) |
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
@@ -1020,11 +1020,23 @@ Claude takes text and pictures only, so the Assistant judges sound and moving vi
   /v1/studio/takes/{take_id}` answers `facts` (the facts with `grid_url` signed and `at`) for a video or audio take
   (null until made), so get_take has them on both surfaces; helm mcp's get_take shows the grid instead of the
   thumbnail when there is one.
-- **The facts job** (`cmd.media.job` kind `facts`): studio's loop (every 10 s, as System) picks ready, live video
-  and audio takes with `facts` null and `facts_tries` < 3, at most 20 minutes long, newest first, one owner per job,
-  at most 4, only when no facts job is open on the stack and a media env whose hosts key has `media.facts: true` is
-  live; a take whose key is outside `u/<owner_id>/` is never picked. `inputs`: each take's file (kind video or
-  audio); `output_prefix` `u/<owner_id>/facts/<job_id>/`. The runner answers `result.facts[]`: `{index, facts}` and
+- **Measured on demand, then kept** (1.108; owner, 2026-11-28: "can it not do on fly it want the fact and it does not
+  exists", then "Only on demand"): there is no background loop. A take is measured the first time `studio.see`,
+  `look_at` or `GET /v1/studio/takes/{take_id}` asked by the Assistant or helm mcp (`X-Helm-Client` `assistant` or
+  `mcp`; never the web's GET) meets the caller's own ready, live video or audio take with `facts` null,
+  `facts_tries` < 3, at most 20 minutes long; its facts are then kept on the take. Studio sends facts jobs (as
+  System) for those of the asked takes in no open facts job, as few as hold them (4 each): a take is never in two
+  open facts jobs. It then waits up to 20 s while any asked take is in an open facts job and answers the facts made;
+  one still measured is answered without facts and with `facts_note` "The facts are being measured; ask again in a
+  minute." (Take, `studio.see` and `look_at`); asked again, it waits on the same job. When no live media env has
+  `media.facts: true` (no runner on, or none that measures), it answers at once, sends nothing and counts no try,
+  with `facts_note` "No runner is on to measure the facts; ask again once one is on."; once one is on, the next ask
+  measures. An image, a take not ready or one never measured (too long, out of tries) is answered as before, with no
+  wait and no note. So `studio.see` answers within 25 s and
+  `studio.tools` within 25 s for get_take and look_at.
+- **The facts job** (`cmd.media.job` kind `facts`): one owner's takes, 1-4, only when a media env whose hosts key has
+  `media.facts: true` is live; a take whose key is outside `u/<owner_id>/` is never sent. `inputs`: each take's file
+  (kind video or audio); `output_prefix` `u/<owner_id>/facts/<job_id>/`. The runner answers `result.facts[]`: `{index, facts}` and
   for a video `key` `<prefix><i>.jpg`, `width`, `height`, `bytes`, `at`; or `{index, error}` (the job goes on). The
   projector stores each only on a live take still without facts and only a key exactly `<prefix><i>.jpg` (else the
   object is deleted); an error or a missing item adds a try, and a job that fails, is cancelled or is lost adds one
@@ -1043,8 +1055,13 @@ The Assistant and helm mcp ask a local model that hears one question about a vid
   interactive run of the listen workflow that can run now (a template with a node whose kind ends in `/listen` and an
   `answer` sink; `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest.
   The node gets `source` `{take_id}` (a media param accepting `[video, audio]`, `max_s` 120), `question` and
-  `transcript`. Refusals: 404 (the take unknown, another user's, deleted or not ready); 409 `no listen workflow can
-  run now: download Qwen3-Omni or start its machine`, `open Create once first: listening needs a session`; 422
+  `transcript`. Refusals: 404 (the take unknown, another user's, deleted or not ready); 409 when no listen workflow
+  can run now, from 1.108 in plain words with what to do (the first listen workflow's dispatch reason, `omni-listen`
+  first): `Can't listen: no runner that can listen is on; start the Mac's runner and ask again.` (no live host for
+  its env, or none publishes a listen workflow), `Can't listen: Qwen3-Omni is on the T9 drive, which is not
+  connected; connect the T9 and ask again.` (a host lists its variant `unplugged`), `Can't listen: Qwen3-Omni is not
+  on this Mac (connect the T9 drive that holds it, or download it in Models) and ask again.` (no host has it), else
+  `Can't listen now: <reason>.`; `open Create once first: listening needs a session`; 422
   `question must be 1-500 characters`, `take <id> is <kind>; listen hears video and audio takes (look_at sees
   images)`.
 - **Result**: the run's `answer` (defs `answer`: one try, `seen` empty) is the answer; `resolved.texts`
@@ -1053,7 +1070,8 @@ The Assistant and helm mcp ask a local model that hears one question about a vid
 - **Use in…** (`take_uses`): a text workflow (`media` text: `echo-listen`, `omni-listen`, the ask workflows) is never
   a use, though its media param accepts the take.
 - **Tool** `listen` (tools/catalog.json; surfaces assistant and mcp, no card): the Assistant gets the run to await (as
-  look_at) and is always offered it (a 409 says when it cannot run); helm mcp posts the route, waits for the run (at
+  look_at) and, from 1.108, is offered it only while a listen workflow can run now (offered_tools `listen`), so it
+  never offers to listen when it cannot; helm mcp always lists it and gets the 409's words; helm mcp posts the route, waits for the run (at
   most 10 minutes) and answers `{run_id, session_id, workflow_id, host, position, status, answer, transcript}`.
 - **The omni family** (`fixtures/registry/omni.{nodes,workflows}.valid.json`, the mlx runner's `packs/omni`):
   `omni/model` variant `q8` (dir `Qwen3-Omni-30B-A3B-Instruct-GGUF`, ggml-org at 6e35a28f, Apache-2.0; components

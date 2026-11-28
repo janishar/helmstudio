@@ -5499,8 +5499,10 @@ export interface components {
             tool?: components["schemas"]["TakeTool"];
             /** @description from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions) */
             decisions?: components["schemas"]["TakeDecision"][];
-            /** @description from 1.104, only in `GET /v1/studio/takes/{take_id}`, a video or audio take: what ffmpeg measured on its file (contracts/README.md, Take facts); null until made (seconds after the take is ready) or when its file cannot be read */
+            /** @description from 1.104, only in `GET /v1/studio/takes/{take_id}`, a video or audio take: what ffmpeg measured on its file (contracts/README.md, Take facts); null until made (from 1.108 measured on demand: the first time the Assistant or helm mcp asks, then kept) or when its file cannot be read */
             facts?: components["schemas"]["TakeFacts"] | null;
+            /** @description from 1.108, only in `GET /v1/studio/takes/{take_id}` asked by the Assistant or helm mcp (X-Helm-Client mcp): why a video or audio take has no facts yet, in plain words: being measured (asked on demand, not done within 20 s) or no runner is on to measure them; absent otherwise (contracts/README.md, Take facts) */
+            facts_note?: string;
         } & (unknown & unknown);
         /**
          * @description From 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg, and a video's frame

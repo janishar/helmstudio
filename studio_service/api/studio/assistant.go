@@ -1011,6 +1011,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if _, ok := s.askWorkflow(); ok && *status.Limits.LookAtPerHour > 0 {
 			lookAt = true
 		}
+		_, noListen := s.listenWorkflow() // API 1.108: listen is offered only when a listen workflow can run now
+		listen := noListen == ""
 		input := map[string]any{"kind": body.Kind}
 		set := `turn = $2, state = 'working', client_id = $3, pending = NULL, roles = $4, actions = $5, updated_at = clock_timestamp()`
 		switch body.Kind {
@@ -1043,7 +1045,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
 			if mine && running {
-				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides),
+				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, listen, len(skills) > 0, guides),
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
 					Plugins: plugins, Skills: skills, Guides: cards}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
@@ -1134,7 +1136,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		}
 		if err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, turn),
 			Data: message.AssistantTurn{ThreadID: t.ID, Turn: turn, ClientID: body.ClientID, Roles: roles,
-				Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides), Actions: append([]string{}, actions...), Settings: snap,
+				Tools: offeredTools(roles, snap.Search != nil, lookAt, listen, len(skills) > 0, guides), Actions: append([]string{}, actions...), Settings: snap,
 				Input: input, Plugins: plugins, Skills: skills, Guides: cards}}); err != nil {
 			return err
 		}

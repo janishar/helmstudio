@@ -33,13 +33,15 @@ func listenNode(workflow registry.Workflow) string {
 	return ""
 }
 
-// listenWorkflow is the listen workflow that can run now: Qwen3-Omni's (omni-listen) first, else any other (the fake).
-func (s *Service) listenWorkflow() (registry.Workflow, bool) {
+// listenWorkflow is the listen workflow that can run now: Qwen3-Omni's (omni-listen) first, else any other (the fake);
+// none: why not, in plain words the Assistant and helm mcp pass on (listenWhy; API 1.108).
+func (s *Service) listenWorkflow() (registry.Workflow, string) {
 	templates, now := s.registry.Workflows(), time.Now()
 	rank := func(w registry.Workflow) int { return map[bool]int{true: 0, false: 1}[w.ID == "omni-listen"] }
 	slices.SortFunc(templates, func(a, b registry.Workflow) int {
 		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a.ID, b.ID))
 	})
+	first, why := "", ""
 	for _, workflow := range templates {
 		if listenNode(workflow) == "" || !registry.IsText(workflow.Nodes) {
 			continue
@@ -50,11 +52,34 @@ func (s *Service) listenWorkflow() (registry.Workflow, bool) {
 			graph[id] = node
 		}
 		nodes, _ := json.Marshal(graph)
-		if _, _, reason := eligible(s.registry, s.registry.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: nodes}, now); reason == "" {
-			return workflow, true
+		_, _, reason := eligible(s.registry, s.registry.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: nodes}, now)
+		if reason == "" {
+			return workflow, ""
+		}
+		if first == "" {
+			first, why = workflow.ID, reason
 		}
 	}
-	return registry.Workflow{}, false
+	return registry.Workflow{}, s.listenWhy(first, why)
+}
+
+// listenWhy says in plain words why the listen workflow `id` cannot run (its dispatch reason), with what to do: no
+// runner on, its model on a drive that is not connected, its model not downloaded.
+func (s *Service) listenWhy(id, reason string) string {
+	name := map[bool]string{true: "Qwen3-Omni", false: "the listen model"}[id == "omni-listen"]
+	switch {
+	case id == "" || (strings.HasPrefix(reason, "no live host for env") && !strings.Contains(reason, " has ")):
+		return "Can't listen: no runner that can listen is on; start the Mac's runner and ask again."
+	case strings.Contains(reason, " has model "):
+		for _, h := range s.registry.Hosts() {
+			found, _ := s.registry.Model(h.Host+"."+h.Env, "omni")
+			if slices.ContainsFunc(found.Variants, func(v registry.Variant) bool { return v.Presence == "unplugged" }) {
+				return "Can't listen: " + name + " is on the T9 drive, which is not connected; connect the T9 and ask again."
+			}
+		}
+		return "Can't listen: " + name + " is not on this Mac (connect the T9 drive that holds it, or download it in Models) and ask again."
+	}
+	return "Can't listen now: " + reason + "."
 }
 
 // Listen is POST /takes/{id}/listen (API 1.107) and the listen tool: one interactive run of the listen workflow on the
@@ -80,9 +105,9 @@ func (s *Service) Listen(ctx context.Context, caller common.Caller, takeID strin
 		if kind != "video" && kind != "audio" {
 			return network.NewUnprocessableError("take "+takeID+" is "+kind+"; listen hears video and audio takes (look_at sees images)", nil)
 		}
-		workflow, ok := s.listenWorkflow()
-		if !ok {
-			return network.NewConflictError("no listen workflow can run now: download Qwen3-Omni or start its machine", nil)
+		workflow, why := s.listenWorkflow()
+		if why != "" {
+			return network.NewConflictError(why, nil)
 		}
 		if sessionID == nil {
 			if err := tx.QueryRow(ctx, `SELECT id::text FROM sessions WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 1`,

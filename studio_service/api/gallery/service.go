@@ -57,6 +57,7 @@ type Service struct {
 	registry *registry.Registry
 	find     Find
 	offers   Offerable
+	measure  Measure
 }
 
 // Offerable lists the workflows "Use in…" may offer, in offer order (studio's Offerable; API 1.19).
@@ -64,6 +65,13 @@ type Offerable func(ctx context.Context, caller common.Caller) ([]registry.Workf
 
 // SetOffers sets where GET /takes/{id}/uses reads its workflows.
 func (s *Service) SetOffers(offers Offerable) { s.offers = offers }
+
+// Measure measures the owner's takes of ids without facts on demand and answers a plain note when they are not made
+// ("" when none: studio's MeasureFacts; API 1.108).
+type Measure func(ctx context.Context, owner string, ids []string) string
+
+// SetMeasure sets how GET /takes/{id} measures a take's facts on demand for the Assistant and helm mcp.
+func (s *Service) SetMeasure(measure Measure) { s.measure = measure }
 
 // NewService returns the service.
 func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry, find Find) *Service {
@@ -349,6 +357,19 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto
 		out.Facts = &facts
 		return nil
 	})
+	// API 1.108: the Assistant and helm mcp wait for facts measured on demand
+	if err == nil && out.Facts != nil && *out.Facts == nil && s.measure != nil && (caller.Via == "assistant" || caller.Via == "mcp") {
+		note := s.measure(ctx, caller.ID, []string{id})
+		err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+			var raw json.RawMessage
+			err := tx.QueryRow(ctx, `SELECT facts FROM takes WHERE id = $1`, id).Scan(&raw)
+			facts := FactsOut(raw, s.signer.Sign)
+			if out.Facts = &facts; facts == nil {
+				out.FactsNote = note
+			}
+			return err
+		})
+	}
 	return out, err
 }
 

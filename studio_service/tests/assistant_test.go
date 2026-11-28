@@ -217,6 +217,9 @@ func TestAssistantChat(t *testing.T) {
 			t.Fatalf("offered %s: %v", never, turn.Tools)
 		}
 	}
+	if !slices.Contains(turn.Tools, "listen") { // API 1.108: offered while a listen workflow (the fake's) can run
+		t.Fatalf("listen not offered: %v", turn.Tools)
+	}
 	// a message from another tab while it works is 409 (from its own tab it steers: TestAssistantSteer)
 	if c := e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabB, "text": "again", "screen": screen("/")},
 		409); c["detail"] != "this chat is working in another tab" {
@@ -539,6 +542,7 @@ func TestAssistantOffered(t *testing.T) {
 			LookAt      bool     `json:"look_at"`
 			Skills      bool     `json:"skills"`
 			Guides      bool     `json:"guides"` // API 1.71
+			Listen      *bool    `json:"listen"` // API 1.108; absent = a listen workflow can run
 			Expect      []string `json:"expect"`
 		} `json:"cases"`
 	}
@@ -551,7 +555,7 @@ func TestAssistantOffered(t *testing.T) {
 			continue // screen_actions: web_service's
 		}
 		ran++
-		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt, c.Skills, c.Guides); !slices.Equal(got, c.Expect) {
+		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt, c.Listen == nil || *c.Listen, c.Skills, c.Guides); !slices.Equal(got, c.Expect) {
 			t.Errorf("%s: %v, want %v", c.Description, got, c.Expect)
 		}
 	}

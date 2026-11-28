@@ -136,6 +136,8 @@ type Take struct {
 	Decisions *[]TakeDecision `json:"decisions,omitempty"`
 	// only GET /takes/{id}, a video or audio take: its facts (API 1.104, openapi TakeFacts); null until made
 	Facts *map[string]any `json:"facts,omitempty"`
+	// API 1.108: only to the Assistant and helm mcp: why there are no facts yet (being measured, no runner), plain words
+	FactsNote string `json:"facts_note,omitempty"`
 	// source import: the old settings, read-only (API 1.16)
 	Legacy json.RawMessage `json:"legacy,omitempty"`
 	// source frame: the video take and frame it is; source export: the sequence and revision (API 1.17)

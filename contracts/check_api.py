@@ -175,15 +175,17 @@ GUIDE_TOOL = "read_model_guide"  # API 1.71: offered only while some model guide
 
 
 def offered_tools(catalog: dict, roles: list[str], web_search: bool, look_at: bool, skills: bool = False,
-                  guides: bool = False) -> list[str]:
+                  guides: bool = False, listen: bool = True) -> list[str]:
     """The catalog tools a turn offers (README, Assistant: tools): surface assistant, every role it needs held,
-    web_search only when on, look_at only when an ask workflow can run now, from API 1.64 use_skill and
+    web_search only when on, look_at only when an ask workflow can run now, from API 1.108 listen only when a listen
+    workflow can, from API 1.64 use_skill and
     read_skill_file only while a skill is on, from API 1.71 read_model_guide only while a model guide is published.
     Studio (Go) runs the same fixtures."""
     return sorted(
         n for n, t in catalog["tools"].items()
         if "assistant" in t["surfaces"] and set(t["roles"]) <= set(roles)
         and (n != "web_search" or web_search) and (n != "look_at" or look_at) and (n not in SKILL_TOOLS or skills)
+        and (n != "listen" or listen)
         and (n != GUIDE_TOOL or guides)
     )
 
@@ -336,7 +338,7 @@ def check_tools(schemas: dict[str, dict], registry: Registry) -> None:
     fx = json.loads((HERE / "fixtures" / "tools" / "offered.json").read_text())
     for c in fx["cases"]:
         got = (offered_tools(catalog, c["roles"], c.get("web_search", False), c.get("look_at", False), c.get("skills", False),
-                             c.get("guides", False))
+                             c.get("guides", False), c.get("listen", True))
                if "screen" not in c else screen_actions(actions, c["screen"], c["roles"]))
         if got != c["expect"]:
             fail(f"fixtures/tools/offered.json {c['description']!r}: got {got}, want {c['expect']}")

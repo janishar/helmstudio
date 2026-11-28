@@ -14,6 +14,7 @@ log = logging.getLogger(__name__)
 
 SUBJECT = "studio.runs.create"
 TIMEOUT = 5.0  # seconds per request (the contract's)
+FACTS_TIMEOUT = 25.0  # API 1.108: studio.see, get_take and look_at may measure take facts on the fly (up to 20 s)
 BACKOFF_MAX = 30.0
 
 
@@ -64,7 +65,8 @@ async def tool(nc, request: dict) -> dict:
     body, delay = json.dumps(request).encode(), 0.5
     while True:
         try:
-            msg = await nc.request(TOOLS, body, timeout=TIMEOUT)
+            wait = FACTS_TIMEOUT if request.get("tool") in ("get_take", "look_at") else TIMEOUT
+            msg = await nc.request(TOOLS, body, timeout=wait)
             reply = json.loads(msg.data)
             errs = _reply_errors(request, reply)
             if not errs and reply.get("code") != "internal":
@@ -98,7 +100,7 @@ async def see(nc, request: dict) -> dict | None:
         raise ValueError(f"{SEE} request is off-contract: {'; '.join(errs[:3])}")
     for _ in range(2):
         try:
-            msg = await nc.request(SEE, json.dumps(request).encode(), timeout=TIMEOUT)
+            msg = await nc.request(SEE, json.dumps(request).encode(), timeout=FACTS_TIMEOUT)
             reply = json.loads(msg.data)
             if not (errs := schemas.see_errors("reply", reply)) and reply.get("code") != "internal":
                 return reply

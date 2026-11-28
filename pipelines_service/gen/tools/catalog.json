@@ -864,6 +864,12 @@
                 }
               }
             }
+          },
+          "facts_note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "from API 1.108: why some of its video takes have no facts yet, in plain words: being measured (asked on demand, not done within 20 s) or no runner is on to measure them; absent otherwise"
           }
         },
         "required": [

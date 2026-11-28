@@ -36,8 +36,10 @@ type SeeReply struct {
 	// API 1.104: a video's or audio's facts (defs takeFacts) and, when the picture is its frame grid, its frames' seconds
 	Facts json.RawMessage `json:"facts,omitempty"`
 	At    []float64       `json:"at,omitempty"`
-	Error string          `json:"error,omitempty"`
-	Code  string          `json:"code,omitempty"`
+	// API 1.108: why there are no facts yet (being measured, no runner), plain words (Take facts)
+	FactsNote string `json:"facts_note,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Code      string `json:"code,omitempty"`
 }
 
 // seeSide is the long side the model gets (alpha.2 item 8: "about 1024 px"); seeMax caps one picture's bytes.
@@ -58,12 +60,20 @@ func (s *Service) See(ctx context.Context, req *SeeRequest) SeeReply {
 		Key   *string         `json:"key"`
 		At    []float64       `json:"at"`
 	}
-	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT t.kind, t.title, `+gallerymodel.ThumbKey+`, coalesce(t.facts, '{}') FROM takes t
-			JOIN assistant_threads a ON a.id = $2 AND a.owner_id = $3
-			WHERE t.id = $1 AND t.owner_id = $3 AND t.deleted_at IS NULL AND t.ready`, req.TakeID, req.ThreadID,
-			req.OwnerID).Scan(&kind, &title, &key, &facts)
-	})
+	read := func() error {
+		return common.System(ctx, s.db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT t.kind, t.title, `+gallerymodel.ThumbKey+`, coalesce(t.facts, '{}') FROM takes t
+				JOIN assistant_threads a ON a.id = $2 AND a.owner_id = $3
+				WHERE t.id = $1 AND t.owner_id = $3 AND t.deleted_at IS NULL AND t.ready`, req.TakeID, req.ThreadID,
+				req.OwnerID).Scan(&kind, &title, &key, &facts)
+		})
+	}
+	err := read()
+	note := ""
+	if err == nil && kind != "image" && len(facts.Facts) == 0 { // API 1.108: measured on demand
+		note = MeasureFacts(ctx, s.db, s.registry, req.OwnerID, []string{req.TakeID})
+		err = read()
+	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return SeeReply{Error: "not found", Code: "not_found"}
@@ -72,7 +82,8 @@ func (s *Service) See(ctx context.Context, req *SeeRequest) SeeReply {
 		return SeeReply{Error: "internal error", Code: "internal"}
 	}
 	pics := [][]byte{}
-	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: &pics, Facts: facts.Facts}
+	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: &pics, Facts: facts.Facts,
+		FactsNote: map[bool]string{true: note}[len(facts.Facts) == 0]}
 	if kind == "audio" {
 		return out
 	}

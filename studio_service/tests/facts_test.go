@@ -9,10 +9,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+
 	"github.com/helmstudio/helmgo/micro"
 	"github.com/helmstudio/helmgo/utility"
 
 	"github.com/helmstudio/studio_service/api/studio"
+	"github.com/helmstudio/studio_service/common"
 )
 
 // Take facts (contracts/README.md "Take facts", API 1.104).
@@ -38,19 +41,23 @@ func TestFactsJob(t *testing.T) {
 	e.thumbsHost()
 	video, sound, gone := e.clipTake(userA, 2, true, nil), e.audioTake(userA, 3), e.audioTake(userA, 4)
 	long, img := e.audioTake(userA, 1300), e.image(userA)
-	if id, err := studio.QueueFacts(ctx, e.pool, e.registry); err != nil || id != "" {
-		t.Fatal("an older runner (no media.facts) is sent none", id, err)
+	defer func(wait time.Duration) { studio.FactsWait = wait }(studio.FactsWait)
+	studio.FactsWait = 0
+	asked := []string{img, long, gone, sound, video}
+	if note := studio.MeasureFacts(ctx, e.pool, e.registry, userA, asked); note != studio.FactsNoRunnerNote ||
+		e.count(`SELECT count(*) FROM media_jobs`) != 0 || e.count(`SELECT count(*) FROM takes WHERE facts_tries > 0`) != 0 {
+		t.Fatal("an older runner (no media.facts) is sent none, at once, and no try is counted", note)
 	}
 	e.factsHost()
 	for i, id := range []string{gone, sound, video} { // newest first: video, sound, gone
 		e.exec(`UPDATE takes SET created_at = clock_timestamp() + make_interval(hours => $2) WHERE id = $1`, id, i)
 	}
-	jobID, err := studio.QueueFacts(ctx, e.pool, e.registry)
-	if err != nil || jobID == "" {
-		t.Fatal(jobID, err)
+	if note := studio.MeasureFacts(ctx, e.pool, e.registry, userA, asked); note != studio.FactsMeasuringNote {
+		t.Fatal("still measured", note)
 	}
-	if again, err := studio.QueueFacts(ctx, e.pool, e.registry); err != nil || again != "" {
-		t.Fatal("never two facts jobs", again, err)
+	jobID := e.factsJob(video)
+	if studio.MeasureFacts(ctx, e.pool, e.registry, userA, asked); e.count(`SELECT count(*) FROM media_jobs`) != 1 {
+		t.Fatal("never two facts jobs for one take")
 	}
 	_, sent := e.relay()
 	var command struct {
@@ -109,10 +116,8 @@ func TestFactsJob(t *testing.T) {
 	}
 
 	// a failed job adds a try to each take and deletes its grids no take points at
-	next, err := studio.QueueFacts(ctx, e.pool, e.registry)
-	if err != nil || next == "" {
-		t.Fatal(next, err)
-	}
+	studio.MeasureFacts(ctx, e.pool, e.registry, userA, []string{gone})
+	next := e.factsJob(gone)
 	e.relay()
 	np := "u/" + userA + "/facts/" + next + "/"
 	e.putObject(np+"0.jpg", "jpg")
@@ -126,18 +131,92 @@ func TestFactsJob(t *testing.T) {
 	}
 }
 
-// The backfill measures only an owner's newest FactsNewest video and audio takes (owner, 2026-11-28).
-func TestFactsNewestOnly(t *testing.T) {
+// A take is measured on demand, the first time the Assistant or helm mcp asks for its facts, then kept (API 1.108;
+// owner, 2026-11-28: "can it not do on fly it want the fact and it does not exists", "Only on demand").
+func TestFactsOnDemand(t *testing.T) {
 	e := setup(t)
-	ctx := context.Background()
+	group := &micro.NatsJetStreamGroup{}
+	p := studio.NewProjector(e.pool)
+	p.Store = e.store
+	p.MountMedia(group)
 	e.factsHost()
-	old := e.audioTake(userA, 2)
-	e.exec(`UPDATE takes SET created_at = clock_timestamp() - interval '1 day' WHERE id = $1`, old)
-	for range studio.FactsNewest {
-		e.audioTake(userA, 2)
+	old, late := e.audioTake(userA, 2), e.audioTake(userA, 3)
+	e.exec(`UPDATE takes SET created_at = clock_timestamp() - interval '1 year' WHERE id = $1`, old)
+
+	e.call(userB, "GET", "/v1/studio/takes/"+old, nil, 404) // another user's take: 404, nothing measured
+	if _, ok := e.call(userA, "GET", "/v1/studio/takes/"+old, nil, 200)["facts_note"]; ok {
+		t.Fatal("the web's GET never measures")
 	}
-	e.exec(`UPDATE takes SET facts = '{}'::jsonb WHERE id <> $1`, old) // the newest are measured
-	if id, err := studio.QueueFacts(ctx, e.pool, e.registry); err != nil || id != "" {
-		t.Fatal("a take older than the newest 200 is not backfilled", id, err)
+	got := make(chan map[string]any)
+	go func() { got <- e.callVia(userA, "mcp", "GET", "/v1/studio/takes/"+old, nil, 200) }()
+	job := e.factsJob(old)
+	e.relay()
+	af := map[string]any{"seconds": 2.0, "sound_seconds": 2.0, "lufs": -16.0, "peak_db": -2.0, "silence_start": 0.0,
+		"silence_end": 0.0, "end_lufs": -20.0, "abrupt": false}
+	e.media(group, userA, job, "status", 1, map[string]any{"status": "succeeded",
+		"result": map[string]any{"facts": []any{map[string]any{"index": 0, "facts": af}}}})
+	take := <-got
+	if f, _ := take["facts"].(map[string]any); f == nil || f["lufs"] != -16.0 || take["facts_note"] != nil {
+		t.Fatal("measured on the fly and answered in the same reply", take)
 	}
+
+	// not done in time: no facts and the note; asked again, the same job (never two for one take)
+	defer func(wait time.Duration) { studio.FactsWait = wait }(studio.FactsWait)
+	studio.FactsWait = 200 * time.Millisecond
+	take = e.callVia(userA, "assistant", "GET", "/v1/studio/takes/"+late, nil, 200)
+	if take["facts"] != nil || take["facts_note"] != studio.FactsMeasuringNote {
+		t.Fatal(take)
+	}
+	e.callVia(userA, "mcp", "GET", "/v1/studio/takes/"+late, nil, 200)
+	if n := e.count(`SELECT count(*) FROM media_jobs WHERE kind = 'facts' AND $1 = ANY(take_ids)`, late); n != 1 {
+		t.Fatal("never two facts jobs for one take", n)
+	}
+	thread := utility.NewID()
+	e.exec(`INSERT INTO assistant_threads (id, owner_id, title) VALUES ($1, $2, 'look')`, thread, userA)
+	seen := e.service.See(context.Background(), &studio.SeeRequest{OwnerID: userA, ThreadID: thread, TakeID: late})
+	if seen.FactsNote != studio.FactsMeasuringNote || len(seen.Facts) != 0 {
+		t.Fatal("studio.see says it is being measured", seen)
+	}
+
+	// several takes asked at once: as few jobs as hold them (4 each)
+	var five []string
+	for range 5 {
+		five = append(five, e.audioTake(userA, 1))
+	}
+	studio.MeasureFacts(context.Background(), e.pool, e.registry, userA, five)
+	if n := e.count(`SELECT count(*) FROM media_jobs WHERE kind = 'facts' AND take_ids && $1::uuid[]`, five); n != 2 {
+		t.Fatal("5 takes in 2 jobs", n)
+	}
+
+	// no runner can measure: answered at once with the reason, no try counted; with one back, the next ask measures
+	e.thumbsHost()
+	fresh := e.audioTake(userA, 1)
+	studio.FactsWait = 20 * time.Second
+	start := time.Now()
+	take = e.callVia(userA, "mcp", "GET", "/v1/studio/takes/"+fresh, nil, 200)
+	if take["facts_note"] != studio.FactsNoRunnerNote || time.Since(start) > 5*time.Second ||
+		e.count(`SELECT count(*) FROM takes WHERE id = $1 AND facts_tries = 0`, fresh) != 1 {
+		t.Fatal("no runner: the reason at once", take)
+	}
+	e.factsHost()
+	studio.FactsWait = 0
+	e.callVia(userA, "mcp", "GET", "/v1/studio/takes/"+fresh, nil, 200)
+	e.factsJob(fresh)
+}
+
+// factsJob is the facts job that holds take (waiting up to 5 s for it).
+func (e *env) factsJob(take string) string {
+	e.t.Helper()
+	var id string
+	for range 100 {
+		if common.System(context.Background(), e.pool, func(tx pgx.Tx) error {
+			return tx.QueryRow(context.Background(), `SELECT id::text FROM media_jobs WHERE kind = 'facts'
+				AND $1 = ANY(take_ids) ORDER BY created_at DESC LIMIT 1`, take).Scan(&id)
+		}) == nil {
+			return id
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	e.t.Fatal("no facts job for", take)
+	return ""
 }

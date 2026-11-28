@@ -106,6 +106,9 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetAssistantCache(m.assistantCache)
 	galleryService := gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)
 	galleryService.SetOffers(service.Offerable)
+	galleryService.SetMeasure(func(ctx context.Context, owner string, ids []string) string {
+		return studio.MeasureFacts(ctx, m.db, m.registry, owner, ids)
+	})
 	api := []micro.Controller{
 		studio.NewController(service, m.recheck, m.shutdown),
 		gallery.NewController(galleryService),

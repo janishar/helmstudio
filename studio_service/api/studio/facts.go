@@ -18,9 +18,10 @@ import (
 	"github.com/helmstudio/studio_service/registry"
 )
 
-// Take facts (contracts/README.md "Take facts", API 1.104; plan 42): every video and audio take gets its ffmpeg facts
-// and a video its frame grid from a facts media job, as thumbnails do: QueueFacts picks them, the media projector
-// stores what the runner measured (endFacts). The state is takes.facts itself.
+// Take facts (contracts/README.md "Take facts", API 1.104; plan 42): a video or audio take gets its ffmpeg facts and
+// a video its frame grid from a facts media job, measured on demand (API 1.108; owner, 2026-11-28: "Only on demand"):
+// MeasureFacts sends the job the first time the Assistant or helm mcp asks for them, the media projector stores what
+// the runner measured (endFacts), and they are kept on the take. The state is takes.facts itself.
 
 // FactsPerJob is the most takes one facts job holds; FactsTries how often a take is tried; FactsMaxSeconds the longest
 // take measured (a longer one is never picked: ponytail, raise it when hours-long exports need facts).
@@ -28,89 +29,110 @@ const (
 	FactsPerJob     = 4
 	FactsTries      = 3
 	FactsMaxSeconds = 20 * 60
-	FactsNewest     = 200
 )
 
-// factsTodo selects, from takes aliased t, the ready, live video and audio takes still without facts, at most
-// FactsMaxSeconds long, whose file is under the owner's prefix, among the owner's FactsNewest video and audio takes (the
-// backfill measures only the newest 200; owner, 2026-11-28: "Newest 200, then new ones").
-const factsTodo = `t.facts IS NULL AND t.deleted_at IS NULL AND t.ready AND t.facts_tries < 3 -- FactsTries
+// factsReady selects, from takes aliased t, the ready, live video and audio takes still without facts, at most
+// FactsMaxSeconds long, whose file is under the owner's prefix.
+const factsReady = `t.facts IS NULL AND t.deleted_at IS NULL AND t.ready AND t.facts_tries < 3 -- FactsTries
 	AND t.kind IN ('video', 'audio') AND starts_with(t.key, 'u/' || t.owner_id::text || '/')
 	AND coalesce((coalesce(t.video, t.audio)->>'duration_s')::float8, 0) <= 1200 -- FactsMaxSeconds
-	AND t.id IN (SELECT n.id FROM takes n WHERE n.owner_id = t.owner_id AND n.kind IN ('video', 'audio')
-		AND n.deleted_at IS NULL ORDER BY n.created_at DESC, n.id LIMIT 200) -- FactsNewest
 `
 
-// QueueFacts sends one facts job (as System) for the newest takes without facts, of one owner, at most FactsPerJob,
-// unless one is open already or no live env can run it; it returns the job id ("" for none).
-func QueueFacts(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) (string, error) {
-	env, ok := mediaEnvOf(reg, nil, func(m registry.Media) bool { return m.Facts })
-	if !ok {
-		return "", nil
-	}
-	id := ""
+// factsOpen holds when take t is in an open facts job.
+const factsOpen = `EXISTS (SELECT 1 FROM media_jobs j WHERE j.kind = 'facts' AND j.status IN ('queued', 'running')
+	AND t.id = ANY(j.take_ids))`
+
+// FactsWait is how long MeasureFacts waits for the facts (a var so tests can shorten it).
+var FactsWait = 20 * time.Second
+
+// factsPick is one take a facts job measures.
+type factsPick struct{ ID, Owner, Kind, Key string }
+
+// The plain notes MeasureFacts answers (API 1.108): the Assistant passes them on.
+const (
+	FactsMeasuringNote = "The facts are being measured; ask again in a minute."
+	FactsNoRunnerNote  = "No runner is on to measure the facts; ask again once one is on."
+)
+
+// MeasureFacts measures on demand (API 1.108, Take facts) the owner's takes of ids that the Assistant or helm mcp asks
+// about without facts: facts jobs (as System) for those factsReady in no open facts job, as few as can hold them
+// (FactsPerJob each), then a wait of up to FactsWait while any of ids is in an open facts job. It answers "" when
+// nothing is left to wait for, FactsMeasuringNote when one is still measured, and at once FactsNoRunnerNote when one
+// needs measuring but no live env can run a facts job (nothing is sent and no try is counted). An error answers "".
+func MeasureFacts(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry, owner string, ids []string) string {
+	env, live := mediaEnvOf(reg, nil, func(m registry.Media) bool { return m.Facts })
+	offline := false
 	err := common.System(ctx, pool, func(tx pgx.Tx) error {
+		if !live {
+			return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM takes t WHERE t.id = ANY($1::uuid[]) AND t.owner_id = $2
+				AND `+factsReady+`)`, ids, owner).Scan(&offline)
+		}
 		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('media:facts'))`); err != nil {
 			return err
 		}
-		var open bool
-		if err := tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM media_jobs WHERE kind = 'facts'
-			AND status IN ('queued', 'running'))`).Scan(&open); err != nil || open {
-			return err
-		}
-		type pick struct{ ID, Owner, Kind, Key string }
-		picks, err := collect[pick](ctx, tx, `WITH o AS (SELECT t.owner_id FROM takes t WHERE `+factsTodo+`
-				ORDER BY t.created_at DESC, t.id LIMIT 1)
-			SELECT t.id::text, t.owner_id::text, t.kind, t.key FROM takes t JOIN o ON o.owner_id = t.owner_id
-			WHERE `+factsTodo+` ORDER BY t.created_at DESC, t.id LIMIT $1 FOR UPDATE OF t SKIP LOCKED`, FactsPerJob)
-		if err != nil || len(picks) == 0 {
-			return err
-		}
-		var ids, bad []string
-		var inputs []timeline.MediaInput
-		for _, p := range picks {
-			if !common.Owns(p.Owner, p.Key) { // a key with .. or //: never sent, never picked again
-				bad = append(bad, p.ID)
-				continue
-			}
-			ids, inputs = append(ids, p.ID), append(inputs, timeline.MediaInput{Key: p.Key, Kind: p.Kind})
-		}
-		if len(bad) > 0 {
-			if _, err := tx.Exec(ctx, `UPDATE takes SET facts_tries = $2 WHERE id = ANY($1::uuid[])`, bad, FactsTries); err != nil {
+		picks, err := collect[factsPick](ctx, tx, `SELECT t.id::text, t.owner_id::text, t.kind, t.key FROM takes t
+			WHERE t.id = ANY($1::uuid[]) AND t.owner_id = $2 AND `+factsReady+` AND NOT `+factsOpen+`
+			ORDER BY t.created_at DESC, t.id FOR UPDATE OF t SKIP LOCKED`, ids, owner)
+		for chunk := range slices.Chunk(picks, FactsPerJob) {
+			if _, err := sendFacts(ctx, tx, env, chunk); err != nil {
 				return err
 			}
 		}
-		if len(ids) == 0 {
-			return nil
-		}
-		job := mediaRow{ID: utility.NewID(), OwnerID: picks[0].Owner, Kind: "facts", Host: env.Host, Env: env.Env, TakeIDs: ids}
-		_, err = insertMediaJob(ctx, tx, job, mediaCommand{Kind: "facts", Inputs: inputs, OutputPrefix: factsPrefix(job)})
-		id = job.ID
 		return err
 	})
-	if err != nil {
-		id = ""
+	switch {
+	case err != nil:
+		log.Printf("facts on demand: %v", err)
+		return ""
+	case offline:
+		return FactsNoRunnerNote
+	case !live:
+		return ""
 	}
-	return id, err
-}
-
-// RunFacts queues facts jobs every ThumbsTick until ctx ends.
-func RunFacts(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) {
-	tick := time.NewTicker(ThumbsTick)
-	defer tick.Stop()
+	deadline := time.Now().Add(FactsWait)
 	for {
+		var pending bool
+		err := common.System(ctx, pool, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT EXISTS (SELECT 1 FROM takes t WHERE t.id = ANY($1::uuid[])
+				AND t.owner_id = $2 AND t.facts IS NULL AND `+factsOpen+`)`, ids, owner).Scan(&pending)
+		})
+		switch {
+		case err != nil || !pending:
+			return ""
+		case time.Now().After(deadline):
+			return FactsMeasuringNote
+		}
 		select {
 		case <-ctx.Done():
-			return
-		case <-tick.C:
-		}
-		if !reg.Ready() {
-			continue
-		}
-		if _, err := QueueFacts(ctx, pool, reg); err != nil && ctx.Err() == nil {
-			log.Printf("facts: %v", err)
+			return FactsMeasuringNote
+		case <-time.After(250 * time.Millisecond):
 		}
 	}
+}
+
+// sendFacts inserts one facts job for picks (one owner's), never sending a key outside its owner's prefix; it returns
+// the job id ("" for none).
+func sendFacts(ctx context.Context, tx pgx.Tx, env registry.Host, picks []factsPick) (string, error) {
+	var ids, bad []string
+	var inputs []timeline.MediaInput
+	for _, p := range picks {
+		if !common.Owns(p.Owner, p.Key) { // a key with .. or //: never sent, never picked again
+			bad = append(bad, p.ID)
+			continue
+		}
+		ids, inputs = append(ids, p.ID), append(inputs, timeline.MediaInput{Key: p.Key, Kind: p.Kind})
+	}
+	if len(bad) > 0 {
+		if _, err := tx.Exec(ctx, `UPDATE takes SET facts_tries = $2 WHERE id = ANY($1::uuid[])`, bad, FactsTries); err != nil {
+			return "", err
+		}
+	}
+	if len(ids) == 0 {
+		return "", nil
+	}
+	job := mediaRow{ID: utility.NewID(), OwnerID: picks[0].Owner, Kind: "facts", Host: env.Host, Env: env.Env, TakeIDs: ids}
+	_, err := insertMediaJob(ctx, tx, job, mediaCommand{Kind: "facts", Inputs: inputs, OutputPrefix: factsPrefix(job)})
+	return job.ID, err
 }
 
 // factsResult is one item of a facts job's result.facts (evt.media.status, API 1.104).
@@ -223,6 +245,7 @@ func unusedFacts(ctx context.Context, tx pgx.Tx, job mediaRow) ([]string, error)
 	for i := range job.TakeIDs {
 		keys[i] = factsPrefix(job) + strconv.Itoa(i) + ".jpg"
 	}
-	used, err := collect[string](ctx, tx, `SELECT facts->>'key' FROM takes WHERE facts->>'key' = ANY($1)`, keys)
+	rows, _ := tx.Query(ctx, `SELECT facts->>'key' FROM takes WHERE facts->>'key' = ANY($1)`, keys)
+	used, err := pgx.CollectRows(rows, pgx.RowTo[string]) // a string is no struct: never collect[string]
 	return slices.DeleteFunc(keys, func(k string) bool { return slices.Contains(used, k) }), err
 }

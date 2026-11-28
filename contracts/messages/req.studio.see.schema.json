@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/req.studio.see.schema.json",
   "title": "NATS request/reply studio.see (pipelines → studio)",
-  "description": "From API 1.65 (contracts/README.md, Assistant: media and vision). Core NATS request/reply on subject `studio.see` (queue group `studio`), bare JSON: the pictures of one take for the assistant's own model when it sees images (cmd.assistant.turn settings.sees). Asked as the thread's owner: owner_id must own thread_id and the take (else not_found). Studio reads the take's thumbnail (an image's, a video's poster; else the image itself; from API 1.104 a video's frame grid once its facts are made) and answers it as JPEG, its long side at most 1024 px; an audio take has no pictures. From 1.104 a video or audio take's `facts` (Take facts) come too. Never stored, never on a stream: the bytes go only into the model call. Studio answers within 5 s.",
+  "description": "From API 1.65 (contracts/README.md, Assistant: media and vision). Core NATS request/reply on subject `studio.see` (queue group `studio`), bare JSON: the pictures of one take for the assistant's own model when it sees images (cmd.assistant.turn settings.sees). Asked as the thread's owner: owner_id must own thread_id and the take (else not_found). Studio reads the take's thumbnail (an image's, a video's poster; else the image itself; from API 1.104 a video's frame grid once its facts are made) and answers it as JPEG, its long side at most 1024 px; an audio take has no pictures. From 1.104 a video or audio take's `facts` (Take facts) come too. Never stored, never on a stream: the bytes go only into the model call. Studio answers within 5 s (from API 1.108 within 25 s when it measures the take's facts on demand).",
   "$defs": {
     "request": {
       "type": "object",
@@ -30,6 +30,7 @@
           "description": "JPEG pictures, base64: an image's one, a video's poster (from API 1.104 its frame grid, each frame's time printed on it, once made), none for audio"
         },
         "facts": {"oneOf": [{"$ref": "defs.schema.json#/$defs/takeFacts"}, {"type": "null"}], "description": "from API 1.104: a video or audio take's facts (Take facts); null or absent until made, and for an image"},
+        "facts_note": {"type": "string", "minLength": 1, "maxLength": 200, "description": "from API 1.108: why a video or audio take has no facts yet, in plain words: being measured (asked on demand, not done within 20 s) or no runner is on to measure them; absent otherwise"},
         "at": {"type": "array", "maxItems": 16, "items": {"type": "number", "minimum": 0}, "description": "from API 1.104: the seconds of the grid's frames, in order (a video whose grid is the picture)"}
       }
     },

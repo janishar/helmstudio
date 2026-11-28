@@ -420,6 +420,27 @@ async def test_a_model_that_sees_gets_a_videos_grid_and_the_facts_of_video_and_a
     assert len(images_of(req)) == 1 and step["lines"][0]["text"] == "Looked at Harbour, Theme"
 
 
+async def test_facts_still_measured_come_as_a_note_and_are_asked_again(pool, fake):
+    """API 1.108 (Take facts: on the fly): studio.see not done within 20 s says so; the next message asks again."""
+    c = Chat(pool, fake)
+    c.sees = True
+    asked = []
+
+    async def see(req: dict) -> dict:
+        asked.append(req["take_id"])
+        got = {"take_id": TAKES[1], "kind": "audio", "title": "Theme", "images": [],
+               "facts_note": "The facts are being measured; ask again in a minute."}  # fmt: skip
+        assert not schemas.see_errors("reply", got), schemas.see_errors("reply", got)
+        return got
+
+    c.a.see = see
+    c.script({"content": "Measuring."}, {"content": "Still."})
+    await c.say(f"How loud is [[take:{TAKES[1]}]]?")
+    await c.say(f"And now, [[take:{TAKES[1]}]]?")
+    text = json.dumps(c.asked()[0]["messages"][1]["content"])
+    assert f"Facts of [[take:{TAKES[1]}]]: The facts are being measured" in text and asked == [TAKES[1], TAKES[1]]
+
+
 async def test_a_text_only_model_looks_at_the_users_own_takes_without_a_card(pool, fake):
     c = Chat(pool, fake)
     look = calls(("look_at", {"take_ids": [TAKES[0]], "question": "what light?"}))

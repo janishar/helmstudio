@@ -900,7 +900,7 @@ class Assistant:
         out = []
         for i in ids:
             got = self.pics.get(f"{s['owner_id']}:{i}")
-            if got is None and self.see:
+            if (got is None or got.get("facts_note")) and self.see:  # API 1.108: no facts yet: asked again
                 got = await self.see({"owner_id": s["owner_id"], "thread_id": s["thread_id"], "take_id": i})
                 if got is not None and "error" not in got:
                     self.pics[f"{s['owner_id']}:{i}"] = got
@@ -920,6 +920,8 @@ class Assistant:
                 f = got["facts"] | ({"grid_at": got["at"]} if got.get("at") else {})
                 line = f"Facts of [[take:{i}]] (ffmpeg): {json.dumps(f, separators=(',', ':'))}"
                 out.append((i, got.get("title") or "a take", line))
+            elif got.get("facts_note"):  # API 1.108: why there are none yet (being measured, no runner)
+                out.append((i, got.get("title") or "a take", f"Facts of [[take:{i}]]: {got['facts_note']}"))
         return out
 
     # --- server calls

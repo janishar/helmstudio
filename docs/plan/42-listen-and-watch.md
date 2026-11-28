@@ -20,6 +20,11 @@ tools that turn them into facts, pictures and words.
    and passes a first test on the Mac; the 3B when it is missing or the T9 is unplugged. Built in alpha.6, in
    parallel with plan 41.
 
+4. **Facts on demand, then kept** ("can it not do on fly it want the fact and it does not exists", then "Only on
+   demand"): no background facts loop. A take is measured the first time the Assistant or helm mcp asks for its
+   facts (studio.see, look_at, get_take); studio waits up to 20 s and answers them in the same reply, else a plain
+   note (being measured, or no runner on to measure). alpha.6 row 96, contract 1.108.
+
 Every part also reaches helm mcp, and the director skill says when to look and when to listen.
 
 ## Next
