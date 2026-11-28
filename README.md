@@ -45,11 +45,15 @@
   can be rerun, stopped or set louder or quieter. Play plays the board as a rough cut; Export makes the MP4 in one
   step, or Send to Timeline cuts it further. Ask the Assistant and its built-in Magic director plans the board, makes
   the views, frames and shots, and gives each speaking character a voice.
+- **Fade, crossfade and duck the sound.** Drag fade handles on any audio clip on the Timeline or block in Magic;
+  two touching clips crossfade, and music dips under the voice. The fades carry to the player, Send and Export.
 - **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
   clips, builds Magic boards and asks before anything that costs GPU time. You see each step live as it works, and
   each has its own Undo. It sees the images you
   attach or `@`-mention, shows takes right in its answers, keeps your film's shot list across chats, and reads each
-  model's guide (its good settings and pitfalls) before it uses it. Open it from the Assistant drawer, dock it or
+  model's guide (its good settings and pitfalls) before it uses it. It watches a video as a grid of frames with
+  their times, reads exact facts (length, loudness, silence, cuts), and listens to a take with Qwen3-Omni to judge
+  the sound. Open it from the Assistant drawer, dock it or
   drag it anywhere on the screen; the first launch opens it with a setup message.
 - **Set up AI in one place.** Setup sits at the foot of the rail. Admins get **Hub** (the Assistant, In pipelines with the default model for pipeline AI
   steps, Providers, Plugins) and **System** (Users, Hosts, API keys).
@@ -87,6 +91,9 @@
   and ARM). [Releases](https://github.com/janishar/helmstudio/releases).
 
 ## A look inside
+
+<p><img src="docs/images/readme/magic.jpg" alt="Magic board The Last Tide: the assets row, storyboard frames, three shots with their joins, Mara's voice lines, the music and sound lanes, the floating player and Shot 2's side panel" width="100%"></p>
+<p><b>Magic.</b> Direct a short film on one board: characters and places, a storyboard, shots, voice, music and sound in lanes, played as a rough cut and exported in one step.</p>
 
 <table>
   <tr>
@@ -135,6 +142,9 @@ own licence.
 | Stable Audio 3 | Sound effects | Small SFX | Small SFX |
 | MMAudio | Sound from text or a video | Large 44k v2 | Large 44k v2 |
 | [Ask](https://helmstudio.in/models/ask/) | Text answers about takes | Qwen3.8 27B, Qwen3-VL 8B | Qwen3-VL 8B |
+| Qwen3-Omni 30B | Listens to a take for the Assistant (llama.cpp) | GGUF Q8_0 | none |
+| Qwen2.5-Omni-3B | Listens when Qwen3-Omni cannot run (short answers) | GGUF Q8_0 | none |
+| Qwen3-ASR 1.7B | Writes down the speech for listening | Base | none |
 
 Variants, precision, add-ons, LoRAs and licences: [helmstudio.in/models](https://helmstudio.in/models/).
 
