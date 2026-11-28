@@ -20,7 +20,8 @@ import time
 from config import ENV, HOST
 from core import download, models
 from core import pack as packs
-from core.download import Cancelled, JobError
+from core.download import JobError
+from core.graph import Cancelled
 from messaging import cancels
 from messaging.delivery import dead_letter, decode, keep_alive
 from messaging.publisher import envelope, send

@@ -30,7 +30,7 @@ from PIL import Image
 
 from config import ENV, HOST
 from core import images, media
-from core.download import Cancelled
+from core.graph import Cancelled
 from core.media import MediaError
 from messaging import cancels
 from messaging.delivery import dead_letter, decode, keep_alive

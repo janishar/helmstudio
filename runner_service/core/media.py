@@ -21,7 +21,8 @@ NEEDS = ("xfade", "apad", "amix")  # filters the export graph uses
 
 
 class MediaError(Exception):
-    """A job failure of class `cls` (input, invalid, ffmpeg, verify, internal); the text is one line without paths."""
+    """A job failure (media and model jobs; core.download names it JobError) of class `cls` (media: input, invalid,
+    ffmpeg, verify, internal; models: download.classify's); the text is one line without paths."""
 
     def __init__(self, cls: str, detail: str) -> None:
         super().__init__(detail[:500])

@@ -21,23 +21,13 @@ from pathlib import Path
 
 from core import models
 from core import pack as packs
+from core.graph import Cancelled
+from core.media import MediaError as JobError  # one job-failure class: `cls` and a one-line detail
 
 log = logging.getLogger("download")
 
 MARGIN = 2**30  # free space kept beyond the plan
 DISK_EVERY = 256 * 2**20  # bytes streamed between free-space checks
-
-
-class JobError(Exception):
-    """A model job failed: `cls` is its failure class, the message its one-line detail."""
-
-    def __init__(self, cls: str, detail: str) -> None:
-        super().__init__(detail[:500])
-        self.cls = cls
-
-
-class Cancelled(Exception):
-    pass
 
 
 @dataclass
