@@ -181,3 +181,14 @@ only-you, keep the disclaimer, `run` on host mac (starts itself; Couldn't start 
 when missing), bundle it in the .dmg, check the app VM reaches it, docs page. The owner confirmed
 Anthropic's Commercial Terms are accepted (2026-11-25; the page says products running Claude Code fall under them).
 
+
+## Code health, left from the 2026-11-28 review (owner, 2026-11-28: "Backlog only")
+
+From docs/review/code-optimisation-2026-11-28.md; the rest of that review is merged (alpha.6 row 85).
+
+- Magic as its own studio package: move api/studio's Magic files (about 3,500 lines, tangled both ways with runs,
+  takes, the Timeline, the Assistant's tools and the projector) into their own package behind a small interface.
+  Needs its own plan first; not a pure move. Parked for later (owner: "we can park the studio package task").
+- The rest of the contract_tests helpers (about 850 lines that need renames).
+- The Python copy of the Timeline edit rules in contracts/check*.py: drop it once the 16 contract tests that use it
+  check against the fixtures' `expect` instead.
