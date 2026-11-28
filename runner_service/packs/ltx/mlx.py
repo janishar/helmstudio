@@ -34,24 +34,29 @@ from PIL import Image
 
 from core import media
 from core.graph import RunError, auto_frames
+from packs.ltx import common as _common
 from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED,
     ANCESTRAL_SEED_2,
+    AUDIO_CFG,
     CANVAS_MAX,
     EXTEND_CARRY,
     FFMPEG,
     FRAMES,
     MAX_FRAMES,
     MAX_TOKENS,
+    MODALITY,
     NEGATIVE_PROMPT,
     RELAY_AUDIO_STRENGTH,
     RELAY_EPSILON,
     RELAY_STRENGTH,
+    RESCALE,
     SAMPLE_RATE,
     SLOT_SEED,
     SOURCE_RATE,
     STAGE1_SIGMAS,
     STAGE2_SIGMAS,
+    STG_BLOCK,
     _failed,
     _ffmpeg,
     _needs_dev,
@@ -75,6 +80,8 @@ from packs.ltx.common import (  # the runtime-neutral part
     model_version,
     retake_map,
 )
+
+canvas, duration = _common.canvas, _common.duration  # the stages both runtimes share
 
 sys.path.append(str(Path(__file__).parent / "vendor"))  # the vendored model library: `import ltx_core_mlx`
 
@@ -344,16 +351,6 @@ def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float, rope: f
 
 
 # --- stages
-
-
-def canvas(ctx, params: dict, inputs: dict) -> dict:
-    """width x height floored to the 64 px grid (two-stage: stage 1 runs at half)."""
-    return {"canvas": {"width": params["width"] // 64 * 64, "height": params["height"] // 64 * 64}}
-
-
-def duration(ctx, params: dict, inputs: dict) -> dict:
-    """frames may be "auto": stage 1 resolves it from the prompt (DurationHead)."""
-    return {"duration": {"frames": params["frames"], "fps": params["fps"]}}
 
 
 def encode(ctx, params: dict, inputs: dict) -> dict:
@@ -961,10 +958,11 @@ def _guiders(params: dict, cond: Cond, audio_guided: bool):
     (retake, extend) or no guidance (`MultiModalGuiderParams()`: audio to video's frozen audio)."""
     if cond.neg_video is None:
         raise RunError("the guided samplers need the prompt from ltx/encode-guided (the negative prompt)")
-    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=0.7,
-                                   modality_scale=3.0, stg_blocks=[28])  # fmt: skip
-    audio = MultiModalGuiderParams(cfg_scale=7.0, stg_scale=params["stg"], rescale_scale=0.7, modality_scale=3.0,
-                                   stg_blocks=[28]) if audio_guided else MultiModalGuiderParams()  # fmt: skip
+    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=RESCALE,
+                                   modality_scale=MODALITY, stg_blocks=[STG_BLOCK])  # fmt: skip
+    audio = (MultiModalGuiderParams(cfg_scale=AUDIO_CFG, stg_scale=params["stg"], rescale_scale=RESCALE,
+                                    modality_scale=MODALITY, stg_blocks=[STG_BLOCK])
+             if audio_guided else MultiModalGuiderParams())  # fmt: skip
     return (create_multimodal_guider_factory(video, negative_context=cond.neg_video),
             create_multimodal_guider_factory(audio, negative_context=cond.neg_audio))  # fmt: skip
 

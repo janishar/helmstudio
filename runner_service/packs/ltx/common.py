@@ -7,7 +7,6 @@ import logging
 import math
 import subprocess
 from dataclasses import replace
-from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 from pathlib import Path
 
@@ -18,7 +17,7 @@ from PIL import Image, ImageCms
 import config
 from core import media
 from core.graph import RunError
-from core.media import FFMPEG
+from core.media import FFMPEG, rnd
 
 if FFMPEG is None:  # checked when the runner loads the pack: it stops with this
     raise RuntimeError("the ltx pack needs ffmpeg on PATH to write MP4s (brew install ffmpeg)")
@@ -33,10 +32,7 @@ SIGMAS = {"stage1": STAGE1_SIGMAS, "stage2": STAGE2_SIGMAS}
 ANCESTRAL_SEED, ANCESTRAL_SEED_2 = 10000, 20000
 MAX_TOKENS = 1024  # Gemma prompt length (left-padded; LTX2_GEMMA_MAX_LENGTH)
 SAMPLE_RATE = 48000
-RELAY_EPSILON, RELAY_STRENGTH = (
-    1e-3,
-    1.0,
-)  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
+RELAY_EPSILON, RELAY_STRENGTH = 1e-3, 1.0  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
 # upstream 0879826: Prompt Relay also gates audio_attn2 on the distilled paths at 1.0 (its epsilon: the video one)
 RELAY_AUDIO_STRENGTH = 1.0
 # plan 19 phase 4, Recipe Detail (DFR): the detailing IC-LoRA's fixed strength (upstream _DETAILING_LORA_STRENGTH) is
@@ -47,6 +43,22 @@ SLOT_SEED = 20000
 _STAGES = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]
 FRAMES = _STAGES["duration"]["params"]["frames"]
 CANVAS_MAX = max(_STAGES["canvas"]["params"][s]["max"] for s in ("width", "height"))  # the largest canvas side
+# LTX_2_3_PARAMS, the guided samplers' guiders (runtimes' _guiders): video cfg / stg as set, rescale 0.7, modality 3,
+# STG block 28; audio cfg 7 with the same
+RESCALE, MODALITY, STG_BLOCK, AUDIO_CFG = 0.7, 3.0, 28, 7.0
+
+# --- stages both runtimes share
+
+
+def canvas(ctx, params: dict, inputs: dict) -> dict:
+    """width x height floored to the 64 px grid (two-stage: stage 1 runs at half)."""
+    return {"canvas": {"width": params["width"] // 64 * 64, "height": params["height"] // 64 * 64}}
+
+
+def duration(ctx, params: dict, inputs: dict) -> dict:
+    """frames may be "auto": stage 1 resolves it from the prompt (DurationHead)."""
+    return {"duration": {"frames": params["frames"], "fps": params["fps"]}}
+
 
 # --- the model generation (ltx-pipelines constants.detect_params, distilled.should_use_ancestral_sampler)
 
@@ -256,11 +268,6 @@ NEGATIVE_PROMPT = (
 )
 MAX_FRAMES = 321  # ltx/duration's max: the longest clip these make (contracts check.py LTX_MAX_FRAMES)
 SOURCE_RATE = 16000  # the audio VAE encoder's input rate
-
-
-def rnd(x: float) -> int:
-    """Half away from zero, exactly (contracts check.py rnd: Go math.Round)."""
-    return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def ltx_floor(n: int) -> int:

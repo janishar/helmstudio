@@ -42,18 +42,23 @@ from safetensors import safe_open
 from core import media
 from core import pack as packs
 from core.graph import RunError, auto_frames
+from packs.ltx import common as _common
 from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED,
     ANCESTRAL_SEED_2,
+    AUDIO_CFG,
     CANVAS_MAX,
     FFMPEG,
     FRAMES,
     MAX_FRAMES,
+    MODALITY,
     NEGATIVE_PROMPT,
+    RESCALE,
     SAMPLE_RATE,
     SOURCE_RATE,
     STAGE1_SIGMAS,
     STAGE2_SIGMAS,
+    STG_BLOCK,
     _failed,
     _ffmpeg,
     _needs_dev,
@@ -73,6 +78,8 @@ from packs.ltx.common import (  # the runtime-neutral part
 from packs.ltx.common import (
     check_sample as _check_sample,
 )
+
+canvas, duration = _common.canvas, _common.duration  # the stages both runtimes share
 
 sys.path.append(str(Path(__file__).parent / "vendor"))  # the vendored model library: `import ltx_core`
 
@@ -548,10 +555,11 @@ def _guiders(params: dict, cond: Cond, audio_guided: bool):
     """mlx.py _guiders (LTX_2_3_PARAMS)."""
     if cond.neg_video is None:
         raise RunError("the guided samplers need the prompt from ltx/encode-guided (the negative prompt)")
-    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=0.7,
-                                   modality_scale=3.0, stg_blocks=[28])  # fmt: skip
-    audio = MultiModalGuiderParams(cfg_scale=7.0, stg_scale=params["stg"], rescale_scale=0.7, modality_scale=3.0,
-                                   stg_blocks=[28]) if audio_guided else MultiModalGuiderParams()  # fmt: skip
+    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=RESCALE,
+                                   modality_scale=MODALITY, stg_blocks=[STG_BLOCK])  # fmt: skip
+    audio = (MultiModalGuiderParams(cfg_scale=AUDIO_CFG, stg_scale=params["stg"], rescale_scale=RESCALE,
+                                    modality_scale=MODALITY, stg_blocks=[STG_BLOCK])
+             if audio_guided else MultiModalGuiderParams())  # fmt: skip
     return (create_multimodal_guider_factory(video, negative_context=cond.neg_video),
             create_multimodal_guider_factory(audio, negative_context=cond.neg_audio))  # fmt: skip
 
@@ -603,14 +611,6 @@ def ltx2_schedule(steps: int, tokens: int) -> list[float]:
 
 
 # --- stages
-
-
-def canvas(ctx, params: dict, inputs: dict) -> dict:
-    return {"canvas": {"width": params["width"] // 64 * 64, "height": params["height"] // 64 * 64}}
-
-
-def duration(ctx, params: dict, inputs: dict) -> dict:
-    return {"duration": {"frames": params["frames"], "fps": params["fps"]}}
 
 
 def _encode(ctx, model, texts: list[str]) -> list:
