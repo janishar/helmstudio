@@ -3,19 +3,46 @@
 // its change drawn from the board_edit card (new, moved, changed, removed) with Apply and Discard answering the card
 // and edits held meanwhile; the bar's and the blocks' menu; History's words and menu; the screen's actions and summary;
 // navigate to /magic with a board.
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MagicBoard } from "@/components/magic/board";
-import { byOf, magicTools, proposalOf } from "@/components/magic/assistant";
-import { historyMenu } from "@/components/magic/menus";
-import { Registry, ToolsContext } from "@/components/assistant/tools";
-import { closeMenu } from "@/components/context-menu";
 import { sampleBoard } from "@/lib/magic-fixture";
-import { routeUrl } from "@/lib/assistant";
 import type { Op } from "@/lib/magic";
 import type { S } from "@/lib/api";
+import { reset, seedSample } from "./magic-api";
 
 vi.mock("@/components/magic/magic.css", () => ({}));
+// the page on the sample board in a mock of studio (./magic-api.ts)
+vi.mock("@/lib/api", async (orig) => ({
+  ...(await orig<typeof import("@/lib/api")>()),
+  api: (await import("./magic-api")).api,
+}));
+vi.mock("@/lib/runs", async (orig) => ({
+  ...(await orig<typeof import("@/lib/runs")>()),
+  followSession: (await import("./magic-api")).followSession,
+}));
+vi.mock("@/lib/library", async (orig) => ({
+  ...(await orig<typeof import("@/lib/library")>()),
+  useVoices: () => [],
+}));
+
+const { MagicBoard } = await import("@/components/magic/board");
+const { byOf, magicTools, proposalOf } = await import("@/components/magic/assistant");
+const { historyMenu } = await import("@/components/magic/menus");
+const { Registry, ToolsContext } = await import("@/components/assistant/tools");
+const { closeMenu } = await import("@/components/context-menu");
+const { routeUrl } = await import("@/lib/assistant");
+
+/** the page on the sample board, loaded, in the Assistant's registry */
+async function openBoard(reg: InstanceType<typeof Registry>) {
+  seedSample();
+  render(
+    <ToolsContext value={reg}>
+      <MagicBoard />
+    </ToolsContext>,
+  );
+  await screen.findByRole("toolbar", { name: "Board tools" });
+  await act(async () => {}); // the kinds and the plan
+}
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -37,6 +64,10 @@ beforeAll(() => {
   };
   HTMLElement.prototype.hidePopover ??= () => undefined;
   document.elementsFromPoint ??= () => [];
+});
+beforeEach(() => {
+  localStorage.clear();
+  reset();
 });
 afterEach(() => {
   act(closeMenu);
@@ -82,16 +113,13 @@ describe("the change drawn on the board", () => {
     });
   });
 
-  it("is drawn from the Assistant's card; Apply and Discard answer it; edits wait meanwhile", () => {
+  it("is drawn from the Assistant's card; Apply and Discard answer it; edits wait meanwhile", async () => {
     const reg = new Registry();
     reg.setPath("/magic");
     const answer = vi.fn();
-    render(
-      <ToolsContext value={reg}>
-        <MagicBoard local />
-      </ToolsContext>,
-    );
-    const board = reg.current()!.spec.ids!.board;
+    await openBoard(reg);
+    const id = reg.current()!.spec.ids!.board;
+    const { revision } = (reg.current()!.spec.summary() as { board: { revision: number } }).board;
     const card: S<"AssistantCard"> = {
       id: "0b6f3a3e-1d2c-4b5a-9e8f-7a6b5c4d3e2f:1:3",
       kind: "board_edit",
@@ -102,7 +130,7 @@ describe("the change drawn on the board", () => {
       ],
       tags: ["changes the board"],
       state: "waiting",
-      board: { board_id: board, base_revision: 0, ops: [ADD] as S<"MagicOp">[] },
+      board: { board_id: id, base_revision: revision, ops: [ADD] as S<"MagicOp">[] },
     };
     act(() => reg.setServer([card], "t:1:working", answer));
     const added = screen.getByRole("button", { name: /Video block Shot 9/ });
@@ -133,14 +161,10 @@ describe("the change drawn on the board", () => {
     expect(screen.queryByRole("group", { name: "Assistant's change" })).toBeNull();
   });
 
-  it("is not drawn on another board", () => {
+  it("is not drawn on another board", async () => {
     const reg = new Registry();
     reg.setPath("/magic");
-    render(
-      <ToolsContext value={reg}>
-        <MagicBoard local />
-      </ToolsContext>,
-    );
+    await openBoard(reg);
     act(() =>
       reg.setServer(
         [

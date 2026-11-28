@@ -1,18 +1,37 @@
 // @vitest-environment jsdom
-// Magic's assets and storyboard on the sample board (MagicBoard frames 6 and 7; plan 39 phase E): + Asset makes one
-// with a free handle and Make views fills its sheet; a frame opened with its style, framing and Generate from board,
-// which makes the shot under it and runs it; the rough cut plays the frames with their lines; the @ menu in a prompt.
+// Magic's assets and storyboard on the sample board (MagicBoard frames 6 and 7; plan 39 phase E), in a mock of studio
+// (./magic-api.ts): + Asset makes one with a free handle and Make views fills its sheet; a frame opened with its
+// style, framing and Generate from board, which makes the shot under it and runs it; the rough cut plays the frames
+// with their lines; the @ menu in a prompt.
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import { MagicBoard } from "@/components/magic/board";
-import { closeMenu } from "@/components/context-menu";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { finishRuns, reset, seedSample, studio } from "./magic-api";
 
+vi.mock("@/lib/api", async (orig) => ({
+  ...(await orig<typeof import("@/lib/api")>()),
+  api: (await import("./magic-api")).api,
+}));
+vi.mock("@/lib/runs", async (orig) => ({
+  ...(await orig<typeof import("@/lib/runs")>()),
+  followSession: (await import("./magic-api")).followSession,
+}));
 vi.mock("@/components/magic/magic.css", () => ({}));
 vi.mock("@/lib/library", async (orig) => ({
   ...(await orig<typeof import("@/lib/library")>()),
   useVoices: () => [],
   useLibrary: () => [],
 }));
+
+const { MagicBoard } = await import("@/components/magic/board");
+const { closeMenu } = await import("@/components/context-menu");
+
+/** the page on the sample board, loaded */
+async function board() {
+  seedSample();
+  render(<MagicBoard />);
+  await screen.findByRole("toolbar", { name: "Board tools" });
+  await act(async () => {}); // the kinds and the plan
+}
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {
@@ -36,15 +55,18 @@ beforeAll(() => {
   HTMLElement.prototype.showPopover ??= () => undefined;
   document.elementsFromPoint ??= () => [];
 });
-beforeEach(() => localStorage.clear());
+beforeEach(() => {
+  localStorage.clear();
+  reset();
+});
 afterEach(() => {
   act(closeMenu);
   cleanup();
 });
 
 describe("assets", () => {
-  it("+ Asset makes one with a free handle; Make views puts the views on its sheet (frame 6)", () => {
-    render(<MagicBoard local />);
+  it("+ Asset makes one with a free handle; Make views puts the views on its sheet (frame 6)", async () => {
+    await board();
     fireEvent.click(screen.getByRole("button", { name: "+ Asset" }));
     let dlg = screen.getByRole("dialog", { name: /New asset/ });
     fireEvent.change(within(dlg).getByRole("textbox", { name: "Name" }), {
@@ -73,21 +95,30 @@ describe("assets", () => {
     fireEvent.blur(w);
     expect(within(dlg).getByRole("button", { name: /^640 × 1024/ })).toBeTruthy();
     fireEvent.click(within(dlg).getByRole("button", { name: /^Make 4/ }));
+    // studio makes them (the size picked goes with them), then they are on the sheet
     const views = within(dlg).getByRole("list", { name: "Views" });
-    expect(
-      within(views)
-        .getAllByRole("listitem")
-        .map((x) => x.getAttribute("aria-label")),
-    ).toEqual(["Front", "Side", "Full figure", "Smiling"]);
-    // the Assets row has it, and Import is the studio's (no Gallery in the fake mode)
+    await waitFor(() => expect(within(views).getAllByText(/· making/)).toHaveLength(4));
+    expect(studio.calls.find((c) => c.path.endsWith("/views"))?.body).toMatchObject({
+      views: ["Front", "Side", "Full figure", "Smiling"],
+      width: 640,
+    });
+    finishRuns();
+    await waitFor(() =>
+      expect(
+        within(views)
+          .getAllByRole("listitem")
+          .map((x) => x.getAttribute("aria-label")),
+      ).toEqual(["Front", "Side", "Full figure", "Smiling"]),
+    );
+    // the Assets row has it, and Import is the studio's
     expect(screen.getByRole("button", { name: "Asset @mara-2, Character" })).toBeTruthy();
     expect((screen.getByRole("button", { name: "Import" }) as HTMLButtonElement).disabled).toBe(
-      true,
+      false,
     );
   });
 
-  it("an asset opened shows where it is used, lit on a small board", () => {
-    render(<MagicBoard local />);
+  it("an asset opened shows where it is used, lit on a small board", async () => {
+    await board();
     fireEvent.doubleClick(screen.getByRole("button", { name: "Asset @mara, Character" }));
     const dlg = screen.getByRole("dialog", { name: /Character · @mara/ });
     expect(within(dlg).getByRole("heading", { name: /Used in · 7/ })).toBeTruthy();
@@ -97,8 +128,8 @@ describe("assets", () => {
 });
 
 describe("the storyboard", () => {
-  it("a frame opened: style, framing; Generate from board makes the shot under it and runs it (frame 7)", () => {
-    render(<MagicBoard local />);
+  it("a frame opened: style, framing; Generate from board makes the shot under it and runs it (frame 7)", async () => {
+    await board();
     fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), {
       key: "Enter",
     });
@@ -112,12 +143,12 @@ describe("the storyboard", () => {
     fireEvent.click(within(dlg).getByRole("button", { name: "Generate from board" }));
     // the frame's changes and the new shot, made from it, running
     const shot = screen.getByRole("button", { name: /Video block Shot 4/ });
-    expect(within(shot).getByText(/%/)).toBeTruthy();
+    expect(await within(shot).findByText(/%/)).toBeTruthy();
     expect(within(dlg).getByText("was made from this frame")).toBeTruthy();
   });
 
-  it("the rough cut plays the frames in order with their lines", () => {
-    render(<MagicBoard local />);
+  it("the rough cut plays the frames in order with their lines", async () => {
+    await board();
     fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 1/ }), {
       key: "Enter",
     });
@@ -133,8 +164,8 @@ describe("the storyboard", () => {
     expect(within(cut).getByText(/2 of 3/)).toBeTruthy();
   });
 
-  it("@ in a prompt offers the board's assets; a pick writes the handle and joins the refs", () => {
-    render(<MagicBoard local />);
+  it("@ in a prompt offers the board's assets; a pick writes the handle and joins the refs", async () => {
+    await board();
     fireEvent.keyDown(screen.getByRole("button", { name: /Board block Frame 3/ }), {
       key: "Enter",
     });
@@ -150,13 +181,15 @@ describe("the storyboard", () => {
 });
 
 describe("the board's Stop runs", () => {
-  it("says Stopping, then Stopped once none of them is going (it stayed on for good)", () => {
-    render(<MagicBoard local />);
+  it("says Stopping, then Stopped once none of them is going (it stayed on for good)", async () => {
+    await board();
     fireEvent.click(screen.getByRole("button", { name: /^Stop runs/ }));
     // a small confirm on its own button, not a bar that pushes the board
     const ask = document.querySelector<HTMLElement>('[aria-label="Stop runs?"]')!;
     expect(ask.textContent).toMatch(/^Stop \d/);
     fireEvent.click(within(ask).getByText("Stop runs", { selector: "button" }));
-    expect(screen.getAllByRole("status").map((s) => s.textContent)).toContain("Stopped 1 run");
+    await waitFor(() =>
+      expect(screen.getAllByRole("status").map((s) => s.textContent)).toContain("Stopped 1 run"),
+    );
   });
 });

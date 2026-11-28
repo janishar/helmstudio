@@ -1,7 +1,7 @@
 "use client";
 // The Magic page (plan 39 phase B, MagicBoard frames 1, 2, 4, 5, 10, 11): the board name and its tools, the Assets
-// row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts);
-// `local` keeps them in this browser with fake takes (the tests' fake mode). Every edit is a named op (lib/magic.ts).
+// row, the lanes, the floating player and the side panel. Boards live in studio (phase C, components/magic/use-board.ts).
+// Every edit is a named op (lib/magic.ts).
 import { useStoredFlag } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
@@ -69,25 +69,17 @@ import {
   type Mode,
   type Op,
   type Takes,
+  estText,
 } from "@/lib/magic";
-import { EST_HOST, EST_S, estText } from "@/lib/magic-fixture";
 import { FORM_KINDS, type Estimate } from "@/lib/magic-standard";
 import { LoadingBoard } from "@/components/magic/loading";
 import { OUTAGE_TEXT, retryNow } from "@/lib/health";
 import { useScreenTools } from "@/components/assistant/tools";
 import { HistoryChip, ProposalBar, magicTools, useProposal } from "@/components/magic/assistant";
-import {
-  useApiBoard,
-  useLocalBoard,
-  type Board,
-  type Snapshot,
-  type Store,
-} from "@/components/magic/use-board";
+import { useApiBoard, type Board, type Snapshot } from "@/components/magic/use-board";
 import "./magic.css";
 
 const PANEL = "magic-side-panel";
-/** Why runs can't go (a board with no way to run). */
-export const RUNS_LATER = "Runs come with the standard request";
 /** What runs: image, video and voice blocks that are not dialogues (phase D), board frames (phase E), music and sound
  * (phase H). */
 const runsHere = (b: Block) =>
@@ -105,17 +97,8 @@ const subPhone = (cb: () => void) => {
 
 // ------------------------------------------------------------------------------------------------ the page
 
-/** The Magic page: the boards in studio, or (`local`, or an `initial` store: the tests' fake mode) in this browser. */
-export function MagicBoard({ initial, local }: { initial?: Store; local?: boolean }) {
-  return local || initial ? <LocalBoard initial={initial} /> : <StudioBoard />;
-}
-
-function LocalBoard({ initial }: { initial?: Store }) {
-  const board = useLocalBoard(initial);
-  return <Editor key={board.id} board={board} sample={!initial} />;
-}
-
-function StudioBoard() {
+/** The Magic page: the boards in studio. */
+export function MagicBoard() {
   const board = useApiBoard();
   if (!board.ready)
     return board.error === OUTAGE_TEXT ? (
@@ -145,23 +128,20 @@ function StudioBoard() {
     ) : (
       <LoadingBoard />
     );
-  return <Editor key={board.id} board={board} sample={false} />;
+  return <Editor key={board.id} board={board} />;
 }
 
-function Editor({ board, sample }: { board: Board; sample: boolean }) {
+function Editor({ board }: { board: Board }) {
   const doc = board.doc;
   const takes = board.takes;
   const fps = doc.target.fps;
 
-  // frame 1 opens with Shot 2 selected, its details in the side panel
-  const [sel, setSel] = useState<string[]>(() =>
-    sample && doc.blocks.some((b) => b.id === "s2") ? ["s2"] : [],
-  );
+  const [sel, setSel] = useState<string[]>([]);
   const [mode, setMode] = useState<Mode>("insert");
   const [snapOn, setSnapOn] = useState(true);
   const [pps, setPps] = useState(26);
   const [viewW, setViewW] = useState(0);
-  const [frame, setFrame] = useState(sample ? Math.round(10.5 * 24) : 0);
+  const [frame, setFrame] = useState(0);
   const [adding, setAdding] = useState<AddAt | null>(null);
   const [opened, setOpened] = useState<string | null>(null);
   /** a block whose takes are compared side by side (API 1.89) */
@@ -232,10 +212,9 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
     [doc, board, waiting],
   );
 
-  /** Runs blocks (fake in the fake mode; in studio, their standard requests). */
+  /** Runs blocks: their standard requests, in studio. */
   const run = useCallback(
     (ids: string[] | "stale") => {
-      if (!board.run) return setSaid(RUNS_LATER);
       const n = board.run(ids);
       if (n < 0) setSaid("Running every block that isn't done");
       else if (n) setSaid(`Running ${n} block${n > 1 ? "s" : ""}`);
@@ -271,14 +250,8 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       s.startsWith("Stopping") ? `Stopped ${runs.length} run${runs.length > 1 ? "s" : ""}` : s,
     );
   }, [board.going]);
-  /** a block's estimate: studio's plan, else (the fake mode) the kind's guess */
-  const estOf = useCallback(
-    (b: Block): Estimate | undefined =>
-      board.plan
-        ? board.estimate(b.id)
-        : { seconds: EST_S[b.kind], host: EST_HOST, source: "yours" },
-    [board],
-  );
+  /** a block's estimate: studio's plan */
+  const estOf = useCallback((b: Block): Estimate | undefined => board.estimate(b.id), [board]);
 
   const seek = useCallback((f: number) => {
     player.current?.seek(Math.max(0, f));
@@ -326,7 +299,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
       edit,
       run,
       stop,
-      runOff: board.run ? undefined : RUNS_LATER,
       runWhenAdded: (id) => (toRun.current = id),
       // API 1.85: studio's models per kind (Music's Model ›, a sound from a shot's video) and their names
       models: (k) =>
@@ -339,12 +311,10 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         board.kinds?.kinds
           .find((x) => x.kind === k)
           ?.models.find((m) => m.workflow_id === id || m.video?.workflow_id === id)?.name,
-      estimate: board.plan
-        ? (id: string) => {
-            const s = board.estimate(id)?.seconds;
-            return s == null ? undefined : estText(s, true);
-          }
-        : undefined,
+      estimate: (id: string) => {
+        const s = board.estimate(id)?.seconds;
+        return s == null ? undefined : estText(s, true);
+      },
       select: setSel,
       open,
       add: (lane, at, kind) => setAdding({ lane, at, kind }),
@@ -366,66 +336,64 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
         : null,
       copyText: (s) => void navigator.clipboard?.writeText(s).catch(() => undefined),
       openAsset: setAssetOpen,
-      importTo: board.gallery ? (asset) => setImporting({ asset }) : undefined,
+      importTo: (asset) => setImporting({ asset }),
       rough: setRough,
       openMorph: setMorph,
       compare: setComparing,
-      gallery: board.gallery ? setPicking : null,
-      views: board.run ? board.makeViews : null,
+      gallery: setPicking,
+      views: board.makeViews,
       board: board.id,
-      fromBoard: board.run
-        ? (fid, before = []) => {
-            // the frame's own changes, then its shot: made under it (the board's place mode) or run again
-            let d = doc;
-            for (const op of before) {
-              const r = apply(d, op);
-              if ("error" in r) return setError(r.error);
-              d = r.doc;
-            }
-            const f = d.blocks.find((b) => b.id === fid);
-            if (!f) return;
-            const model = f.request.shot_model;
-            const made = d.blocks.find((b) => b.from_frame === fid);
-            if (made) {
-              const ops = [
-                ...before,
-                ...(model && made.request.model !== model
-                  ? [
-                      {
-                        op: "block" as const,
-                        id: made.id,
-                        set: { request: { ...made.request, model } },
-                      },
-                    ]
-                  : []),
-              ];
-              if (ops.length && !edit(ops)) return;
-              return run([made.id]);
-            }
-            const shots = d.lanes.find((l) => l.role === "shots");
-            if (!shots) return setError("Add a Shots lane first.");
-            const add: Op = {
-              op: "add",
-              mode,
-              block: {
-                lane: shots.id,
-                at: f.at,
-                length: f.length,
-                kind: "video",
-                name: `Shot ${d.blocks.filter((b) => b.kind === "video").length + 1}`,
-                from_frame: f.id,
-                request: { kind: "video", ...(model ? { model } : {}) },
-                takes: [],
-                effects: [],
-              },
-            };
-            const r = apply(d, add);
-            if ("error" in r) return setError(r.error);
-            if (!edit([...before, add])) return;
-            const shot = r.doc.blocks.find((b) => b.from_frame === fid);
-            if (shot) toRun.current = shot.id;
-          }
-        : undefined,
+      fromBoard: (fid, before = []) => {
+        // the frame's own changes, then its shot: made under it (the board's place mode) or run again
+        let d = doc;
+        for (const op of before) {
+          const r = apply(d, op);
+          if ("error" in r) return setError(r.error);
+          d = r.doc;
+        }
+        const f = d.blocks.find((b) => b.id === fid);
+        if (!f) return;
+        const model = f.request.shot_model;
+        const made = d.blocks.find((b) => b.from_frame === fid);
+        if (made) {
+          const ops = [
+            ...before,
+            ...(model && made.request.model !== model
+              ? [
+                  {
+                    op: "block" as const,
+                    id: made.id,
+                    set: { request: { ...made.request, model } },
+                  },
+                ]
+              : []),
+          ];
+          if (ops.length && !edit(ops)) return;
+          return run([made.id]);
+        }
+        const shots = d.lanes.find((l) => l.role === "shots");
+        if (!shots) return setError("Add a Shots lane first.");
+        const add: Op = {
+          op: "add",
+          mode,
+          block: {
+            lane: shots.id,
+            at: f.at,
+            length: f.length,
+            kind: "video",
+            name: `Shot ${d.blocks.filter((b) => b.kind === "video").length + 1}`,
+            from_frame: f.id,
+            request: { kind: "video", ...(model ? { model } : {}) },
+            takes: [],
+            effects: [],
+          },
+        };
+        const r = apply(d, add);
+        if ("error" in r) return setError(r.error);
+        if (!edit([...before, add])) return;
+        const shot = r.doc.blocks.find((b) => b.from_frame === fid);
+        if (shot) toRun.current = shot.id;
+      },
     }),
     [doc, takes, mode, frame, sel, edit, run, stop, board, open, seek, clip],
   );
@@ -487,7 +455,6 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
   const boardHost = ests.find((e) => e?.host)?.host ?? "";
   /** Run board: every block that isn't done; in studio, asking first above the limit */
   const runBoard = async () => {
-    if (!board.plan) return run(todo.map((b) => b.id));
     try {
       const p = await board.plan({ stale: true });
       if (p.ask) setAsking(`${p.ask_text} · above your ${p.limit_minutes} min limit`);
@@ -673,20 +640,18 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
               <button
                 type="button"
                 className="chip bevel"
-                disabled={!runnable.length || !board.run}
+                disabled={!runnable.length}
                 onClick={() => void runBoard()}
                 style={{ anchorName: "--magic-runboard" } as React.CSSProperties}
                 title={
-                  !board.run
-                    ? RUNS_LATER
-                    : boardEst != null && runnable.length
-                      ? `About ${estText(boardEst)}${boardHost ? ` on ${boardHost}` : ""}, from your own recent runs of these models`
-                      : "Runs every block that isn't done"
+                  boardEst != null && runnable.length
+                    ? `About ${estText(boardEst)}${boardHost ? ` on ${boardHost}` : ""}, from your own recent runs of these models`
+                    : "Runs every block that isn't done"
                 }
               >
                 <Play10 />
                 Run board
-                {boardEst != null && runnable.length > 0 && board.run && (
+                {boardEst != null && runnable.length > 0 && (
                   <span className="mono text-t2">· ≈ {clockEst(boardEst)}</span>
                 )}
               </button>
@@ -976,7 +941,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           runs={board.runs}
           estimate={opened ? board.estimate(opened) : undefined}
           shotEstimate={board.estimate}
-          gallery={board.gallery}
+          gallery
           onClose={() => setOpened(null)}
         />
         <AssetDialog
@@ -984,7 +949,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           id={assetOpen}
           kinds={board.kinds}
           runs={board.assetRuns}
-          gallery={board.gallery}
+          gallery
           onImport={(asset) => setImporting({ asset })}
           onOpen={(id) => {
             setSel([id]);
@@ -1043,29 +1008,21 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
           kinds={board.kinds}
           where={adding}
           mode={mode}
-          onGenerate={
-            board.run
-              ? (block, m, tie) => {
-                  // a line or cue tied in step 2 is added with its tie, in one edit
-                  const id = freshId(doc, "b");
-                  const ops: Op[] = [
-                    { op: "add", block: { ...block, id }, mode: m },
-                    ...(tie ? [{ op: "link" as const, block: id, to: tie }] : []),
-                  ];
-                  if (!edit(ops)) return;
-                  setSel([id]);
-                  toRun.current = id;
-                }
-              : null
-          }
-          onGallery={
-            board.gallery
-              ? (w, m) => {
-                  const lane = doc.lanes.find((l) => l.id === w.lane);
-                  if (lane) fromGallery(act, lane, w.at, m);
-                }
-              : null
-          }
+          onGenerate={(block, m, tie) => {
+            // a line or cue tied in step 2 is added with its tie, in one edit
+            const id = freshId(doc, "b");
+            const ops: Op[] = [
+              { op: "add", block: { ...block, id }, mode: m },
+              ...(tie ? [{ op: "link" as const, block: id, to: tie }] : []),
+            ];
+            if (!edit(ops)) return;
+            setSel([id]);
+            toRun.current = id;
+          }}
+          onGallery={(w, m) => {
+            const lane = doc.lanes.find((l) => l.id === w.lane);
+            if (lane) fromGallery(act, lane, w.at, m);
+          }}
           onClose={() => setAdding(null)}
           onAdd={(block, m) => {
             const before = new Set(doc.blocks.map((b) => b.id));
@@ -1135,7 +1092,7 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                 if (name) board.renameSnapshot(s, name);
               }}
               onDelete={board.deleteSnapshot}
-              askAbove={board.plan ? board.askAbove : null}
+              askAbove={board.askAbove}
               onAskAbove={board.setAskAbove}
             />
           )}
@@ -1737,7 +1694,7 @@ function BoardPanel({
   d: Doc;
   takes: Takes;
   snapshots: Snapshot[];
-  /** Magic settings: ask before runs above this many GPU minutes (null: the fake mode) */
+  /** Magic settings: ask before runs above this many GPU minutes (null: no setting) */
   askAbove: number | null;
   onAskAbove: (minutes: number) => void;
   onClose: () => void;

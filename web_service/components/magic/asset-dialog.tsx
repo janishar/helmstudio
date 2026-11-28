@@ -30,8 +30,8 @@ import {
   usedIn,
   type Asset,
   type AssetKind,
+  estText,
 } from "@/lib/magic";
-import { estText } from "@/lib/magic-fixture";
 import { VARIANT, kindOf, packSeconds, type AssetRun, type Kinds } from "@/lib/magic-standard";
 import { useTakes } from "@/lib/take-cache";
 import { UPLOAD_TYPES, uploadFile } from "@/lib/takes";

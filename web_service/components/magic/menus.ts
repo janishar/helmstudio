@@ -83,8 +83,9 @@ import {
   type Op,
   type Takes,
   type TransitionKind,
+  EST_S,
+  estText,
 } from "@/lib/magic";
-import { EST_S, estText } from "@/lib/magic-fixture";
 import { missingViews, viewName } from "@/lib/magic-assets";
 
 const RUNS_OFF = "Runs come with the standard request";
@@ -92,7 +93,7 @@ const RUNS_OFF = "Runs come with the standard request";
 export const SOON = {
   dialog: "Comes with the block dialog",
   compare: "Comes with saved boards",
-  /** the fake mode has no Gallery */
+  /** absent: no Gallery */
   gallery: "The Gallery is in studio",
 };
 /** The effects a block can take as badges (MagicBoard frame 4c). */
@@ -127,7 +128,7 @@ export type Act = {
   /** API 1.85: the models studio serves a kind (`video`: one takes a shot's video), and a model's name by its id */
   models?: (k: Kind) => { id: string; name: string; video: boolean }[];
   modelName?: (k: Kind, id?: string) => string | undefined;
-  /** a block's estimate as a menu shows it ("≈ 1:50"); absent: the kind's guess (the fake mode) */
+  /** a block's estimate as a menu shows it ("≈ 1:50"); absent: the kind's guess */
   estimate?: (id: string) => string | undefined;
   select: (ids: string[]) => void;
   /** select it and open it (the block dialog, frame 3) */
@@ -148,7 +149,7 @@ export type Act = {
   fromBoard?: (frame: string, before?: Op[]) => void;
   /** the rough cut, from a frame */
   rough?: (from?: string) => void;
-  /** Gallery takes picked (null in the fake mode): of a kind (null: images and video), up to max */
+  /** Gallery takes picked (null: none): of a kind (null: images and video), up to max */
   gallery?:
     | ((o: {
         kind: "image" | "video" | "audio" | null;
