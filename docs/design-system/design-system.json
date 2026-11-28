@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T15:00:00Z",
+  "at": "2026-11-28T15:10:00Z",
   "via": "Claude Code",
-  "note": "Parity sync with alpha.6: Rail (one panel, items 56px 10px apart, 32px tiles with 18px glyphs, Setup folds to a wrench under about 805px with its menu beside the rail) and its preview redrawn; PhoneDock (wrench, new order); ContextMenu beside; StatusBanner points at the logo dot; MagicBlockDialog take video full screen, Make views chip gap; Button Run board estimate; README Navigation, Layout, Iconography, Magic and Error states; tokens tile and dock notes; nine missing lucide icons (wrench, lock and others)"
+  "note": "Sliders: every range input in the accent a1 (accent-color) (owner, 2026-11-28: \"can this slide ui get better everywhere\")"
  }
 }

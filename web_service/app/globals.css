@@ -28,6 +28,12 @@
   html {
     @apply font-sans;
   }
+  /* every slider the theme's: its filled track and handle in the accent, not the browser's blue (owner, 2026-11-28:
+     "can this slide ui get better everywhere") */
+  input[type="range"] {
+    accent-color: var(--a1);
+    cursor: pointer;
+  }
   /* every scrollbar the theme's: a 0.25rem square accent bar on no track. Chromium and Safari (the Mac app too) take
      the ::-webkit-scrollbar rules, which they ignore once scrollbar-width / -color are set, so those are Firefox's only */
   ::-webkit-scrollbar {
