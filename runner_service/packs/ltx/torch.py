@@ -29,7 +29,6 @@ import math
 import subprocess
 import sys
 import tempfile
-import wave
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
@@ -43,18 +42,23 @@ from safetensors import safe_open
 from core import media
 from core import pack as packs
 from core.graph import RunError, auto_frames
+from packs.ltx import common as _common
 from packs.ltx.common import (  # the runtime-neutral part
     ANCESTRAL_SEED,
     ANCESTRAL_SEED_2,
+    AUDIO_CFG,
     CANVAS_MAX,
     FFMPEG,
     FRAMES,
     MAX_FRAMES,
+    MODALITY,
     NEGATIVE_PROMPT,
+    RESCALE,
     SAMPLE_RATE,
     SOURCE_RATE,
     STAGE1_SIGMAS,
     STAGE2_SIGMAS,
+    STG_BLOCK,
     _failed,
     _ffmpeg,
     _needs_dev,
@@ -75,9 +79,9 @@ from packs.ltx.common import (
     check_sample as _check_sample,
 )
 
-sys.path.append(
-    str(Path(__file__).parent / "vendor")
-)  # the vendored model library: `import ltx_core`
+canvas, duration = _common.canvas, _common.duration  # the stages both runtimes share
+
+sys.path.append(str(Path(__file__).parent / "vendor"))  # the vendored model library: `import ltx_core`
 
 from ltx_core.components.diffusion_steps import EulerAncestralDiffusionStep
 from ltx_core.components.guiders import MultiModalGuiderParams, create_multimodal_guider_factory
@@ -145,14 +149,10 @@ class Cond:
     video: torch.Tensor  # [1, 1024, 4096]
     audio: torch.Tensor  # [1, 1024, 2048]
     images: tuple = ()  # keyframe rows (H.264-round-tripped RGB uint8, seconds, strength, binding), unresolved
-    images_at: str = (
-        ""  # where the rows came from, for the run's error texts (no beats: check_encode)
-    )
+    images_at: str = ""  # where the rows came from, for the run's error texts (no beats: check_encode)
     neg_video: torch.Tensor | None = None  # the fixed negative prompt's (encode-guided: CFG)
     neg_audio: torch.Tensor | None = None
-    crf: int | None = (
-        None  # the keyframe images' CRF, from the encoding model's generation (common.image_crf)
-    )
+    crf: int | None = None  # the keyframe images' CRF, from the encoding model's generation (common.image_crf)
 
 
 @dataclass(frozen=True)
@@ -164,9 +164,7 @@ class Latent:
     fps: float
     upscaled: bool = False
     source_map: dict | None = None
-    sound: tuple | None = (
-        None  # audio to video: (the source file's bytes, in seconds), muxed by decode
-    )
+    sound: tuple | None = None  # audio to video: (the source file's bytes, in seconds), muxed by decode
 
 
 # --- weights
@@ -179,9 +177,7 @@ def _gemma4_key_ops():
 
 
 # LTX-2.5's transformer files hold the connector too: the embeddings processor's (use_embeddings_connector)
-CONNECTOR_OUT = transformer_checkpoint_selection_ops(
-    {"transformer": {"use_embeddings_connector": True}}
-)
+CONNECTOR_OUT = transformer_checkpoint_selection_ops({"transformer": {"use_embeddings_connector": True}})
 # component → (ltx-core's configurator, its key rules): what ltx-pipelines builds each component from
 PARTS = {
     "transformer": (LTXModelConfigurator, (LTXV_MODEL_COMFY_RENAMING_MAP, CONNECTOR_OUT)),
@@ -238,9 +234,7 @@ def _community(component: str, key: str) -> str | None:
     if component == "connector":
         for old, new in CONNECTOR:
             if key.startswith(old):
-                return new + ".".join(
-                    CONNECTOR_SEGMENTS.get(s, s) for s in key.removeprefix(old).split(".")
-                )
+                return new + ".".join(CONNECTOR_SEGMENTS.get(s, s) for s in key.removeprefix(old).split("."))
     return key
 
 
@@ -290,19 +284,13 @@ def build(component: str, model):
     if component in ("text_encoder", "connector"):
         te = str(model.files("text_encoder")[0])
         configurator = configurator.with_gemma_model_path(te)
-    meta = (
-        _dit_meta(model)
-        if component in ("transformer", "connector")
-        else metadata(model.files(component)[0])
-    )
+    meta = _dit_meta(model) if component in ("transformer", "connector") else metadata(model.files(component)[0])
     with accelerate.init_empty_weights(include_buffers=False):
         module = configurator.from_metadata(meta)
     if component == "text_encoder":
         key_ops, ops = get_gemma_ops(te)
         if key_ops.name != PARTS[component][1][0].name:
-            raise RunError(
-                f"{Path(te).name}: a Gemma layout this pack does not read ({key_ops.name})"
-            )
+            raise RunError(f"{Path(te).name}: a Gemma layout this pack does not read ({key_ops.name})")
         module = apply_module_ops(module, ops)  # rotary buffers, embed scale, tokenizer, processor
         # encode reads the inner model's hidden states only (its tied lm_head would stay on meta)
         module.model.lm_head = torch.nn.Identity()
@@ -325,14 +313,10 @@ def _tags(component: str, files: tuple) -> dict:
         with safe_open(str(path), "pt") as f:
             tags = [json.loads(bytes(f.get_tensor(k).tolist())) for k in keys]
         if any({k: t.get(k) for k in CONVROT} != CONVROT for t in tags):
-            raise RunError(
-                f"{path.name}: not the int8 ConvRot (group {CONVROT_GROUP}) layout this pack reads"
-            )
+            raise RunError(f"{path.name}: not the int8 ConvRot (group {CONVROT_GROUP}) layout this pack reads")
         for k in keys:
             base = k.removesuffix(".comfy_quant")
-            if (
-                name := rename(component, f"{base}.weight")
-            ) is not None:  # the dev file's connector is not the DiT's
+            if (name := rename(component, f"{base}.weight")) is not None:  # the dev file's connector is not the DiT's
                 out[name.removesuffix(".weight")] = (path, f"{base}.weight_scale")
     return out
 
@@ -358,9 +342,7 @@ def tensor_hook(component: str, model):
             return tensor
         module = name.removesuffix(".weight")
         if not packs.quantized(spec, precision, module):  # a plain Linear of rotated values: wrong
-            raise RunError(
-                f"{module}: an int8 ConvRot weight outside the {component}'s quantize globs"
-            )
+            raise RunError(f"{module}: an int8 ConvRot weight outside the {component}'s quantize globs")
         path, key = found[module]
         return tensor.float() * handles[path].get_tensor(key).to(tensor.device).float()
 
@@ -377,9 +359,7 @@ class State:
     mask: torch.Tensor  # the denoise mask (B, T, 1): 1 generate, 0 keep
     positions: torch.Tensor  # (B, 3, T, 2) video, (B, 1, T, 2) audio
     keyframes: torch.Tensor | None = None  # the keyframe marker (B, T, 1): the first latent frame
-    frozen: bool = (
-        False  # the whole stream is conditioning: the DiT sees sigma 0 for it (LatentState.frozen)
-    )
+    frozen: bool = False  # the whole stream is conditioning: the DiT sees sigma 0 for it (LatentState.frozen)
 
 
 def video_positions(f: int, h: int, w: int, fps: float, device) -> torch.Tensor:
@@ -428,14 +408,10 @@ def noise_state(state: State, sigma: float, seed: int) -> State:
     """noise_latent_state: noise · mask · sigma + clean · (1 − mask · sigma)."""
     noise = randn(state.clean.shape, seeded(seed), state.clean.device).to(state.clean.dtype)
     scaled = state.mask * sigma
-    return replace(
-        state, latent=(noise * scaled + state.clean * (1.0 - scaled)).to(state.clean.dtype)
-    )
+    return replace(state, latent=(noise * scaled + state.clean * (1.0 - scaled)).to(state.clean.dtype))
 
 
-def noised_state(
-    shape, conditionings, fhw, positions, seed, sigma, initial=None, scalar_blend=True
-) -> State:
+def noised_state(shape, conditionings, fhw, positions, seed, sigma, initial=None, scalar_blend=True) -> State:
     """mlx.py noised_state (helpers.create_noised_state): the scalar blend on the plain grid first, then the
     conditionings (video in both stages, stage-1 audio); else conditionings then noise_state (stage-2 audio)."""
     device = positions.device
@@ -487,9 +463,7 @@ def to_pixels(rgb: np.ndarray, height: int, width: int, device) -> torch.Tensor:
     scale = max(height / h, width / w)
     new_h, new_w = math.ceil(h * scale), math.ceil(w * scale)
     x = torch.tensor(rgb, dtype=torch.float32, device=device).permute(2, 0, 1)[None]
-    x = torch.nn.functional.interpolate(
-        x, size=(new_h, new_w), mode="bilinear", align_corners=False
-    )
+    x = torch.nn.functional.interpolate(x, size=(new_h, new_w), mode="bilinear", align_corners=False)
     top, left = (new_h - height) // 2, (new_w - width) // 2
     return (x[:, :, top : top + height, left : left + width] / 127.5 - 1.0).to(device, BF16)
 
@@ -502,17 +476,9 @@ def _conditionings(ctx, model, cond: Cond, fhw, frames: int, fps: float) -> list
     encoder = ctx.component(model, "vae_encoder")
     ctx.progress(1, 1, "encoding images")
     out = []
-    for (rgb, _, strength, _), frame in zip(
-        cond.images, at, strict=True
-    ):  # auto only (check_keyframes)
-        tokens = PATCH.patchify(
-            encoder(to_pixels(rgb, fhw[1] * 32, fhw[2] * 32, ctx.device)[:, :, None])
-        )
-        out.append(
-            latent_index_cond(tokens, strength)
-            if frame == 0
-            else keyframe_cond(tokens, frame, fps, strength)
-        )
+    for (rgb, _, strength, _), frame in zip(cond.images, at, strict=True):  # auto only (check_keyframes)
+        tokens = PATCH.patchify(encoder(to_pixels(rgb, fhw[1] * 32, fhw[2] * 32, ctx.device)[:, :, None]))
+        out.append(latent_index_cond(tokens, strength) if frame == 0 else keyframe_cond(tokens, frame, fps, strength))
     return out
 
 
@@ -547,9 +513,7 @@ def _pass(x0_model, vx, ax, video: State, audio: State, sigma: float, vctx, actx
 
     perturbations = None if kinds is None else BatchedPerturbationConfig(
         [PerturbationConfig(list(kinds))], x0_model.num_blocks, vx.device, vx.dtype)  # fmt: skip
-    return x0_model(
-        modality(vx, video, vctx, video.keyframes), modality(ax, audio, actx), perturbations
-    )
+    return x0_model(modality(vx, video, vctx, video.keyframes), modality(ax, audio, actx), perturbations)
 
 
 def _denoise(
@@ -590,13 +554,12 @@ def _denoise(
 def _guiders(params: dict, cond: Cond, audio_guided: bool):
     """mlx.py _guiders (LTX_2_3_PARAMS)."""
     if cond.neg_video is None:
-        raise RunError(
-            "the guided samplers need the prompt from ltx/encode-guided (the negative prompt)"
-        )
-    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=0.7,
-                                   modality_scale=3.0, stg_blocks=[28])  # fmt: skip
-    audio = MultiModalGuiderParams(cfg_scale=7.0, stg_scale=params["stg"], rescale_scale=0.7, modality_scale=3.0,
-                                   stg_blocks=[28]) if audio_guided else MultiModalGuiderParams()  # fmt: skip
+        raise RunError("the guided samplers need the prompt from ltx/encode-guided (the negative prompt)")
+    video = MultiModalGuiderParams(cfg_scale=params["cfg"], stg_scale=params["stg"], rescale_scale=RESCALE,
+                                   modality_scale=MODALITY, stg_blocks=[STG_BLOCK])  # fmt: skip
+    audio = (MultiModalGuiderParams(cfg_scale=AUDIO_CFG, stg_scale=params["stg"], rescale_scale=RESCALE,
+                                    modality_scale=MODALITY, stg_blocks=[STG_BLOCK])
+             if audio_guided else MultiModalGuiderParams())  # fmt: skip
     return (create_multimodal_guider_factory(video, negative_context=cond.neg_video),
             create_multimodal_guider_factory(audio, negative_context=cond.neg_audio))  # fmt: skip
 
@@ -611,9 +574,7 @@ def _guided(ctx, x0_model, video: State, audio: State, cond: Cond, factories, si
     for i, (sigma, sigma_next) in enumerate(steps):
         ctx.check()
         vg, ag = (f.build_from_sigma(sigma) for f in factories)
-        run = functools.partial(
-            _pass, x0_model, vx, ax, video, audio, sigma
-        )  # (vctx, actx[, kinds])
+        run = functools.partial(_pass, x0_model, vx, ax, video, audio, sigma)  # (vctx, actx[, kinds])
         cond_v, cond_a = run(cond.video, cond.audio)
         neg_v = neg_a = ptb_v = ptb_a = mod_v = mod_a = 0.0
         if vg.do_unconditional_generation() or ag.do_unconditional_generation():
@@ -650,14 +611,6 @@ def ltx2_schedule(steps: int, tokens: int) -> list[float]:
 
 
 # --- stages
-
-
-def canvas(ctx, params: dict, inputs: dict) -> dict:
-    return {"canvas": {"width": params["width"] // 64 * 64, "height": params["height"] // 64 * 64}}
-
-
-def duration(ctx, params: dict, inputs: dict) -> dict:
-    return {"duration": {"frames": params["frames"], "fps": params["fps"]}}
 
 
 def _encode(ctx, model, texts: list[str]) -> list:
@@ -697,9 +650,7 @@ def encode_guided(ctx, params: dict, inputs: dict) -> dict:
         raise RunError(f"{ctx.node}: the prompt is empty")
     negative = params.get("negative", "") if params.get("negative", "").strip() else NEGATIVE_PROMPT
     (v, a), (nv, na) = _encode(ctx, inputs["model"], [inputs["prompt"], negative])
-    return {
-        "cond": Cond(v, a, neg_video=nv, neg_audio=na, crf=image_crf(_version(inputs["model"])))
-    }
+    return {"cond": Cond(v, a, neg_video=nv, neg_audio=na, crf=image_crf(_version(inputs["model"])))}
 
 
 def check_keyframes(params: dict, wired: set, models: dict | None = None) -> str | None:
@@ -715,12 +666,10 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
     trips: dict[int, np.ndarray] = {}
     for r in params["images"]:
         if id(r["image"]) not in trips:
-            trips[id(r["image"])] = cover(
-                crf_round_trip(r["image"], inputs["cond"].crf), CANVAS_MAX
-            )
+            trips[id(r["image"])] = cover(crf_round_trip(r["image"], inputs["cond"].crf), CANVAS_MAX)
     if why := check_keyframes(params, set()):
         raise RunError(f"{ctx.node}{why}")
-    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"]), "auto") for r in params["images"])  # fmt: skip
+    rows = tuple((trips[id(r["image"])], float(r["seconds"]), float(r["strength"]), "auto") for r in params["images"])
     if not rows:
         raise RunError(f"{ctx.node}.images: at least 1 items")
     return {"cond": replace(inputs["cond"], images=rows, images_at=f"{ctx.node}.images")}
@@ -733,18 +682,14 @@ def _duration_head(path: Path, size: int, mtime: int, device: str):
 
     with accelerate.init_empty_weights(include_buffers=False):
         head = DurationHeadConfigurator.from_metadata(metadata(path))
-    return loaders_torch.load(
-        head, [path], dev=device, dtype=None, rename=DURATION_HEAD_KEY_OPS.apply_to_key
-    )
+    return loaders_torch.load(head, [path], dev=device, dtype=None, rename=DURATION_HEAD_KEY_OPS.apply_to_key)
 
 
 def predict_frames(model, cond: Cond, fps: float) -> int:
     """Auto length: the DurationHead's seconds from the prompt embeddings on the frames grid."""
     found = model.files("duration_head")  # model.yaml: a component of the distilled variants
     if not found:
-        raise RunError(
-            "auto length needs the model's duration_head (model.yaml) in the model folder"
-        )
+        raise RunError("auto length needs the model's duration_head (model.yaml) in the model folder")
     p = found[0]
     head = _duration_head(p, p.stat().st_size, p.stat().st_mtime_ns, str(cond.video.device))
     seconds = head(video_tokens=cond.video, audio_tokens=cond.audio)
@@ -783,9 +728,7 @@ def sample(ctx, params: dict, inputs: dict) -> dict:
     video = noised_state(latent.video.shape, conds, fhw, video_positions(*fhw, latent.fps, dev), seed + 2,
                          sigmas[0], latent.video)  # fmt: skip
     if latent.sound:  # audio to video: the source audio frozen (sigma 0, mask 0)
-        audio = _audio_state(
-            latent.audio, torch.zeros((1, latent.audio.shape[1], 1), device=dev), frozen=True
-        )
+        audio = _audio_state(latent.audio, torch.zeros((1, latent.audio.shape[1], 1), device=dev), frozen=True)
     else:
         audio = noised_state(latent.audio.shape, [], fhw, audio_positions(latent.audio.shape[1], dev), seed + 2,
                              sigmas[0], latent.audio, scalar_blend=False)  # fmt: skip
@@ -806,24 +749,16 @@ def upscale(ctx, params: dict, inputs: dict) -> dict:
     f, h, w = latent.fhw
     x = PATCH.unpatchify(latent.video[:, : f * h * w], VideoLatentShape(1, 128, f, h, w))
     x = stats.normalize(upsampler(stats.un_normalize(x)))
-    return {
-        "latent": replace(latent, video=PATCH.patchify(x), fhw=(f, h * 2, w * 2), upscaled=True)
-    }
+    return {"latent": replace(latent, video=PATCH.patchify(x), fhw=(f, h * 2, w * 2), upscaled=True)}
 
 
 def _save_wav(waveform: np.ndarray, path: Path) -> None:
     """(channels, samples) float → 16-bit PCM WAV at 48 kHz."""
     pcm = np.ascontiguousarray((np.clip(waveform.T, -1.0, 1.0) * 32767).astype(np.int16))
-    with wave.open(str(path), "w") as wf:
-        wf.setnchannels(pcm.shape[1])
-        wf.setsampwidth(2)
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(pcm.tobytes())
+    path.write_bytes(media.wav(pcm.tobytes(), SAMPLE_RATE, pcm.shape[1]))  # truncated, not media.pcm16's rounding
 
 
-def _pcm(
-    path: Path, rate: int, start: float = 0.0, seconds: float | None = None
-) -> np.ndarray | None:
+def _pcm(path: Path, rate: int, start: float = 0.0, seconds: float | None = None) -> np.ndarray | None:
     """utils.audio.load_audio: ffmpeg → float32 stereo PCM (channels, samples) at `rate`, or None without sound."""
     cmd = [FFMPEG, *(["-ss", str(start)] if start > 0 else []), "-i", str(path),
            *(["-t", str(seconds)] if seconds is not None else []),
@@ -857,12 +792,8 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
         elif audio:
             audio_vae, vocoder = ctx.component(model, "audio_vae"), ctx.component(model, "vocoder")
             ctx.progress(1, 1, "decoding audio")
-            tokens = AUDIO.unpatchify(
-                latent.audio, AudioLatentShape(1, 8, latent.audio.shape[1], 16)
-            )
-            _save_wav(
-                decode_audio(tokens, audio_vae, vocoder).waveform.cpu().numpy(), tmp / "audio.wav"
-            )
+            tokens = AUDIO.unpatchify(latent.audio, AudioLatentShape(1, 8, latent.audio.shape[1], 16))
+            _save_wav(decode_audio(tokens, audio_vae, vocoder).waveform.cpu().numpy(), tmp / "audio.wav")
         ctx.check()
         ctx.progress(1, 1, "decoding video")
         video = PATCH.unpatchify(latent.video[:, : f * h * w], VideoLatentShape(1, 128, f, h, w))
@@ -870,12 +801,8 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
         cmd = [FFMPEG, "-y", "-f", "rawvideo", "-vcodec", "rawvideo", "-s", f"{w * 32}x{h * 32}", "-pix_fmt", "rgb24",
                "-r", str(latent.fps), "-i", "-", *(["-i", str(tmp / "audio.wav"), "-c:a", "aac"] if audio else []),
                "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "18", str(tmp / "raw.mp4")]  # fmt: skip
-        with open(
-            tmp / "ffmpeg.log", "wb"
-        ) as log:  # a file: a full stderr pipe would stall the frames
-            proc = subprocess.Popen(
-                cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log
-            )
+        with open(tmp / "ffmpeg.log", "wb") as log:  # a file: a full stderr pipe would stall the frames
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=log)
             try:  # ponytail: an untiled decode (the RTX PRO 6000's 96 GB); the vendored temporal tiling if it refuses
                 for chunk in vae.decode_video(video):  # [f, h, w, c] in [0, 1]
                     proc.stdin.write((chunk.float() * 255).to(torch.uint8).cpu().numpy().tobytes())
@@ -929,15 +856,8 @@ def load_video_frames(path: Path, height: int, width: int, frames: int, device) 
     r = subprocess.run([FFMPEG, "-i", str(path), "-vframes", str(frames), "-s", f"{width}x{height}", "-pix_fmt",
                         "rgb24", "-f", "rawvideo", "-"], capture_output=True, check=False, timeout=600)  # fmt: skip
     if r.returncode:
-        raise RunError(
-            f"ffmpeg failed to read the source video: {r.stderr.decode(errors='ignore')[-300:]}"
-        )
-    f = (
-        np.frombuffer(r.stdout, dtype=np.uint8).reshape(-1, height, width, 3).astype(np.float32)
-        / 255.0
-        * 2.0
-        - 1.0
-    )
+        raise RunError(f"ffmpeg failed to read the source video: {r.stderr.decode(errors='ignore')[-300:]}")
+    f = np.frombuffer(r.stdout, dtype=np.uint8).reshape(-1, height, width, 3).astype(np.float32) / 255.0 * 2.0 - 1.0
     return torch.from_numpy(f).permute(3, 0, 1, 2)[None].to(device, BF16)
 
 
@@ -971,13 +891,9 @@ def encode_video(ctx, params: dict, inputs: dict) -> dict:
         width, height, n = info["video"]["width"], info["video"]["height"], info["frames"]
         fps = float(Fraction(info["video"].get("r_frame_rate", "24/1")))
         if width % 32 or height % 32:
-            raise RunError(
-                f"{where}: take {tid} is {width} × {height}; this input needs sides on a 32 px grid"
-            )
+            raise RunError(f"{where}: take {tid} is {width} × {height}; this input needs sides on a 32 px grid")
         if n > MAX_FRAMES:
-            raise RunError(
-                f"{where}: take {tid} has {n} frames; this input takes at most {MAX_FRAMES}"
-            )
+            raise RunError(f"{where}: take {tid} has {n} frames; this input takes at most {MAX_FRAMES}")
         frames = ltx_floor(n)
         latent = ctx.component(model, "vae_encoder").tiled_encode(
             load_video_frames(path, height, width, frames, ctx.device), TileSizeConfig.default()
@@ -1007,9 +923,7 @@ def encode_audio_(ctx, params: dict, inputs: dict) -> dict:
         raise RunError(f"{ctx.node}.source: take {src['take_id']} has no sound")
     latent, seconds = sound
     if latent.shape[2] < t:
-        raise RunError(
-            f"{ctx.node}.source: out {end:.1f} is past the audio's end {start + seconds:.1f}"
-        )
+        raise RunError(f"{ctx.node}.source: out {end:.1f} is past the audio's end {start + seconds:.1f}")
     smap = {"take_id": src["take_id"]} | m["map"]
     return {"latent": Latent(None, AUDIO.patchify(latent[:, :, :t]), None, frames, float(fps), source_map=smap,
                              sound=(src["data"], start)),
@@ -1017,9 +931,7 @@ def encode_audio_(ctx, params: dict, inputs: dict) -> dict:
 
 
 def _audio_state(tokens: torch.Tensor, mask: torch.Tensor, frozen: bool = False) -> State:
-    return State(
-        tokens, tokens, mask, audio_positions(tokens.shape[1], tokens.device), frozen=frozen
-    )
+    return State(tokens, tokens, mask, audio_positions(tokens.shape[1], tokens.device), frozen=frozen)
 
 
 def _edit(ctx, params, inputs, video: State, audio: State, src: Latent, fhw, frames, smap) -> dict:
@@ -1031,11 +943,7 @@ def _edit(ctx, params, inputs, video: State, audio: State, src: Latent, fhw, fra
     video, audio = noise_state(video, 1.0, seed), noise_state(audio, 1.0, seed + 1)
     sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
     vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
-    return {
-        "latent": Latent(
-            vx, ax, fhw, frames, src.fps, source_map={"take_id": src.source_map["take_id"]} | smap
-        )
-    }
+    return {"latent": Latent(vx, ax, fhw, frames, src.fps, source_map={"take_id": src.source_map["take_id"]} | smap)}
 
 
 @torch.no_grad()
@@ -1051,9 +959,7 @@ def retake(ctx, params: dict, inputs: dict) -> dict:
     dev = src.video.device
     mask = torch.zeros((1, f * h * w, 1), device=dev)
     mask[:, s * h * w : e * h * w] = 1
-    video = State(
-        src.video, src.video, mask, video_positions(f, h, w, src.fps, dev), first_frame(mask, h * w)
-    )
+    video = State(src.video, src.video, mask, video_positions(f, h, w, src.fps, dev), first_frame(mask, h * w))
     t = src.audio.shape[1]
     amask = torch.zeros((1, t, 1), device=dev)
     if params["audio"]:
@@ -1093,9 +999,7 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
     clean = joined(src.video, torch.zeros((1, k * h * w, 128), dtype=src.video.dtype, device=dev))
     amask = joined(torch.zeros((1, t, 1), device=dev), torch.ones((1, extra, 1), device=dev))
     aclean = joined(src.audio, torch.zeros((1, extra, 128), dtype=src.audio.dtype, device=dev))
-    video = State(
-        clean, clean, vmask, video_positions(f + k, h, w, src.fps, dev), first_frame(vmask, h * w)
-    )
+    video = State(clean, clean, vmask, video_positions(f + k, h, w, src.fps, dev), first_frame(vmask, h * w))
     return _edit(
         ctx,
         params,
@@ -1126,9 +1030,7 @@ def sample_guided(ctx, params: dict, inputs: dict) -> dict:
     x0_model = X0Model(ctx.component(model, "transformer"))
     video = noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), _conditionings(ctx, model, cond, fhw, frames, fps), fhw,
                          video_positions(*fhw, fps, ctx.device), seed, 1.0)  # fmt: skip
-    audio = _audio_state(
-        a.audio, torch.zeros((1, a.audio.shape[1], 1), device=a.audio.device), frozen=True
-    )
+    audio = _audio_state(a.audio, torch.zeros((1, a.audio.shape[1], 1), device=a.audio.device), frozen=True)
     sigmas = ltx2_schedule(params["steps"], fhw[0] * fhw[1] * fhw[2])
     vx, ax = _guided(ctx, x0_model, video, audio, cond, factories, sigmas, "guided")
     return {"latent": Latent(vx, ax, fhw, frames, fps, source_map=a.source_map, sound=a.sound)}

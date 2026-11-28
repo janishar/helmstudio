@@ -6,11 +6,13 @@
 // the update check at a fake releases list; HELMSTUDIO_HIDE=1 (tests) never shows a window.
 const path = require('node:path');
 const fs = require('node:fs');
-const { app, BrowserWindow, Tray, Menu, nativeImage, shell, dialog, ipcMain, powerMonitor } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, nativeImage, shell, dialog, ipcMain, powerMonitor, session } = require('electron');
 const { StepRunner, exec, pipe } = require('./steps');
-const { layout, loadSettings, stackSteps, Runners, openMode } = require('./stack');
+const { layout, loadSettings, stackSteps, Runners, openMode, tailOf } = require('./stack');
 const updates = require('./update');
 const { spellingOf, isWord } = require('./spelling');
+const { localPath, tilde } = require('./folders');
+const rules = require('./rules');
 const cfg = require('../stack.json');
 
 const home = process.env.HELMSTUDIO_HOME || path.join(app.getPath('appData'), 'helmstudio');
@@ -22,8 +24,9 @@ const fake = process.env.HELMSTUDIO_FAKE === '1';
 let fakeFail = process.env.HELMSTUDIO_FAKE_FAIL; // fake mode: the first command line holding this word fails once
 const p = layout(home, res);
 const settings = loadSettings(p);
+rules.applyPorts(cfg, settings.ports); // 2c: the ports picked when another app held one
 const logFile = path.join(p.logs, 'app.log');
-const studioOrigin = new URL(cfg.studioUrl).origin;
+const studioOrigin = () => new URL(cfg.studioUrl).origin;
 
 const fakeExec = async (cmd, args, { onLine = () => {}, signal } = {}) => {
   if (cmd === '/usr/bin/sw_vers') return exec(cmd, args);
@@ -41,8 +44,19 @@ const fakeExec = async (cmd, args, { onLine = () => {}, signal } = {}) => {
 };
 const run = fake ? fakeExec : exec;
 const runners = fake
-  ? { start() {}, stop: async () => {}, restart: async () => {}, waitReady: async () => {}, alive: () => true, healthy: async () => true }
-  : new Runners({ p, cfg, settings, onChange: () => phase === 'ready' && check() });
+  ? {
+      start() {},
+      stop: async () => {},
+      restart: async () => {},
+      waitReady: async () => {},
+      healthy: async () => true,
+      state: () => Object.fromEntries(cfg.runners.map((r) => [r.env, 'run'])),
+      issues: {},
+      restartOne() {},
+      note() {},
+      logOf: (env) => path.join(p.logs, `runner-${env}.log`),
+    }
+  : new Runners({ p, cfg, settings, onChange: () => (refresh(), runnerIssues()) });
 const stack = stackSteps({ p, cfg, settings, runners });
 
 let phase = 'starting'; // starting | failed | ready | restarting | stopping
@@ -54,6 +68,16 @@ let studioWin = null;
 let tray = null;
 let trayMenu = null;
 let quitting = false;
+// the error states (board Desktop.dc.html "Error states", 2a–2h)
+const outage = new rules.Outage(); // 2a: the stack check's misses and notifications
+let stackUp = true; // the last check
+let lowDisk = ''; // 2e: "Only 4 GB free" while under 10 GB (checked every 10 minutes)
+let studioIssue = null; // 2a {kind: 'down', at, rows} | 2g {kind: 'load', code, url, crashed}: the studio window's page
+let studioPage = false; // the studio window shows our page (setup.html: 2a, 2g, a restart's start list), not the studio
+let issueWin = null; // 2b: a runner that keeps stopping or didn't start
+let runnerIssue = null; // {kind: 'runner', env, what, cause, lines, busy}
+let note = null; // 2a's notification (kept, else it is collected before a click)
+const quitSignal = new AbortController(); // Quit stops 2b's venv set up again
 // the update (board frames 8–9): state checking | none | checkfail | available | download | verify | ready | installing
 // | dlfail | sumfail | installfail; release: the newest one found
 let upd = { state: 'none', release: null, got: 0, error: null };
@@ -121,6 +145,7 @@ function setStatus(dot, text, sub = '') {
           ]
         : []),
       { label: 'Open', click: showApp },
+      { label: 'Restart stack', enabled: phase === 'ready', click: restartStack },
       { label: 'Restart runners', enabled: phase === 'ready', click: restartRunners },
       { label: 'Open logs', click: () => (fs.mkdirSync(p.logs, { recursive: true }), shell.openPath(p.logs)) },
       { type: 'separator' },
@@ -138,25 +163,82 @@ function setStatus(dot, text, sub = '') {
       },
       { type: 'separator' },
       { label: 'Check for updates…', click: () => checkUpdates(true) },
-      { label: 'Quit', click: () => quitEntirely() },
+      { label: 'Quit', click: () => askQuit('menu') },
     ])),
   );
 }
 
-// while ready: the studio answers and every runner runs, else "Something is down"
+// 2h: while ready, the tray in the web status tile's words: Studio down, Runner down (restarting in n s, keeps
+// stopping, didn't start), else Ready with a low disk or an unplugged models drive as its sub line
+function refresh() {
+  if (phase !== 'ready') return;
+  const st = runners.state();
+  const [env, s] = cfg.runners.map((r) => [r.env, st[r.env]]).find(([, x]) => x !== 'run') || [];
+  if (!stackUp) return setStatus('bad', 'Studio down', 'The studio isn’t answering');
+  if (s?.wait != null) return setStatus('wait', 'Runner down', `${env} runner restarting in ${Math.max(1, Math.ceil(s.wait / 1000))} s`);
+  if (s) return setStatus('bad', 'Runner down', { keeps: `The ${env} runner keeps stopping`, nostart: `The ${env} runner didn’t start` }[s.kind] || `The ${env} runner stopped`);
+  const drive = rules.missingVolume(settings.modelsDir, fs.existsSync);
+  setStatus('ok', 'Ready', lowDisk || (drive ? `Models folder on ${drive} not connected` : ''));
+}
+
+const probe = (url) => fetch(url, { signal: AbortSignal.timeout(3000), redirect: 'manual' }).then((r) => r.status, () => null);
+const hhmm = (t) => new Date(t).toTimeString().slice(0, 5);
+
+// 2a: every 20 s (5 s after a miss): Kong and the web page (/), and studio through Kong (its one keyless path: 401
+// is an answer, Kong's 502 or 503 is not). 3 misses in a row: the studio window's page says what is down, and one
+// notification per outage. Back: the studio again by itself
+let checking = false;
 async function check() {
-  if (phase !== 'ready' || fake) return;
-  const web = await fetch(cfg.studioUrl, { signal: AbortSignal.timeout(3000) }).then((r) => r.status < 500, () => false);
-  const ok = web && runners.alive();
-  if (ok && status.dot !== 'ok') setStatus('ok', 'Ready');
-  if (!ok) setStatus('bad', 'Something is down', web ? 'A runner stopped' : 'The studio does not answer');
+  if (phase !== 'ready' || fake || checking) return;
+  checking = true;
+  try {
+    const [web, api] = (await Promise.all([probe(`${cfg.studioUrl}/`), probe(`${cfg.studioUrl}/v1/studio/plugin/takes`)])).map(rules.answers);
+    stackUp = web && api;
+    const o = outage.record(stackUp, Date.now());
+    if (stackUp && studioIssue) reloadStudio();
+    if (o.down) {
+      const live = Object.values(runners.state()).filter((x) => x === 'run').length;
+      const vm = await stack.vmUp();
+      const row = (title, ok, yes, no) => ({ title, ok, state: ok ? yes : no });
+      showPage({
+        kind: 'down',
+        at: hhmm(outage.since),
+        rows: [
+          row('VM', vm, 'running', 'stopped'),
+          row('Studio', api, 'answering', 'not answering'),
+          row('Web and Kong', web, 'answering', 'not answering'),
+          { title: 'Runners', ok: live === cfg.runners.length, state: `${live} of ${cfg.runners.length}` },
+        ],
+      });
+      if (o.notify && Notification.isSupported()) {
+        note = new Notification({ title: 'helmstudio', body: 'helmstudio stopped answering. Open it to see what is down.' });
+        note.on('click', showApp);
+        note.show();
+      }
+    }
+    refresh();
+  } finally {
+    checking = false;
+  }
+}
+
+async function checkLoop() {
+  await check().catch(logError);
+  setTimeout(checkLoop, studioIssue ? 5000 : outage.every);
+}
+
+// 2e's sub line, every 10 minutes
+function checkDisk() {
+  const d = stack.freeDisk();
+  lowDisk = d && d.free < 10 ? `Only ${Math.floor(d.free)} GB free` : '';
+  refresh();
 }
 
 // ---------- windows
 
 function setupWindow() {
   if (setupWin && !setupWin.isDestroyed()) return setupWin;
-  const [width, height] = { start: [420, 340], update: [460, 420] }[mode] || [672, 500];
+  const [width, height] = SIZES[mode] || [672, 500];
   setupWin = new BrowserWindow({
     width,
     height,
@@ -207,7 +289,21 @@ function studioWindow() {
     if (p.isEditable) wc.send('spelling', spellingOf(p));
   });
   wc.on('will-navigate', (e, url) => {
-    if (new URL(url).origin !== studioOrigin) (e.preventDefault(), openExternal(url));
+    if (new URL(url).origin !== studioOrigin()) (e.preventDefault(), openExternal(url));
+  });
+  // 2g: the studio page failed to load (not a load we replaced: -3), crashed or hangs for 10 s; while the stack is down
+  // (3 misses) 2a's page shows instead
+  const failed = (_e, code, desc, url, main) => main && code !== -3 && !studioPage && loadFailed({ code: desc || `${code}`, url: url || cfg.studioUrl });
+  wc.on('did-fail-load', failed);
+  wc.on('did-fail-provisional-load', failed);
+  let hang = null;
+  let hung = false;
+  wc.on('unresponsive', () => (clearTimeout(hang), (hang = setTimeout(() => ((hung = true), wc.forcefullyCrashRenderer()), 10000))));
+  wc.on('responsive', () => clearTimeout(hang));
+  wc.on('render-process-gone', (_e, d) => {
+    clearTimeout(hang);
+    if (d.reason !== 'clean-exit' && !quitting) loadFailed({ code: hung ? 'unresponsive' : d.reason, url: cfg.studioUrl, crashed: true });
+    hung = false;
   });
   wc.setWindowOpenHandler(({ url }) => (openExternal(url), { action: 'deny' })); // target=_blank: the default browser
   // downloads: with no save path set, Electron asks with the standard save dialog
@@ -222,8 +318,87 @@ function studioWindow() {
     if (!quitting) (e.preventDefault(), hideAll());
   });
   studioWin.once('ready-to-show', () => reveal(studioWin));
-  studioWin.loadURL(cfg.studioUrl);
+  studioPage = !!studioIssue; // the stack went down before this window opened: 2a's page first
+  if (studioPage) studioWin.loadFile(path.join(__dirname, 'ui', 'setup.html'));
+  else studioWin.loadURL(cfg.studioUrl);
   return studioWin;
+}
+
+const pageSnap = () => ({ ...(snapshot() || {}), issue: studioIssue });
+
+// the studio window's own page (2a, 2g, or with no issue a restart's start list); a window not opened yet shows it
+// when it opens. It never pops up by itself: the notification and the menu bar's Open show it
+function showPage(issue) {
+  studioIssue = issue;
+  if (!studioWin || studioWin.isDestroyed()) return;
+  if (!studioPage) {
+    studioPage = true;
+    studioWin.loadFile(path.join(__dirname, 'ui', 'setup.html'));
+  } else studioWin.webContents.send('update', pageSnap());
+}
+
+function loadFailed(issue) {
+  fs.mkdirSync(p.logs, { recursive: true });
+  fs.appendFileSync(logFile, `${new Date().toISOString()} studio page: ${issue.code} ${issue.url}\n`);
+  if (outage.misses < 3) showPage({ kind: 'load', ...issue });
+}
+
+function reloadStudio() {
+  studioIssue = null;
+  studioPage = false;
+  if (studioWin && !studioWin.isDestroyed()) studioWin.loadURL(cfg.studioUrl);
+}
+
+// 2b: a runner given up opens its window once (while ready; at start the step's failure says it)
+function runnerIssues() {
+  if (phase !== 'ready') return;
+  for (const [env, i] of Object.entries(runners.issues)) {
+    if (i.shown) continue;
+    i.shown = true;
+    showRunnerIssue({ kind: 'runner', env, what: i.kind, cause: i.cause, lines: i.lines, busy: false });
+  }
+}
+
+function showRunnerIssue(issue) {
+  runnerIssue = issue;
+  if (issueWin && !issueWin.isDestroyed()) return (issueWin.webContents.send('update', { issue }), reveal(issueWin));
+  issueWin = new BrowserWindow({
+    width: 460,
+    height: 330,
+    resizable: false,
+    fullscreenable: false,
+    minimizable: false,
+    title: 'helmstudio',
+    backgroundColor: '#16201b',
+    show: false,
+    webPreferences: { preload: path.join(__dirname, 'ui', 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  issueWin.webContents.on('will-navigate', (e) => e.preventDefault());
+  issueWin.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+  issueWin.once('ready-to-show', () => reveal(issueWin));
+  issueWin.on('closed', () => ((issueWin = null), (runnerIssue = null))); // closing leaves it stopped
+  issueWin.loadFile(path.join(__dirname, 'ui', 'setup.html'));
+}
+
+// 2b's Restart runner: the count reset and the runner started now; one that didn't start has its venv set up again
+// first (uv sync, in the runner's log)
+async function restartRunner() {
+  const i = runnerIssue;
+  if (!i || i.busy) return;
+  const r = cfg.runners.find((x) => x.env === i.env);
+  if (i.what === 'nostart') {
+    showRunnerIssue({ ...i, busy: true });
+    try {
+      await stack.setupVenv(r.venv, (cmd, args, o) => run(cmd, args, { ...o, signal: quitSignal.signal, onLine: (l) => runners.note(i.env, l) }));
+    } catch (e) {
+      if (quitting) return;
+      runners.note(i.env, `setup failed: ${e.message}`);
+      return showRunnerIssue({ ...i, busy: false, cause: `Setting it up again failed: ${e.message}`, lines: tailOf(runners.logOf(i.env), 4) });
+    }
+  }
+  if (quitting) return; // Quit while it was set up: nothing starts after the stop
+  issueWin?.close();
+  runners.restartOne(i.env);
 }
 
 // HELMSTUDIO_HIDE=1 (test runs): windows are never shown, so a driven run stays off the screen
@@ -247,14 +422,26 @@ function showApp() {
 
 function send() {
   if (setupWin && !setupWin.isDestroyed()) setupWin.webContents.send('update', snapshot());
+  if (studioPage && !studioIssue && studioWin && !studioWin.isDestroyed()) studioWin.webContents.send('update', pageSnap());
+}
+
+// the setup window's size for the start list, the first open, a failure, or a check that asks (2c, 2d, 2e)
+const SIZES = { start: [420, 340], restart: [420, 340], update: [460, 420] };
+const ASKS = new Set(['port', 'drive', 'disk']);
+function fit(snap) {
+  if (!setupWin || setupWin.isDestroyed() || mode === 'first') return;
+  const [w, h] = snap.error ? [672, 500] : snap.ask && ASKS.has(snap.ask.kind) ? [460, 330] : SIZES[mode];
+  const [cw, ch] = setupWin.getSize();
+  if (cw !== w || ch !== h) setupWin.setSize(w, h);
 }
 const snapshot = () => runner && { mode, version, ...runner.snapshot() };
 
-async function startUp() {
-  if (!runner) {
-    mode = openMode(settings, version);
+// again: 'restart' (2a's Restart, the menu's Restart stack), a new start list over a running app
+async function startUp(again) {
+  if (!runner || again) {
+    mode = again || openMode(settings, version);
     runner = new StepRunner({
-      steps: { first: stack.first, update: stack.update, start: stack.every }[mode],
+      steps: { first: stack.first, update: stack.update, start: stack.every, restart: stack.restart }[mode],
       stateFile: mode === 'first' ? p.state : null,
       logFile,
       exec: run,
@@ -263,37 +450,91 @@ async function startUp() {
     runner.on('update', (snap) => {
       const cur = snap.steps.find((s) => s.status === 'run' || s.status === 'ask');
       if (phase === 'starting') setStatus('wait', 'Starting…', cur ? [cur.title, cur.detail].filter(Boolean).join(' · ') : '');
+      fit(snap);
       send();
     });
   }
   phase = 'starting';
   setStatus('wait', 'Starting…');
-  setupWindow();
+  // a restart over the open studio window shows its start list there (2a: the rows turn to the start list)
+  if (!(studioPage && !studioIssue && studioWin?.isVisible())) setupWindow();
   const result = await runner.run();
   if (result === 'done') {
     if (!settings.installed || settings.version !== version) Object.assign(settings, { installed: true, version }).save();
     phase = 'ready';
-    setStatus('ok', 'Ready');
+    stackUp = true;
+    outage.record(true, Date.now());
+    checkDisk();
     const visible = setupWin?.isVisible();
     setupWin?.destroy();
     setupWin = null;
-    if (visible) studioWindow();
+    if (studioPage) reloadStudio(); // a restart over the studio window: the studio again
+    if (visible) {
+      const had = studioWin && !studioWin.isDestroyed();
+      const w = studioWindow(); // a new one shows itself when ready
+      if (had) reveal(w);
+    }
   } else if (result === 'failed') {
     phase = 'failed';
     setStatus('bad', 'Something is down', runner.error?.title);
-    if (mode !== 'first') setupWin?.setContentSize(672, 500); // the failed step's pane needs the room
   }
 }
 
+async function restartStack() {
+  if (phase !== 'ready') return;
+  issueWin?.close();
+  if (studioWin && !studioWin.isDestroyed() && studioWin.isVisible()) showPage(null);
+  else studioIssue = null;
+  startUp('restart');
+}
+
 async function restartRunners() {
+  issueWin?.close(); // the stop counts start again
   phase = 'restarting'; // check() waits: the runners' exits and spawns would flip the dot to down, then to Ready early
   setStatus('wait', 'Starting…', 'Runners');
   await runners.restart();
   await runners.waitReady().catch(() => {});
   if (phase !== 'restarting') return; // Quit meanwhile
   phase = 'ready';
-  setStatus('ok', 'Ready');
+  refresh();
+  runnerIssues(); // one given up meanwhile
   check();
+}
+
+// 2f: the runs going (the caller's queued and running ones, and everyone else's queued), asked of studio with the
+// studio window's sign-in; 0 when it cannot tell (the stack down, signed out)
+async function runsGoing() {
+  if (fake || phase !== 'ready') return 0;
+  const ask = session
+    .fromPartition('persist:studio')
+    .fetch(`${cfg.studioUrl}/api/v1/studio/queue`, { credentials: 'include' })
+    .then((r) => (r.ok ? r.json() : null));
+  const q = await Promise.race([ask, new Promise((r) => setTimeout(r, 3000))]).catch(() => null);
+  return (q?.runs?.length || 0) + (q?.hosts || []).reduce((n, h) => n + (h.others_queued || 0), 0);
+}
+
+// 2f: via menu (the menu bar's Quit, 2a's Quit) or cmdq (⌘Q, the Dock's Quit); Keep running is the default (Return)
+let askingQuit = false;
+async function askQuit(via) {
+  if (phase === 'stopping' || askingQuit) return;
+  if (via === 'cmdq' && settings.keepRunning) return hideAll();
+  askingQuit = true;
+  try {
+    const runs = await runsGoing();
+    if (rules.quitAsks({ via, keepRunning: settings.keepRunning, runs })) {
+      const { response } = await dialog.showMessageBox({
+        message: `${runs} ${runs === 1 ? 'run is' : 'runs are'} going. Quit and stop them?`,
+        detail: 'They show as failed in Create; Retry starts them again.',
+        buttons: ['Keep running', 'Quit'],
+        defaultId: 0,
+        cancelId: 0,
+      });
+      if (response !== 1) return;
+    }
+  } finally {
+    askingQuit = false;
+  }
+  quitEntirely();
 }
 
 // then: what runs after the stack stopped, before the app exits (the update's swap)
@@ -302,6 +543,7 @@ async function quitEntirely(then = () => {}) {
   updAbort?.abort();
   phase = 'stopping';
   quitting = true;
+  quitSignal.abort();
   setStatus('wait', 'Stopping…');
   runner?.cancel();
   const log = (l) => runner?.log(l);
@@ -420,21 +662,60 @@ ipcMain.on('upd', (_e, action) => {
 
 // ---------- the app
 
-ipcMain.handle('hello', () => snapshot());
+// a page asks for its state: the studio window's page (2a, 2g, a restart), 2b's window, else the setup window's steps
+ipcMain.handle('hello', (e) => {
+  if (studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents) return pageSnap();
+  if (issueWin && !issueWin.isDestroyed() && e.sender === issueWin.webContents) return { issue: runnerIssue };
+  return snapshot();
+});
+// the error states' buttons, only from our own pages (file:), never from the studio's web page
+ipcMain.on('act', (e, name) => {
+  if (!e.senderFrame?.url.startsWith('file:') || quitting) return;
+  const logs = () => fs.mkdirSync(p.logs, { recursive: true });
+  ({
+    restart: restartStack,
+    quit: () => askQuit('menu'),
+    reload: reloadStudio,
+    'restart-runner': restartRunner,
+    'log-folder': () => (logs(), fs.appendFileSync(logFile, ''), shell.showItemInFolder(logFile)),
+    'runner-log': () => runnerIssue && (logs(), fs.appendFileSync(runners.logOf(runnerIssue.env), ''), shell.openPath(runners.logOf(runnerIssue.env))),
+    'open-storage': () => shell.openExternal('x-apple.systempreferences:com.apple.settings.Storage'),
+  })[name]?.();
+});
 // the studio page's spelling items: only from the studio window, only a word
 const fromStudio = (e, word) => studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents && isWord(word);
 ipcMain.on('replace-misspelling', (e, word) => fromStudio(e, word) && e.sender.replaceMisspelling(word));
 ipcMain.on('add-to-dictionary', (e, word) => fromStudio(e, word) && e.sender.session.addWordToSpellCheckerDictionary(word));
-ipcMain.on('answer', (_e, kind, value) => runner?.answer(kind, value));
+ipcMain.on('answer', (e, kind, value) => e.senderFrame?.url.startsWith('file:') && runner?.answer(kind, value)); // our pages only
 ipcMain.on('retry', () => phase === 'failed' && startUp());
 ipcMain.on('show-log', () => (fs.mkdirSync(p.logs, { recursive: true }), fs.appendFileSync(logFile, ''), shell.openPath(logFile)));
-ipcMain.handle('choose-folder', async (_e, current) => {
-  const r = await dialog.showOpenDialog(setupWin, {
+ipcMain.handle('choose-folder', async (e, current) => {
+  const r = await dialog.showOpenDialog(BrowserWindow.fromWebContents(e.sender), {
     defaultPath: current?.replace(/^~/, app.getPath('home')),
     properties: ['openDirectory', 'createDirectory'],
     buttonLabel: 'Choose',
   });
   return r.canceled ? null : r.filePaths[0];
+});
+// the studio page's model folders (plan 40 P5): its Browse… (a folder for a path field, written ~/…) and Show / Open in
+// Finder (shown, never opened or run), only from the studio window, only a checked path that exists
+const isStudio = (e) => studioWin && !studioWin.isDestroyed() && e.sender === studioWin.webContents;
+ipcMain.handle('studio-choose-folder', async (e, current) => {
+  if (!isStudio(e)) return null;
+  const home = app.getPath('home');
+  const r = await dialog.showOpenDialog(studioWin, {
+    defaultPath: localPath(current, home) ?? undefined,
+    properties: ['openDirectory', 'createDirectory'],
+    buttonLabel: 'Choose',
+  });
+  return r.canceled ? null : tilde(r.filePaths[0], home);
+});
+// ponytail: any existing local path the page names is shown; the host's folder list lives in studio, not here
+ipcMain.handle('studio-reveal', (e, p) => {
+  const abs = isStudio(e) && localPath(p, app.getPath('home'));
+  if (!abs || !fs.existsSync(abs)) return false;
+  shell.showItemInFolder(abs);
+  return true;
 });
 
 app.on('second-instance', showApp);
@@ -443,12 +724,11 @@ app.on('window-all-closed', () => {}); // the menu-bar item stays
 app.on('before-quit', (e) => {
   if (quitting) return;
   e.preventDefault(); // Cmd+Q, the Dock's Quit, Quit in the app menu
-  if (settings.keepRunning) hideAll();
-  else quitEntirely();
+  askQuit('cmdq');
 });
 
 // the end-to-end run's hook (Playwright's _electron evaluates in this process): the menu-bar menu and the state
-if (process.env.HELMSTUDIO_TEST === '1') global.helmTest = { menu: () => trayMenu, title: () => tray?.getTitle(), state: () => ({ phase, mode, status, upd: updSnap() }) };
+if (process.env.HELMSTUDIO_TEST === '1') global.helmTest = { menu: () => trayMenu, title: () => tray?.getTitle(), state: () => ({ phase, mode, status, upd: updSnap(), studioIssue, runnerIssue }) };
 
 app.whenReady().then(() => {
   Menu.setApplicationMenu(
@@ -459,7 +739,10 @@ app.whenReady().then(() => {
   tray = new Tray(trayIcon());
   tray.setToolTip('helmstudio');
   setStatus('wait', 'Starting…');
-  setInterval(check, 20000);
+  setTimeout(checkLoop, 20000);
+  setInterval(checkDisk, 10 * 60 * 1000);
+  // 2h: "mlx runner restarting in 8 s" counts down
+  setInterval(() => Object.values(runners.state()).some((x) => x?.wait != null) && refresh(), 1000);
   startUp();
   setTimeout(checkUpdates, 5000);
   setInterval(checkUpdates, 24 * 3600 * 1000);

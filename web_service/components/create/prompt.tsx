@@ -242,6 +242,8 @@ export function PromptArea({
         style={{
           ...rest.style,
           position: "relative",
+          // block: an inline textarea leaves a gap under it, which made the colour layer 5px taller and drift
+          display: "block",
           background: "transparent",
           scrollbarGutter: "stable",
         }}
@@ -456,4 +458,165 @@ export function insertAtCaret(id: string, value: string, handle: string, set: (v
   const el = document.getElementById(id) as HTMLTextAreaElement | null;
   const s = el?.selectionStart ?? value.length;
   typeMention(el, value, s, el?.selectionEnd ?? s, handle, set);
+}
+
+/** `[tag]` put into `value` at [start, end), on a line of its own: the text and where the caret goes after it. */
+export function withTag(value: string, start: number, end: number, tag: string) {
+  const before = value.slice(0, start);
+  const after = value.slice(end);
+  const lead = before === "" || before.endsWith("\n") ? "" : "\n";
+  const text = `${lead}[${tag}]\n`;
+  return { text: before + text + after.replace(/^\n/, ""), caret: start + text.length };
+}
+
+/** The Lyrics box under a song's style (docs/mock/CreateMusicSound.dc.html frame 1, LyricsBox in the Design System):
+ * the heading, one chip per section tag the model knows (`tags`, each put in at the caret as `[tag]`), Instrumental
+ * at the end of the bar (on: the text goes, as its `when` says), and the text with its tag lines in the accent. */
+export function LyricsBox({
+  id,
+  label,
+  tags,
+  value,
+  onChange,
+  instrumental,
+  hidden,
+  error,
+}: {
+  id: string;
+  label: string;
+  tags: string[];
+  value: string;
+  onChange: (v: string) => void;
+  /** the Instrumental switch, when the model has one */
+  instrumental?: { on: boolean; set: (on: boolean) => void };
+  /** Instrumental is on: the text is not sent, so not shown */
+  hidden?: boolean;
+  error?: string;
+}) {
+  const ta = useRef<HTMLTextAreaElement>(null);
+  const layer = useRef<HTMLDivElement>(null);
+  const put = (tag: string) => {
+    const el = ta.current;
+    const s = el?.selectionStart ?? value.length;
+    const e = el?.selectionEnd ?? s;
+    const r = withTag(value, s, e, tag);
+    // typed into the textarea itself (the native undo keeps it, and the caret is right at once, so keys pressed
+    // straight after land after the tag); the state follows from its input event
+    el?.focus();
+    el?.setSelectionRange(s, Math.min(value.length, e + (value.slice(e).startsWith("\n") ? 1 : 0)));
+    const inserted = r.text.slice(s, r.caret);
+    let done = false;
+    try {
+      done = !!el && el.value === value && document.execCommand("insertText", false, inserted);
+    } catch {
+      done = false;
+    }
+    if (!done) {
+      onChange(r.text);
+      requestAnimationFrame(() => el?.setSelectionRange(r.caret, r.caret));
+    }
+  };
+  const text = "text-[14px] leading-[21px] whitespace-pre-wrap break-words";
+  return (
+    // the lyrics take twice the style's share of the composer's free height (grow-2), 6 lines the least; not while
+    // Instrumental hides them
+    <div
+      className={`flex flex-col gap-1.5 rounded-[10px] border border-s4 bg-s1 px-2.5 py-2 ${hidden ? "" : "grow-[2]"}`}
+    >
+      <div
+        role="group"
+        aria-label={`${label} tags`}
+        className="flex flex-wrap items-center gap-1.5"
+      >
+        <span className="heading mr-1">{label}</span>
+        {!hidden &&
+          tags.map((t) => (
+            <button
+              key={t}
+              type="button"
+              title={`Put [${t}] at the cursor`}
+              onClick={() => put(t)}
+              className="mono h-[26px] rounded-[7px] border border-dashed border-dash bg-transparent px-2 text-[11px] text-t2"
+            >
+              [{t}]
+            </button>
+          ))}
+        {instrumental && (
+          <label className="ml-auto flex items-center gap-2 text-[13px] text-t2">
+            Instrumental
+            <button
+              type="button"
+              role="switch"
+              aria-checked={instrumental.on}
+              aria-label="Instrumental"
+              onClick={() => instrumental.set(!instrumental.on)}
+              className="flex h-[22px] w-9 shrink-0 rounded-full border border-line p-0.5"
+              style={{ background: instrumental.on ? "var(--a2)" : "var(--s1)" }}
+            >
+              <span
+                className="block size-4 rounded-full transition-transform"
+                style={{
+                  background: instrumental.on ? "var(--on2)" : "var(--t2)",
+                  transform: instrumental.on ? "translateX(14px)" : undefined,
+                }}
+              />
+            </button>
+          </label>
+        )}
+      </div>
+      {!hidden && (
+        <div className="group relative flex grow flex-col">
+          {/* the tag lines in the accent: a layer under a see-through textarea, same font and gutter so the lines
+              wrap alike; it follows the textarea's scroll (up to 10 lines, then it scrolls; Expand opens it big) */}
+          <div
+            ref={layer}
+            aria-hidden
+            className={`${text} pointer-events-none absolute inset-0 overflow-hidden pr-9 text-t1`}
+            style={{ scrollbarGutter: "stable" }}
+          >
+            {value.split("\n").map((l, i) => (
+              <div key={i} className={/^\s*\[[^\]]+\]\s*$/.test(l) ? "text-a2" : undefined}>
+                {l || " "}
+              </div>
+            ))}
+          </div>
+          <textarea
+            ref={ta}
+            id={id}
+            aria-label={label}
+            // 6 lines the least, then the composer's free height: more scrolls (the layer follows), Expand opens it big
+            rows={6}
+            value={value}
+            placeholder="[verse] the words, a line each"
+            aria-invalid={!!error || undefined}
+            style={
+              {
+                height: 126,
+                scrollbarGutter: "stable",
+              } as React.CSSProperties
+            }
+            onChange={(e) => onChange(e.target.value)}
+            onScroll={(e) => {
+              if (layer.current) layer.current.scrollTop = e.currentTarget.scrollTop;
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey))
+                e.currentTarget.form?.requestSubmit();
+            }}
+            className={`${text} relative block w-full shrink-0 grow resize-none overflow-y-auto border-0 bg-transparent p-0 pr-9 text-transparent caret-t1 outline-0 placeholder:text-t2`}
+          />
+          <Expand
+            title={label}
+            value={value}
+            box={ta}
+            placeholder="[verse] the words, a line each"
+            editor={(p) => (
+              <textarea {...p} value={value} onChange={(e) => onChange(e.target.value)} />
+            )}
+          />
+        </div>
+      )}
+      {error && <span className="text-[12px] text-bad">{error}</span>}
+    </div>
+  );
 }

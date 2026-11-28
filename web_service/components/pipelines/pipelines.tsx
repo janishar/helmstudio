@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, MoreHorizontal } from "lucide-react";
 import { ErrorNote, Info, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { MemoryDialog, useMemory } from "@/components/pipelines/memory";
 import { NewBatch } from "@/components/pipelines/new-batch";
 import { useScreenTools } from "@/components/assistant/tools";
@@ -144,6 +145,17 @@ function Chain({ p }: { p: Pipeline }) {
 }
 
 type Filter = "all" | "agents" | "running";
+
+/** All batches' state chips (Search.dc.html frame 5) and the statuses each keeps; Failed also keeps the stopped ones */
+const STATES = [
+  ["all", "All", []],
+  ["running", "Running", ["queued", "running"]],
+  ["waiting", "Waiting for you", ["waiting"]],
+  ["paused", "Paused", ["paused"]],
+  ["done", "Done", ["done"]],
+  ["failed", "Failed", ["failed", "stopped"]],
+] as const satisfies readonly (readonly [string, string, readonly S<"BatchStatus">[]])[];
+type State = (typeof STATES)[number][0];
 const hasAgents = (p: Pipeline) => Object.values(p.nodes).some((n) => isAgent(n.kind));
 
 export function Pipelines({
@@ -161,8 +173,8 @@ export function Pipelines({
   const [cursor, setCursor] = useState<string | null>(initial?.next_cursor ?? null);
   const [pipelines, setPipelines] = useState<Pipeline[] | null>(givenPipelines ?? null);
   const [selectedId, setSelectedId] = useState<string | null>(givenPipelines?.[0]?.id ?? null);
-  const [q, setQ] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [state, setState] = useState<State>("all");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
   const [creating, setCreating] = useState(false);
@@ -195,19 +207,16 @@ export function Pipelines({
     if (!initial || !givenPipelines) void load();
   }, [initial, givenPipelines, load]);
 
+  /** Load more: the next page of every batch */
   async function more() {
+    if (!cursor) return;
     setBusy("more");
     try {
-      let next = cursor;
-      while (next) {
-        const p = await ok(
-          api.GET("/v1/studio/batches", { params: { query: { limit: 200, cursor: next } } }),
-        );
-        const ids = new Set(batches?.map((b) => b.id));
-        setBatches((l) => [...(l ?? []), ...p.batches.filter((b) => !ids.has(b.id))]);
-        next = p.next_cursor;
-      }
-      setCursor(null);
+      const p = await ok(
+        api.GET("/v1/studio/batches", { params: { query: { limit: 60, cursor } } }),
+      );
+      setBatches((l) => [...(l ?? []), ...p.batches.filter((b) => !l?.some((x) => x.id === b.id))]);
+      setCursor(p.next_cursor);
     } catch (e) {
       setError(message(e));
     } finally {
@@ -321,12 +330,49 @@ export function Pipelines({
   }
 
   const runningCount = (pipelines ?? []).filter((p) => p.last_batch && !ended(p.last_batch)).length;
-  const shown = (pipelines ?? []).filter(
-    (p) =>
-      (filter === "all" ||
-        (filter === "agents" ? hasAgents(p) : p.last_batch && !ended(p.last_batch))) &&
-      p.title.toLowerCase().includes(q.trim().toLowerCase()),
-  );
+  // the whole list is loaded (at most 100 pipelines a user): the browser searches it, with the tabs
+  const plSearch = useSearch({
+    items: pipelines?.filter(
+      (p) =>
+        filter === "all" ||
+        (filter === "agents" ? hasAgents(p) : p.last_batch && !ended(p.last_batch)),
+    ),
+    text: (p) => [p.title],
+    id: (p) => p.id,
+    onPick: (p) => router.push(`/pipelines/${p.id}`),
+    min: -1,
+  });
+  const shown = plSearch.shown;
+  // All batches: words and a state chip, asked of the server (q, state) past the pages loaded
+  const keeps: readonly string[] = STATES.find(([k]) => k === state)![2];
+  const bSearch = useSearch({
+    items: batches?.filter((b) => !keeps.length || keeps.includes(b.status)),
+    text: (b) => [b.title, b.pipeline_title, b.workflow_title],
+    id: (b) => b.id,
+    scope: state === "all" ? "" : state,
+    server: (q, c) =>
+      ok(
+        api.GET("/v1/studio/batches", {
+          params: {
+            query: {
+              q: q || undefined,
+              state: keeps.length ? (keeps as S<"BatchStatus">[]) : undefined,
+              cursor: c ?? undefined,
+              limit: 60,
+            },
+          },
+        }),
+      ).then((p) => ({ items: p.batches, next: p.next_cursor })),
+    onPick: (b) =>
+      router.push(
+        b.status === "done"
+          ? `/gallery?batch=${encodeURIComponent(b.id)}`
+          : `/pipelines/batches/${b.id}`,
+      ),
+    onError: setError,
+    min: -1,
+  });
+  const narrowed = !!bSearch.q.trim() || state !== "all";
   const selected = pipelines?.find((p) => p.id === selectedId) ?? null;
   // the assistant's list actions (plan 18 §22.5): New batch filled (Undo) and Submit as a card
   const draft = useRef<Draft | null>(null);
@@ -355,16 +401,11 @@ export function Pipelines({
             </Info>
           </h1>
           <div className="grow" />
-          <label htmlFor="pl-search" className="sr-only">
-            Search pipelines
-          </label>
-          <input
+          <SearchField
+            {...plSearch.field}
             id="pl-search"
-            className="in w-60"
-            type="search"
-            placeholder="Search pipelines"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+            label="Search pipelines"
+            className="w-60 max-md:w-full"
           />
           <button
             type="button"
@@ -415,6 +456,9 @@ export function Pipelines({
 
         {error && <ErrorNote onRetry={batches && pipelines ? undefined : load}>{error}</ErrorNote>}
 
+        {plSearch.q && !shown.length && pipelines?.length !== 0 && (
+          <NoMatch what="pipelines" onClear={() => plSearch.setQ("")} />
+        )}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((p) => {
             const b = p.last_batch;
@@ -424,9 +468,10 @@ export function Pipelines({
                 key={p.id}
                 role="button"
                 tabIndex={0}
+                id={plSearch.rowId(p)}
                 aria-pressed={sel}
                 aria-label={`${p.title}, version ${p.version}`}
-                className={`panel flex min-w-0 cursor-pointer flex-col gap-2.5 px-4 py-3.5 ${sel ? "bg-s2 outline-2 outline-offset-3 outline-a1" : ""}`}
+                className={`panel flex min-w-0 cursor-pointer flex-col gap-2.5 px-4 py-3.5 ${sel ? "bg-s2 outline-2 outline-offset-3 outline-a1" : ""} ${plSearch.rows[plSearch.active] === p ? "sf-on" : ""}`}
                 onClick={() => setSelectedId(p.id)}
                 onDoubleClick={() => router.push(`/pipelines/${p.id}`)}
                 onKeyDown={(e) => {
@@ -437,7 +482,9 @@ export function Pipelines({
                 }}
               >
                 <div className="flex items-baseline justify-between gap-2">
-                  <h3 className="m-0 truncate font-display text-[15px] font-bold">{p.title}</h3>
+                  <h3 className="m-0 truncate font-display text-[15px] font-bold">
+                    <Marked text={p.title} q={plSearch.q} />
+                  </h3>
                   <span className="mono text-[11px] text-t2">v{p.version}</span>
                 </div>
                 <Chain p={p} />
@@ -481,12 +528,31 @@ export function Pipelines({
             disabled={busy === "more"}
             onClick={() => {
               setAll(!all);
-              if (!all && cursor) void more();
+              bSearch.setQ("");
+              setState("all");
             }}
           >
             All batches
           </button>
         </div>
+        {all && (
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchField {...bSearch.field} label="Search batches" className="w-72 max-md:w-full" />
+            <div role="group" aria-label="Batch state" className="flex flex-wrap gap-1.5">
+              {STATES.map(([k, l]) => (
+                <button
+                  key={k}
+                  type="button"
+                  aria-pressed={state === k}
+                  className="chip bevel h-[30px] aria-pressed:bg-t1 aria-pressed:font-semibold aria-pressed:text-panel"
+                  onClick={() => setState(k)}
+                >
+                  {l}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           <table className="grid-table">
             <thead>
@@ -502,12 +568,18 @@ export function Pipelines({
               </tr>
             </thead>
             <tbody>
-              {(all ? batches : batches?.slice(0, RECENT))?.map((b) => (
-                <tr key={b.id}>
+              {(all ? bSearch.rows : batches?.slice(0, RECENT))?.map((b) => (
+                <tr
+                  key={b.id}
+                  id={all ? bSearch.rowId(b) : undefined}
+                  className={all && bSearch.rows[bSearch.active] === b ? "sf-on" : ""}
+                >
                   <td className="m max-w-[200px] truncate" title={b.title}>
-                    {b.title}
+                    <Marked text={b.title} q={bSearch.q} />
                   </td>
-                  <td className="font-semibold">{b.pipeline_title ?? b.workflow_title}</td>
+                  <td className="font-semibold">
+                    <Marked text={b.pipeline_title ?? b.workflow_title ?? ""} q={bSearch.q} />
+                  </td>
                   <td className="m">
                     <RowsDone counts={b.counts} />
                   </td>
@@ -581,6 +653,32 @@ export function Pipelines({
               )}
             </tbody>
           </table>
+          {all && !!batches?.length && narrowed && !bSearch.rows.length && !bSearch.searching && (
+            <NoMatch
+              what="batches"
+              onClear={() => {
+                bSearch.setQ("");
+                setState("all");
+              }}
+            />
+          )}
+          {all && (
+            <div className="flex items-center gap-3 px-2 pt-1.5 pb-1">
+              <span className="mono text-[11px] text-t2">
+                {bSearch.searching ? "Searching older batches…" : `${bSearch.rows.length} shown`}
+              </span>
+              {(narrowed ? bSearch.olderNext : !!cursor) && !bSearch.searching && (
+                <button
+                  type="button"
+                  className="chip bevel h-[30px]"
+                  disabled={busy === "more"}
+                  onClick={() => (narrowed ? bSearch.moreOlder() : void more())}
+                >
+                  Load more
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <NewBatch

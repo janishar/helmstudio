@@ -33,7 +33,7 @@ const thumbsTodo = `t.thumb IS NULL AND t.deleted_at IS NULL AND t.ready AND t.t
 // QueueThumbs sends one thumbs job (as System) for the newest takes without a thumbnail, of one owner, at most
 // ThumbsPerJob, unless one is open already or no live env can run it; it returns the job id ("" for none).
 func QueueThumbs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Registry) (string, error) {
-	env, ok := mediaEnvOf(reg, nil, true) // never an older runner: it would fail every job
+	env, ok := mediaEnvOf(reg, nil, func(m registry.Media) bool { return m.Thumbs }) // never an older runner
 	if !ok {
 		return "", nil
 	}

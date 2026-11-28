@@ -1,0 +1,59 @@
+{
+  "plan": {
+    "name": "The Last Tide · send 3",
+    "revision": 41,
+    "goes": [
+      {
+        "lane": "shots",
+        "name": "Shots",
+        "kind": "video",
+        "blocks": 3,
+        "track": "V1",
+        "linked": 0
+      },
+      {
+        "lane": "lines",
+        "name": "Mara's lines",
+        "kind": "voice",
+        "blocks": 2,
+        "track": "A2",
+        "linked": 2
+      }
+    ],
+    "joins": [
+      {
+        "transition": "t1",
+        "kind": "fade_in",
+        "how": "baked"
+      },
+      {
+        "transition": "t2",
+        "kind": "dissolve",
+        "how": "kept"
+      },
+      {
+        "transition": "t3",
+        "kind": "wipe",
+        "how": "baked"
+      },
+      {
+        "transition": "t4",
+        "kind": "morph",
+        "how": "clip"
+      }
+    ],
+    "effects": [
+      {
+        "block": "s2",
+        "name": "Grade · warm",
+        "how": "baked"
+      }
+    ],
+    "warnings": [
+      "Shot 3 is out of date: sends take 2 as it is"
+    ],
+    "bakes": 0,
+    "bake_seconds": null,
+    "host": null
+  }
+}

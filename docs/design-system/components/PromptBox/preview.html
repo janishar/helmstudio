@@ -1,0 +1,23 @@
+<!-- @dsCard group="Create" height=240 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>PromptBox · preview</title></head>
+<body>
+<div style="padding:16px">
+<form class="panel" aria-label="Composer" style="max-width:720px;min-height:190px;box-sizing:border-box;display:flex;flex-direction:column;gap:12px;background-color:var(--s2);padding:14px 16px;box-shadow:var(--shadow-composer)">
+  <textarea rows="2" aria-label="Prompt" placeholder="Describe what you want to see" style="width:100%;flex:1 0 auto;resize:none;border:0;background:transparent;font:inherit;font-size:15px;line-height:22px;color:var(--t1);outline:0">A fox trots in at dusk</textarea>
+  <p style="margin:0;font-size:15px;line-height:22px">A fox trots in at dusk beside <span class="mention-chip mono" style="font-size:12px">@mara</span> and <span class="mention-unknown mono" style="font-size:12px">@bus</span></p>
+  <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    <button class="chip sq icon bevel" type="button" aria-label="Add image, video or audio"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button>
+    <button class="chip sq icon bevel" type="button" aria-label="Insert element"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/></svg></button>
+    <button class="chip sq bevel" type="button">FLUX.2 dev</button>
+    <button class="chip sq bevel" type="button">16:9</button>
+    <button class="chip sq bevel" type="button">Seed 42</button>
+    <div class="hs-seeds" role="group" aria-label="Seeds to queue"><button type="button" aria-label="Fewer seeds" disabled><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg></button><span class="mono">1 / 4</span><button type="button" aria-label="More seeds"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg></button></div>
+    <button class="chip sq icon bevel drawer" type="button" aria-label="All settings" aria-expanded="false"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5H3"/><path d="M12 19H3"/><path d="M14 3v4"/><path d="M16 17v4"/><path d="M21 12h-9"/><path d="M21 19h-5"/><path d="M21 5h-7"/><path d="M8 10v4"/><path d="M8 12H3"/></svg></button>
+    <button class="key hs-key" type="submit" style="margin-left:auto"><span>Generate</span></button>
+  </div>
+</form>
+</div>
+</body>
+</html>

@@ -69,7 +69,7 @@ def clips(tmp_path_factory) -> dict[str, bytes]:
         "-ar",
         "48000",
     ]
-    for name, src, freq in (("a", "testsrc2=s=256x128:r=24:d=1", 440), ("c", "testsrc=s=320x240:r=30:d=1", 880)):  # fmt: skip
+    for name, src, freq in (("a", "testsrc2=s=256x128:r=24:d=1", 440), ("c", "testsrc=s=320x240:r=30:d=1", 880)):
         ff("-f", "lavfi", "-i", src, "-f", "lavfi", "-i", f"sine=f={freq}:d=1:r=48000", *x264, "-shortest",
            str(d / f"{name}.mp4"))  # fmt: skip
     ff("-f", "lavfi", "-i", "color=c=orange:s=200x100", "-frames:v", "1", str(d / "d.png"))
@@ -98,9 +98,7 @@ def facts(data: bytes) -> dict:
         return media.probe(f.name)["stream"]
 
 
-def command(
-    inputs: list[tuple[str, str]], export: dict | None = None, frame: dict | None = None
-) -> dict:
+def command(inputs: list[tuple[str, str]], export: dict | None = None, frame: dict | None = None) -> dict:
     cmd = copy.deepcopy(BASE)
     data = {
         "kind": "frame" if frame else "export",
@@ -165,9 +163,7 @@ async def test_stream_copy_concatenates_the_pictures_and_reencodes_the_sound(cli
         48,
         True,
     )
-    assert (
-        r["video"]["stream"]["extradata_sha256"] == facts(clips["a"])["extradata_sha256"]
-    )  # copied, not encoded
+    assert r["video"]["stream"]["extradata_sha256"] == facts(clips["a"])["extradata_sha256"]  # copied, not encoded
     assert set(store.objects) >= {
         PREFIX + "export.mp4",
         PREFIX + "export.poster.png",
@@ -181,9 +177,7 @@ async def test_a_copy_plan_whose_probe_differs_runs_the_conform_arguments(clips)
     cmd = command([("runs/a/1/0.mp4", "video"), ("runs/c/1/0.mp4", "video")], copy_export(clips))
     end = (await run(cmd, store))[-1]["data"]
     assert end["status"] == "succeeded" and end["encoder"] == "libx264"
-    assert end["result"]["mode"] == "conform" and end["result"]["reason"].startswith(
-        "clip input 1: "
-    )
+    assert end["result"]["mode"] == "conform" and end["result"]["reason"].startswith("clip input 1: ")
     assert end["result"]["video"]["frames"] == 48
 
 
@@ -202,9 +196,7 @@ async def test_conform_with_an_image_a_dissolve_gain_and_an_extra_audio_track(cl
           "args": [*HEAD, "-fflags", "+bitexact", "-i", "{in:0}", "-i", "{in:1}", "-loop", "1", "-framerate", "24",
                    "-t", "0.5", "-i", "{in:2}", "-filter_complex", graph, "-map", "[vout]", "-map", "[aout]",
                    "-map_metadata", "-1", "{venc}", "-pix_fmt", "yuv420p", *TAIL]}  # fmt: skip
-    cmd = command(
-        [("runs/a/1/0.mp4", "video"), ("runs/c/1/0.mp4", "video"), ("uploads/d.png", "image")], ex
-    )
+    cmd = command([("runs/a/1/0.mp4", "video"), ("runs/c/1/0.mp4", "video"), ("uploads/d.png", "image")], ex)
     end = (await run(cmd, store))[-1]["data"]
     assert end["status"] == "succeeded", end
     v = end["result"]["video"]
@@ -220,9 +212,7 @@ async def test_conform_with_an_image_a_dissolve_gain_and_an_extra_audio_track(cl
 
 
 @pytest.mark.parametrize("codec", ["pcm_s16le", "aac"])
-async def test_an_audio_take_on_an_audio_track_is_mixed_resampled_to_stereo_at_its_start(
-    clips, tmp_path, codec
-):
+async def test_an_audio_take_on_an_audio_track_is_mixed_resampled_to_stereo_at_its_start(clips, tmp_path, codec):
     """1.32: an input of kind audio (a mono 24 kHz WAV, sine at 1/8 scale; 1.38 also an m4a, what the web uploads)
     mixed as studio's buildArgs mixes a sound: in 0.1..0.4 laid at 0.5 s, resampled to 48 kHz stereo, -6 dB; silence
     before it."""
@@ -265,9 +255,7 @@ async def test_an_audio_input_that_is_not_a_wav_fails_input(clips):
     store = store_of(clips, **{"runs/t/1/0.mp4": "t", "runs/w/1/0.wav": "a"})
     ex = {"mode": "conform", "frames": 24, "samples": 48000,
           "args": [*HEAD, "-i", "{in:0}", "-i", "{in:1}", "-map", "0:v:0", "{venc}", *TAIL]}  # fmt: skip
-    end = (
-        await run(command([("runs/t/1/0.mp4", "video"), ("runs/w/1/0.wav", "audio")], ex), store)
-    )[-1]["data"]
+    end = (await run(command([("runs/t/1/0.mp4", "video"), ("runs/w/1/0.wav", "audio")], ex), store))[-1]["data"]
     assert end["status"] == "failed" and end["failure"]["detail"] == "an input is not a audio", end
 
 
@@ -327,9 +315,7 @@ async def test_cancel_mid_run_stops_ffmpeg_and_removes_the_temp_dir(clips, tmp_p
 )
 def test_arguments_outside_the_allowlist_are_refused(args, why, tmp_path):
     with pytest.raises(MediaError, match=why) as e:
-        media.build(
-            args, [tmp_path / "in0.mp4"], out=tmp_path / "o.mp4", venc_args=[], listfile=None
-        )
+        media.build(args, [tmp_path / "in0.mp4"], out=tmp_path / "o.mp4", venc_args=[], listfile=None)
     assert e.value.cls == "invalid"
 
 
@@ -362,17 +348,13 @@ async def test_stream_copy_of_clips_whose_sound_runs_past_the_picture_keeps_the_
     e = mp4.mp4(Image.new("RGB", (256, 128), (200, 50, 50)), 49, 24)
     clips = {"e": e}
     store = store_of(clips, **{"runs/e/1/0.mp4": "e", "runs/f/1/0.mp4": "e"})
-    sound = "[1:a:0]atrim=end=2.041667,asetpts=N/SR/TB[a0];[2:a:0]atrim=end=2.041667,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]"  # fmt: skip
+    sound = "[1:a:0]atrim=end=2.041667,asetpts=N/SR/TB[a0];[2:a:0]atrim=end=2.041667,asetpts=N/SR/TB[a1];[a0][a1]concat=n=2:v=0:a=1[aout]"
     export = {"mode": "copy", "frames": 98, "samples": 196000, "concat": [0, 1],
               "args": [*HEAD, "-f", "concat", "-safe", "0", "-i", "{list}", "-i", "{in:0}", "-i", "{in:1}",
                        "-filter_complex", sound, "-map", "0:v:0", "-c:v", "copy", "-map", "[aout]", *TAIL],
               "expect": [{"input": 0, "stream": facts(e)}, {"input": 1, "stream": facts(e)}],
               "conform_args": [*HEAD, "-i", "{in:0}", "{venc}", *TAIL]}  # fmt: skip
-    end = (
-        await run(
-            command([("runs/e/1/0.mp4", "video"), ("runs/f/1/0.mp4", "video")], export), store
-        )
-    )[-1]
+    end = (await run(command([("runs/e/1/0.mp4", "video"), ("runs/f/1/0.mp4", "video")], export), store))[-1]
     r = end["data"]["result"]
     assert end["data"]["status"] == "succeeded" and r["mode"] == "copy", end["data"]
     assert (r["video"]["stream"]["frame_rate"], r["video"]["frames"]) == ("24/1", 98)
@@ -415,9 +397,7 @@ def decoded(data: bytes, w: int, h: int) -> list[bytes]:
 @pytest.mark.parametrize("at, index", [("first", 0), ("last", 24)])
 async def test_a_frame_job_writes_exactly_that_frame(clips, at, index):
     store = store_of(clips, **{"runs/t/1/0.mp4": "t"})
-    events = await run(
-        command([("runs/t/1/0.mp4", "video")], frame={"at": at, "index": index}), store
-    )
+    events = await run(command([("runs/t/1/0.mp4", "video")], frame={"at": at, "index": index}), store)
     assert not any(e["type"] == "evt.media.progress" for e in events)
     r = events[-1]["data"]["result"]
     assert (r["width"], r["height"]) == (128, 64) and r["key"].endswith("/frame.png")
@@ -429,9 +409,7 @@ async def test_a_frame_job_writes_exactly_that_frame(clips, at, index):
 
 async def test_a_frame_past_the_end_fails_input(clips):
     store = store_of(clips, **{"runs/t/1/0.mp4": "t"})
-    end = (
-        await run(command([("runs/t/1/0.mp4", "video")], frame={"at": "last", "index": 25}), store)
-    )[-1]["data"]
+    end = (await run(command([("runs/t/1/0.mp4", "video")], frame={"at": "last", "index": 25}), store))[-1]["data"]
     assert end["failure"] == {"class": "input", "detail": "the video has 25 frames, no frame 25"}
 
 
@@ -443,7 +421,7 @@ def test_the_fake_reports_the_stream_facts_ffprobe_reads():
 def test_detect_names_the_hosts_key_media():
     value = media.detect()
     assert value["encoders"][-1] == "libx264" and value["ffmpeg"][0].isdigit()
-    assert value["thumbs"] is True  # API 1.48
+    assert value["thumbs"] is True and value["facts"] is True  # API 1.48, 1.104
 
 
 LOOP = {"mode": "conform", "frames": 86400, "samples": 172800000,
@@ -490,9 +468,7 @@ async def test_inputs_past_the_jobs_budget_fail_input(clips, monkeypatch):
         "samples": 48000,
         "args": ["-i", "{in:0}", "-i", "{in:1}", "{out}"],
     }
-    end = (
-        await run(command([("runs/a/1/0.mp4", "video"), ("runs/b/1/0.mp4", "video")], ok), store)
-    )[-1]["data"]
+    end = (await run(command([("runs/a/1/0.mp4", "video"), ("runs/b/1/0.mp4", "video")], ok), store))[-1]["data"]
     assert end["failure"] == {
         "class": "input",
         "detail": "input 1 is past the job's room on disk",
@@ -528,9 +504,7 @@ def test_venc_per_encoder_and_nvenc_only_when_it_encodes(monkeypatch):
     runs = []
     monkeypatch.setattr(media.subprocess, "run", lambda argv, **kw: runs.append(argv) or
                         types.SimpleNamespace(returncode=1))  # fmt: skip
-    assert (
-        media.usable("h264_nvenc") is False and "h264_nvenc" in runs[0]
-    )  # listed, but no GPU encodes
+    assert media.usable("h264_nvenc") is False and "h264_nvenc" in runs[0]  # listed, but no GPU encodes
     assert media.usable("libx264")
 
 
@@ -600,12 +574,160 @@ async def test_a_frame_job_writes_the_frames_thumb(clips, tmp_path):
                     "-c:v", "libx264", "-preset", "ultrafast", "-pix_fmt", "yuv420p", str(big)], check=True)  # fmt: skip
     store = FakeStore()
     store.objects[f"{U}runs/t/1/0.mp4"] = (big.read_bytes(), "video/mp4")
-    r = (
-        await run(command([("runs/t/1/0.mp4", "video")], frame={"at": "first", "index": 0}), store)
-    )[-1]
+    r = (await run(command([("runs/t/1/0.mp4", "video")], frame={"at": "first", "index": 0}), store))[-1]
     thumb = r["data"]["result"]["thumb"]
     assert thumb["key"].endswith("/frame.thumb.webp") and (thumb["width"], thumb["height"]) == (
         910,
         512,
     )
     assert store.objects[thumb["key"]][1] == "image/webp"
+
+
+def _wav(rate: int, channels: int, frames: int) -> bytes:
+    import wave
+
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels), w.setsampwidth(2), w.setframerate(rate)
+        w.writeframes(bytes(range(256)) * (frames * 2 * channels // 256) + bytes(frames * 2 * channels % 256))
+    return buf.getvalue()
+
+
+def test_pcm_decodes_any_audio_at_the_rate_and_channels_asked():
+    """API 1.79 (contracts/README.md, Music and sound): a mono WAV as stereo at 48 kHz and back to mono at 24 kHz."""
+    src = _wav(24000, 1, 24000)  # 1 s mono
+    stereo = media.pcm(src, 48000, 2)
+    assert abs(len(stereo) - 48000 * 4) <= 4 * 64
+    mono = media.pcm(_wav(48000, 2, 48000), 24000, 1)
+    assert abs(len(mono) - 24000 * 2) <= 2 * 64
+    with pytest.raises(MediaError) as e:
+        media.pcm(b"not audio", 24000, 1)
+    assert e.value.cls == "ffmpeg" and "/" not in str(e.value)
+
+
+def test_mux_keeps_the_picture_and_fits_the_sound_to_its_length(tmp_path):
+    """API 1.79 (Save with the video): H.264 copied, the sound AAC stereo, padded (shorter) or cut (longer) to the
+    picture's length."""
+    poster = Image.new("RGB", (64, 32), "red")
+    clip = mp4.mp4(poster, 48, 24)  # 2 s
+    for seconds in (0.5, 5):
+        out = tmp_path / f"{seconds}.mp4"
+        out.write_bytes(media.mux(clip, _wav(44100, 2, round(44100 * seconds))))
+        info = media.probe(out)
+        assert info["video"]["codec_name"] == "h264" and info["audio"]["codec_name"] == "aac"
+        assert info["audio"]["channels"] == 2 and info["frames"] == 48
+        assert abs(float(info["audio"]["duration"]) - 2.0) < 0.1
+
+
+def mux_command(video: str, sound: str) -> dict:
+    cmd = copy.deepcopy(BASE)
+    cmd["data"] = {"kind": "mux", "output_prefix": f"{U}muxes/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}{video}", "kind": "video"}, {"key": f"{U}{sound}", "kind": "audio"}]}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    return cmd
+
+
+@pytest.mark.parametrize("seconds", [0.5, 5])
+async def test_a_mux_job_keeps_the_picture_with_the_sound_fitted_to_its_length(clips, seconds):
+    """API 1.79 (Save with the video): mux.mp4 with the picture copied, AAC stereo cut or padded to 1 s, its poster
+    (frame 0) and last frame; no thumb (the schema has none for a mux)."""
+    store = store_of(clips, **{"runs/v/1/0.mp4": "t"})
+    store.objects[f"{U}runs/a/1/0.wav"] = (_wav(44100, 2, round(44100 * seconds)), "audio/wav")
+    events = await run(mux_command("runs/v/1/0.mp4", "runs/a/1/0.wav"), store)
+    end = events[-1]["data"]
+    assert end["status"] == "succeeded" and end["encoder"] == "copy"
+    r = end["result"]
+    assert r["key"].endswith("/mux.mp4") and (r["width"], r["height"]) == (128, 64) and "thumb" not in r
+    v = r["video"]
+    assert v["frames"] == 25 and v["fps"] == 24 and v["has_audio"]
+    frames = decoded(clips["t"], 128, 64)
+    assert Image.open(io.BytesIO(store.objects[v["poster"]["key"]][0])).tobytes() == frames[0]
+    assert Image.open(io.BytesIO(store.objects[v["last"]["key"]][0])).tobytes() == frames[24]
+    with tempfile.NamedTemporaryFile(suffix=".mp4") as f:
+        f.write(store.objects[r["key"]][0])
+        f.flush()
+        info = media.probe(f.name)
+    assert info["video"]["codec_name"] == "h264" and info["audio"]["codec_name"] == "aac"
+    assert info["audio"]["channels"] == 2 and int(info["audio"]["sample_rate"]) == 48000
+    assert abs(float(info["audio"]["duration"]) - 25 / 24) < 0.1
+
+
+async def test_a_mux_job_whose_sound_is_a_video_fails_input(clips):
+    store = store_of(clips, **{"runs/v/1/0.mp4": "t", "runs/a/1/0.wav": "a"})
+    end = (await run(mux_command("runs/v/1/0.mp4", "runs/a/1/0.wav"), store))[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["class"] == "input"
+
+
+def bake_command(kind: str, inputs: list[str], graph: str, frames: int) -> dict:
+    cmd = copy.deepcopy(BASE)
+    ins = [a for i in range(len(inputs)) for a in ("-i", f"{{in:{i}}}")]
+    args = [*HEAD, *ins, "-filter_complex", graph, "-map", "[vout]", "{venc}", "-r", "24", "-pix_fmt", "yuv420p",
+            "-map", "[aout]", *TAIL]  # fmt: skip
+    cmd["data"] = {"kind": "bake", "output_prefix": f"{U}bakes/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}{k}", "kind": "video"} for k in inputs],
+                   "bake": {"target": TARGET, "frames": frames, "samples": frames * 2000, "video_bitrate": 1000000,
+                            "args": args}}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    return cmd
+
+
+async def test_a_bake_job_wipes_two_clip_ends_into_a_short_clip(clips):
+    """API 1.82 (Magic: Send to Timeline): a wipe of the first clip's last half second into the second's first, the
+    first's sound faded out: bake.mp4 at the target, exactly 12 frames, with its poster, last frame and thumb."""
+    store = store_of(clips, **{"runs/x/1/0.mp4": "a", "runs/y/1/0.mp4": "a"})
+    graph = (f"[0:v:0]trim=start=0.5:end=1,setpts=PTS-STARTPTS,{CONFORM}[v0];"
+             f"[1:v:0]trim=start=0:end=0.5,setpts=PTS-STARTPTS,{CONFORM}[v1];"
+             "[v0][v1]xfade=transition=wipeleft:duration=0.5:offset=0,trim=duration=0.5[vout];"
+             "[0:a:0]atrim=start=0.5:end=1,asetpts=N/SR/TB,afade=t=out:st=0:d=0.5[aout]")  # fmt: skip
+    events = await run(bake_command("wipe", ["runs/x/1/0.mp4", "runs/y/1/0.mp4"], graph, 12), store)
+    end = events[-1]["data"]
+    assert end["status"] == "succeeded" and end["encoder"] == "libx264", end
+    r = end["result"]
+    assert r["key"].endswith("/bakes/" + BASE["job_id"] + "/bake.mp4") and "mode" not in r
+    v = r["video"]
+    assert v["frames"] == 12 and v["fps"] == 24 and v["has_audio"]
+    assert v["poster"]["key"].endswith("/bake.poster.png") and v["last"]["key"].endswith("/bake.last.png")
+    assert r.get("thumb") is None or r["thumb"]["key"].endswith("/bake.thumb.webp")
+    assert (r["width"], r["height"]) == (256, 128)
+
+
+async def test_a_bake_whose_output_is_off_its_frames_fails_verify(clips):
+    store = store_of(clips, **{"runs/x/1/0.mp4": "a"})
+    graph = f"[0:v:0]setpts=PTS-STARTPTS,{CONFORM}[vout];[0:a:0]anull[aout]"
+    end = (await run(bake_command("effects", ["runs/x/1/0.mp4"], graph, 12), store))[-1]["data"]
+    assert end["status"] == "failed" and end["failure"]["class"] == "verify"
+
+
+# ---- API 1.104: take facts (contracts/README.md, Take facts)
+
+
+async def test_a_facts_job_measures_each_take_grids_a_video_and_reports_a_missing_one(clips):
+    store = store_of(clips, **{"runs/r/1/0.mp4": "a", "runs/r/2/0.mp4": "t"})
+    cmd = copy.deepcopy(BASE)
+    cmd["data"] = {"kind": "facts", "output_prefix": f"{U}facts/{BASE['job_id']}/",
+                   "inputs": [{"key": f"{U}runs/r/1/0.mp4", "kind": "video"}, {"key": f"{U}runs/r/2/0.mp4", "kind": "video"},
+                              {"key": f"{U}gone.m4a", "kind": "audio"}]}  # fmt: skip
+    assert schemas.message_errors(cmd) == []
+    events = await run(cmd, store)
+    end = events[-1]
+    assert end["data"]["status"] == "succeeded" and schemas.message_errors(end) == []
+    a, t, gone = end["data"]["result"]["facts"]
+    prefix = f"{U}facts/{BASE['job_id']}/"
+    assert a["key"] == f"{prefix}0.jpg" and store.objects[a["key"]][1] == "image/jpeg" and len(a["at"]) == 12
+    assert (
+        a["facts"]["seconds"] == 1.0 and a["facts"]["lufs"] > -40 and a["facts"]["abrupt"] is True
+    )  # a sine to the end
+    assert a["facts"]["cuts"] == [] and (a["width"], a["height"]) == (1024, 384)
+    assert t["facts"]["sound_seconds"] is None and t["facts"]["lufs"] is None and len(t["at"]) == 12
+    assert gone == {"index": 2, "error": "input 2 is missing"}
+
+
+def test_a_facts_ffmpeg_timeout_fails_only_its_take(monkeypatch):
+    from core import facts as take_facts  # `facts` here is the test's own helper
+
+    def slow(*a, **k):
+        raise subprocess.TimeoutExpired("ffmpeg", 1)
+
+    monkeypatch.setattr(take_facts.subprocess, "run", slow)
+    with pytest.raises(MediaError, match="took over"):
+        take_facts._ffmpeg(["-i", "x"], timeout=1)

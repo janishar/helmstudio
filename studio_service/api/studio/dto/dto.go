@@ -29,8 +29,9 @@ type Session struct {
 
 // SessionList is the caller's sessions, newest first, and how new ones are named (API 1.43).
 type SessionList struct {
-	Sessions []Session     `json:"sessions"`
-	Naming   SessionNaming `json:"naming"`
+	Sessions   []Session     `json:"sessions"`
+	Naming     SessionNaming `json:"naming"`
+	NextCursor *string       `json:"next_cursor"` // API 1.92
 }
 
 // SessionNaming is SessionList.naming: the session-names setting, redacted.
@@ -284,7 +285,8 @@ type RunAnswer struct {
 
 // RunList is a session's runs, newest first.
 type RunList struct {
-	Runs []Run `json:"runs"`
+	Runs       []Run   `json:"runs"`
+	NextCursor *string `json:"next_cursor"` // API 1.92
 }
 
 // SessionEvent is one stored event: type status, progress or output.

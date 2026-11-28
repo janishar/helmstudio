@@ -1,0 +1,124 @@
+{
+  "kinds": [
+    {
+      "kind": "video",
+      "fields": [
+        "prompt",
+        "first",
+        "last",
+        "length",
+        "size",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "ltx-image-to-video",
+          "name": "LTX 2.5",
+          "title": "LTX-2.5 Image to video",
+          "family": "ltx",
+          "fields": [
+            "prompt",
+            "first",
+            "last",
+            "length",
+            "size",
+            "seed"
+          ],
+          "greyed": {},
+          "seconds": 14,
+          "advanced": [
+            {
+              "path": "sample1.steps",
+              "param": {
+                "name": "steps",
+                "type": "int",
+                "label": "Steps",
+                "default": 8,
+                "min": 1,
+                "max": 50,
+                "step": 1
+              }
+            }
+          ]
+        },
+        {
+          "workflow_id": "echo-video",
+          "name": "Echo video",
+          "title": "Echo video",
+          "fields": [
+            "prompt",
+            "length",
+            "size"
+          ],
+          "greyed": {
+            "first": "Echo video can't take a first frame",
+            "last": "Echo video can't take a last frame",
+            "seed": "Echo video can't take a seed"
+          },
+          "seconds": null,
+          "advanced": []
+        }
+      ]
+    },
+    {
+      "kind": "music",
+      "fields": [
+        "prompt",
+        "lyrics",
+        "length",
+        "key",
+        "bpm",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "minimax-music3",
+          "name": "MiniMax Music 3",
+          "title": "MiniMax Music 3",
+          "fields": [
+            "prompt",
+            "lyrics",
+            "length",
+            "seed"
+          ],
+          "greyed": {
+            "key": "MiniMax Music 3 can't take a key",
+            "bpm": "MiniMax Music 3 can't take a BPM"
+          },
+          "seconds": 4.9,
+          "advanced": []
+        }
+      ]
+    },
+    {
+      "kind": "sound",
+      "fields": [
+        "from",
+        "prompt",
+        "length",
+        "seed"
+      ],
+      "models": [
+        {
+          "workflow_id": "mmaudio-sound",
+          "name": "MMAudio",
+          "title": "MMAudio Sound",
+          "fields": [
+            "from",
+            "prompt",
+            "length",
+            "seed"
+          ],
+          "greyed": {},
+          "seconds": 0.5,
+          "advanced": [],
+          "video": {
+            "workflow_id": "mmaudio-video",
+            "title": "MMAudio Sound from a video",
+            "advanced": []
+          }
+        }
+      ]
+    }
+  ]
+}

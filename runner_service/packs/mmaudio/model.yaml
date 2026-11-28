@@ -1,0 +1,99 @@
+# MMAudio large 44k v2 on torch (plan 38): sound effects from a text, or for a video (the video comes back with the
+# sound muxed in). MMAudio's own code, vendored in vendor/ (VENDORED.md), run as ~/GenAI/model-samples/mmaudio's
+# run_samples.py runs it (results.md: bf16 on MPS, 8 s in 3.8 s from a text, 8.7 s from a video). Its checkpoints are
+# torch.save files, so torch.py loads its components itself (load_component). Generates exactly the canonical mmaudio
+# fixtures (contracts/fixtures/registry/mmaudio.*.valid.json; tests/test_packs.py).
+id: mmaudio-large-44k-v2
+family: mmaudio
+title: MMAudio
+media: [audio]
+sound: sound                     # API 1.79: its takes are sound effects (contracts/README.md, Music and sound)
+runtimes:
+  torch: {env: torch, devices: [mps, cuda]}   # bf16 on both; the CUDA golden waits for a GCP slot (plan 38)
+licences:                        # licences/<id>.md holds the text, shown before a download
+  mmaudio-weights: {title: "MMAudio (CC BY-NC 4.0), DFN5B CLIP (Apple research) and BigVGAN (MIT)",
+                    url: https://huggingface.co/hkchengrex/MMAudio}
+model:
+  help: The weights to load.
+  variant: {label: Variant, help: "Large 44k v2: 44.1 kHz mono, the best of MMAudio's checkpoints."}
+variants:
+  large_44k_v2:
+    dir: MMAudio
+    title: Large 44k v2
+    # three repos, each into its own folder: MMAudio's network, VAE and Synchformer; its two helpers (the CLIP and
+    # the vocoder), only the files the code loads (not DFN5B's transformers copy, not BigVGAN's discriminator).
+    # Byte counts: the files on disk at these revisions (source: the whole download)
+    source: {repo: hkchengrex/MMAudio, revision: eb13a1a98fdbec91753775c57b074ccdfc60587c,
+             allow_patterns: [weights/mmaudio_large_44k_v2.pth, ext_weights/v1-44.pth,
+                              ext_weights/synchformer_state_dict.pth],
+             licence: mmaudio-weights, must_accept: true, gated: false, bytes: 10730600950}
+    sources:
+      - {repo: apple/DFN5B-CLIP-ViT-H-14-384, revision: 01b771ed0d1395ca5ffdd279897d665ebe00dfd2,
+         dir: DFN5B-CLIP-ViT-H-14-384, allow_patterns: [open_clip_config.json, open_clip_pytorch_model.bin],
+         gated: false, bytes: 3947082372}
+      - {repo: nvidia/bigvgan_v2_44khz_128band_512x, revision: 95a9d1dcb12906c03edd938d77b9333d6ded7dfb,
+         dir: bigvgan_v2_44khz_128band_512x, allow_patterns: [config.json, bigvgan_generator.pt],
+         gated: false, bytes: 489042694}
+# memory plans (core/registry.py): a video is planned at the sample's (8 s of 1080p, results.md); sound from a video
+# gets its own item (it loads the Synchformer and reads the frames)
+plan_media:
+  video: {width: 1920, height: 1080, frames: 192, fps: 24, duration_s: 8.0, has_audio: false}
+planned_alone: [mmaudio-video]
+components:                      # all stored fp32 (torch.save), cast to bf16 as the sample's `.to(device, dtype)`
+  net: {files: weights/mmaudio_large_44k_v2.pth, dtype: bf16, precision: [bf16]}
+  autoencoder: {files: ext_weights/v1-44.pth, dtype: bf16, precision: [bf16]}           # the VAE, decoder only
+  synchformer: {files: ext_weights/synchformer_state_dict.pth, dtype: bf16, precision: [bf16]}   # video only
+  clip: {dir: DFN5B-CLIP-ViT-H-14-384, files: open_clip_pytorch_model.bin, dtype: bf16, precision: [bf16]}
+  bigvgan: {dir: bigvgan_v2_44khz_128band_512x, files: bigvgan_generator.pt, dtype: bf16, precision: [bf16]}
+stages:
+  sound:
+    title: Sound
+    component: net
+    help: "A sound effect from a description: 44.1 kHz mono, Length seconds long. MMAudio was trained on 8 s clips; longer ones work but hold less detail."
+    uses: [net, clip, autoencoder, bigvgan]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      avoid: &avoid {type: string, label: Avoid, default: "", max: 400,
+                     help: "What the sound should not have (the negative prompt)."}
+      seconds: {type: float, label: Length, default: 8, min: 1, max: 30, step: 0.5,
+                help: "The sound's length in seconds."}
+      guidance: &guidance {type: float, label: Guidance, default: 4.5, min: 1, max: 10, step: 0.5,
+                           help: "How closely the sound follows the text (cfg strength): higher is closer, less varied."}
+      steps: &steps {type: int, label: Steps, default: 25, min: 10, max: 50, step: 1,
+                     help: "Flow-matching steps: more is slower, rarely better past 25."}
+    # measured (torch 2.15 MPS, footprint sampled every 50 ms, tests/test_mmaudio_golden.py): 1.45 / 1.96 / 2.56 GB
+    # above a 0.43 GB runner and 4.56 GB of components for 2 / 8 / 30 s, cold (loads included) or warm
+    peak_gb: "1.8 + 0.03 * seconds"
+    stall_s: 120                 # a cancel point every step and before each component
+  foley:
+    title: Sound from a video
+    component: net
+    help: "The sound of a video (its picture read at 8 and 25 fps, steered by the text), and the video with that sound: the picture copied as it is, the sound added as AAC."
+    uses: [net, clip, synchformer, autoencoder, bigvgan]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio, video: Video}
+    params:
+      source: {type: media, label: Video, default: null, accepts: [video], min_s: 1, max_s: 30,
+               help: "The video to give a sound; its own sound, if any, is replaced."}
+      seconds: {type: float, label: Length, default: 0, auto: true, min: 1, max: 30, step: 0.5,
+                help: "Auto: from the video (its length; the last 0.04 s may stay silent: the 25 fps sync). Else its first seconds, and the video is cut to them."}
+      avoid: *avoid
+      guidance: *guidance
+      steps: *steps
+    # measured as sound (5.0 GB of components): 1.4 GB for 2 s of 640 x 360, 4.0-5.3 GB for 8 s of 1080p (the CLIP
+    # and Synchformer passes; MPS keeps what they took); ponytail: linear in seconds, 30 s unmeasured
+    peak_gb: "1 + 0.55 * (seconds if seconds else frames / fps)"
+    stall_s: 120
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param>, each checked against its workflow's node schemas (tests/test_guides.py). assistant.md says when.
+recipes:
+  - {name: quick-sound, title: Quick sound, workflow: mmaudio-sound,
+     params: {sound.seconds: 8, sound.guidance: 4.5, sound.steps: 25},
+     note: "One sound in a short concrete phrase: the source and the action (\"door creaking open\")."}
+  - {name: tight-to-text, title: Tight to the text, workflow: mmaudio-sound, params: {sound.guidance: 7},
+     note: "When takes drift from the description; less variety between takes."}
+  - {name: video-sound, title: Sound for a video, workflow: mmaudio-video,
+     params: {foley.seconds: 0, foley.guidance: 4.5},
+     note: "The whole video; a short text of what is heard steers it (\"truck engine on a road\")."}

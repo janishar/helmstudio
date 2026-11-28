@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/url"
 	"os"
@@ -28,6 +29,7 @@ var toolCatalogJSON []byte // make gen: a copy of contracts/tools/catalog.json
 
 type catalogTool struct {
 	Description string          `json:"description"`
+	MCPDesc     string          `json:"mcp_description"` // plan 16 §20.8: in place of description (no card over MCP)
 	Surfaces    []string        `json:"surfaces"`
 	ReadOnly    bool            `json:"read_only"`
 	Destructive bool            `json:"destructive"`
@@ -117,7 +119,7 @@ func newMCPServer(c *client) *mcp.Server {
 	c.app = "mcp" // its timeline edits are labelled via mcp
 	s := &mcpServer{c: c, runs: map[string]bool{}}
 	srv := mcp.NewServer(&mcp.Implementation{Name: "helmstudio", Version: "1"}, &mcp.ServerOptions{
-		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one. To edit a sequence: show_timeline (clip ids, revision), try_timeline_edit, then edit_timeline with the same ops and base_revision; timeline_frame to look at a time; restore_timeline goes back.",
+		Instructions: "helmstudio: find a workflow (list_workflows, get_workflow), run_workflow, wait_run, then get_take to see a take. Inputs are take ids; upload turns a local image into one. To edit a sequence: show_timeline (clip ids, revision), try_timeline_edit, then edit_timeline with the same ops and base_revision; timeline_frame to look at a time; restore_timeline goes back. Magic boards: list_boards or create_board, show_board (block ids, revision), try_board_edit then edit_board; plan_board shows the cost before run_blocks (no card here: plan first); board_frame looks at a time; send_to_timeline makes a sequence.",
 	})
 	handlers := s.handlers()
 	for name, t := range mcpCatalog() {
@@ -133,7 +135,11 @@ func newMCPServer(c *client) *mcp.Server {
 			destructive := t.Destructive
 			ann.DestructiveHint = &destructive // the spec's default is true: every other write says false
 		}
-		mcp.AddTool(srv, &mcp.Tool{Name: name, Description: t.Description, InputSchema: t.Input, Annotations: ann},
+		desc := t.Description
+		if t.MCPDesc != "" {
+			desc = t.MCPDesc
+		}
+		mcp.AddTool(srv, &mcp.Tool{Name: name, Description: desc, InputSchema: t.Input, Annotations: ann},
 			func(ctx context.Context, req *mcp.CallToolRequest, in map[string]any) (*mcp.CallToolResult, any, error) {
 				out, content, err := h(ctx, req, in)
 				if err != nil {
@@ -180,13 +186,15 @@ func (s *mcpServer) gets(ctx context.Context, paths ...string) (map[string]json.
 	return out, nil
 }
 
-func (s *mcpServer) handlers() map[string]toolFunc {
-	plain := func(f func(context.Context, args) (any, error)) toolFunc {
-		return func(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
-			out, err := f(ctx, in)
-			return out, nil, err
-		}
+// plain is a tool that answers JSON only.
+func plain(f func(context.Context, args) (any, error)) toolFunc {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+		out, err := f(ctx, in)
+		return out, nil, err
 	}
+}
+
+func (s *mcpServer) handlers() map[string]toolFunc {
 	del := func(path, key string) toolFunc {
 		return plain(func(ctx context.Context, in args) (any, error) {
 			if err := s.c.callCtx(ctx, http.MethodDelete, "/v1/studio"+path+in.esc(key), nil, http.StatusNoContent, nil); err != nil {
@@ -195,7 +203,7 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			return map[string]string{"deleted": in.str(key)}, nil
 		})
 	}
-	return map[string]toolFunc{
+	h := map[string]toolFunc{
 		"list_workflows": plain(func(ctx context.Context, _ args) (any, error) { return s.get(ctx, "/workflows") }),
 		"get_workflow":   plain(s.getWorkflow),
 		"plan_run": plain(func(ctx context.Context, in args) (any, error) {
@@ -213,6 +221,7 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 			return s.get(ctx, "/takes?"+q.Encode())
 		}),
 		"get_take": s.getTake,
+		"listen":   s.listen,
 		"list_library": plain(func(ctx context.Context, in args) (any, error) {
 			switch k := in.str("kind"); {
 			case in.str("pipeline_id") != "":
@@ -309,6 +318,8 @@ func (s *mcpServer) handlers() map[string]toolFunc {
 		"delete_run":      del("/runs/", "run_id"),
 		"delete_session":  del("/sessions/", "session_id"),
 	}
+	maps.Copy(h, s.magicHandlers())
+	return h
 }
 
 // editTimeline sends the ops to /edits (dry run: try_timeline_edit). An op that cannot apply is the API's 422
@@ -375,6 +386,58 @@ func (s *mcpServer) getWorkflow(ctx context.Context, in args) (any, error) {
 	return map[string]any{"workflow": wf, "nodes": nodes}, nil
 }
 
+// listen (API 1.107) posts the take's listen run, waits for it as wait_run does, and adds its answer and transcript
+// (from 1.109 the reply's note when the smaller model answered).
+func (s *mcpServer) listen(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
+	raw, err := s.send(ctx, http.MethodPost, "/takes/"+in.esc("take_id")+"/listen", in.pick("question", "transcript"), http.StatusAccepted)
+	if err != nil {
+		return nil, nil, err
+	}
+	var r struct {
+		ID         string  `json:"id"`
+		SessionID  string  `json:"session_id"`
+		WorkflowID string  `json:"workflow_id"`
+		Host       *string `json:"host"`
+		Position   *int    `json:"position"`
+		Note       string  `json:"note"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		return nil, nil, err
+	}
+	out := map[string]any{"run_id": r.ID, "session_id": r.SessionID, "workflow_id": r.WorkflowID, "host": r.Host,
+		"position": r.Position, "answer": nil, "transcript": nil}
+	if r.Note != "" {
+		out["note"] = r.Note // API 1.109: the smaller listen model answered, and why
+	}
+	waited, _, err := s.waitRun(ctx, req, args{"run_id": r.ID})
+	if err != nil {
+		return nil, nil, err
+	}
+	var done struct {
+		Status string `json:"status"`
+		Answer *struct {
+			Text string `json:"text"`
+		} `json:"answer"`
+		Resolved *struct {
+			Texts map[string]string `json:"texts"`
+		} `json:"resolved"`
+	}
+	if json.Unmarshal(waited.(map[string]any)["run"].(json.RawMessage), &done) == nil {
+		out["status"] = done.Status
+		if done.Answer != nil && done.Status == "succeeded" {
+			out["answer"] = done.Answer.Text
+		}
+		if done.Resolved != nil {
+			for k, v := range done.Resolved.Texts {
+				if strings.HasSuffix(k, ".transcript") {
+					out["transcript"] = v
+				}
+			}
+		}
+	}
+	return out, nil, nil
+}
+
 // getTake is the take, its uses and decisions, and its small thumbnail as image content (not an audio take's).
 func (s *mcpServer) getTake(ctx context.Context, _ *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
 	out, err := s.gets(ctx, "take", "/takes/"+in.esc("take_id"), "uses", "/takes/"+in.esc("take_id")+"/uses",
@@ -389,14 +452,23 @@ func (s *mcpServer) getTake(ctx context.Context, _ *mcp.CallToolRequest, in args
 	return out, []mcp.Content{&mcp.ImageContent{Data: img, MIMEType: mime}}, nil
 }
 
-// thumb fetches a take's thumb_url (plan 22: a WebP, short side 512 px); nil for audio or on any failure.
+// thumb fetches a take's thumb_url (plan 22: a WebP, short side 512 px), or (API 1.104) a video's frame grid when it
+// has one (Take facts: its frames with their times); nil for audio or on any failure.
 func (s *mcpServer) thumb(ctx context.Context, take json.RawMessage) ([]byte, string) {
 	var t struct {
 		Kind     string `json:"kind"`
 		ThumbURL string `json:"thumb_url"`
+		Facts    *struct {
+			GridURL *string `json:"grid_url"`
+		} `json:"facts"`
 	}
 	if json.Unmarshal(take, &t) != nil || t.Kind == "audio" {
 		return nil, ""
+	}
+	if t.Facts != nil && t.Facts.GridURL != nil {
+		if img, mime := s.image(ctx, *t.Facts.GridURL, 4<<20); img != nil {
+			return img, mime
+		}
 	}
 	return s.image(ctx, t.ThumbURL, 4<<20)
 }

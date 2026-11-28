@@ -6,9 +6,15 @@ import {
   appendPage,
   checkFile,
   checkSize,
+  coverOf,
   fits,
+  lyricsOf,
   progressText,
   sizeSeed,
+  songLine,
+  soundOf,
+  soundTakeOf,
+  splitOffers,
   stripItems,
   subLine,
   takeQuery,
@@ -346,5 +352,112 @@ describe("rawsFrom", () => {
       inputs: { [seed.key]: 43, [prompt.key]: "a fox" },
       errors: {},
     });
+  });
+});
+
+describe("music and sound (API 1.79, docs/mock/CreateMusicSound.dc.html frames 6-7)", () => {
+  const song = take({
+    kind: "audio",
+    sound: "music",
+    run_id: "r1",
+    audio: { duration_s: 130 },
+    made_with: {
+      ...madeWith,
+      workflow_title: "ACE-Step 1.5",
+      prompt: "warm lo-fi",
+      inputs: { "music.bpm": 90, "music.key": "A minor", "music.lyrics": " [verse]\nla la \n" },
+    },
+  });
+
+  it("classes audio takes (voice when none is sent) and filters by class", () => {
+    expect(soundOf(song)).toBe("music");
+    expect(soundOf(take({ kind: "audio" }))).toBe("voice");
+    expect(soundOf(take())).toBeUndefined();
+    expect(fits(song, { kind: "music" })).toBe(true);
+    expect(fits(song, { kind: "audio" })).toBe(true);
+    expect(fits(song, { kind: "sound" })).toBe(false);
+    expect(fits(take(), { kind: "music" })).toBe(false);
+    expect(takeQuery({ kind: "sound" }, "")).toEqual({ kind: "sound" });
+  });
+
+  it("a run's audio take says what made it and its length; the Song row and the lyrics", () => {
+    expect(subLine(song)).toBe("ACE-Step 1.5 · 2:10");
+    expect(songLine(song)).toBe("2:10 · 90 BPM · A minor");
+    const auto = {
+      ...song,
+      made_with: { ...song.made_with!, inputs: { "music.bpm": 0, "music.key": "auto" } },
+    };
+    expect(songLine(auto)).toBe("2:10");
+    expect(lyricsOf(song)).toBe("[verse]\nla la");
+    const inst = {
+      ...song,
+      made_with: {
+        ...song.made_with!,
+        inputs: { "music.lyrics": "x", "music.instrumental": true },
+      },
+    };
+    expect(lyricsOf(inst)).toBe("");
+  });
+
+  it("the cover's gradient comes from the prompt: the same song, the same cover", () => {
+    expect(coverOf(song)).toBe(coverOf({ ...song, id: "other" }));
+    expect(coverOf(song)).toMatch(
+      /^linear-gradient\(150deg, #[0-9a-f]{6}, #[0-9a-f]{6} 55%, #[0-9a-f]{6}\)$/,
+    );
+    const many = new Set(
+      ["rain", "sun", "fire", "snow", "city", "sea"].map((p) =>
+        coverOf({ ...song, made_with: { ...song.made_with!, prompt: p } }),
+      ),
+    );
+    expect(many.size).toBeGreaterThan(1);
+  });
+
+  it("splits an audio take's edits from its other offers; a video keeps them all under Use in", () => {
+    const o = (action: string) =>
+      ({ workflow_id: action, action, title: "x", param: "a.b", inputs: {} }) as S<"TakeOffer">;
+    const offers = [o("Extend"), o("Audio to video"), o("Repaint"), o("Cover")];
+    const { edits, rest } = splitOffers(song, offers);
+    expect(edits.map((x) => x.action)).toEqual(["Repaint", "Cover", "Extend"]);
+    expect(rest.map((x) => x.action)).toEqual(["Audio to video"]);
+    expect(splitOffers(take({ kind: "video" }), offers).rest).toEqual(offers);
+    // a second family's Repaint is not put under Use in either
+    const two = splitOffers(song, [...offers, { ...o("Repaint"), workflow_id: "other" }]);
+    expect(two.rest.map((x) => x.action)).toEqual(["Audio to video"]);
+  });
+
+  it("finds the sound a video was made with: its run's audio take, or its audio parent", () => {
+    const fx = take({ id: "fx", kind: "audio", sound: "sound", run_id: "r2" });
+    const vid = take({ id: "v", kind: "video", run_id: "r2" });
+    expect(soundTakeOf(vid, [vid, fx, song])).toBe(fx);
+    expect(
+      soundTakeOf(take({ id: "v2", kind: "video", run_id: null, parents: [song.id] }), [song]),
+    ).toBe(song);
+    expect(soundTakeOf(take({ kind: "video", run_id: "r9" }), [fx])).toBeUndefined();
+    expect(soundTakeOf(fx, [fx])).toBeUndefined();
+  });
+
+  it("an audio upload carries the class of its filter; an image never does", async () => {
+    const io: UploadIO = {
+      create: vi.fn(async () => ({
+        take_id: "t",
+        upload_url: "/files/up",
+        content_type: "audio/mpeg",
+        expires_at: "",
+      })) as never,
+      put: vi.fn(async () => undefined),
+      complete: vi.fn(async () => take()),
+      duration: vi.fn(async () => 4),
+      optimise: vi.fn(async (f: Blob, type: string) => ({ blob: f, type, line: "" })),
+    };
+    await uploadFile(new File(["abc"], "s.mp3", { type: "audio/mpeg" }), () => {}, io, {
+      audio: true,
+      sound: "sound",
+    });
+    expect(io.create).toHaveBeenLastCalledWith(expect.objectContaining({ sound: "sound" }));
+    await uploadFile(new File(["abc"], "a.png", { type: "image/png" }), () => {}, io, {
+      audio: true,
+      sound: "sound",
+    });
+    expect(io.create).toHaveBeenLastCalledWith(expect.not.objectContaining({ sound: "sound" }));
   });
 });

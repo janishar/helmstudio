@@ -122,7 +122,7 @@ func TestMediaInputs(t *testing.T) {
 		offer := u.(map[string]any)
 		offered = append(offered, offer["workflow_id"].(string)+":"+offer["param"].(string))
 	}
-	if strings.Join(offered, " ") != "echo-retake:retake.source echo-a2v:a2v.source echo-extend:extend.source" {
+	if strings.Join(offered, " ") != "echo-sound-video:foley.source echo-retake:retake.source echo-a2v:a2v.source echo-extend:extend.source" {
 		t.Fatal(uses)
 	}
 	e.call(userB, "GET", "/v1/studio/takes/"+video+"/uses", nil, 404)
@@ -239,4 +239,21 @@ func TestClipActions(t *testing.T) {
 	if filled["in"] != 0.375 || filled["out"] != 1.375 || filled["shot"] != nil {
 		t.Fatal(filled)
 	}
+}
+
+// A run holds the offers' class rule (API 1.91): a classed workflow's media param takes an audio take of its class only.
+func TestRunsGoByClass(t *testing.T) {
+	e := setup(t)
+	voice, song := e.audioTake(userA, 3), e.audioTake(userA, 3)
+	e.exec(`UPDATE takes SET sound = 'music' WHERE id = $1`, song)
+	session := e.call(userA, "POST", "/v1/studio/sessions", nil, 201)["id"].(string)
+	run := func(take string, want int) map[string]any {
+		return e.call(userA, "POST", "/v1/studio/sessions/"+session+"/runs", map[string]any{"workflow_id": "echo-repaint",
+			"inputs": map[string]any{"prompt.text": "new chorus", "repaint.source": map[string]any{"take_id": take},
+				"repaint.span": map[string]any{"start": 0.5, "end": 1}}}, want)
+	}
+	if got := run(voice, 422); got["detail"] != "repaint.source: take "+voice+" is voice; this workflow takes music only" {
+		t.Fatal(got)
+	}
+	run(song, 202)
 }

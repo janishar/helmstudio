@@ -2,7 +2,8 @@
 // <video>, <img> or <audio>, against one clock. What shows and plays at a frame is frameAt's (lib/timeline.ts); this
 // only makes a handful of media elements agree with it: the clips under the playhead and those starting within
 // LOOKAHEAD_S, parked on their first frame so a cut does not wait for a read. Ported from the old helmstudio's
-// preview.js (MIT, same owner); gain goes through Web Audio (a GainNode) so +dB plays louder, as the export does.
+// preview.js (MIT, same owner); gain goes through Web Audio (a GainNode) so +dB plays louder, as the export does; from
+// 1.106 its level follows frameAt's fade each frame (clip fades, crossfades, ducking), as Export's afade and volume do.
 import { Grid, frameAt, kindOf, type Norm, type Takes } from "@/lib/timeline";
 
 /** How far ahead (seconds) a clip is loaded and parked. */
@@ -203,7 +204,8 @@ export class Preview {
     if (!url || this.unplayable.has(take)) return null;
     const kind = ti > 0 ? "audio" : kindOf(c, this.takes) === "image" ? "image" : "video";
     const el = document.createElement(kind === "image" ? "img" : kind);
-    el.className = "absolute inset-0 size-full object-contain";
+    // black behind its own letterbox: a picture behind the stage (the Magic player's still) showed round a fitted clip
+    el.className = "absolute inset-0 size-full bg-black object-contain";
     if (el instanceof HTMLMediaElement) {
       el.preload = "auto";
       (el as HTMLVideoElement).playsInline = true;
@@ -235,7 +237,11 @@ export class Preview {
       }
     }
     if (e.gain) {
-      e.gain.gain.value = g;
+      // 1.106: fades, crossfades and ducking change the gain every frame: a short glide, not a step (no zipper)
+      const p = e.gain.gain;
+      if (this.playing && this.ctx && Math.abs(p.value - g) > 1e-4)
+        p.setTargetAtTime(g, this.ctx.currentTime, 0.012);
+      else p.value = g;
       m.volume = 1;
       m.muted = false;
     } else {

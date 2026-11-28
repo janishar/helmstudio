@@ -98,7 +98,9 @@ def test_workflows_have_media_and_filter(api, echo_video):
     for media in ("image", "video", "audio"):  # audio from API 1.30 (test_voices)
         got = ok(api.get(f"{STUDIO}/workflows", params={"media": media}))["workflows"]
         assert {w["id"] for w in got} == {i for i, w in listed.items() if w["media"] == media}
-    assert api.get(f"{STUDIO}/workflows", params={"media": "sound"}).status_code == 422
+    # API 1.79: music, sound and voice are audio classes and valid filters (test_music_sound); others are 422
+    assert api.get(f"{STUDIO}/workflows", params={"media": "sound"}).status_code == 200
+    assert api.get(f"{STUDIO}/workflows", params={"media": "noise"}).status_code == 422
 
 
 def test_schemas_of_echo_video(echo_video):

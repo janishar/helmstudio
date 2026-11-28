@@ -1,33 +1,63 @@
 "use client";
 // The memory chip (docs/mock/Direct.dc.html, PipelineGraph.dc.html: "21 / 64 GB"): the runner hosts, polled, and
 // the button with its popover of what each env of the host holds. Create and the pipeline editor show it.
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Cpu } from "lucide-react";
 import { api, ok, type S } from "@/lib/api";
 import type { HostMemory } from "@/lib/hosts";
+import { onBack } from "@/lib/health";
+
+/** One hosts poll for every part of the page that reads them (Create, Magic, the Timeline and the status tile under
+ * the rail: docs/mock/ErrorStates.dc.html g1, "no new call"); it runs while one reads it and forgets when none does. */
+const shared = {
+  hosts: null as S<"Host">[] | null,
+  subs: new Set<() => void>(),
+  /** bumped when the last reader goes: an answer for an earlier round is dropped */
+  round: 0,
+  stop: () => undefined as void,
+};
+function tick() {
+  if (document.hidden) return;
+  const round = shared.round;
+  ok(api.GET("/v1/studio/hosts"))
+    .then((h) => {
+      if (round !== shared.round) return;
+      shared.hosts = h.hosts;
+      shared.subs.forEach((f) => f());
+    })
+    .catch(() => undefined);
+}
+function subscribe(f: () => void) {
+  shared.subs.add(f);
+  if (shared.subs.size === 1) {
+    const t = setInterval(tick, 10_000);
+    document.addEventListener("visibilitychange", tick);
+    // the studio is back (lib/health.ts): read them at once
+    const off = onBack(tick);
+    shared.stop = () => {
+      clearInterval(t);
+      off();
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }
+  tick(); // a new reader reads them now (a page opened since the last poll)
+  return () => {
+    shared.subs.delete(f);
+    if (shared.subs.size) return;
+    shared.stop();
+    shared.round++;
+    shared.hosts = null;
+  };
+}
 
 /** The runner hosts, refreshed every 10 s while the tab is visible (they rewrite their state that often) and at once
  * when it shows again; null until the first answer. */
 export function useHosts() {
-  const [hosts, setHosts] = useState<S<"Host">[] | null>(null);
-  useEffect(() => {
-    let stop = false;
-    const tick = () => {
-      if (document.hidden) return;
-      ok(api.GET("/v1/studio/hosts"))
-        .then((h) => !stop && setHosts(h.hosts))
-        .catch(() => undefined);
-    };
-    tick();
-    const t = setInterval(tick, 10_000);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      stop = true;
-      clearInterval(t);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, []);
-  return hosts;
+  return useSyncExternalStore(
+    subscribe,
+    () => shared.hosts,
+    () => null,
+  );
 }
 
 /** The planned peak in GB of the run `body` would make (POST /v1/studio/runs/plan, API 1.25), asked 400 ms after the
@@ -37,14 +67,21 @@ export function usePlannedPeak(body: S<"RunRequest"> | null) {
   return usePlan(body).gb;
 }
 
-/** usePlannedPeak with the host the plan is for (Auto's host when `body` has none; null = none or no answer yet). */
-export function usePlan(body: S<"RunRequest"> | null): { gb: number | null; host: string | null } {
+/** usePlannedPeak with the host the plan is for (Auto's host when `body` has none; null = none or no answer yet) and
+ * (docs/mock/ErrorStates.dc.html b1) the plan's `reason`: why no host is eligible, for this very request only.
+ * `again` asks once more when it changes (the live hosts: a runner that comes up or stops). */
+export function usePlan(
+  body: S<"RunRequest"> | null,
+  again = "",
+): { gb: number | null; host: string | null; reason: string | null } {
   const key = body && JSON.stringify(body);
   // the answer and the workflow it was for: another workflow's never shows while this one's is asked
   const [got, setGot] = useState<{
     wf: string;
+    key: string;
     gb: number | null;
     host: string | null;
+    reason: string | null;
   } | null>(null);
   useEffect(() => {
     if (!key) return;
@@ -52,15 +89,29 @@ export function usePlan(body: S<"RunRequest"> | null): { gb: number | null; host
     let stop = false;
     const t = setTimeout(() => {
       ok(api.POST("/v1/studio/runs/plan", { body: req }))
-        .then((p) => !stop && setGot({ wf: req.workflow_id, gb: p.peak_gb, host: p.host }))
-        .catch(() => !stop && setGot({ wf: req.workflow_id, gb: null, host: null }));
+        .then(
+          (p) =>
+            !stop &&
+            setGot({
+              wf: req.workflow_id,
+              key,
+              gb: p.peak_gb,
+              host: p.host,
+              reason: p.reason ?? null,
+            }),
+        )
+        .catch(
+          () => !stop && setGot({ wf: req.workflow_id, key, gb: null, host: null, reason: null }),
+        );
     }, 400);
     return () => {
       stop = true;
       clearTimeout(t);
     };
-  }, [key]);
-  return body && got?.wf === body.workflow_id ? got : { gb: null, host: null };
+  }, [key, again]);
+  return body && got?.wf === body.workflow_id
+    ? { gb: got.gb, host: got.host, reason: got.key === key ? got.reason : null }
+    : { gb: null, host: null, reason: null };
 }
 
 /** The Generate button's estimate (docs/mock/TextToVideo.dc.html "≈ 40 s · 21 GB"): the last run's time, then the

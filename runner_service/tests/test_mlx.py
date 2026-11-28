@@ -32,9 +32,7 @@ FIXTURES = CONTRACTS / "fixtures/registry"
 
 def neutral(code: str) -> str:
     """Run `code` in a fresh interpreter of this env (cwd runner_service) and return its stdout."""
-    r = subprocess.run(
-        [sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, check=True
-    )
+    r = subprocess.run([sys.executable, "-c", code], cwd=ROOT, capture_output=True, text=True, check=True)
     return r.stdout.strip()
 
 
@@ -52,9 +50,7 @@ def test_a_runner_process_never_imports_the_other_runtime(env, other):
     assert neutral(code) == "False True"
 
 
-needs_mlx = pytest.mark.skipif(
-    mx is None, reason="the mlx env only (uv run --project envs/mlx pytest)"
-)
+needs_mlx = pytest.mark.skipif(mx is None, reason="the mlx env only (uv run --project envs/mlx pytest)")
 
 
 @pytest.fixture
@@ -68,17 +64,11 @@ def on_cpu():
 def only(values: dict, family: str) -> dict:
     """The mlx values as one family's pack alone publishes them (the mlx runner publishes ltx and llm together):
     its workflows, models and nodes, with the core nodes its workflows use."""
-    out = {
-        k: dict(v) for k, v in values.items()
-    }  # the entries stay shared (fill_prefused updates them)
-    out["workflows"]["workflows"] = [
-        w for w in out["workflows"]["workflows"] if w["family"] == family
-    ]
+    out = {k: dict(v) for k, v in values.items()}  # the entries stay shared (fill_prefused updates them)
+    out["workflows"]["workflows"] = [w for w in out["workflows"]["workflows"] if w["family"] == family]
     out["models"]["models"] = [m for m in out["models"]["models"] if m["family"] == family]
     used = {n["kind"] for w in out["workflows"]["workflows"] for n in w["nodes"].values()}
-    out["nodes"]["nodes"] = [
-        n for n in out["nodes"]["nodes"] if n["family"] == family or n["kind"] in used
-    ]
+    out["nodes"]["nodes"] = [n for n in out["nodes"]["nodes"] if n["family"] == family or n["kind"] in used]
     return out
 
 
@@ -96,11 +86,7 @@ def test_ltx_pack_publishes_the_canonical_fixtures():
     (model,) = values["models"]["models"]
     assert (model["id"], model["family"], model["title"]) == ("ltx-2.5", "ltx", "LTX-2.5")
     assert [v["id"] for v in model["variants"]] == ["distilled", "dev"]
-    assert (
-        model["variants"][0]["precisions"]
-        == model["variants"][1]["precisions"]
-        == ["bf16", "int8", "int4"]
-    )
+    assert model["variants"][0]["precisions"] == model["variants"][1]["precisions"] == ["bf16", "int8", "int4"]
 
 
 @needs_mlx
@@ -113,13 +99,9 @@ def test_llm_pack_publishes_the_canonical_fixtures():
     (model,) = llm["models"]["models"]
     assert (model["id"], model["family"], model["title"]) == ("qwen3.8-27b", "llm", "Qwen3.8 27B")
     assert impls["llm/ask"].uses == ("model",) and model["variants"][0]["precisions"] == ["int4"]
-    if (
-        model["variants"][0]["presence"] == "present"
-    ):  # the weights are on this host: sized from the headers
+    if model["variants"][0]["presence"] == "present":  # the weights are on this host: sized from the headers
         (plan,) = model["variants"][0]["memory"]
-        assert (
-            plan["components"][0]["component"] == "model" and 14 < plan["components"][0]["gb"] < 16
-        )
+        assert plan["components"][0]["component"] == "model" and 14 < plan["components"][0]["gb"] < 16
         assert plan["planned_at"]["images"] == 4 and "workflow" not in plan
 
 
@@ -140,9 +122,7 @@ def test_ltx_lora_block_is_generated_from_the_transformer_and_equals_the_fixture
     values, _, p = ltx()
     want = json.loads((FIXTURES / "ltx.models.valid.json").read_text())["models"][0]["lora"]
     got = values["models"]["models"][0]["lora"]
-    assert {k: v for k, v in got.items() if k != "prefused"} == {
-        k: v for k, v in want.items() if k != "prefused"
-    }
+    assert {k: v for k, v in got.items() if k != "prefused"} == {k: v for k, v in want.items() if k != "prefused"}
     assert got["prefused"] == []  # until registry.fill_prefused
     f = pack.models_root() / "ltx-2.5/loras/ltx-2.5-22b-distilled-lora-450-bf16.safetensors"
     registry.fill_prefused(values, [p], {f: "ab" * 32})
@@ -156,7 +136,7 @@ def test_ltx_sizes_come_from_the_headers(tmp_path, monkeypatch):
     """dtype stored keeps each tensor's bytes; rename's None keys do not count; MLX int8 / int4 is bits / 8 per value
     plus a bf16 scale and bias per group of 64."""
     _, _, p = ltx()
-    monkeypatch.setattr(pack, "models_root", lambda: tmp_path)
+    monkeypatch.setattr("config.MODELS", tmp_path)
     pack._sizes.clear()
     dit = tmp_path / "ltx-2.5/diffusion_models/ltx-2.5-22b-distilled-transformer-bf16.safetensors"
     safetensors_file(dit, {
@@ -164,10 +144,7 @@ def test_ltx_sizes_come_from_the_headers(tmp_path, monkeypatch):
         "model.diffusion_model.scale_shift_table": ("F32", [2, 64]),
         "model.diffusion_model.video_embeddings_connector.x.weight": ("BF16", [64, 64]),  # the connector's
     })  # fmt: skip
-    gb = {
-        prec: pack.ModelRef(p, "distilled", prec).gb("transformer")[0] * 2**30
-        for prec in ("bf16", "int8", "int4")
-    }
+    gb = {prec: pack.ModelRef(p, "distilled", prec).gb("transformer")[0] * 2**30 for prec in ("bf16", "int8", "int4")}
     assert gb == {"bf16": 64 * 128 * 2 + 2 * 64 * 4, "int8": 64 * 128 + 64 * 128 // 64 * 4 + 2 * 64 * 4,
                   "int4": 64 * 128 // 2 + 64 * 128 // 64 * 4 + 2 * 64 * 4}  # fmt: skip
 
@@ -193,17 +170,13 @@ def test_mlx_loader_renames_converts_quantizes_and_loads_strictly(tmp_path, on_c
     assert isinstance(m.proj, nn.QuantizedLinear) and m.proj.bits == 8 and m.proj.group_size == 64
     q, scales, _biases = mx.quantize(w, group_size=64, bits=8)
     assert mx.array_equal(m.proj.weight, q) and mx.array_equal(m.proj.scales, scales)
-    assert (
-        m.norm.weight.dtype == mx.float32 and seen.count("check") == 1
-    )  # stored dtype kept; a cancel point
+    assert m.norm.weight.dtype == mx.float32 and seen.count("check") == 1  # stored dtype kept; a cancel point
     m4 = loaders_mlx.load(Tiny(), [f], bits=4, dtype=mx.bfloat16, **kw)
     assert m4.proj.bits == 4 and m4.norm.weight.dtype == mx.bfloat16
     plain = loaders_mlx.load(Tiny(), [f], **kw)
     assert isinstance(plain.proj, nn.Linear) and mx.array_equal(plain.proj.weight, w)
     with pytest.raises(ValueError):  # strict: the module's norm.weight is not in the file
-        loaders_mlx.load(
-            Tiny(), [f], rename=lambda k: k.removeprefix("m.") if k.startswith("m.proj") else None
-        )
+        loaders_mlx.load(Tiny(), [f], rename=lambda k: k.removeprefix("m.") if k.startswith("m.proj") else None)
 
 
 @needs_mlx
@@ -218,20 +191,11 @@ def test_ltx_renames_the_official_keys():
         "connector.audio_embeddings_connector.a.weight"  # fmt: skip
     assert r("connector", "text_embedding_projection.video_aggregate_embed.bias") == \
         "connector.text_embedding_projection.video_aggregate_embed.bias"  # fmt: skip
-    assert (
-        r("text_encoder", "model.layers.0.self_attn.q_proj.weight")
-        == "layers.0.self_attn.q_proj.weight"
-    )
-    assert (
-        r("text_encoder", "tokenizer_json") is None
-        and r("text_encoder", "vision_model.patch_ln1.bias") is None
-    )
+    assert r("text_encoder", "model.layers.0.self_attn.q_proj.weight") == "layers.0.self_attn.q_proj.weight"
+    assert r("text_encoder", "tokenizer_json") is None and r("text_encoder", "vision_model.patch_ln1.bias") is None
     assert r("vae", "per_channel_statistics.mean-of-means") == "per_channel_statistics.mean"
     assert r("vae", "encoder.conv_in.conv.weight") is None
-    assert (
-        r("audio_vae", "audio_vae.per_channel_statistics.std-of-means")
-        == "per_channel_statistics.std_of_means"
-    )
+    assert r("audio_vae", "audio_vae.per_channel_statistics.std-of-means") == "per_channel_statistics.std_of_means"
     assert r("vocoder", "vocoder.vocoder.conv_pre.weight") == "conv_pre.weight"
     assert r("vocoder", "audio_vae.decoder.x") is None
 
@@ -273,9 +237,7 @@ def test_ltx_role_rules_fail_the_run_before_anything_loads(edit, error):
     nodes = two_stage(values["workflows"]["workflows"][0]["nodes"])
     nodes["prompt"]["params"]["text"] = "a cat"
     edit(nodes)
-    assert (
-        graph.validate(nodes, schemas) == []
-    )  # the graph rules let it through: the pack's check does not
+    assert graph.validate(nodes, schemas) == []  # the graph rules let it through: the pack's check does not
     with pytest.raises(RunError, match=error.replace(".", r"\.")):
         run_graph(nodes, impls, schemas)  # no residency: any load would fail with another error
 
@@ -343,9 +305,7 @@ def test_stage1_noise_is_the_goldens_bit_for_bit(case, on_cpu):
     t = ltx_mlx.compute_audio_token_count(g["frames"], frame_rate=g["fps"])
     pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=g["fps"])
     video = ltx_mlx.noised_state((1, fhw[0] * fhw[1] * fhw[2], 128), [], fhw, pos, g["seed"], 1.0)
-    audio = ltx_mlx.noised_state(
-        (1, t, 128), [], fhw, ltx_mlx.compute_audio_positions(t), g["seed"] + 1, 1.0
-    )
+    audio = ltx_mlx.noised_state((1, t, 128), [], fhw, ltx_mlx.compute_audio_positions(t), g["seed"] + 1, 1.0)
     stage = g["stages"][0]
     assert list(pos.shape) == stage["video_positions"] and stage["sigmas"] == ltx_mlx.STAGE1_SIGMAS
     assert (sha(video.latent), sha(audio.latent)) == (
@@ -364,9 +324,7 @@ def test_an_image_on_frame_0_keeps_the_first_frame_marked(on_cpu):
     fhw = (3, 2, 2)
     hw = fhw[1] * fhw[2]
     pos = ltx_mlx.compute_video_positions(*fhw, frame_rate=24.0)
-    first = ltx_mlx.VideoConditionByLatentIndex(
-        frame_indices=[0], clean_latent=mx.zeros((1, hw, 128)), strength=1.0
-    )
+    first = ltx_mlx.VideoConditionByLatentIndex(frame_indices=[0], clean_latent=mx.zeros((1, hw, 128)), strength=1.0)
     later = ltx_mlx.VideoConditionByKeyframeIndex(
         frame_idx=8,
         keyframe_latent=mx.zeros((1, hw, 128)),
@@ -391,9 +349,7 @@ def test_a_second_upscale_of_one_latent_fails_before_it_loads_anything(on_cpu):
     ctx = Ctx(progress=None, output=None, check=lambda: None)
     ctx.node = "upscale2"
     with pytest.raises(RunError, match="upscale2: the latent is already upscaled"):
-        ltx_mlx.upscale(
-            ctx, {}, {"model": None, "latent": latent}
-        )  # model None: any load would fail otherwise
+        ltx_mlx.upscale(ctx, {}, {"model": None, "latent": latent})  # model None: any load would fail otherwise
 
 
 # --- stage B against the goldens' recorded inputs, still without weights (tests/golden/ltx-*/<case>.json)
@@ -423,12 +379,8 @@ def test_keyframe_images_are_preprocessed_as_the_goldens(case, on_cpu):
         px = ltx_mlx.to_pixels(rgb[row["file"]], row["height"], row["width"])
         assert sha(px) == row["pixels"]["sha256_f32"], (row["file"], row["height"])
     want = g["image_conditionings"][0]["items"][-1]
-    if (
-        want["type"] == "VideoConditionByKeyframeIndex"
-    ):  # the appended frame's positions at the stage-1 grid
-        kf = ltx_mlx.VideoConditionByKeyframeIndex(
-            want["frame_idx"], mx.zeros((1, 28, 128)), (7, 4, 7), 24.0
-        )
+    if want["type"] == "VideoConditionByKeyframeIndex":  # the appended frame's positions at the stage-1 grid
+        kf = ltx_mlx.VideoConditionByKeyframeIndex(want["frame_idx"], mx.zeros((1, 28, 128)), (7, 4, 7), 24.0)
         assert sha(kf.keyframe_positions) == want["positions"]["sha256_f32"]
 
 
@@ -442,10 +394,7 @@ def test_keyframe_positions_follow_the_contract_fixture():
         d, kf = nodes["duration"]["params"], nodes.get("keyframes", {})
         if d["frames"] == "auto" or kf.get("bypass") or "keyframes" not in nodes:
             continue
-        rows = tuple(
-            (None, r.get("seconds", 0), r.get("strength", 1), "auto")
-            for r in kf["params"]["images"]
-        )
+        rows = tuple((None, r.get("seconds", 0), r.get("strength", 1), "auto") for r in kf["params"]["images"])
         cond = ltx_mlx.Cond(None, None, images=rows, images_at="keyframes.images")
         try:
             ltx_mlx.keyframe_frames(cond, d["frames"], d["fps"])
@@ -476,17 +425,13 @@ def test_image_bindings_map_to_the_forks_conditionings(on_cpu):
         return ltx_mlx._conditionings(ctx, None, cond, fhw, 49, 24.0)
 
     def today(rows):  # the rule before bindings (a763d77), inline
-        frames = ltx_mlx.keyframe_frames(
-            ltx_mlx.Cond(None, None, images=rows, images_at="k"), 49, 24.0
-        )
+        frames = ltx_mlx.keyframe_frames(ltx_mlx.Cond(None, None, images=rows, images_at="k"), 49, 24.0)
         out = []
         for (rgb, _, strength, _), f in zip(rows, frames, strict=True):
             px = ltx_mlx.to_pixels(rgb, 64, 64)[:, :, None]
             t = Encoder().encode(px).transpose(0, 2, 3, 4, 1).reshape(1, -1, 128)
             out.append(
-                ltx_mlx.VideoConditionByLatentIndex(
-                    frame_indices=[0], clean_latent=t, strength=strength
-                )
+                ltx_mlx.VideoConditionByLatentIndex(frame_indices=[0], clean_latent=t, strength=strength)
                 if f == 0
                 else ltx_mlx.VideoConditionByKeyframeIndex(
                     frame_idx=f,
@@ -523,9 +468,7 @@ def test_image_bindings_map_to_the_forks_conditionings(on_cpu):
         conds((img[0], 0.0, 1.0, "auto"), (img[1], 2.0, 1.0, "replace"))
     assert str(e.value) == ("keyframes.images[2].binding: Replace needs frame 0 or 1 + 8k (2.0 s is frame 48; "
                             "the nearest is 1.7 s, frame 41)")  # the board's line: 49 has no frame 49  # fmt: skip
-    with pytest.raises(
-        RunError, match=r"\[1\].binding: .*frame 3; the nearest is 0.04 s, frame 1\)"
-    ):
+    with pytest.raises(RunError, match=r"\[1\].binding: .*frame 3; the nearest is 0.04 s, frame 1\)"):
         conds((img[0], 0.125, 1.0, "replace"))
 
 
@@ -540,16 +483,10 @@ def test_prompt_beats_give_the_goldens_ranges_and_relay_masks(on_cpu):
         pytest.skip("the LTX-2.5 text encoder is not on this host")
     g = golden("ltx-prompt-beats/beats-448x256-49f-s42")
     tok = ltx_mlx._tokenizer(f, f.stat().st_size, f.stat().st_mtime_ns)
-    text, ranges = ltx_mlx.map_token_ranges(
-        tok, g["prompt"], [s["text"] for s in g["segments"]], max_length=1024
-    )
-    assert (text, [list(r) for r in ranges]) == (g["prompt_relay"]["encoded_prompt"], g["prompt_relay"]["token_ranges"])  # fmt: skip
-    seconds = tuple(
-        s["length"] * 8 / g["fps"] if s["length"] else 0.0 for s in g["segments"]
-    )  # latent frames → s
-    cond = ltx_mlx.Cond(
-        mx.zeros((1, 1024, 8)), None, seconds, tuple(ranges), beats_at="encode.beats"
-    )
+    text, ranges = ltx_mlx.map_token_ranges(tok, g["prompt"], [s["text"] for s in g["segments"]], max_length=1024)
+    assert (text, [list(r) for r in ranges]) == (g["prompt_relay"]["encoded_prompt"], g["prompt_relay"]["token_ranges"])
+    seconds = tuple(s["length"] * 8 / g["fps"] if s["length"] else 0.0 for s in g["segments"])  # latent frames → s
+    cond = ltx_mlx.Cond(mx.zeros((1, 1024, 8)), None, seconds, tuple(ranges), beats_at="encode.beats")
     for stage, fhw in zip(g["stages"], [(7, 4, 7), (7, 8, 14)], strict=True):
         mask = ltx_mlx.relay_mask(cond, fhw, stage["video_tokens_total"], g["fps"])
         assert sha(mask) == stage["video_cross_attention_mask"]["sha256_f32"]
@@ -559,9 +496,7 @@ def test_prompt_beats_give_the_goldens_ranges_and_relay_masks(on_cpu):
         assert sha(amask) == stage["audio_cross_attention_mask"]["sha256_f32"]
         frozen = SimpleNamespace(latent=audio.latent, frozen=True)
         assert ltx_mlx.relay_audio_mask(cond, fhw, frozen, g["fps"]) is None
-    with pytest.raises(
-        RunError, match=r"encode\.beats\[2\]: no frames left for this beat \(the clip has 2 latent"
-    ):
+    with pytest.raises(RunError, match=r"encode\.beats\[2\]: no frames left for this beat \(the clip has 2 latent"):
         ltx_mlx.beat_lengths(replace(cond, beats=(3.0, 0.0)), 2, 24.0)
 
 
@@ -571,10 +506,7 @@ def test_vae_encoder_keys_are_renamed():
 
     r = ltx_mlx.rename
     assert r("vae_encoder", "encoder.conv_in.conv.weight") == "conv_in.conv.weight"
-    assert (
-        r("vae_encoder", "per_channel_statistics.mean-of-means")
-        == "per_channel_statistics.mean_of_means"
-    )
+    assert r("vae_encoder", "per_channel_statistics.mean-of-means") == "per_channel_statistics.mean_of_means"
     assert r("vae_encoder", "decoder.conv_in.conv.weight") is None
 
 
@@ -587,10 +519,7 @@ def test_sample_peak_counts_the_tokens_keyframes_append():
     at = {"mp": mp, "frames": 121, "role": "stage2", "steps": 3, "mp_in": 1, "detail": False}
     extra = pack.evaluate(peak, at | {"images": 8}) - pack.evaluate(peak, at | {"images": 0})
     assert extra == pytest.approx(8 * (0.7 + 1.5 * mp) + 0.26 * 8 * mp)
-    assert (
-        pack.evaluate(impls["ltx/keyframes"].peak, {"mp_in": 50, "images": 8, "mp": 0, "frames": 0})
-        == 2.0
-    )
+    assert pack.evaluate(impls["ltx/keyframes"].peak, {"mp_in": 50, "images": 8, "mp": 0, "frames": 0}) == 2.0
 
 
 @needs_mlx
@@ -601,9 +530,7 @@ def test_keyframes_round_trip_each_take_once_and_keep_at_most_the_largest_canvas
 
     trips = []
     real = ltx_mlx.crf_round_trip
-    monkeypatch.setattr(
-        ltx_mlx, "crf_round_trip", lambda img, crf: trips.append((img.size, crf)) or real(img, crf)
-    )
+    monkeypatch.setattr(ltx_mlx, "crf_round_trip", lambda img, crf: trips.append((img.size, crf)) or real(img, crf))
     big, small = (
         Image.new("RGB", (4000, 2400), (200, 10, 10)),
         Image.new("RGB", (640, 400), (10, 200, 10)),
@@ -653,16 +580,12 @@ def test_keyframe_images_decode_and_round_trip_as_upstream():
     assert common.decode_image(Image.open(buf)).shape == (5, 3, 3)
     tagged = Image.new("RGB", (4, 4), (90, 140, 200))
     tagged.info["icc_profile"] = ImageCms.ImageCmsProfile(ImageCms.createProfile("sRGB")).tobytes()
-    assert (
-        np.abs(common.decode_image(tagged).astype(int) - (90, 140, 200)).max() <= 1
-    )  # converted, sRGB to sRGB
+    assert np.abs(common.decode_image(tagged).astype(int) - (90, 140, 200)).max() <= 1  # converted, sRGB to sRGB
     rgba = Image.new("RGBA", (4, 4), (10, 200, 10, 0))
     assert common.decode_image(rgba).tolist() == np.full((4, 4, 3), (10, 200, 10)).tolist()
     bad = Image.new("RGB", (4, 4), (1, 2, 3))
     bad.info["icc_profile"] = b"not a profile"
-    assert (
-        common.decode_image(bad).tolist() == np.full((4, 4, 3), (1, 2, 3)).tolist()
-    )  # a plain RGB conversion
+    assert common.decode_image(bad).tolist() == np.full((4, 4, 3), (1, 2, 3)).tolist()  # a plain RGB conversion
     odd = Image.new("RGB", (65, 33), (120, 60, 30))
     assert common.crf_round_trip(odd, 18).shape == (32, 64, 3)
     assert common.crf_round_trip(odd, 0).shape == (33, 65, 3)
@@ -717,9 +640,7 @@ def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_pa
     mx.random.seed(0)
     net = Net()
     nn.quantize(net, group_size=64, bits=8, class_predicate=lambda p, m: p == "blocks.0")
-    pack_ = Pack(
-        "t", None, {"family": "t", "id": "t-1", "lora": {"component": "transformer"}}, "mlx", None
-    )
+    pack_ = Pack("t", None, {"family": "t", "id": "t-1", "lora": {"component": "transformer"}}, "mlx", None)
     files, factors = {}, {}
     for n, alpha in ((1, 2.0), (2, None)):  # rank 4: alpha 2 gives s = strength / 2
         t = {}
@@ -735,18 +656,12 @@ def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_pa
             t |= {f"diffusion_model.{name}.alpha": mx.array(alpha)} if alpha else {}
             factors[(n, name)] = (a, b, alpha / 4 if alpha else 1.0)
         files[f"{n:064x}"] = tmp_path / f"l{n}.safetensors"
-        mx.save_safetensors(
-            str(files[f"{n:064x}"]), t, {"format": "pt"}
-        )  # metadata None is no safetensors
+        mx.save_safetensors(str(files[f"{n:064x}"]), t, {"format": "pt"})  # metadata None is no safetensors
     fetched = []
-    ctx = SimpleNamespace(
-        check=lambda: None, lora_path=lambda u: fetched.append(u.name) or files[u.sha256]
-    )
+    ctx = SimpleNamespace(check=lambda: None, lora_path=lambda u: fetched.append(u.name) or files[u.sha256])
 
     def model(*rows):
-        uses = [
-            LoraUse(f"{n:064x}", "shared", f"l{n}", f"{n:064x}", 1, st, "adapter") for n, st in rows
-        ]
+        uses = [LoraUse(f"{n:064x}", "shared", f"l{n}", f"{n:064x}", 1, st, "adapter") for n, st in rows]
         return ModelRef(pack_, "v", "bf16", tuple(uses))
 
     x = mx.random.normal((3, 128))
@@ -755,9 +670,7 @@ def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_pa
     assert lm.activate(model(), "transformer", net, ctx) == 0.0
     gb = lm.activate(model((1, 0.8), (2, -1.5)), "transformer", net, ctx)
     assert gb * 2**30 == 2 * (4 * 128 + 128 * 4 + 4 * 128 + 64 * 4) * 2  # bf16 factors of two files
-    assert type(net.blocks[0]).__name__ == "LoraQuantizedLinear" and isinstance(
-        net.blocks[1], lm.LoraLinear
-    )
+    assert type(net.blocks[0]).__name__ == "LoraQuantizedLinear" and isinstance(net.blocks[1], lm.LoraLinear)
 
     def want(strengths):
         h = net.blocks[0].__class__.__bases__[1].__call__(net.blocks[0], x)
@@ -771,30 +684,17 @@ def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_pa
             y = y + (h @ a.T) @ b.T * (st * f)
         return y
 
-    assert mx.allclose(net(x), want([(1, 0.8), (2, -1.5)]), atol=1e-4) and not mx.allclose(
-        net(x), base
-    )
+    assert mx.allclose(net(x), want([(1, 0.8), (2, -1.5)]), atol=1e-4) and not mx.allclose(net(x), base)
     a1 = net.blocks[0]["loras"][f"{1:064x}"]["a"]
-    lm.activate(
-        model((1, 0.2)), "transformer", net, ctx
-    )  # a strength change and one detached: no read, no reload
+    lm.activate(model((1, 0.2)), "transformer", net, ctx)  # a strength change and one detached: no read, no reload
     assert fetched == ["l1", "l2"] and net.blocks[0]["loras"][f"{1:064x}"]["a"] is a1
-    assert (
-        list(net.blocks[1]["loras"]) == [f"{1:064x}"]
-        and net.blocks[0]._lora_s[f"{1:064x}"] == 0.2 * 0.5
-    )
+    assert list(net.blocks[1]["loras"]) == [f"{1:064x}"] and net.blocks[0]._lora_s[f"{1:064x}"] == 0.2 * 0.5
     assert mx.allclose(net(x), want([(1, 0.2)]), atol=1e-4)
-    lm.activate(
-        model(), "transformer", net, ctx
-    )  # the last adapter gone: the very layers as they were
+    lm.activate(model(), "transformer", net, ctx)  # the last adapter gone: the very layers as they were
     assert type(net.blocks[0]) is nn.QuantizedLinear and type(net.blocks[1]) is nn.Linear
-    assert (
-        sorted(k for k, _ in __import__("mlx.utils").utils.tree_flatten(net.parameters())) == keys
-    )
+    assert sorted(k for k, _ in __import__("mlx.utils").utils.tree_flatten(net.parameters())) == keys
     assert mx.array_equal(net(x), base)
-    net.compute_dtype = (
-        mx.float16
-    )  # attached to a float16 transformer: the factors in its compute dtype
+    net.compute_dtype = mx.float16  # attached to a float16 transformer: the factors in its compute dtype
     lm.activate(model((2, 1.0)), "transformer", net, ctx)
     assert net.blocks[1]["loras"][f"{2:064x}"]["b"].dtype == mx.float16
     # a file that does not fit fails before anything attaches
@@ -810,13 +710,9 @@ def test_mlx_adapters_detach_exactly_and_change_strength_without_a_reload(tmp_pa
 def test_a_baked_entry_counts_its_float32_scales():
     from core import loaders_mlx
 
-    q = nn.QuantizedLinear(
-        128, 8, group_size=64, bits=8
-    )  # quantized from float32: float32 scales and biases
+    q = nn.QuantizedLinear(128, 8, group_size=64, bits=8)  # quantized from float32: float32 scales and biases
     assert q.scales.dtype == mx.float32
-    assert (
-        loaders_mlx.extra_gb(q) * 2**30 == 2 * 8 * 2 * 2
-    )  # 8 x 2 groups, scales and biases, 2 bytes more each
+    assert loaders_mlx.extra_gb(q) * 2**30 == 2 * 8 * 2 * 2  # 8 x 2 groups, scales and biases, 2 bytes more each
     q.scales, q.biases = q.scales.astype(mx.bfloat16), q.biases.astype(mx.bfloat16)
     assert loaders_mlx.extra_gb(q) == 0
 
@@ -890,9 +786,7 @@ def edited_states(monkeypatch, fn, params: dict, latent):
 
 
 @needs_mlx
-@pytest.mark.parametrize(
-    "case", ["ltx-retake/retake-448x256-49f-s42", "ltx-extend/extend-448x256-49f+8-s42"]
-)
+@pytest.mark.parametrize("case", ["ltx-retake/retake-448x256-49f-s42", "ltx-extend/extend-448x256-49f+8-s42"])
 def test_retake_and_extend_states_are_the_goldens(case, on_cpu, monkeypatch):
     """The masks (video float32 for retake, bf16 for extend; audio bf16), the keyframes mask on the first latent
     frame, the positions at the source's fps and the sigmas of the 30-step schedule over the whole clip."""
@@ -924,13 +818,7 @@ def test_retake_and_extend_states_are_the_goldens(case, on_cpu, monkeypatch):
         assert str(x.dtype).split(".")[-1] == loop[part][k]["dtype"], (part, k)
     tokens = seen["fhw"][0] * seen["fhw"][1] * seen["fhw"][2]
     assert tokens == loop["video_in"]["tokens"]
-    assert (
-        max(
-            abs(x - y)
-            for x, y in zip(ltx_mlx.ltx2_schedule(30, tokens), loop["sigmas"], strict=True)
-        )
-        < 1e-6
-    )
+    assert max(abs(x - y) for x, y in zip(ltx_mlx.ltx2_schedule(30, tokens), loop["sigmas"], strict=True)) < 1e-6
 
 
 @needs_mlx
@@ -950,9 +838,7 @@ def test_audio_to_video_stage1_state_is_the_golden(on_cpu, monkeypatch):
     monkeypatch.setattr(ltx_mlx, "X0Model", lambda m: m)
     cond = ltx_mlx.Cond(mx.zeros((1, 4, 8)), mx.zeros((1, 4, 8)), neg_video=mx.zeros((1, 4, 8)),
                         neg_audio=mx.zeros((1, 4, 8)))  # fmt: skip
-    audio = ltx_mlx.Latent(
-        None, mx.zeros((1, 51, 128)), None, 49, 24.0, source_map={"take_id": "t"}, sound=(b"", 0)
-    )
+    audio = ltx_mlx.Latent(None, mx.zeros((1, 51, 128)), None, 49, 24.0, source_map={"take_id": "t"}, sound=(b"", 0))
     inputs = {"model": None, "cond": cond, "seed": g["seed"], "canvas": {"width": 448, "height": 256},
               "duration": {"frames": 49, "fps": 24}, "audio": audio}  # fmt: skip
     out = ltx_mlx.sample_guided(Probe(), {"steps": 30, "cfg": 3.0, "stg": 1.0}, inputs)["latent"]
@@ -974,9 +860,7 @@ def test_audio_to_video_stage1_state_is_the_golden(on_cpu, monkeypatch):
 
 def dev_workflow(name: str) -> tuple[dict, dict, dict]:
     values, impls, _ = ltx()
-    nodes = json.loads(
-        json.dumps(next(w for w in values["workflows"]["workflows"] if w["id"] == name)["nodes"])
-    )
+    nodes = json.loads(json.dumps(next(w for w in values["workflows"]["workflows"] if w["id"] == name)["nodes"]))
     return nodes, impls, registry.node_schemas(values)
 
 
@@ -1005,9 +889,7 @@ def test_the_model_variant_is_checked_before_anything_loads(name, edit, error):
         n.pop("only", None)  # studio drops it from a command
         n.pop("bypass", None) if n["kind"] != "ltx/keyframes" else None
     nodes.pop("keyframes", None)
-    for n in (
-        nodes.values()
-    ):  # keyframes bypassed: studio splices it out (its input feeds its consumers)
+    for n in nodes.values():  # keyframes bypassed: studio splices it out (its input feeds its consumers)
         for port, ref in n.get("in", {}).items():
             if ref == "keyframes.cond":
                 n["in"][port] = "encode.cond"
@@ -1028,13 +910,8 @@ def test_distill_is_the_dev_model_with_the_distilled_lora_baked():
     assert baked.variant == "dev" and [(u.strength, u.mode) for u in baked.loras] == [(1.0, "bake")]
     assert ltx_mlx.distilled_lora(baked) and not ltx_mlx.distilled_lora(dev)
     if baked.files("transformer"):
-        assert (
-            baked.key("transformer")[:4] == dev.key("transformer")
-            and len(baked.key("transformer")) == 5
-        )
-    assert (
-        ltx_mlx.check_sample({"role": "stage2", "steps": 3}, {"latent"}, {"model": baked}) is None
-    )
+        assert baked.key("transformer")[:4] == dev.key("transformer") and len(baked.key("transformer")) == 5
+    assert ltx_mlx.check_sample({"role": "stage2", "steps": 3}, {"latent"}, {"model": baked}) is None
     assert ltx_mlx.check_sample({"role": "stage1", "steps": 8}, {"canvas", "duration"}, {"model": baked}) == \
         ": needs model variant distilled"  # fmt: skip
 
@@ -1053,7 +930,7 @@ def test_distilled_actions_pass_distill_through_and_key_the_encode_by_variant():
     import config
 
     dev = pack.ModelRef(p, "dev", "int8")
-    with mock.patch.object(pack, "models_root", lambda: Path("/nonexistent")):
+    with mock.patch("config.MODELS", Path("/nonexistent")):
         assert ltx_mlx.check_distill({}, {"model"}, {"model": dev}) == (
             f": Distilled LoRA not downloaded on host {config.HOST}"
         )
@@ -1085,16 +962,12 @@ def test_dev_memory_plans_cover_only_the_runs_that_can_use_it():
     plans = registry.memory_plans(p, "dev", "int8", impls, schemas)
     assert [x.get("workflow") for x in plans] == [None, "ltx-audio-to-video"]
     assert plans[0]["planned_at"] == {"mp": 0.1147, "frames": 97}  # 49 + the default 2 s extend
-    assert {c["variant"] for c in plans[0]["components"] if c["component"] == "transformer"} == {
-        "dev"
-    }
+    assert {c["variant"] for c in plans[0]["components"] if c["component"] == "transformer"} == {"dev"}
     assert registry.memory_plans(p, "dev", "bf16", impls, schemas) == []
     # API 1.40: the distilled LoRA is an add-on the bake reads: no plan counts it as a component
     assert not [c for x in plans for c in x["components"] if c["component"] == "distilled_lora"]
     # from API 1.39 retake, extend and audio to video run on Distilled too: audio to video gets its own item there
-    assert [
-        x.get("workflow") for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)
-    ] == [
+    assert [x.get("workflow") for x in registry.memory_plans(p, "distilled", "int8", impls, schemas)] == [
         None,
         "ltx-audio-to-video",
     ]

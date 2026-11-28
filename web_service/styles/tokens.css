@@ -1,6 +1,8 @@
 /* The seven themes (docs/plan/05-ui.md 8.5, docs/mock/*.dc.html). next-themes sets data-theme on <html>.
    g ground · in inset (stage) · p0 floating panel · s1-s5 surface tones · ln line · dash dashed outline ·
-   t1/t2 text · ib/it info button · a1/a2 accents (image, video) with on1/on2 text on them · shd shadow colour. */
+   t1/t2 text · ib/it info button · a1/a2 accents (image, video) with on1/on2 text on them · shd shadow colour.
+   kind-music / kind-sound / kind-voice (fixed in every theme) with on-kind-* text on them: the Music, Sound and Voice
+   badges and orbs (docs/mock/CreateMusicSound.dc.html, docs/design-system tokens.json; plan 38 P0). */
 :root,
 [data-theme="forest"] {
   --g: #0e1512;
@@ -24,6 +26,12 @@
   --on2: #2b0c02;
   --shd: #000000;
   --bad: #ff8a80;
+  --kind-music: #d59bf6;
+  --on-kind-music: #230a33;
+  --kind-sound: #7cc7f2;
+  --on-kind-sound: #06202e;
+  --kind-voice: #f2b84b;
+  --on-kind-voice: #2a1c00;
   color-scheme: dark;
 }
 [data-theme="ocean"] {

@@ -135,3 +135,34 @@ merges. 2. Stdio only (local); no remote endpoint. 3. Test with Claude Code and 
   `Batch.director` is set.
 - Not done: asking Claude Code / Claude Desktop for a Qwen still, an LTX clip and an export on real models (20.4,
   third point). Plan 24's clip-level edit tools are not built here.
+
+### 20.8 Magic over MCP (2026-11-27)
+
+Owner, 2026-11-27: "yes add them to mcp in parallel to  this if no blocker" (the Magic tools, after the Assistant's
+Magic gaps build, contract 1.93).
+
+- The 12 Magic tools are on both surfaces: `list_boards` (`q`), `create_board`, `show_board`, `magic_kinds`,
+  `try_board_edit`, `edit_board`, `restore_board`, `plan_board`, `run_blocks`, `make_views`, `board_frame`,
+  `send_to_timeline`. Each calls the same board routes the Assistant's do, as the signed-in user, labelled `via mcp`
+  (`cli/mcp_magic.go`).
+- No card over MCP. A write does what it says at once; the client's own ask (destructiveHint, or its settings) is the
+  Yes. `edit_board` and `restore_board` are `destructive`, as `edit_timeline` and `restore_timeline` are.
+- Cost, as `run_workflow` / `plan_run` and `export_timeline`: plan first with `plan_board` (or `show_board`'s plan);
+  `run_blocks` plans again and answers that `MagicPlan` next to the runs it started; `send_to_timeline`'s answer has its
+  own plan (what went, the bakes); `make_views` answers the runs only (studio plans views in process; no route gives
+  the estimate). The user's "ask above N GPU minutes" is not applied over MCP: there is no card to ask on, and
+  refusing would leave an MCP agent no way to say yes. The 4-run cap of `run_workflow` is not applied either: a board
+  run is the user's pick of blocks, and the board's own 100-run limit holds.
+- Catalog: a write on both surfaces carries `mcp_description`, which helm mcp offers in place of `description` (the
+  Assistant's text names its card, Apply or the screen). `check.py`: a write on both surfaces needs one, it is only
+  for a tool on both surfaces, and `destructive` is any write helm mcp serves. No API or message change, so no
+  contract version.
+- Answers: `try_board_edit` is the dry run's revision, diff and warnings (no summary: studio writes that only on the
+  stored revision; its `mcp_description` says so); `edit_board` adds the stored revision's `ops_summary` when the
+  newest kept revision is still its own; `run_blocks` answers `seconds` (the plan's) as the Assistant's does;
+  `make_views` answers `seconds` null (unknown); `plan_board`'s `mcp_description` drops "whether it asks you first"
+  (nothing asks over MCP); `board_frame` reads the agent view and works out what each visible lane shows, as studio's
+  `boardFrame` does (no image: `get_take` shows a take). (Review fixes, 2026-11-27.)
+- Tests: `cli/mcp_test.go` TestMCPMagicBoards (every call each tool makes) and the catalog test (descriptions,
+  annotations); `contract_tests/tests/test_mcp.py` drives a board from empty to a sequence over stdio on
+  `helmstudio-test` (echo models).

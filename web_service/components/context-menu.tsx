@@ -9,6 +9,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { AtSign, BookPlus, ClipboardPaste, Copy, Scissors, TextSelect } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { desktop } from "@/lib/desktop";
 
 export type MenuItem = {
   label: string;
@@ -26,10 +27,28 @@ export type MenuItem = {
   items?: Item[];
   /** the Mac app's spelling suggestions */
   bold?: boolean;
+  /** a section's name inside the menu (ModelFolders 5c "Copies on mac"): not an item */
+  heading?: boolean;
+  /** a length in seconds typed in a small popover beside the menu, with quick picks (AudioFades frame 4: Fade in…) */
+  seconds?: Seconds;
+};
+export type Seconds = {
+  title: string;
+  value: number;
+  picks: number[];
+  max: number;
+  /** default 0 */
+  min?: number;
+  /** default "s" (the Duck music amount: "dB") */
+  unit?: string;
+  note: string;
+  onSet: (s: number) => void;
 };
 /** "-" is a separator; false / null / undefined are left out (`cond && {…}`). */
 export type Item = MenuItem | "-" | false | null | undefined;
-export type Menu = { title?: string; items: Item[] };
+/** `beside`: a click opens it to the right of the panel the button sits in, bottom-aligned with the button (the rail's
+ * Setup gear), not under the button over its neighbours */
+export type Menu = { title?: string; items: Item[]; beside?: boolean };
 export type MenuHandle = { update: (m: Menu) => void };
 
 type Open = {
@@ -91,8 +110,14 @@ export function openMenu(e: Ev, menu: Menu, keep = false): MenuHandle | null {
     el,
     back: document.activeElement,
     menu,
-    x: r ? r.left : e.clientX,
-    y: r ? r.bottom + 4 : e.clientY,
+    // beside: past the right edge of the button's panel; the bottom edge flips it up to sit level with the button
+    x: r
+      ? menu.beside
+        ? (target?.closest(".panel") ?? (e.currentTarget as Element)).getBoundingClientRect()
+            .right + 8
+        : r.left
+      : e.clientX,
+    y: r ? (menu.beside ? r.bottom : r.bottom + 4) : e.clientY,
     kbd,
   };
   open = o;
@@ -135,13 +160,19 @@ function MenuRoot({ o }: { o: Open }) {
     (o.kbd && first ? first : (list ?? m)).focus({ preventScroll: true });
     const outside = (e: Event) => !o.el.contains(e.target as Node) && closeMenu();
     const gone = () => closeMenu();
+    // a scroll queued before the menu opened (the strip scrolled to the tile right-clicked) is dispatched in the next
+    // frame, ahead of its animation callbacks: only a scroll after that closes the menu
+    let armed = false;
+    const arm = requestAnimationFrame(() => (armed = true));
+    const scrolled = (e: Event) => armed && outside(e);
     addEventListener("pointerdown", outside, true);
-    addEventListener("scroll", outside, true);
+    addEventListener("scroll", scrolled, true);
     addEventListener("blur", gone);
     addEventListener("resize", gone);
     return () => {
+      cancelAnimationFrame(arm);
       removeEventListener("pointerdown", outside, true);
-      removeEventListener("scroll", outside, true);
+      removeEventListener("scroll", scrolled, true);
       removeEventListener("blur", gone);
       removeEventListener("resize", gone);
     };
@@ -188,6 +219,7 @@ function List({
     if (r.bottom > innerHeight - 4) m.style.top = `${innerHeight - 4 - r.bottom}px`;
     if (focusFirst) m.querySelector<HTMLElement>(`[data-lv="${lv}"]`)?.focus();
   }, [lv, focusFirst]);
+  const acts = list.filter((x): x is MenuItem => x !== "-" && !x.heading);
   const buttons = () => [
     ...(ref.current?.querySelectorAll<HTMLElement>(`[data-lv="${lv}"]`) ?? []),
   ];
@@ -202,21 +234,19 @@ function List({
         const bs = buttons();
         const i = bs.indexOf(document.activeElement as HTMLElement);
         const go = (j: number) => bs[(j + bs.length) % bs.length]?.focus();
-        const it = list.filter((x) => x !== "-")[i] as MenuItem | undefined;
+        const it = acts[i] as MenuItem | undefined;
         if (e.key === "ArrowDown") go(i + 1);
         else if (e.key === "ArrowUp") go(i < 0 ? -1 : i - 1);
         else if (e.key === "Home") go(0);
         else if (e.key === "End") go(-1);
-        else if (e.key === "ArrowRight" && it?.items && !it.off)
+        else if (e.key === "ArrowRight" && (it?.items || it?.seconds) && !it.off)
           setSub({ i: list.indexOf(it), focus: true });
         else if (e.key === "ArrowLeft" && onBack) onBack();
         else if (e.key === "Escape" || e.key === "Tab") closeMenu();
         else if (e.key.length === 1 && /\S/.test(e.key) && !e.metaKey && !e.ctrlKey) {
           // a typed letter: the next item starting with it
           const k = e.key.toLowerCase();
-          const labels = list
-            .filter((x) => x !== "-")
-            .map((x) => (x as MenuItem).label.toLowerCase());
+          const labels = acts.map((x) => x.label.toLowerCase());
           const j = [...labels.keys()]
             .map((n) => (i + 1 + n) % labels.length)
             .find((n) => labels[n].startsWith(k));
@@ -230,8 +260,15 @@ function List({
       {title && <span className="hd">{title}</span>}
       {list.map((x, n) => {
         if (x === "-") return <span key={n} className="sep" role="separator" />;
+        if (x.heading)
+          return (
+            <span key={n} className="hd pt-0.5">
+              {x.label}
+            </span>
+          );
         const Icon = x.icon;
         const on = sub?.i === n;
+        const nest = !!(x.items || x.seconds);
         return (
           <div key={n} className="relative">
             <button
@@ -239,19 +276,19 @@ function List({
               role={x.checked === undefined ? "menuitem" : "menuitemcheckbox"}
               aria-checked={x.checked}
               aria-disabled={x.off ? true : undefined}
-              aria-haspopup={x.items ? "menu" : undefined}
-              aria-expanded={x.items ? on : undefined}
+              aria-haspopup={x.items ? "menu" : x.seconds ? "dialog" : undefined}
+              aria-expanded={nest ? on : undefined}
               title={x.off}
               tabIndex={-1}
               data-lv={lv}
               className={`mi ${x.danger ? "danger" : ""} ${x.bold ? "font-bold" : ""} ${on ? "on" : ""}`}
               onMouseEnter={(e) => {
                 e.currentTarget.focus({ preventScroll: true });
-                setSub(x.items && !x.off ? { i: n, focus: false } : null);
+                setSub(nest && !x.off ? { i: n, focus: false } : null);
               }}
               onClick={() => {
                 if (x.off) return;
-                if (x.items) setSub({ i: n, focus: true });
+                if (nest) setSub({ i: n, focus: true });
                 else pick(x);
               }}
             >
@@ -261,6 +298,7 @@ function List({
               {x.keys && <kbd>{x.keys}</kbd>}
               {x.items && <span className="chev">›</span>}
             </button>
+            {on && x.seconds && <SecondsPanel s={x.seconds} focus={sub.focus} />}
             {on && x.items && (
               <List
                 items={x.items}
@@ -269,13 +307,74 @@ function List({
                 focusFirst={sub.focus}
                 onBack={() => {
                   setSub(null);
-                  buttons()[list.filter((y) => y !== "-").indexOf(x)]?.focus();
+                  buttons()[acts.indexOf(x)]?.focus();
                 }}
               />
             )}
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const dbWord = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)} dB`;
+
+/** A Seconds item's popover: the length (Enter sets it), the quick picks, the limits. */
+function SecondsPanel({ s, focus }: { s: Seconds; focus: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [v, setV] = useState(String(+s.value.toFixed(2)));
+  const [left, setLeft] = useState(false);
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r && r.right > innerWidth - 4) setLeft(true);
+    if (focus) ref.current?.querySelector("input")?.focus();
+  }, [focus]);
+  const unit = s.unit ?? "s";
+  const set = (x: number) => {
+    if (!Number.isFinite(x)) return;
+    closeMenu();
+    s.onSet(Math.max(s.min ?? 0, Math.min(s.max, x)));
+  };
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={s.title}
+      className={`cm sub secs ${left ? "left" : ""}`}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <span className="hd">{s.title}</span>
+      <label className="secs-in">
+        <input
+          type="number"
+          inputMode="decimal"
+          min={s.min ?? 0}
+          max={s.max}
+          step={unit === "s" ? 0.1 : 1}
+          value={v}
+          aria-label={`${s.title} (${unit})`}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") set(parseFloat(v));
+            if (e.key === "Escape") closeMenu();
+          }}
+        />
+        <span>{unit}</span>
+      </label>
+      <div className="secs-picks">
+        {s.picks.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`chip ${p === s.value ? "on" : ""}`}
+            onClick={() => set(p)}
+          >
+            {unit === "dB" ? dbWord(p) : `${p} s`}
+          </button>
+        ))}
+      </div>
+      <p className="secs-note">{s.note}</p>
     </div>
   );
 }
@@ -389,13 +488,6 @@ export function textItems(f: Field): Item[] {
   ];
 }
 
-/** The Mac app's bridge (desktop/src/ui/studio-preload.js): the word under the pointer and its suggestions. */
-type Desktop = {
-  onSpelling: (cb: (s: { word: string; suggestions: string[] }) => void) => void;
-  replaceMisspelling: (word: string) => void;
-  addToDictionary: (word: string) => void;
-};
-const desktop = () => (globalThis as { helmDesktop?: Desktop }).helmDesktop;
 let spelling: { h: MenuHandle; menu: Menu } | null = null;
 
 /** The spelling items first (up to three suggestions, Add to dictionary), then the field's. */
@@ -405,8 +497,8 @@ export function spellItems(word: string, suggestions: string[]): Item[] {
   return [
     ...suggestions
       .slice(0, 3)
-      .map((s) => ({ label: s, bold: true, onPick: () => d.replaceMisspelling(s) })),
-    { label: "Add to dictionary", icon: BookPlus, onPick: () => d.addToDictionary(word) },
+      .map((s) => ({ label: s, bold: true, onPick: () => d.replaceMisspelling?.(s) })),
+    { label: "Add to dictionary", icon: BookPlus, onPick: () => d.addToDictionary?.(word) },
     "-",
   ];
 }
@@ -460,7 +552,7 @@ export function installMenus() {
   // after every element's handler, so a place's own menu goes first
   addEventListener("contextmenu", onContextMenu);
   addEventListener("keydown", onKey, true);
-  desktop()?.onSpelling(({ word, suggestions }) => {
+  desktop()?.onSpelling?.(({ word, suggestions }) => {
     const s = spelling;
     spelling = null;
     if (s && word)

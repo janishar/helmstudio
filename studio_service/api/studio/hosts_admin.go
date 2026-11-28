@@ -2,6 +2,8 @@ package studio
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +11,7 @@ import (
 	"maps"
 	"math"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,10 +37,20 @@ type settingsRow struct {
 	ReserveGB     float64
 	ReserveMode   string
 	Pins          json.RawMessage
+	Folders       []string // API 1.78: the model folders' paths in priority order; nil = never set
+	Downloads     *int     // API 1.78: the downloads folder's index in Folders
 	UpdatedAt     time.Time
 }
 
-const settingsCols = `host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, updated_at`
+const settingsCols = `host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, folders, downloads,
+	updated_at`
+
+// FolderID is a model folder's id (API 1.78, contracts/README.md "Model folders"): the first 12 hex of the SHA-256 of
+// its path as stored.
+func FolderID(path string) string {
+	sum := sha256.Sum256([]byte(path))
+	return hex.EncodeToString(sum[:])[:12]
+}
 
 // dto is the row with applied: every fresh key of the host reports this version in effect.
 func (r settingsRow) dto(values []registry.Host, now time.Time) dto.HostSettings {
@@ -46,6 +59,13 @@ func (r settingsRow) dto(values []registry.Host, now time.Time) dto.HostSettings
 	_ = json.Unmarshal(r.Pins, &out.Pins)
 	if out.Pins == nil {
 		out.Pins = []dto.PinRef{}
+	}
+	if len(r.Folders) > 0 {
+		for _, p := range r.Folders {
+			out.Folders = append(out.Folders, dto.HostFolder{ID: FolderID(p), Path: p})
+		}
+		id := FolderID(r.Folders[min(deref(r.Downloads), len(r.Folders)-1)])
+		out.Downloads = &id
 	}
 	for _, v := range values {
 		if v.Host == r.Host && v.Env != "server" && v.Live(now) && (v.Policy == nil || deref(v.Policy.SettingsVersion) != r.Version) {
@@ -62,6 +82,9 @@ func (r settingsRow) kv() []byte {
 		"updated_at": r.UpdatedAt.UTC()}
 	if r.ReserveMode == "auto" { // absent = custom: a runner older than 1.75 keeps taking custom values
 		v["reserve_mode"] = "auto"
+	}
+	if len(r.Folders) > 0 { // API 1.78: only when set, so a runner older than 1.78 keeps its HELMSTUDIO_MODELS
+		v["folders"], v["downloads"] = r.Folders, deref(r.Downloads)
 	}
 	value, _ := json.Marshal(v)
 	return value
@@ -180,6 +203,55 @@ func (s *Service) PutHostPins(ctx context.Context, caller common.Caller, host st
 	return s.storeSettings(ctx, host, func(row *settingsRow) error { row.Pins = raw; return nil }, keys)
 }
 
+// FoldersCheckAsk asks the supervising runner of a host what each model folder path is there (req.runner.folders.check,
+// API 1.78); an error is no answer.
+type FoldersCheckAsk func(ctx context.Context, host string, req message.FoldersCheckRequest) (message.FoldersCheckReply, error)
+
+// SetFoldersCheck sets how folder paths are checked on their host (nil: 503).
+func (s *Service) SetFoldersCheck(fn FoldersCheckAsk) { s.foldersCheck = fn }
+
+// PutHostFolders answers PUT /admin/hosts/{host}/folders (API 1.78): the list replaced after the host's runner checked
+// it, version + 1, published like the settings.
+func (s *Service) PutHostFolders(ctx context.Context, caller common.Caller, host string, body *dto.ModelFoldersPut) (dto.HostSettings, error) {
+	if !caller.IsAdmin() {
+		return dto.HostSettings{}, errAdmin
+	}
+	keys, err := s.presentKeys(host)
+	if err != nil {
+		return dto.HostSettings{}, err
+	}
+	paths := make([]string, len(body.Folders))
+	for i, f := range body.Folders {
+		paths[i] = f.Path
+		if len(f.Path) > 1 {
+			paths[i] = strings.TrimRight(f.Path, "/")
+		}
+	}
+	offline := network.NewServiceUnavailableError(host+" is offline", nil)
+	if s.foldersCheck == nil {
+		return dto.HostSettings{}, offline
+	}
+	reply, err := s.foldersCheck(ctx, host, message.FoldersCheckRequest{Paths: paths})
+	if err != nil || len(reply.Folders) != len(paths) {
+		return dto.HostSettings{}, offline
+	}
+	for i, f := range reply.Folders {
+		switch {
+		case !f.Connected && !f.Drive: // a drive's folder may be listed while unplugged
+			return dto.HostSettings{}, network.NewUnprocessableError(paths[i]+" is not a folder on "+host, nil)
+		case i == *body.Downloads && !f.Connected:
+			return dto.HostSettings{}, network.NewUnprocessableError("downloads must be a connected folder", nil)
+		case i == *body.Downloads && !f.Writable:
+			return dto.HostSettings{}, network.NewUnprocessableError(paths[i]+" is not writable on "+host, nil)
+		}
+	}
+	log.Printf("hosts admin: %s set %d model folders on %s", caller.ID, len(paths), host)
+	return s.storeSettings(ctx, host, func(row *settingsRow) error {
+		row.Folders, row.Downloads = paths, body.Downloads
+		return nil
+	}, keys)
+}
+
 // storeSettings applies change to the host's row (a new row starts from the freshest key's policy, no pins),
 // version + 1, and publishes it before the commit.
 func (s *Service) storeSettings(ctx context.Context, host string, change func(row *settingsRow) error, keys []registry.Host) (dto.HostSettings, error) {
@@ -200,11 +272,12 @@ func (s *Service) storeSettings(ctx context.Context, host string, change func(ro
 		if err := change(&row); err != nil {
 			return err
 		}
-		row, err = one[settingsRow](ctx, tx, `INSERT INTO host_settings (host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins)
-			VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (host) DO UPDATE SET version = excluded.version,
+		row, err = one[settingsRow](ctx, tx, `INSERT INTO host_settings (host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, folders, downloads)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) ON CONFLICT (host) DO UPDATE SET version = excluded.version,
 			after_run = excluded.after_run, idle_unload_min = excluded.idle_unload_min, reserve_gb = excluded.reserve_gb,
-			reserve_mode = excluded.reserve_mode, pins = excluded.pins, updated_at = clock_timestamp() RETURNING `+settingsCols,
-			host, row.Version+1, row.AfterRun, row.IdleUnloadMin, row.ReserveGB, row.ReserveMode, row.Pins)
+			reserve_mode = excluded.reserve_mode, pins = excluded.pins, folders = excluded.folders,
+			downloads = excluded.downloads, updated_at = clock_timestamp() RETURNING `+settingsCols,
+			host, row.Version+1, row.AfterRun, row.IdleUnloadMin, row.ReserveGB, row.ReserveMode, row.Pins, row.Folders, row.Downloads)
 		if err != nil {
 			return err
 		}

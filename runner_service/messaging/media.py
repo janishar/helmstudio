@@ -8,13 +8,16 @@ weight holder.
   `expect` (any fact differs: conform_args), the placeholders substituted and the argument list checked (invalid),
   ffmpeg in its own process group with progress from `-progress pipe:1`, the output verified, poster (a tenth in)
   and last frame written; frame: that exact frame as a PNG (each with its thumbnail, API 1.48); thumbs: each input's
-  thumbnail (README, Thumbnails) → uploads under output_prefix → one terminal status →
+  thumbnail (README, Thumbnails); mux (API 1.79, README Music and sound: Save with the video): the video's picture
+  copied with the audio as its AAC stereo sound fitted to the picture's length, poster at frame 0 and the last frame;
+  bake (API 1.82, README Magic: Send to Timeline): an export's conform with studio's own graph, bake.mp4 and its pictures;
+  facts (API 1.104, README Take facts): each video or audio take's facts and a video's frame grid
+  → uploads under output_prefix → one terminal status →
   ack (after the status is acked). The temp dir is removed on every path. A redelivery starts over."""
 
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -27,10 +30,11 @@ from pathlib import Path
 from PIL import Image
 
 from config import ENV, HOST
-from core import images, media
-from core.download import Cancelled
+from core import facts, images, media
+from core.graph import Cancelled
 from core.media import MediaError
-from messaging import cancels, schemas
+from messaging import cancels
+from messaging.delivery import dead_letter, decode, keep_alive
 from messaging.models import ModelEvents
 
 log = logging.getLogger("media")
@@ -65,25 +69,15 @@ class MediaJobs:
         self.job: str | None = None
 
     async def handle(self, msg) -> None:
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.media.job":
-            errs = [f"not a media job: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.media.job", "media job")
         if errs:
-            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-            with contextlib.suppress(Exception):
-                await self.js.publish(f"dlq.{msg.subject}", msg.data)
-            with contextlib.suppress(Exception):
-                await msg.term()
+            await dead_letter(self.js, msg, errs)
             return
         meta = getattr(msg, "metadata", None)
         events = MediaEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
         job_id, data = cmd["job_id"], cmd["data"]
         self.job, cancel = job_id, asyncio.Event()
-        beat = asyncio.create_task(self._wip(msg))
+        beat = asyncio.create_task(keep_alive(msg, WIP))
         tmp = Path(tempfile.mkdtemp(prefix="media-"))  # 0700
         stop = failure = result = None
         extra: dict = {}
@@ -97,9 +91,17 @@ class MediaJobs:
                     await events.publish("status", {"status": "running", "encoder": planned})
                     result, encoder = await self.export(data, events, tmp, cancel)
                     extra = {"encoder": encoder}
+                elif data["kind"] == "bake":  # API 1.82: an export's conform with studio's own graph
+                    await events.publish("status", {"status": "running", "encoder": self.encoders[0]})
+                    result, encoder = await self.export(data, events, tmp, cancel, "bake")
+                    extra = {"encoder": encoder}
+                elif data["kind"] == "mux":
+                    await events.publish("status", {"status": "running", "encoder": "copy"})
+                    result = await self.mux(data, events, tmp, cancel)
+                    extra = {"encoder": "copy"}
                 else:
                     await events.publish("status", {"status": "running"})
-                    job = self.thumbs if data["kind"] == "thumbs" else self.frame
+                    job = {"thumbs": self.thumbs, "facts": self.facts}.get(data["kind"], self.frame)
                     result = await job(data, tmp, cancel)
                 status = "succeeded"
         except Cancelled:
@@ -119,9 +121,7 @@ class MediaJobs:
                     await stop()
             shutil.rmtree(tmp, ignore_errors=True)
             self.job = None
-        log.info(
-            "media job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else ""
-        )
+        log.info("media job %s: %s%s", job_id, status, f" ({failure.cls}: {failure})" if failure else "")
         body: dict = {"status": status}
         if failure is not None:
             body["failure"] = {"class": failure.cls, "detail": str(failure) or failure.cls}
@@ -132,12 +132,6 @@ class MediaJobs:
             await msg.ack_sync()
         except Exception:  # not acked: redelivered after ACK_WAIT, and the job runs again
             log.exception("media job %s: could not report %s", job_id, status)
-
-    async def _wip(self, msg) -> None:
-        while True:
-            await asyncio.sleep(WIP)
-            with contextlib.suppress(Exception):
-                await msg.in_progress()
 
     async def _fetch(
         self, inputs: list[dict], tmp: Path, cancel: asyncio.Event, done=None
@@ -163,28 +157,28 @@ class MediaJobs:
             if got is None:
                 raise MediaError("input", f"input {n} is missing")
             if got[0] > limit:
-                why = (
-                    f"larger than {LIMIT >> 30} GB"
-                    if limit == LIMIT
-                    else "past the job's room on disk"
-                )
+                why = f"larger than {LIMIT >> 30} GB" if limit == LIMIT else "past the job's room on disk"
                 raise MediaError("input", f"input {n} is {why}")
             total += got[0]
             info = await asyncio.to_thread(media.probe, raw)
             media.check_kind(info, it["kind"])
-            ext = (
-                info["container"]
-                if it["kind"] in ("video", "audio")
-                else IMAGE_EXT[info["video"]["codec_name"]]
-            )
+            ext = info["container"] if it["kind"] in ("video", "audio") else IMAGE_EXT[info["video"]["codec_name"]]
             paths.append(raw.rename(tmp / f"in{n}.{ext}"))
             infos.append(info)
             if done:
                 await done(n)
         return paths, infos
 
-    async def export(self, data: dict, events: MediaEvents, tmp: Path, cancel: asyncio.Event):
-        ex = data["export"]
+    async def export(
+        self,
+        data: dict,
+        events: MediaEvents,
+        tmp: Path,
+        cancel: asyncio.Event,
+        name: str = "export",
+    ):
+        """An export, or (API 1.82, `name` bake) a bake: the same conform, verify and pictures, named <name>.*."""
+        ex = data[name]
         last = [time.monotonic()]
 
         async def fetched(
@@ -195,13 +189,11 @@ class MediaJobs:
                 last[0] = time.monotonic()
 
         paths, infos = await self._fetch(data["inputs"], tmp, cancel, fetched)
-        mode, args, reason, listfile = ex["mode"], ex["args"], None, None
+        mode, args, reason, listfile = ex.get("mode", "conform"), ex["args"], None, None
         if mode == "copy":
             for e in ex["expect"]:
                 if e["input"] >= len(infos):
-                    raise MediaError(
-                        "invalid", f"expect names input {e['input']}, which is not an input"
-                    )
+                    raise MediaError("invalid", f"expect names input {e['input']}, which is not an input")
                 got = infos[e["input"]]["stream"] or {}
                 if diff := next((k for k, v in e["stream"].items() if got.get(k) != v), None):
                     mode, args = "conform", ex["conform_args"]
@@ -214,7 +206,7 @@ class MediaJobs:
                 listfile.write_text(media.concat_list([paths[i] for i in ex["concat"]],
                                                       [(infos[i]["video"] or {}).get("duration") for i in ex["concat"]]))  # fmt: skip
         encoder = "copy" if mode == "copy" else self.encoders[0]
-        out = tmp / "export.mp4"
+        out = tmp / f"{name}.mp4"
         argv = media.build(args, paths, out=out, listfile=listfile,
                            venc_args=media.venc(self.encoders[0], ex["video_bitrate"]))  # fmt: skip
         await self._ffmpeg(argv, ex["frames"], events, cancel, tmp)
@@ -224,16 +216,67 @@ class MediaJobs:
         v, frames, target = info["video"], info["frames"], ex["target"]
         prefix = data["output_prefix"]
         pictures = {}
-        for name, index in (("poster", frames // 10), ("last", frames - 1)):
-            png = tmp / f"{name}.png"
+        job = name
+        for pic, index in (("poster", frames // 10), ("last", frames - 1)):
+            png = tmp / f"{pic}.png"
             try:
                 await asyncio.to_thread(media.frame_png, out, index, png)
             except MediaError as e:  # the output, not an input, lacks the frame
                 raise MediaError("verify", str(e)) from None
-            key = f"{prefix}export.{name}.png"
+            key = f"{prefix}{job}.{pic}.png"
             body = png.read_bytes()
-            if name == "poster":  # API 1.48: its thumbnail first, export.thumb.webp
-                thumb = await self._thumb(body, f"{prefix}export.thumb.webp")
+            if pic == "poster":  # API 1.48: its thumbnail first, export.thumb.webp
+                thumb = await self._thumb(body, f"{prefix}{job}.thumb.webp")
+            await self.store.put(key, body, "image/png")
+            pictures[pic] = {
+                "key": key,
+                "width": v["width"],
+                "height": v["height"],
+                "bytes": len(body),
+            }
+        key = f"{prefix}{job}.mp4"
+        size, etag = await self.store.upload(key, out, "video/mp4")
+        fps = float(Fraction(target["rate"]))
+        video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": info["audio"] is not None,
+                 **pictures, "stream": info["stream"]}  # fmt: skip
+        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag,
+                  "video": video} | ({"thumb": thumb} if thumb else {}) | ({"mode": mode} if name == "export" else {})  # fmt: skip
+        if reason:
+            result["reason"] = reason
+        return result, encoder
+
+    async def mux(self, data: dict, events: MediaEvents, tmp: Path, cancel: asyncio.Event) -> dict:
+        """API 1.79: inputs[0]'s picture copied with inputs[1] as its only sound (core.media.mux's arguments, here on
+        files with progress and cancel), mux.mp4 with mux.poster.png (frame 0) and mux.last.png."""
+        (video, sound), (vinfo, _) = await self._fetch(data["inputs"][:2], tmp, cancel)
+        total = vinfo["frames"]
+        if total < 1:
+            raise MediaError("input", "the video has no frames")
+        out = tmp / "mux.mp4"
+        argv = ["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-progress", "pipe:1", "-nostats",
+                "-protocol_whitelist", "file", "-i", str(video), "-protocol_whitelist", "file", "-i", str(sound),
+                "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "apad", "-c:a", "aac", "-ar", "48000",
+                "-ac", "2", "-shortest", "-movflags", "+faststart", "-f", "mp4", str(out)]  # fmt: skip
+        await self._ffmpeg(argv, total, events, cancel, tmp)
+        if cancel.is_set():
+            raise Cancelled
+        try:
+            info = await asyncio.to_thread(media.probe, out) if out.is_file() else None
+        except MediaError:
+            info = None
+        if info is None or info["video"] is None or info["audio"] is None:
+            raise MediaError("verify", "the output has no picture or no sound")
+        v, frames = info["video"], info["frames"]
+        if abs(frames - total) > 1:
+            raise MediaError("verify", f"the output has {frames} frames, not {total}")
+        prefix, pictures = data["output_prefix"], {}
+        for name, index in (("poster", 0), ("last", frames - 1)):
+            png = tmp / f"{name}.png"
+            try:
+                await asyncio.to_thread(media.frame_png, out, index, png)
+            except MediaError as e:
+                raise MediaError("verify", str(e)) from None
+            key, body = f"{prefix}mux.{name}.png", png.read_bytes()
             await self.store.put(key, body, "image/png")
             pictures[name] = {
                 "key": key,
@@ -241,16 +284,21 @@ class MediaJobs:
                 "height": v["height"],
                 "bytes": len(body),
             }
-        key = f"{prefix}export.mp4"
+        key = f"{prefix}mux.mp4"
         size, etag = await self.store.upload(key, out, "video/mp4")
-        fps = float(Fraction(target["rate"]))
-        video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": info["audio"] is not None,
-                 **pictures, "stream": info["stream"]}  # fmt: skip
-        result = {"key": key, "width": v["width"], "height": v["height"], "bytes": size, "etag": etag, "mode": mode,
-                  "video": video} | ({"thumb": thumb} if thumb else {})  # fmt: skip
-        if reason:
-            result["reason"] = reason
-        return result, encoder
+        fps = float(Fraction(v.get("r_frame_rate", "0/1")))
+        if fps <= 0:
+            raise MediaError("verify", "the output has no frame rate")
+        video = {"duration_s": frames / fps, "fps": fps, "frames": frames, "has_audio": True, **pictures,
+                 "stream": info["stream"]}  # fmt: skip
+        return {
+            "key": key,
+            "width": v["width"],
+            "height": v["height"],
+            "bytes": size,
+            "etag": etag,
+            "video": video,
+        }
 
     @staticmethod
     def verify(out: Path, ex: dict) -> dict:
@@ -266,20 +314,14 @@ class MediaJobs:
         if v is None or (v["width"], v["height"]) != (t["width"], t["height"]):
             raise MediaError("verify", f"the output is not {t['width']}x{t['height']}")
         if Fraction(v.get("r_frame_rate", "0/1")) != Fraction(t["rate"]):
-            raise MediaError(
-                "verify", f"the output's frame rate {v.get('r_frame_rate')} is not {t['rate']}"
-            )
+            raise MediaError("verify", f"the output's frame rate {v.get('r_frame_rate')} is not {t['rate']}")
         if a is None or int(a.get("sample_rate", 0)) != t["sample_rate"]:
             raise MediaError("verify", f"the output's sound is not {t['sample_rate']} Hz")
         if abs(info["frames"] - ex["frames"]) > 1:
-            raise MediaError(
-                "verify", f"the output has {info['frames']} frames, not {ex['frames']}"
-            )
+            raise MediaError("verify", f"the output has {info['frames']} frames, not {ex['frames']}")
         return info
 
-    async def _ffmpeg(
-        self, argv: list[str], total: int, events, cancel: asyncio.Event, tmp: Path
-    ) -> None:
+    async def _ffmpeg(self, argv: list[str], total: int, events, cancel: asyncio.Event, tmp: Path) -> None:
         """ffmpeg in its own process group (a list, never a shell), progress from its `frame=N` lines only when the
         count moved; a cancel stops the group (SIGTERM, KILL_AFTER, SIGKILL) and raises Cancelled; past its deadline
         (DEADLINE_BASE + DEADLINE_PER_FRAME × total, at most DEADLINE_MAX) it is stopped: MediaError ffmpeg; a
@@ -316,9 +358,7 @@ class MediaJobs:
                 n, now = state["frames"], time.monotonic()
                 if now > deadline:
                     await self._stop(proc, waiter)
-                    raise MediaError(
-                        "ffmpeg", f"timed out after {round(now - start)} s at frame {n} of {total}"
-                    )
+                    raise MediaError("ffmpeg", f"timed out after {round(now - start)} s at frame {n} of {total}")
                 if n != sent and now - at >= PROGRESS:
                     d = {"frames": n, "total": total}
                     if 0 < n < total:
@@ -387,9 +427,7 @@ class MediaJobs:
             elif body is None:
                 out.append({"index": i, "error": f"input {i} is missing"})
             elif len(body) > images.MAX_BYTES:
-                out.append(
-                    {"index": i, "error": f"input {i} is larger than {images.MAX_BYTES >> 20} MB"}
-                )
+                out.append({"index": i, "error": f"input {i} is larger than {images.MAX_BYTES >> 20} MB"})
             else:
                 try:
                     made = await self._thumb(body, key)
@@ -398,3 +436,26 @@ class MediaJobs:
                     continue
                 out.append({"index": i} | (made or {"skip": True}))
         return {"thumbs": out}
+
+    async def facts(self, data: dict, tmp: Path, cancel: asyncio.Event) -> dict:
+        """API 1.104, kind facts (README, Take facts): each video or audio input's facts, and a video's frame grid at
+        <output_prefix><i>.jpg; `error` when it cannot be read (the job goes on)."""
+        out = []
+        for i, it in enumerate(data["inputs"]):
+            work = tmp / str(i)
+            work.mkdir()
+            try:
+                paths, infos = await self._fetch([it], work, cancel)
+                got = {"index": i, "facts": await asyncio.to_thread(facts.facts, paths[0], infos[0])}
+                if it["kind"] == "video":
+                    jpg, w, h, at = await asyncio.to_thread(facts.grid, paths[0], infos[0])
+                    key = f"{data['output_prefix']}{i}.jpg"
+                    await self.store.put(key, jpg, "image/jpeg")
+                    got |= {"key": key, "width": w, "height": h, "bytes": len(jpg), "at": at}
+                out.append(got)
+            except MediaError as e:
+                why = str(e).replace("input 0", f"input {i}", 1)  # _fetch names its one input 0
+                out.append({"index": i, "error": (why if why.startswith("input") else f"input {i}: {why}")[:300]})
+            finally:
+                shutil.rmtree(work, ignore_errors=True)
+        return {"facts": out}

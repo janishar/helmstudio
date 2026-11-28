@@ -527,6 +527,20 @@
           "Quality",
           "Low memory"
         ]
+      },
+      "standard": {
+        "kind": "video",
+        "model": "LTX 2.5",
+        "fields": {
+          "prompt": "prompt.text",
+          "first": "keyframes.images",
+          "last": "keyframes.images",
+          "length": "duration.frames",
+          "width": "canvas.width",
+          "height": "canvas.height",
+          "seed": "seed.seed"
+        },
+        "seconds": 14
       }
     },
     {

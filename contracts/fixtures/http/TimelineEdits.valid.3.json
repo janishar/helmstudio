@@ -1,0 +1,28 @@
+{
+ "base_revision": 7,
+ "dry_run": true,
+ "ops": [
+  {
+   "op": "set",
+   "clip": "m",
+   "fade_in": 1.5,
+   "fade_out": 3
+  },
+  {
+   "op": "set",
+   "clip": "m",
+   "crossfade": 2
+  },
+  {
+   "op": "set",
+   "clip": "a",
+   "fade_out": null,
+   "crossfade": null
+  },
+  {
+   "op": "ducking",
+   "on": true,
+   "db": -12
+  }
+ ]
+}

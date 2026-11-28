@@ -68,6 +68,22 @@
         "lora_id": {
           "$ref": "defs.schema.json#/$defs/sha256",
           "description": "lora_delete: the shared LoRA (its SHA-256): every file of the host's index with that hash is deleted"
+        },
+        "folder": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{12}$",
+          "description": "from API 1.78 (contracts/README.md, Model folders), download: the id of the folder of the host's list to download into; absent = the downloads folder, else the next connected one"
+        },
+        "folders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{12}$"
+          },
+          "description": "from API 1.78, delete: the ids of the folders whose copies are removed; absent = the copy a run loads (the only one, studio checked)"
         }
       },
       "allOf": [

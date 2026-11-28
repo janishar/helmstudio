@@ -62,11 +62,9 @@ type AssistantLimits struct {
 	AutoGPUMinutesPerHour *int `json:"auto_gpu_minutes_per_hour"`
 }
 
-func intp(n int) *int { return &n }
-
 // defaultLimits are the caps before the admin sets any.
 func defaultLimits() AssistantLimits {
-	return AssistantLimits{intp(2000), intp(20000000), intp(200), intp(30), intp(8), intp(30)}
+	return AssistantLimits{new(2000), new(20000000), new(200), new(30), new(8), new(30)}
 }
 
 // orAuto fills the Auto caps a row or PUT left out from `from`.
@@ -513,14 +511,21 @@ func putEntry(ctx context.Context, tx pgx.Tx, t threadRow, key string, turn int,
 
 // AssistantThreadList is GET /assistant/threads.
 type AssistantThreadList struct {
-	Status  AssistantStatus   `json:"status"`
-	Threads []AssistantThread `json:"threads"`
+	Status     AssistantStatus   `json:"status"`
+	Threads    []AssistantThread `json:"threads"`
+	NextCursor *string           `json:"next_cursor"` // API 1.92
 }
 
 // ListAssistantThreads is GET /assistant/threads: the caller's chats, newest first, and the status.
-func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller) (AssistantThreadList, error) {
+func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller, page Page) (AssistantThreadList, error) {
 	out := AssistantThreadList{Threads: []AssistantThread{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `title`) // API 1.92
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var err error
 		if out.Status, _, err = s.assistantConfig(ctx, tx); err != nil {
 			return err
@@ -528,8 +533,8 @@ func (s *Service) ListAssistantThreads(ctx context.Context, caller common.Caller
 		if out.Status, err = s.statusFor(ctx, tx, caller, out.Status); err != nil {
 			return err
 		}
-		rows, err := collect[threadRow](ctx, tx, `SELECT `+threadCols+` FROM assistant_threads ORDER BY updated_at DESC, id DESC
-			LIMIT $1`, MaxAssistantThreads)
+		rows, err := collect[threadRow](ctx, tx, `SELECT `+threadCols+` FROM assistant_threads WHERE true`+match+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(t threadRow) (time.Time, string) { return t.UpdatedAt, t.ID })
 		for _, t := range rows {
 			out.Threads = append(out.Threads, t.dto())
 		}
@@ -1006,6 +1011,8 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if _, ok := s.askWorkflow(); ok && *status.Limits.LookAtPerHour > 0 {
 			lookAt = true
 		}
+		_, _, noListen := s.listenWorkflow() // API 1.108: listen is offered only when a listen workflow can run now
+		listen := noListen == ""
 		input := map[string]any{"kind": body.Kind}
 		set := `turn = $2, state = 'working', client_id = $3, pending = NULL, roles = $4, actions = $5, updated_at = clock_timestamp()`
 		switch body.Kind {
@@ -1038,7 +1045,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 				return network.NewConflictError("this chat is working in another tab", nil)
 			}
 			if mine && running {
-				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides),
+				next := message.AssistantTurn{ClientID: body.ClientID, Roles: roles, Tools: offeredTools(roles, snap.Search != nil, lookAt, listen, len(skills) > 0, guides),
 					Actions: append([]string{}, actions...), Settings: snap, Input: map[string]any{"kind": "message", "screen": body.Screen},
 					Plugins: plugins, Skills: skills, Guides: cards}
 				entry, err := one[AssistantEntry](ctx, tx, `INSERT INTO assistant_entries (id, thread_id, owner_id, key, turn, kind, text,
@@ -1129,7 +1136,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		}
 		if err := messaging.Enqueue(ctx, tx, messaging.Command{JobID: t.ID, OwnerID: t.OwnerID, MsgID: fmt.Sprintf("%s:%d", t.ID, turn),
 			Data: message.AssistantTurn{ThreadID: t.ID, Turn: turn, ClientID: body.ClientID, Roles: roles,
-				Tools: offeredTools(roles, snap.Search != nil, lookAt, len(skills) > 0, guides), Actions: append([]string{}, actions...), Settings: snap,
+				Tools: offeredTools(roles, snap.Search != nil, lookAt, listen, len(skills) > 0, guides), Actions: append([]string{}, actions...), Settings: snap,
 				Input: input, Plugins: plugins, Skills: skills, Guides: cards}}); err != nil {
 			return err
 		}
@@ -1179,6 +1186,9 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 		if step.Seq <= t.StepSeq {
 			return nil
 		}
+		// API 1.97: a progress step (nothing pending, not done) carries the next step's seq: its lines only, the
+		// thread's seq and state stay
+		progress := !step.Done && len(step.Actions) == 0 && len(step.Cards) == 0
 		key := fmt.Sprintf("step:%d", step.Seq)
 		if text := strings.TrimSpace(step.Text); text != "" {
 			if _, err := putEntry(ctx, tx, t, key, step.Turn, "assistant", &step.Text, nil, nil, nil); err != nil {
@@ -1204,6 +1214,9 @@ func (p *Projector) ApplyAssistantStep(ctx context.Context, ownerID string, step
 			if _, err := putEntry(ctx, tx, t, lineKey, step.Turn, "line", nil, raw, nil, nil); err != nil {
 				return err
 			}
+		}
+		if progress {
+			return nil
 		}
 		cardIDs := []string{}
 		for _, raw := range step.Cards {

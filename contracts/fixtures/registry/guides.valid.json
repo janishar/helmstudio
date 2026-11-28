@@ -8,8 +8,8 @@
     {
       "family": "echo",
       "title": "Echo (fake)",
-      "card": "Echo (fake) is the test model of a dev or test stack (workflows `echo`, `echo-tiny`, `echo-video` and the other\n`echo-*`): it draws its prompt's text on a gradient, makes a still MP4 or a short sound. Never offer it for real work.",
-      "guide": "# Echo (fake): assistant guide\n\n## Card\n\nEcho (fake) is the test model of a dev or test stack (workflows `echo`, `echo-tiny`, `echo-video` and the other\n`echo-*`): it draws its prompt's text on a gradient, makes a still MP4 or a short sound. Never offer it for real work.\n\n## Settings that matter\n\n- `echo.steps`: progress steps to report (1 to 200); `echo.delay_ms`: the wait per step.\n- `echo.fail`: true fails the run after its last step, to test errors.\n\n## Recipes\n\nThe `quick` recipe in model.yaml: 2 steps, no delay.\n",
+      "card": "Echo (fake) is the test model of a dev or test stack (workflows `echo`, `echo-tiny`, `echo-video` and the other\n`echo-*`): it draws its prompt's text on a gradient, makes a still MP4, a short sound, a fake song (`echo-music`:\nstereo, sections from the lyrics' tags) or sound effect (`echo-sound`, `echo-sound-video`, with Repaint, Vary and\nExtend). Never offer it for real work.",
+      "guide": "# Echo (fake): assistant guide\n\n## Card\n\nEcho (fake) is the test model of a dev or test stack (workflows `echo`, `echo-tiny`, `echo-video` and the other\n`echo-*`): it draws its prompt's text on a gradient, makes a still MP4, a short sound, a fake song (`echo-music`:\nstereo, sections from the lyrics' tags) or sound effect (`echo-sound`, `echo-sound-video`, with Repaint, Vary and\nExtend). Never offer it for real work.\n\n## Settings that matter\n\n- `echo.steps`: progress steps to report (1 to 200); `echo.delay_ms`: the wait per step.\n- `echo.fail`: true fails the run after its last step, to test errors.\n\n## Recipes\n\nThe `quick` recipe in model.yaml: 2 steps, no delay.\n",
       "recipes": [
         {
           "name": "quick",

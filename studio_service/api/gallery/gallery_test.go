@@ -134,6 +134,11 @@ func TestParseFilter(t *testing.T) {
 		filter.SessionID != userA || filter.BatchID != userB || strings.Join(filter.Words, ",") != "red,fox" || filter.Limit != 2 {
 		t.Fatal(filter, detail)
 	}
+	for _, class := range []string{"music", "sound", "voice"} { // API 1.79: a sound class is a kind filter
+		if filter, detail := ParseFilter(url.Values{"kind": {class}}, true); detail != "" || filter.Kind != class {
+			t.Fatal(filter, detail)
+		}
+	}
 	if filter, _ := ParseFilter(url.Values{"session_id": {"x"}, "batch_id": {"x"}}, false); filter.SessionID != "" ||
 		filter.BatchID != "" || filter.Limit != 60 {
 		t.Fatal("session_id read where it is not a filter", filter)
@@ -190,6 +195,10 @@ func TestBodies(t *testing.T) {
 		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png", Bytes: dto.MaxUploadBytes + 1}, "file is larger than 50 MB"},
 		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png"}, "bytes must be at least 1"},
 		{dto.UploadCreate{ContentType: "image/png", Bytes: 1}, "filename must be 1-255 characters"},
+		// API 1.79: an audio upload's class
+		{dto.UploadCreate{Filename: "a.wav", ContentType: "audio/wav", Bytes: 1, DurationS: &seconds[0], Sound: "music"}, ""},
+		{dto.UploadCreate{Filename: "a.wav", ContentType: "audio/wav", Bytes: 1, DurationS: &seconds[0], Sound: "song"}, "sound must be music, sound or voice"},
+		{dto.UploadCreate{Filename: "a.png", ContentType: "image/png", Bytes: 1, Sound: "music"}, "only audio has a sound class"},
 	} {
 		if got := test.body.Validate(); got != test.want {
 			t.Errorf("%+v: %q", test.body, got)

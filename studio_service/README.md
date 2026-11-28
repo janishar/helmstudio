@@ -359,7 +359,8 @@ shapes; an admin tool is checked against the thread's roles first, and `look_at`
 (contracts/README.md "Assistant: media and vision") a message may carry attached images (`takes`, the owner's ready
 takes, stored on the entry and sent to pipelines as the text's last line of refs), `AssistantStatus.sees` comes from
 the preset's `vision`, and `api/studio/assistant_see.go` answers `studio.see`: one take's thumbnail (or poster) as a
-JPEG of at most 1024 px for the assistant's model, never stored. From 1.70 ("Plugins: takes") `api/studio/plugin_pass.go` signs each plugin tool call's pass on
+JPEG of at most 1024 px for the assistant's model, never stored; from 1.104 a video's frame grid and a video's or
+audio's facts (Take facts: `api/studio/facts.go` queues the facts media jobs and stores what the runner measured). From 1.70 ("Plugins: takes") `api/studio/plugin_pass.go` signs each plugin tool call's pass on
 `studio.plugins.pass` (a key derived from the file secret) and checks it on `/v1/studio/plugin/*` (the /v1 guard in
 `startup/module.go`), and `api/gallery/plugin_takes.go` lets a `takes` plugin read one of the owner's takes and make a
 new one (source `tool`, `takes.tool`, migration 00050). `api/studio/plugin_use.go` is the Gallery's Edit: `GET /plugins/{plugin}` (a takes plugin on and

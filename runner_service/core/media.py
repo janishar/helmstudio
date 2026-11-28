@@ -4,11 +4,13 @@ arguments, and the check of studio's argument list (placeholders substituted, ev
 blocking: callers run them in a thread."""
 
 import hashlib
+import io
 import json
 import re
 import shutil
 import subprocess
 import sys
+import wave
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -19,7 +21,8 @@ NEEDS = ("xfade", "apad", "amix")  # filters the export graph uses
 
 
 class MediaError(Exception):
-    """A job failure of class `cls` (input, invalid, ffmpeg, verify, internal); the text is one line without paths."""
+    """A job failure (media and model jobs; core.download names it JobError) of class `cls` (media: input, invalid,
+    ffmpeg, verify, internal; models: download.classify's); the text is one line without paths."""
 
     def __init__(self, cls: str, detail: str) -> None:
         super().__init__(detail[:500])
@@ -31,9 +34,9 @@ def _out(*args: str) -> str:
 
 
 def detect() -> dict | None:
-    """{ffmpeg: version, encoders: [...], thumbs: true} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264
+    """{ffmpeg: version, encoders: [...], thumbs: true, facts: true} when ffmpeg >= 6 has xfade, apad, amix, aac and an H.264
     encoder, else None (this env runs no media jobs). Encoders as `usable` finds them, preferred first; `thumbs`
-    (API 1.48): this runner also runs thumbs jobs."""
+    (API 1.48): this runner also runs thumbs jobs; `facts` (API 1.104) facts jobs."""
     if not (FFMPEG and FFPROBE):
         return None
     m = re.search(r"version\s+n?(\d+(?:\.\d+)*)", _out(FFMPEG, "-hide_banner", "-version"))
@@ -47,7 +50,7 @@ def detect() -> dict | None:
     h264 = [e for e in H264 if e in encoders and usable(e)]
     if not h264 or "aac" not in encoders or not all(f in filters for f in NEEDS):
         return None
-    return {"ffmpeg": m.group(1)[:40], "encoders": h264, "thumbs": True}
+    return {"ffmpeg": m.group(1)[:40], "encoders": h264, "thumbs": True, "facts": True}
 
 
 def usable(encoder: str) -> bool:
@@ -77,7 +80,7 @@ def _null(v):
 
 def probe(path: Path) -> dict:
     """ffprobe of a file: {container, video (first video stream or None), audio (first audio or None), stream (the
-    video's defs videoStream facts or None), frames (video packets counted)}. MediaError input when unreadable."""
+    video's defs videoStream facts or None), frames (video packets counted), seconds (the file's length)}. MediaError input when unreadable."""
     r = subprocess.run([FFPROBE, "-v", "error", "-protocol_whitelist", "file", "-show_data_hash", "sha256", "-count_packets", "-show_format",
                         "-show_streams", "-of", "json", str(path)],
                        capture_output=True, text=True, check=False, timeout=300)  # fmt: skip
@@ -108,15 +111,12 @@ def probe(path: Path) -> dict:
             "field_order": _null(v.get("field_order")),
             "frame_rate": v.get("r_frame_rate", "0/0"),
             "time_base": v.get("time_base", "0/0"),
-            "color": {
-                k: _null(v.get(f"color_{k}")) for k in ("range", "space", "primaries", "transfer")
-            },
-            "extradata_sha256": h.split(":")[1]
-            if h.startswith("SHA256:")
-            else hashlib.sha256(b"").hexdigest(),
+            "color": {k: _null(v.get(f"color_{k}")) for k in ("range", "space", "primaries", "transfer")},
+            "extradata_sha256": h.split(":")[1] if h.startswith("SHA256:") else hashlib.sha256(b"").hexdigest(),
         }
     frames = int(v.get("nb_read_packets", 0)) if v else 0
-    return {"container": first, "video": v, "audio": a, "stream": stream, "frames": frames}
+    seconds = float(fmt.get("duration") or 0)  # API 1.104: the file's real length (Take facts)
+    return {"container": first, "video": v, "audio": a, "stream": stream, "frames": frames, "seconds": seconds}
 
 
 IMAGE_CODECS = {"png", "mjpeg", "webp", "bmp", "tiff"}
@@ -130,11 +130,7 @@ def check_kind(info: dict, kind: str) -> None:
     if kind == "audio":
         ok = v is None and info["audio"] is not None and info["container"] in ("wav", "mp3", "mp4")
     elif kind == "video":
-        ok = (
-            v is not None
-            and info["container"] in ("mp4", "mov")
-            and v.get("codec_name") not in IMAGE_CODECS
-        )
+        ok = v is not None and info["container"] in ("mp4", "mov") and v.get("codec_name") not in IMAGE_CODECS
     else:
         ok = v is not None and v.get("codec_name") in IMAGE_CODECS and info["frames"] <= 1
     if not ok:
@@ -184,14 +180,10 @@ DENY = re.compile(r"\b(a?movie|subtitles|ass|lut1d|lut3d|haldclutsrc|a?sendcmd|a
 SLOT = re.compile(r"\{in:(\d+)\}")
 
 
-OUTPUT_LIMIT = (
-    32 << 30
-)  # bytes: the largest output ffmpeg may write (studio blocks an export estimated over 16 GiB)
+OUTPUT_LIMIT = 32 << 30  # bytes: the largest output ffmpeg may write (studio blocks an export estimated over 16 GiB)
 
 
-def build(
-    args: list[str], inputs: list[Path], *, out: Path, venc_args: list[str], listfile: Path | None
-) -> list[str]:
+def build(args: list[str], inputs: list[Path], *, out: Path, venc_args: list[str], listfile: Path | None) -> list[str]:
     """Studio's argument list with `{in:n}`, `{list}`, `{out}` and `{venc}` substituted (whole arguments only),
     after checking it. MediaError invalid for an unknown option, an `-i` not followed by a placeholder, a codec
     other than CODECS outside {venc}, a format other than FORMATS, -progress other than pipe:1, a filter that opens
@@ -289,6 +281,23 @@ def rnd(x: float) -> int:
     return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
+def pcm16(samples) -> bytes:
+    """Float samples in [-1, 1] (a numpy array: (n,) mono or (n, channels), so stereo comes out interleaved) as PCM
+    signed 16-bit little-endian, clipped, then rounded half to even."""
+    return (samples.clip(-1, 1) * 32767).round().astype("<i2").tobytes()
+
+
+def wav(pcm: bytes, rate: int, channels: int) -> bytes:
+    """PCM 16-bit samples (interleaved when stereo) as a RIFF WAVE file."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
+
+
 def stitch(lines: list[dict], spoken: list[bytes], rate: int) -> tuple[bytes, list[dict]]:
     """A dialogue's take (contracts/README.md, Dialogue: cues; check.py echo_dialogue): each line's PCM 16-bit
     samples, then rnd(pause_s × rate) samples of silence before the next line (none after the last), and one cue per
@@ -310,11 +319,45 @@ MAX_TAKE_S = 600  # the longest audio take the output node stores (core.nodes._w
 def lines_problem(lines: list[dict]) -> str | None:
     """A dialogue stage's check before loading (`check_<stage>` text, after the node id): its lines planned as
     speech_seconds plans them (15 characters a second plus the pauses), refused above MAX_TAKE_S."""
-    planned = sum(len(r.get("text", "")) for r in lines) / 15 + sum(
-        r.get("pause_s", 0) for r in lines[:-1]
-    )
-    return (
-        f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s"
-        if planned > MAX_TAKE_S
-        else None
-    )
+    planned = sum(len(r.get("text", "")) for r in lines) / 15 + sum(r.get("pause_s", 0) for r in lines[:-1])
+    return f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s" if planned > MAX_TAKE_S else None
+
+
+def ffmpeg(args: list[str], stdin: bytes | None = None, timeout: float | None = 300) -> bytes:
+    """Run ffmpeg (-v error -nostdin -y first) on local temp files only (-protocol_whitelist file); its stdout.
+    MediaError ffmpeg on failure (packs wrap it in RunError)."""
+    r = subprocess.run([FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", *args], input=stdin,
+                       capture_output=True, check=False, timeout=timeout)  # fmt: skip
+    if r.returncode:
+        raise MediaError("ffmpeg", last_line(r.stderr.decode(errors="replace")))
+    return r.stdout
+
+
+def pcm(data: bytes, rate: int, channels: int) -> bytes:
+    """API 1.79 (packs share it, contracts/README.md Music and sound): an audio file's sound (a WAV, mp3 or m4a, or a
+    video's sound track) as PCM signed 16-bit little-endian samples at `rate` Hz, `channels` 1 (mono, downmixed) or 2
+    (stereo; a mono source on both)."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="pcm-") as tmp:
+        src = Path(tmp) / "source"
+        src.write_bytes(data)
+        return ffmpeg(["-protocol_whitelist", "file", "-i", str(src), "-map", "0:a:0", "-f", "s16le",
+                        "-acodec", "pcm_s16le", "-ar", str(rate), "-ac", str(channels), "pipe:1"])  # fmt: skip
+
+
+def mux(mp4: bytes, wav: bytes) -> bytes:
+    """API 1.79 (Save with the video, MMAudio's video take): the MP4's picture copied (H.264) with `wav` (any audio
+    file ffmpeg reads) as its only sound, AAC 48 kHz stereo, padded with silence or cut to the picture's length;
+    moov first. The facts of the result come from probe()."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="mux-") as tmp:
+        tmp = Path(tmp)
+        (tmp / "video.mp4").write_bytes(mp4)
+        (tmp / "sound").write_bytes(wav)
+        ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "video.mp4"), "-protocol_whitelist", "file",
+                 "-i", str(tmp / "sound"), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "apad",
+                 "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest", "-movflags", "+faststart",
+                 str(tmp / "out.mp4")])  # fmt: skip
+        return (tmp / "out.mp4").read_bytes()

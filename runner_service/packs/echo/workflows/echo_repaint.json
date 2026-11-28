@@ -1,0 +1,34 @@
+{
+  "id": "echo-repaint",
+  "title": "Echo repaint",
+  "action": "Repaint",
+  "family": "echo",
+  "env": "fake",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "repaint": {
+      "kind": "echo/repaint",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "span": null,
+        "seed": -1,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "repaint.audio"
+      }
+    }
+  }
+}

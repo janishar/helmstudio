@@ -82,6 +82,33 @@
       "height": null,
       "duration_s": 1.5,
       "has_audio": true
+    },
+    "22222222-0000-4000-8000-000000000011": {
+      "kind": "audio",
+      "sound": "music",
+      "duration_s": 30.0,
+      "has_audio": true
+    },
+    "22222222-0000-4000-8000-000000000012": {
+      "kind": "audio",
+      "sound": "voice",
+      "duration_s": 3.0,
+      "has_audio": true
+    },
+    "22222222-0000-4000-8000-000000000013": {
+      "kind": "audio",
+      "sound": "sound",
+      "duration_s": 2.0,
+      "has_audio": true
+    },
+    "22222222-0000-4000-8000-000000000015": {
+      "kind": "video",
+      "width": 448,
+      "height": 256,
+      "fps": 24,
+      "frames": 49,
+      "duration_s": 2.0416666666666665,
+      "has_audio": true
     }
   },
   "cases": [
@@ -924,6 +951,627 @@
                 "take_id": "11111111-0000-4000-8000-000000000010",
                 "in": 0,
                 "out": 1.5
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.79 offers by class (echo): a music take gets Repaint and Extend of the music class, its span the whole take, and Audio to video; never Vary (class sound)",
+      "registries": [
+        ""
+      ],
+      "take": "22222222-0000-4000-8000-000000000011",
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "echo-music-extend",
+            "title": "Echo music extend",
+            "action": "Extend",
+            "family": "echo",
+            "media": "audio",
+            "param": "lengthen.source",
+            "inputs": {
+              "lengthen.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-repaint",
+            "title": "Echo repaint",
+            "action": "Repaint",
+            "family": "echo",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              },
+              "repaint.span": {
+                "start": 0,
+                "end": 30.0
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011",
+                "in": 0,
+                "out": 13.375
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.79: a music take over a Timeline range: Repaint's span is the range",
+      "registries": [
+        ""
+      ],
+      "take": "22222222-0000-4000-8000-000000000011",
+      "range": [
+        12.5,
+        20.0
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "echo-music-extend",
+            "title": "Echo music extend",
+            "action": "Extend",
+            "family": "echo",
+            "media": "audio",
+            "param": "lengthen.source",
+            "inputs": {
+              "lengthen.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-repaint",
+            "title": "Echo repaint",
+            "action": "Repaint",
+            "family": "echo",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              },
+              "repaint.span": {
+                "start": 12.5,
+                "end": 20.0
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011",
+                "in": 12.5,
+                "out": 20.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.79: a voice take gets no music or sound workflow (no Repaint, no Vary), only Audio to video",
+      "registries": [
+        ""
+      ],
+      "take": "22222222-0000-4000-8000-000000000012",
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000012",
+                "in": 0,
+                "out": 3.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.79: a sound take gets Vary only of the classed workflows",
+      "registries": [
+        ""
+      ],
+      "take": "22222222-0000-4000-8000-000000000013",
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "echo-vary",
+            "title": "Echo vary",
+            "action": "Vary",
+            "family": "echo",
+            "media": "audio",
+            "param": "vary.source",
+            "inputs": {
+              "vary.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013",
+                "in": 0,
+                "out": 2.0
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "1.79: a video gets Add sound (MMAudio-like, class sound, takes the picture), never a classed workflow by its sound",
+      "registries": [
+        ""
+      ],
+      "take": "22222222-0000-4000-8000-000000000015",
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "echo-sound-video",
+            "title": "Echo sound from a video",
+            "action": "Add sound",
+            "family": "echo",
+            "media": "audio",
+            "param": "foley.source",
+            "inputs": {
+              "foley.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015"
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-retake",
+            "title": "Echo retake",
+            "action": "Retake a section",
+            "family": "echo",
+            "media": "video",
+            "param": "retake.source",
+            "inputs": {
+              "retake.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015"
+              },
+              "retake.span": {
+                "start": 0,
+                "end": 2.0416666666666665
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-a2v",
+            "title": "Echo audio to video",
+            "action": "Audio to video",
+            "family": "echo",
+            "media": "video",
+            "param": "a2v.source",
+            "inputs": {
+              "a2v.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015",
+                "in": 0,
+                "out": 2.0416666666666665
+              }
+            }
+          },
+          {
+            "workflow_id": "echo-extend",
+            "title": "Echo extend",
+            "action": "Extend",
+            "family": "echo",
+            "media": "video",
+            "param": "extend.source",
+            "inputs": {
+              "extend.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3, the four packs' real templates: a music take gets ACE-Step Repaint (its span the whole take), Cover and Extend, and goes into the rows of ACE-Step Music (reference) and Stable Audio 3 Sound (from a sound: rows take any class); no Stable Audio 3 Repaint, Vary or Extend (class sound)",
+      "take": "22222222-0000-4000-8000-000000000011",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "ace-step-music",
+            "title": "ACE-Step Music",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "compose.reference",
+            "inputs": {
+              "compose.reference": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000011"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "ace-step-repaint",
+            "title": "ACE-Step Repaint",
+            "action": "Repaint",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              },
+              "repaint.span": {
+                "start": 0,
+                "end": 30.0
+              }
+            }
+          },
+          {
+            "workflow_id": "ace-step-cover",
+            "title": "ACE-Step Cover",
+            "action": "Cover",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "cover.source",
+            "inputs": {
+              "cover.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "ace-step-extend",
+            "title": "ACE-Step Extend",
+            "action": "Extend",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "extend.source",
+            "inputs": {
+              "extend.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-sound",
+            "title": "Stable Audio 3 Sound",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "sound.from_sound",
+            "inputs": {
+              "sound.from_sound": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000011"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3: a music take over a Timeline range: ACE-Step Repaint's span on the audio source is the range",
+      "take": "22222222-0000-4000-8000-000000000011",
+      "range": [
+        12.5,
+        20.0
+      ],
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "ace-step-music",
+            "title": "ACE-Step Music",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "compose.reference",
+            "inputs": {
+              "compose.reference": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000011"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "ace-step-repaint",
+            "title": "ACE-Step Repaint",
+            "action": "Repaint",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              },
+              "repaint.span": {
+                "start": 12.5,
+                "end": 20.0
+              }
+            }
+          },
+          {
+            "workflow_id": "ace-step-cover",
+            "title": "ACE-Step Cover",
+            "action": "Cover",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "cover.source",
+            "inputs": {
+              "cover.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "ace-step-extend",
+            "title": "ACE-Step Extend",
+            "action": "Extend",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "extend.source",
+            "inputs": {
+              "extend.source": {
+                "take_id": "22222222-0000-4000-8000-000000000011"
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-sound",
+            "title": "Stable Audio 3 Sound",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "sound.from_sound",
+            "inputs": {
+              "sound.from_sound": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000011"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3: a voice take gets no Cover, Repaint, Vary or Extend on the real templates; only the reference rows of ACE-Step Music and Stable Audio 3 Sound",
+      "take": "22222222-0000-4000-8000-000000000012",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "ace-step-music",
+            "title": "ACE-Step Music",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "compose.reference",
+            "inputs": {
+              "compose.reference": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000012"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "sa3-sound",
+            "title": "Stable Audio 3 Sound",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "sound.from_sound",
+            "inputs": {
+              "sound.from_sound": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000012"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3: a video gets only MMAudio's video workflow (Add sound, classed sound, takes the picture); no music or sound workflow takes its sound",
+      "take": "22222222-0000-4000-8000-000000000015",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "mmaudio-video",
+            "title": "MMAudio Sound from a video",
+            "action": "Add sound",
+            "family": "mmaudio",
+            "media": "audio",
+            "param": "foley.source",
+            "inputs": {
+              "foley.source": {
+                "take_id": "22222222-0000-4000-8000-000000000015"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3: a silent video still gets MMAudio's Add sound (it reads the picture, not a sound)",
+      "take": "11111111-0000-4000-8000-000000000002",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "mmaudio-video",
+            "title": "MMAudio Sound from a video",
+            "action": "Add sound",
+            "family": "mmaudio",
+            "media": "audio",
+            "param": "foley.source",
+            "inputs": {
+              "foley.source": {
+                "take_id": "11111111-0000-4000-8000-000000000002"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "description": "plan 38 P3: a sound take gets Stable Audio 3 Repaint (its span the whole take), Vary and Extend, and goes into the rows of ACE-Step Music and Stable Audio 3 Sound; no ACE-Step Repaint, Cover or Extend (class music)",
+      "take": "22222222-0000-4000-8000-000000000013",
+      "registries": [
+        "ace-step.",
+        "minimax-music3.",
+        "stable-audio-3.",
+        "mmaudio."
+      ],
+      "expect": {
+        "uses": [
+          {
+            "workflow_id": "ace-step-music",
+            "title": "ACE-Step Music",
+            "family": "ace-step",
+            "media": "audio",
+            "param": "compose.reference",
+            "inputs": {
+              "compose.reference": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000013"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "sa3-sound",
+            "title": "Stable Audio 3 Sound",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "sound.from_sound",
+            "inputs": {
+              "sound.from_sound": [
+                {
+                  "audio": {
+                    "take_id": "22222222-0000-4000-8000-000000000013"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "workflow_id": "sa3-repaint",
+            "title": "Stable Audio 3 Repaint",
+            "action": "Repaint",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "repaint.source",
+            "inputs": {
+              "repaint.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              },
+              "repaint.span": {
+                "start": 0,
+                "end": 2.0
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-vary",
+            "title": "Stable Audio 3 Vary",
+            "action": "Vary",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "vary.source",
+            "inputs": {
+              "vary.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
+              }
+            }
+          },
+          {
+            "workflow_id": "sa3-extend",
+            "title": "Stable Audio 3 Extend",
+            "action": "Extend",
+            "family": "stable-audio-3",
+            "media": "audio",
+            "param": "extend.source",
+            "inputs": {
+              "extend.source": {
+                "take_id": "22222222-0000-4000-8000-000000000013"
               }
             }
           }

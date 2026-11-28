@@ -1,0 +1,88 @@
+{
+  "id": "minimax-music3",
+  "title": "MiniMax Music 3",
+  "family": "minimax-music3",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "minimax-music3/model",
+      "params": {
+        "variant": "base",
+        "precision": "bf16"
+      }
+    },
+    "lm": {
+      "kind": "minimax-music3/lm",
+      "in": {
+        "model": "model.model",
+        "prompt": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "lyrics": "",
+        "instrumental": false,
+        "seconds": 0
+      }
+    },
+    "flow": {
+      "kind": "minimax-music3/flow",
+      "in": {
+        "model": "model.model",
+        "cond": "lm.cond"
+      }
+    },
+    "vocode": {
+      "kind": "minimax-music3/vocode",
+      "in": {
+        "model": "model.model",
+        "latent": "flow.latent"
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "vocode.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "lm.lyrics"
+    ],
+    "quick": [
+      "lm.instrumental",
+      "lm.seconds"
+    ],
+    "count": {
+      "default": 1,
+      "max": 4
+    }
+  },
+  "standard": {
+    "kind": "music",
+    "model": "MiniMax Music 3",
+    "default": true,
+    "fields": {
+      "prompt": "prompt.text",
+      "lyrics": "lm.lyrics",
+      "instrumental": "lm.instrumental",
+      "length": "lm.seconds",
+      "seed": "seed.seed"
+    },
+    "seconds": 4.9
+  }
+}

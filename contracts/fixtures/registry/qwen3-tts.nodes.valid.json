@@ -90,6 +90,7 @@
       "kind": "qwen3-tts/speak",
       "title": "Speak",
       "family": "qwen3-tts",
+      "sound": "voice",
       "params": [
         {
           "name": "voice",
@@ -169,6 +170,7 @@
       "kind": "qwen3-tts/dialogue",
       "title": "Dialogue",
       "family": "qwen3-tts",
+      "sound": "voice",
       "params": [
         {
           "name": "script",

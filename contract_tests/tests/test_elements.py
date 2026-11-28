@@ -13,10 +13,13 @@ from datetime import datetime
 import pytest
 from conftest import headers, make_client
 from helpers import (
+    CONTRACTS,
     NO_SUCH_ID,
     QUICK,
     STUDIO,
     all_takes,
+    check,
+    detail,
     new_session,
     ok,
     png_bytes,
@@ -28,7 +31,7 @@ from test_batches import BATCHES, FAST, finish, lines, rows_of, submit, wait_bat
 from test_image_inputs import refused, run_take
 from test_pipelines import batch_takes, create, echo_step, inputs_node
 from test_pipelines import submit as submit_pipeline
-from test_user_workflows import CONTRACTS, WF, check, copy_echo, doc
+from test_user_workflows import WF, copy_echo, doc
 
 LIB = f"{STUDIO}/library"
 PARAM = "echo.refs"
@@ -61,13 +64,6 @@ def update(item: dict, **changes) -> dict:
 
 def put(client, item: dict, **changes) -> dict:
     return ok(client.put(f"{LIB}/{item['id']}", json=update(item, **changes)))
-
-
-def detail(r, status: int) -> str:
-    assert r.status_code == status, (
-        f"{r.request.method} {r.request.url.path}: {r.status_code} {r.text}"
-    )
-    return r.json()["detail"]
 
 
 def made_with(client, take_id: str) -> dict:

@@ -3,6 +3,7 @@ import { Bricolage_Grotesque, Inter, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "next-themes";
 import { THEMES } from "@/lib/themes";
 import { ContextMenus } from "@/components/context-menu";
+import { Scrollbars } from "@/components/scrollbars";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
@@ -37,6 +38,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         </ThemeProvider>
         {/* our right-click menus (alpha.5 item 17): text fields' and nothing on empty space */}
         <ContextMenus />
+        {/* scrollbars show while their area scrolls */}
+        <Scrollbars />
       </body>
     </html>
   );

@@ -1,0 +1,119 @@
+# Stable Audio 3 Small-SFX on torch (plan 38, 44.6): sound effects from text, and Repaint, Vary and Extend of a sound,
+# 44.1 kHz stereo. diffusers' StableAudio3 model classes over the original checkpoint (torch.py: one model.safetensors
+# split into dit and autoencoder by rename, plus the T5Gemma folder), run as the reference's StableAudioModel.generate
+# (the sample run: ~/GenAI/model-samples/stable-audio-3-small-sfx). Generates exactly the canonical stable-audio-3
+# fixtures (contracts/fixtures/registry/stable-audio-3.*.valid.json; tests/test_packs.py).
+# peak_gb: measured on MPS (64 GB, torch 2.15) with tests/test_stable_audio_3_golden.py; see the numbers there.
+id: stable-audio-3-small-sfx
+family: stable-audio-3
+title: Stable Audio 3
+media: [audio]
+sound: sound                     # API 1.79: its takes are sound effects (contracts/README.md, Music and sound)
+runtimes:
+  torch: {env: torch, devices: [mps, cuda]}   # validated on MPS; CUDA goldens wait for a GCP slot (plan 38 44.5)
+licences:
+  stability-community: {title: Stability AI Community License and Gemma Terms of Use,
+                        url: https://huggingface.co/stabilityai/stable-audio-3-small-sfx}
+model:
+  help: The weights to load.
+  variant: {label: Variant}
+  precision: {label: Precision, help: "The DiT and autoencoder run fp32 (as the maker's code on a Mac), the T5Gemma text encoder bf16 as stored."}
+variants:
+  small-sfx:
+    dir: Stable-Audio-3-Small-SFX
+    title: Small SFX
+    source: {repo: stabilityai/stable-audio-3-small-sfx, revision: 05ca3857881c94a2b84026b1111c537d78f5f9f0,
+             allow_patterns: [LICENSE.md, LICENSE_GEMMA.md, NOTICE, model.safetensors, model_config.json,
+                              t5gemma-b-b-ul2/config.json, t5gemma-b-b-ul2/model.safetensors,
+                              t5gemma-b-b-ul2/special_tokens_map.json, t5gemma-b-b-ul2/tokenizer.json,
+                              t5gemma-b-b-ul2/tokenizer.model, t5gemma-b-b-ul2/tokenizer_config.json],
+             licence: stability-community, must_accept: true, gated: true, bytes: 3492093873}
+plan_media:                      # the source a memory plan assumes for an empty media param: the longest (30 s)
+  audio: {duration_s: 30, has_audio: true, in: 0, out: 30}
+components:
+  # one file, two components: rename keeps model.model.* (and two conditioner tensors) for the dit,
+  # pretransform.model.* for the autoencoder; both stored and run fp32
+  dit: {files: model.safetensors, dtype: fp32, precision: [fp32]}
+  autoencoder: {files: model.safetensors, dtype: fp32, precision: [fp32]}
+  text_encoder: {files: t5gemma-b-b-ul2/model.safetensors, dtype: bf16, precision: [bf16]}
+stages:
+  sound:
+    title: Sound
+    component: transformer
+    help: "Makes a sound effect from the prompt, 8 steps, 44.1 kHz stereo, levels as the model gives them. From a sound: starts from that sound instead of noise, Change saying how far it may go."
+    uses: [text_encoder, dit, autoencoder]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      seconds: {type: float, label: Length, default: 4, min: 0.5, max: 30, step: 0.5, help: "Seconds of sound."}
+      from_sound:
+        type: rows
+        label: From a sound
+        default: []
+        min: 0
+        max: 1
+        item:
+          audio: {type: media, label: Sound, default: null, accepts: [audio], max_s: 30,
+                  help: "An audio take, or a video's sound, to start from; cut or padded to the Length."}
+        help: "A sound to start from instead of noise (optional)."
+      change: {type: float, label: Change, default: 0.7, min: 0.05, max: 1, step: 0.05,
+               help: "With From a sound: how far the result may move from it (1: a new sound)."}
+    # measured on MPS (phys_footprint every 50 ms, torch 2.15): the process at 4.27 GB with the three components
+    # resident, 4.28 at 10 s, 5.29 at 30 s (the latents carry 6 s of headroom); 0.3 s warm at 2 s, 1.1 s at 30 s
+    peak_gb: "0.3 + 0.03 * seconds"
+    stall_s: 120
+  repaint:
+    title: Repaint
+    component: transformer
+    help: "Makes the span of the source again from the prompt and keeps the rest, as long as the source."
+    uses: [text_encoder, dit, autoencoder]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      source: {type: media, label: Sound, default: null, accepts: [audio], max_s: 30,
+               help: "The sound take to repaint."}
+      span: {type: span, label: Repaint, default: null, help: "The part to make again, in the sound's seconds."}
+    peak_gb: "1.2"                # planned at a 30 s source (as sound at 30 s: 1.1 measured)
+    stall_s: 120
+  vary:
+    title: Vary
+    component: transformer
+    help: "Makes the source again from the prompt, starting from it: low Change stays close, 1 is a new sound. As long as the source."
+    uses: [text_encoder, dit, autoencoder]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      source: {type: media, label: Sound, default: null, accepts: [audio], max_s: 30,
+               help: "The sound take to vary."}
+      change: {type: float, label: Change, default: 0.7, min: 0.05, max: 1, step: 0.05,
+               help: "How far the variation may move from the source (1: a new sound)."}
+    peak_gb: "1.2"
+    stall_s: 120
+  extend:
+    title: Extend
+    component: transformer
+    help: "Adds seconds made from the prompt after the source's end (End) or before its start (Start), the source kept; at most 60 s in all."
+    uses: [text_encoder, dit, autoencoder]
+    inputs: {model: Model, text: Text, seed: Seed}
+    outputs: {audio: Audio}
+    params:
+      source: {type: media, label: Sound, default: null, accepts: [audio], max_s: 30,
+               help: "The sound take to extend."}
+      seconds: {type: float, label: Add, default: 4, min: 0.5, max: 30, step: 0.5, help: "Seconds to add."}
+      where: {type: enum, label: Where, default: end, enum: [end, start]}
+    peak_gb: "1.2 + 0.03 * seconds"   # a 30 s source and the added seconds: 1.2 measured at 30 + 30 s
+    stall_s: 120
+
+# The assistant's recipes (API 1.71, contracts/README.md "Assistant: model guides"): named settings as data, values by
+# <node>.<param>, each checked against its workflow's node schemas (tests/test_guides.py against the canonical fixtures).
+recipes:
+  - {name: short-hit, title: Short hit, workflow: sa3-sound, params: {sound.seconds: 1.5},
+     note: "One event (a door, a hit, a click): name the material and the action."}
+  - {name: ambience, title: Ambience, workflow: sa3-sound, params: {sound.seconds: 20},
+     note: "A steady background (rain, a room, traffic): name the place and what fills it."}
+  - {name: close-variation, title: Close variation, workflow: sa3-vary, params: {vary.change: 0.5},
+     note: "Keeps the source's timing and shape; the prompt says what to change."}
+  - {name: new-take-of-it, title: New take of it, workflow: sa3-vary, params: {vary.change: 0.9},
+     note: "Only the gist of the source stays."}
+  - {name: longer-tail, title: Longer tail, workflow: sa3-extend, params: {extend.seconds: 4, extend.where: end},
+     note: "A ring-out or a longer ambience after the source; the prompt describes the source."}

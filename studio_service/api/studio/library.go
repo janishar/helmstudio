@@ -193,6 +193,7 @@ func rowItem(row libraryRow) lookItem {
 type LibraryQuery struct {
 	Kind, Group, Q, Source, Family, Workflow string
 	Limit                                    int
+	Words                                    []string // API 1.92: words, lower-cased, a leading @ dropped
 }
 
 // ListLibrary returns the caller's items and the live starter looks, filtered: with q, the exact handle first, then by
@@ -269,6 +270,9 @@ func (s *Service) ListLibrary(ctx context.Context, caller common.Caller, query L
 		}
 		return nil
 	})
+	if len(query.Words) > 0 { // API 1.92: the pickers' search keeps the order
+		out.Items = slices.DeleteFunc(out.Items, func(i dto.LibraryItem) bool { return !hasWords(i, query.Words) })
+	}
 	if query.Q != "" {
 		slices.SortStableFunc(out.Items, func(a, b dto.LibraryItem) int {
 			handle := func(i dto.LibraryItem) string { return cmp.Or(i.HandleOr(), "\U0010FFFF") }
@@ -280,6 +284,21 @@ func (s *Service) ListLibrary(ctx context.Context, caller common.Caller, query L
 		out.Items = out.Items[:query.Limit]
 	}
 	return out, err
+}
+
+// hasWords is whether every word occurs in the item's name, handle, text or voice line (case-insensitive).
+func hasWords(i dto.LibraryItem, words []string) bool {
+	hay := []string{i.Name, i.HandleOr(), i.Text}
+	if v := i.Voice; v != nil {
+		hay = append(hay, v.Speaker, v.Design, v.Style, v.Language)
+	}
+	text := strings.ToLower(strings.Join(hay, "\n"))
+	for _, word := range words {
+		if !strings.Contains(text, word) {
+			return false
+		}
+	}
+	return true
 }
 
 // btoi is 1 for true.

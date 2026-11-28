@@ -42,6 +42,7 @@ type Module struct {
 	providerKey      studio.ProviderKeyAsk                                      // pipelines.providers.key (API 1.51)
 	providerKeyWrite studio.ProviderKeyWriteAsk                                 // pipelines.providers.key.write (API 1.52)
 	pluginKey        studio.PluginKeyAsk                                        // runner.plugins.key.<host> (API 1.73)
+	foldersCheck     studio.FoldersCheckAsk                                     // runner.folders.check.<host> (API 1.78)
 	judgeTest        studio.JudgeTestAsk                                        // pipelines.judge.test (API 1.28)
 	assistantMemory  studio.AssistantMemoryAsk                                  // pipelines.assistant.memory (API 1.44)
 	assistantCache   studio.AssistantCacheAsk                                   // pipelines.assistant.cache (API 1.66)
@@ -96,6 +97,7 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetProviderKey(m.providerKey)
 	service.SetProviderKeyWrite(m.providerKeyWrite)
 	service.SetPluginKey(m.pluginKey)
+	service.SetFoldersCheck(m.foldersCheck)
 	service.SetJudgeTest(m.judgeTest)
 	service.SetLookup(m.lookup)
 	service.SetModelOps(m.purge, m.putSettings)
@@ -104,6 +106,9 @@ func (m *Module) Controllers() []micro.Controller {
 	service.SetAssistantCache(m.assistantCache)
 	galleryService := gallery.NewService(m.db, m.signer, m.store, m.registry, service.FindWorkflow)
 	galleryService.SetOffers(service.Offerable)
+	galleryService.SetMeasure(func(ctx context.Context, owner string, ids []string) string {
+		return studio.MeasureFacts(ctx, m.db, m.registry, owner, ids)
+	})
 	api := []micro.Controller{
 		studio.NewController(service, m.recheck, m.shutdown),
 		gallery.NewController(galleryService),

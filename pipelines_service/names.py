@@ -14,11 +14,9 @@ import asyncio
 import json
 import logging
 import re
-import uuid
 
 import providers
-from messaging import schemas
-from messaging.publisher import now
+from messaging.publisher import envelope, send
 
 log = logging.getLogger(__name__)
 
@@ -61,9 +59,7 @@ def clean(answer: str) -> str | None:
 class Names:
     def __init__(self, js, create_run) -> None:
         self.js, self.create_run = js, create_run
-        self.waiting: dict[
-            str, dict
-        ] = {}  # session_id → the command of a local job waiting on its run
+        self.waiting: dict[str, dict] = {}  # session_id → the command of a local job waiting on its run
         self.tasks: set[asyncio.Task] = set()
 
     def take(self, cmd: dict) -> None:
@@ -108,9 +104,7 @@ class Names:
         if "code" in reply:
             self.waiting.pop(sid, None)
             log.info("name %s: %s", sid, reply["error"])
-        elif reply["status"] in ("succeeded", "failed", "cancelled") and self.waiting.pop(
-            sid, None
-        ):
+        elif reply["status"] in ("succeeded", "failed", "cancelled") and self.waiting.pop(sid, None):
             await self._finished(cmd, reply["status"], reply.get("answer"), reply.get("error"))
 
     async def on_run_finished(self, d: dict) -> bool:
@@ -122,9 +116,7 @@ class Names:
         await self._finished(cmd, d["status"], d.get("answer"), d.get("error"))
         return True
 
-    async def _finished(
-        self, cmd: dict, status: str, answer: dict | None, error: str | None
-    ) -> None:
+    async def _finished(self, cmd: dict, status: str, answer: dict | None, error: str | None) -> None:
         if status != "succeeded" or not answer:
             log.info("name %s: the run %s %s", cmd["data"]["session_id"], status, error or "")
             return
@@ -140,17 +132,11 @@ class Names:
 
     async def publish(self, cmd: dict, title: str) -> None:
         d, sid = cmd["data"], cmd["data"]["session_id"]
-        trace = {
-            k: v
-            for k, v in cmd["trace"].items()
-            if k in ("traceparent", "tracestate", "correlation_id")
-        }
-        msg = {"type": "evt.pipeline.named", "version": 1, "id": str(uuid.uuid4()), "job_id": sid,
-               "owner_id": cmd["owner_id"], "occurred_at": now(), "trace": trace,
-               "data": {"session_id": sid, "run_id": d["run_id"], "title": title, "named_by": d["named_by"]}}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            log.error("name %s: evt.pipeline.named is off-contract: %s", sid, "; ".join(errs[:3]))
+        data = {"session_id": sid, "run_id": d["run_id"], "title": title, "named_by": d["named_by"]}
+        try:
+            msg = envelope("evt.pipeline.named", sid, cmd["owner_id"], cmd["trace"], data)
+        except ValueError as e:
+            log.error("name %s: %s", sid, e)
             return
-        await self.js.publish(f"evt.pipeline.{sid}.named", json.dumps(msg).encode(),
-                              headers={"Nats-Msg-Id": f"name:{sid}"})  # fmt: skip
+        await send(self.js, f"evt.pipeline.{sid}.named", msg, f"name:{sid}")
         log.info("named %s (%s)", sid, TEMPLATE)

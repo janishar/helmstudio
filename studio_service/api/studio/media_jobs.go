@@ -64,16 +64,19 @@ type mediaRow struct {
 	CreatedAt, HeardAt                   time.Time
 	StartedAt, FinishedAt                *time.Time
 	TakeIDs                              []string // thumbs: its takes, in input order
+	VideoTakeID                          *string  // mux (API 1.79): the video take; SourceTakeID is the audio
+	SendID                               *string  // bake (API 1.82): the Magic send it bakes for
 }
 
 const mediaCols = `id::text, owner_id::text, kind, status, host, env, timeline_id::text, timeline_name, revision, parents,
 	source_take_id::text, at, mode, reason, frames, progress, take_id::text, failure, created_at, heard_at, started_at,
-	finished_at, take_ids::text[]`
+	finished_at, take_ids::text[], video_take_id::text, send_id::text`
 
 func (r mediaRow) dto() dto.MediaJob {
 	return dto.MediaJob{ID: r.ID, Kind: r.Kind, Status: r.Status, Host: r.Host, Env: r.Env, TimelineID: r.TimelineID,
 		Revision: r.Revision, SourceTakeID: r.SourceTakeID, Mode: r.Mode, Reason: r.Reason, Progress: nullable(r.Progress),
-		TakeID: r.TakeID, Failure: nullable(r.Failure), CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt}
+		TakeID: r.TakeID, Failure: nullable(r.Failure), CreatedAt: r.CreatedAt, StartedAt: r.StartedAt, FinishedAt: r.FinishedAt,
+		VideoTakeID: r.VideoTakeID, SendID: r.SendID}
 }
 
 // mediaCommand is cmd.media.job's data.
@@ -83,6 +86,7 @@ type mediaCommand struct {
 	OutputPrefix string                `json:"output_prefix"`
 	Export       *mediaExport          `json:"export,omitempty"`
 	Frame        *mediaFrame           `json:"frame,omitempty"`
+	Bake         *timeline.BakeJob     `json:"bake,omitempty"` // API 1.82
 	host, env    string
 }
 
@@ -111,16 +115,16 @@ func (c mediaCommand) Subject() string { return "cmd.media." + c.host + "." + c.
 // mediaEnv is the env that would run a media job now: the named host's media envs, else every live one;
 // VideoToolbox first, then NVENC (API 1.18), then host, env by name; never a server env.
 func (s *Service) mediaEnv(host *string) (registry.Host, bool) {
-	return mediaEnvOf(s.registry, host, false)
+	return mediaEnvOf(s.registry, host, nil)
 }
 
 // mediaEnvOf is mediaEnv over reg; thumbs: only an env whose runner runs thumbs jobs (API 1.48).
-func mediaEnvOf(reg *registry.Registry, host *string, thumbs bool) (registry.Host, bool) {
+func mediaEnvOf(reg *registry.Registry, host *string, can func(registry.Media) bool) (registry.Host, bool) {
 	now := time.Now()
 	var envs []registry.Host
 	for _, h := range reg.Hosts() {
 		if h.Media != nil && len(h.Media.Encoders) > 0 && h.Live(now) && h.Env != "server" && (host == nil || h.Host == *host) &&
-			(!thumbs || h.Media.Thumbs) {
+			(can == nil || can(*h.Media)) {
 			envs = append(envs, h)
 		}
 	}
@@ -147,16 +151,17 @@ func insertMediaJob(ctx context.Context, tx pgx.Tx, j mediaRow, command mediaCom
 	}
 	var open int
 	if err := tx.QueryRow(ctx, `SELECT count(*) FROM media_jobs WHERE owner_id = $1 AND status IN ('queued', 'running')
-		AND kind <> 'thumbs'`, j.OwnerID).Scan(&open); err != nil {
+		AND kind NOT IN ('thumbs', 'facts', 'bake')`, j.OwnerID).Scan(&open); err != nil {
 		return mediaRow{}, err
-	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" {
+	} else if open >= MaxOpenMediaJobs && j.Kind != "thumbs" && j.Kind != "facts" && j.Kind != "bake" { // a send's bakes are its own
 		return mediaRow{}, network.NewConflictError(fmt.Sprintf("You have %d unfinished exports or frames; wait for one to finish.",
 			MaxOpenMediaJobs), nil)
 	}
 	row, err := one[mediaRow](ctx, tx, `INSERT INTO media_jobs (id, owner_id, kind, host, env, timeline_id, timeline_name,
-		revision, parents, source_take_id, at, mode, reason, frames, take_ids) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-		$11, $12, $13, $14, $15) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env, j.TimelineID, j.TimelineName,
-		j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs)
+		revision, parents, source_take_id, at, mode, reason, frames, take_ids, video_take_id, send_id) VALUES ($1, $2, $3, $4, $5,
+		$6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17) RETURNING `+mediaCols, j.ID, j.OwnerID, j.Kind, j.Host, j.Env,
+		j.TimelineID, j.TimelineName, j.Revision, j.Parents, j.SourceTakeID, j.At, j.Mode, j.Reason, j.Frames, j.TakeIDs,
+		j.VideoTakeID, j.SendID)
 	if err != nil {
 		return row, err
 	}
@@ -395,7 +400,7 @@ func (s *Service) GetMediaJob(ctx context.Context, caller common.Caller, id stri
 	}
 	var out mediaRow
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'`, id)
+		out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind NOT IN ('thumbs', 'facts')`, id)
 		return err
 	})
 	return out.dto(), err
@@ -410,7 +415,7 @@ func (s *Service) CancelMediaJob(ctx context.Context, caller common.Caller, id s
 	var out mediaRow
 	ask := false
 	err := s.tx(ctx, caller, func(tx pgx.Tx) (err error) {
-		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind <> 'thumbs'
+		if out, err = one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs WHERE id = $1 AND kind NOT IN ('thumbs', 'facts')
 			FOR UPDATE`, id); err != nil {
 			return err
 		}
@@ -455,8 +460,15 @@ func endMedia(ctx context.Context, tx pgx.Tx, job *mediaRow, status string, fail
 	row, err := one[mediaRow](ctx, tx, `UPDATE media_jobs SET status = $2, failure = $3::jsonb, finished_at = clock_timestamp()
 		WHERE id = $1 RETURNING `+mediaCols, job.ID, status, string(f))
 	*job = row
+	if err == nil && row.Kind == "bake" && status != "succeeded" { // API 1.82: its send fails with it
+		err = bakeFailed(ctx, tx, row)
+	}
 	if err == nil && row.Kind == "thumbs" && status != "succeeded" {
 		_, err = tx.Exec(ctx, `UPDATE takes SET thumb_tries = thumb_tries + 1 WHERE id = ANY($1::uuid[]) AND thumb IS NULL`,
+			row.TakeIDs)
+	}
+	if err == nil && row.Kind == "facts" && status != "succeeded" { // API 1.104, as thumbs
+		_, err = tx.Exec(ctx, `UPDATE takes SET facts_tries = facts_tries + 1 WHERE id = ANY($1::uuid[]) AND facts IS NULL`,
 			row.TakeIDs)
 	}
 	return err
@@ -528,6 +540,11 @@ func SweepMediaJobs(ctx context.Context, pool *pgxpool.Pool, reg *registry.Regis
 			if err == nil && job.Kind == "thumbs" && jobEnded[job.Status] {
 				var keys []string
 				keys, err = unusedThumbs(ctx, tx, job)
+				unused = append(unused, keys...)
+			}
+			if err == nil && job.Kind == "facts" && jobEnded[job.Status] {
+				var keys []string
+				keys, err = unusedFacts(ctx, tx, job)
 				unused = append(unused, keys...)
 			}
 			if err != nil {
@@ -688,6 +705,67 @@ func insertFrameTake(ctx context.Context, tx pgx.Tx, ownerID, id string, video g
 	return one[gallerymodel.Take](ctx, tx, `SELECT `+gallerymodel.TakeCols+` FROM takes t WHERE t.id = $1`, id)
 }
 
+// ------------------------------------------------------------------ mux (API 1.79)
+
+// TakeMux answers POST /takes/{id}/mux (Save with the video): the job that makes a video take of video_take_id's
+// picture with this audio take as its sound. Idempotent per pair: an open job, or one whose take is kept, is answered.
+func (s *Service) TakeMux(ctx context.Context, caller common.Caller, id string, body *dto.TakeMuxRequest) (dto.TakeMux, error) {
+	if !utility.IsUUID(id) {
+		return dto.TakeMux{}, errNotFound
+	}
+	var out dto.TakeMux
+	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
+		_, rows, err := loadTakes(ctx, tx, caller.ID, []string{id, body.VideoTakeID})
+		if err != nil {
+			return err
+		}
+		audio, ok := rows[id]
+		video, okv := rows[body.VideoTakeID]
+		switch {
+		case !ok || !okv:
+			return errNotFound
+		case audio.Kind != "audio":
+			return network.NewUnprocessableError("take "+id+" is not audio", nil)
+		case video.Kind != "video":
+			return network.NewUnprocessableError("take "+video.ID+" is not a video", nil)
+		}
+		if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtext('mux:' || $1 || ':' || $2))`, id, video.ID); err != nil {
+			return err
+		}
+		job, err := one[mediaRow](ctx, tx, `SELECT `+mediaCols+` FROM media_jobs j WHERE kind = 'mux' AND source_take_id = $1
+			AND video_take_id = $2 AND (status IN ('queued', 'running') OR (status = 'succeeded' AND EXISTS (SELECT 1 FROM takes t
+			WHERE t.id = j.take_id AND t.deleted_at IS NULL))) ORDER BY created_at DESC LIMIT 1`, id, video.ID)
+		if errors.Is(err, errNotFound) {
+			env, live := s.mediaEnv(nil)
+			if !live {
+				return network.NewConflictError(noHost, nil)
+			}
+			jobID := utility.NewID()
+			job, err = insertMediaJob(ctx, tx, mediaRow{ID: jobID, OwnerID: caller.ID, Kind: "mux", Host: env.Host, Env: env.Env,
+				SourceTakeID: &audio.ID, VideoTakeID: &video.ID},
+				mediaCommand{Kind: "mux", Inputs: []timeline.MediaInput{{Key: video.Key, Kind: "video"}, {Key: audio.Key, Kind: "audio"}},
+					OutputPrefix: common.OwnerPrefix(caller.ID) + "muxes/" + jobID + "/"})
+		}
+		out.Job = job.dto()
+		return err
+	})
+	return out, err
+}
+
+// insertMuxTake stores a mux's video take: source create, the video's title, session and made_with, parents [video,
+// audio]; its thumbnail comes from the thumbs job.
+func insertMuxTake(ctx context.Context, tx pgx.Tx, job mediaRow, id string, r *mediaResult) error {
+	if _, err := tx.Exec(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
+		etag, video, ready, session_id, made_with) SELECT $1, $2, 'video', 'create', v.title, $4, 'video/mp4', $5, $6, $7, $8, $9,
+		true, v.session_id, v.made_with FROM takes v WHERE v.id = $3`, id, job.OwnerID, *job.VideoTakeID, r.Key, r.Width, r.Height,
+		r.Bytes, r.Etag, r.Video); err != nil {
+		return err
+	}
+	_, err := tx.Exec(ctx, `INSERT INTO take_parents (take_id, parent_id, owner_id, idx) VALUES ($1, $2, $4, 0), ($1, $3, $4, 1)`,
+		id, *job.VideoTakeID, *job.SourceTakeID, job.OwnerID)
+	return err
+}
+
 // ------------------------------------------------------------------ the projector of evt.media.*
 
 type mediaStatus struct {
@@ -710,6 +788,7 @@ type mediaResult struct {
 	// API 1.48: an export's or a frame's thumbnail; a thumbs job's results by input index
 	Thumb  *gallerydto.Poster `json:"thumb"`
 	Thumbs []thumbResult      `json:"thumbs"`
+	Facts  []factsResult      `json:"facts"` // API 1.104: a facts job's results by input index
 }
 
 type thumbResult struct {
@@ -795,6 +874,9 @@ func (p *Projector) applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRo
 	if job.Kind == "thumbs" && data.Status != "running" {
 		return p.endThumbs(ctx, tx, job, data)
 	}
+	if job.Kind == "facts" && data.Status != "running" {
+		return p.endFacts(ctx, tx, job, data)
+	}
 	switch data.Status {
 	case "running":
 		_, err := tx.Exec(ctx, `UPDATE media_jobs SET status = 'running', started_at = coalesce(started_at, clock_timestamp())
@@ -829,6 +911,9 @@ func (p *Projector) applyMediaStatus(ctx context.Context, tx pgx.Tx, job mediaRo
 			progress = CASE WHEN kind = 'export' THEN jsonb_build_object('frames', frames, 'total', frames) ELSE progress END,
 			finished_at = clock_timestamp(), started_at = coalesce(started_at, clock_timestamp()) WHERE id = $1`,
 			job.ID, takeID, mode, reason)
+		if err == nil && job.Kind == "bake" { // API 1.82: the send's sequence once its last bake is in
+			err = bakeDone(ctx, tx, job)
+		}
 		return err
 	}
 	log.Printf("media projector: job %s: unknown status %q", job.ID, data.Status)
@@ -877,6 +962,18 @@ func storeMediaTake(ctx context.Context, tx pgx.Tx, store storage.Store, job med
 				video.ID, frame)
 		}
 		return id, "", err
+	}
+	if job.Kind == "mux" {
+		prefix := common.OwnerPrefix(job.OwnerID) + "muxes/" + job.ID + "/"
+		v := r.Video
+		if !inside(r.Key, prefix, "mux.mp4") || v == nil || !inside(v.Poster.Key, prefix, "mux.poster.png") ||
+			v.Last == nil || !inside(v.Last.Key, prefix, "mux.last.png") {
+			return "", "the result is outside the job's prefix", nil
+		}
+		return id, "", insertMuxTake(ctx, tx, job, id, r)
+	}
+	if job.Kind == "bake" {
+		return storeBakeTake(ctx, tx, job, id, r)
 	}
 	prefix := common.OwnerPrefix(job.OwnerID) + "exports/" + job.ID + "/"
 	v := r.Video

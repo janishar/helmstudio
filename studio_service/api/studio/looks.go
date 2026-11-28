@@ -95,7 +95,7 @@ func lookStack(nodes map[string]registry.Node, schemas map[string]registry.NodeS
 func lookFit(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, kind string, item lookItem,
 	loras map[string]string) string {
 	need := needs(item.Text, len(item.Images), len(item.Loras))
-	if workflowMedia(nodes, schemas) == "audio" { // API 1.30: spoken text is never expanded (README, Voices)
+	if Spoken(nodes, schemas) { // API 1.30: spoken text is never expanded (README, Voices); 1.79: class voice
 		if kind == "element" {
 			return "mentions are not read aloud; use a dialogue script"
 		}

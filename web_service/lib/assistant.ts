@@ -1,6 +1,7 @@
 // The in-app assistant (plan 18 §22; docs/mock/Assistant.dc.html): what the drawer folds from a chat's events, the
 // screen actions' outcomes and cards, navigate's route table (§22.4), the screen summary's size cap, and the words
 // its lines use. Everything the model wrote or a tool returned is text: the drawer renders it as text, never HTML.
+import { stored } from "@/lib/hydrated";
 import actionsJson from "@/gen/actions.json";
 import { api, ok, type S } from "@/lib/api";
 import { refText, splitOptions } from "@/lib/answer-refs";
@@ -55,6 +56,30 @@ export const autoText = (text: string) =>
   text.startsWith("Auto · ") ? text : `Auto · ${text.replace(/^You clicked /, "")}`;
 
 export const asked = (o: Outcome | Asked): o is Asked => "card" in o;
+/** The confirm card of a delete: what goes, what stays, the fine print; `go` is its button. */
+export const deleteCard = (
+  title: string,
+  goes: string,
+  stays: string,
+  fine: string,
+  yes: () => Promise<Outcome>,
+  go = "DELETE",
+): Asked => ({
+  card: {
+    kind: "delete",
+    title,
+    rows: [
+      ["Goes", goes],
+      ["Stays", stays],
+    ],
+    tags: [],
+    go,
+    danger: true,
+    fine,
+  },
+  yes,
+});
+
 export const done = (text: string, more: Partial<Outcome> = {}): Outcome => ({
   status: "done",
   text,
@@ -123,22 +148,13 @@ export type Place = { x: number; y: number } | null;
 const placeKey = (uid: string) => `helm-assistant-place:${uid}`;
 
 export function storedPlace(uid: string): Place {
-  try {
-    const p = JSON.parse(globalThis.localStorage?.getItem(placeKey(uid)) ?? "null");
-    return Number.isFinite(p?.x) && Number.isFinite(p?.y) ? { x: p.x, y: p.y } : null;
-  } catch {
-    return null;
-  }
+  const p = stored.json<{ x: number; y: number }>(placeKey(uid));
+  return p && Number.isFinite(p.x) && Number.isFinite(p.y) ? { x: p.x, y: p.y } : null;
 }
 
-export function rememberPlace(uid: string, p: Place) {
-  try {
-    if (p) globalThis.localStorage?.setItem(placeKey(uid), JSON.stringify(p));
-    else globalThis.localStorage?.removeItem(placeKey(uid));
-  } catch {
-    /* no storage: it docks after a reload */
-  }
-}
+// no storage: it docks after a reload
+export const rememberPlace = (uid: string, p: Place) =>
+  stored.set(placeKey(uid), p ? JSON.stringify(p) : null);
 
 /** A chat's events folded: an entry with a known id replaces it (a line going from running to done), a thread
  * event replaces the chat's state. */
@@ -261,6 +277,7 @@ const QUERY: Record<string, Record<string, string[] | null>> = {
   "/": { s: null, reuse: null, use: null, w: null },
   "/gallery": { batch: null },
   "/timeline": { t: null },
+  "/magic": { b: null },
   "/pipelines": {},
   "/pipelines/{id}": { view: ["studio"] },
   "/pipelines/batches/{id}": {},
@@ -277,6 +294,7 @@ const LABEL: [string, string][] = [
   ["/pipelines", "Pipelines"],
   ["/gallery", "Gallery"],
   ["/timeline", "Timeline"],
+  ["/magic", "Magic"],
   ["/models", "Models"],
   ["/admin", "System"],
   ["/system", "System"],

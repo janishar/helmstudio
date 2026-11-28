@@ -19,8 +19,10 @@ import (
 // mountAssistant registers the assistant's routes (API 1.44).
 func (c *controller) mountAssistant(group *gin.RouterGroup) {
 	group.GET("/assistant/threads", func(ctx *gin.Context) {
-		out, err := c.service.ListAssistantThreads(ctx.Request.Context(), common.MustCaller(ctx))
-		reply(ctx, http.StatusOK, out, err)
+		if page, ok := pageOr422(ctx, MaxAssistantThreads); ok {
+			out, err := c.service.ListAssistantThreads(ctx.Request.Context(), common.MustCaller(ctx), page)
+			reply(ctx, http.StatusOK, out, err)
+		}
 	})
 	group.POST("/assistant/first-launch", func(ctx *gin.Context) {
 		noContent(ctx, c.service.MarkAssistantFirstLaunch(ctx.Request.Context(), common.MustCaller(ctx)))
@@ -119,7 +121,7 @@ func (c *controller) mountAssistant(group *gin.RouterGroup) {
 // noContent answers 204, or the error.
 func noContent(ctx *gin.Context, err error) {
 	if err != nil {
-		network.SendMixedError(ctx, err)
+		sendError(ctx, err)
 		return
 	}
 	network.SendNoContent(ctx)

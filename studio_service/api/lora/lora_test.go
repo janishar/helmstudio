@@ -2,6 +2,7 @@ package lora
 
 import (
 	"bytes"
+	"cmp"
 	"crypto/rand"
 	"encoding/binary"
 	"encoding/json"
@@ -117,7 +118,7 @@ func TestLoraFixtures(t *testing.T) {
 			if reason != "" {
 				t.Fatal(reason)
 			}
-			family := cmpOr(fixture.Family, "qwen-image")
+			family := cmp.Or(fixture.Family, "qwen-image")
 			spec := blocks[family]
 			if fixture.Ignore != nil {
 				spec.Ignore = fixture.Ignore

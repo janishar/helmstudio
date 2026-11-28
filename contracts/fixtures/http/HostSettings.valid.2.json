@@ -1,0 +1,30 @@
+{
+  "host": "mac",
+  "version": 3,
+  "after_run": "keep_warm",
+  "idle_unload_min": 10,
+  "reserve_gb": 12,
+  "reserve_mode": "custom",
+  "pins": [
+    {
+      "env": "mlx",
+      "component": "transformer",
+      "model": "ltx-2.5",
+      "variant": "distilled",
+      "precision": "int8"
+    }
+  ],
+  "applied": true,
+  "updated_at": "2026-11-16T09:59:00Z",
+  "folders": [
+    {
+      "id": "3f2a9c1e7b04",
+      "path": "~/GenAI/models"
+    },
+    {
+      "id": "a81d0e5c22f9",
+      "path": "/Volumes/T9/models"
+    }
+  ],
+  "downloads": "3f2a9c1e7b04"
+}

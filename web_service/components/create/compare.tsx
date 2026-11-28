@@ -9,6 +9,7 @@ import { useLibrary, useLooks } from "@/lib/library";
 import { explain, seedGroup, type Origin } from "@/lib/explain";
 import { safeUrl } from "@/lib/format";
 import type { S } from "@/lib/api";
+import { Range } from "@/components/range";
 
 type Take = S<"Take">;
 
@@ -131,8 +132,7 @@ export function Compare({
                 B · {nameOf(b, true)}
               </span>
             </div>
-            <input
-              type="range"
+            <Range
               aria-label="Wipe"
               min={0}
               max={100}

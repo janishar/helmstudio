@@ -1,1078 +1,1648 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helmstudio.local/contracts/messages/req.studio.tools.schema.json",
-  "title": "NATS request/reply studio.tools (pipelines → studio)",
-  "description": "From API 1.15. Core NATS request/reply on subject `studio.tools` (queue group `studio`), bare JSON: one Agent tool call that needs studio's data, made as the batch's owner (row-level security, WithUser). Studio serves gallery.search and library.read (read-only views of the owner's data, result caps in tools.schema.json) and rows.add / rows.edit (the batch's rows, through Submit's checks for that row); memory.read and memory.write never come here (pipelines owns memory). Nothing else is reachable. owner_id, batch_id must be one batch of that owner (else not_found); rows.edit only for row 0 (the director's chat). Idempotent on call_id: asking again returns the first reply (a re-run node after a crash adds no second row). From API 1.44 also the in-app assistant's studio tools (tools/catalog.json, `served_by` studio, surface assistant), with thread_id in place of batch_id, row and node: made as the thread's owner, taken from studio's thread row (an owner_id that is not the thread's is not_found); an admin tool (`roles` admin) is checked against the owner's roles again (forbidden); args are the tool's `input`, an ok reply carries `tool` and the tool's `output`. Studio answers within 5 s; a timeout or `internal` is retried under the same call_id with backoff.",
-  "$defs": {
-    "request": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/agent"
-        },
-        {
-          "$ref": "#/$defs/assistant"
-        }
-      ]
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://helmstudio.local/contracts/messages/req.studio.tools.schema.json",
+ "title": "NATS request/reply studio.tools (pipelines → studio)",
+ "description": "From API 1.15. Core NATS request/reply on subject `studio.tools` (queue group `studio`), bare JSON: one Agent tool call that needs studio's data, made as the batch's owner (row-level security, WithUser). Studio serves gallery.search and library.read (read-only views of the owner's data, result caps in tools.schema.json) and rows.add / rows.edit (the batch's rows, through Submit's checks for that row); memory.read and memory.write never come here (pipelines owns memory). Nothing else is reachable. owner_id, batch_id must be one batch of that owner (else not_found); rows.edit only for row 0 (the director's chat). Idempotent on call_id: asking again returns the first reply (a re-run node after a crash adds no second row). From API 1.44 also the in-app assistant's studio tools (tools/catalog.json, `served_by` studio, surface assistant), with thread_id in place of batch_id, row and node: made as the thread's owner, taken from studio's thread row (an owner_id that is not the thread's is not_found); an admin tool (`roles` admin) is checked against the owner's roles again (forbidden); args are the tool's `input`, an ok reply carries `tool` and the tool's `output`. Studio answers within 5 s (from API 1.108 within 25 s for get_take and look_at, which may measure take facts on demand); a timeout or `internal` is retried under the same call_id with backoff.",
+ "$defs": {
+  "request": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/agent"
     },
-    "agent": {
-      "type": "object",
-      "required": [
-        "owner_id",
-        "batch_id",
-        "row",
-        "node",
-        "call_id",
-        "tool",
-        "args"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "owner_id": {
-          "$ref": "defs.schema.json#/$defs/uuid"
-        },
-        "batch_id": {
-          "$ref": "defs.schema.json#/$defs/uuid"
-        },
-        "row": {
-          "type": "integer",
-          "minimum": 0,
-          "maximum": 500,
-          "description": "the calling row, 0 = the director's chat"
-        },
-        "node": {
-          "$ref": "defs.schema.json#/$defs/nodeId",
-          "description": "the agent node"
-        },
-        "call_id": {
-          "type": "string",
-          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,2}):[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):t[0-9]{1,2}r?:[0-3]$",
-          "description": "<the turn's idempotency key>:<call index from 0>"
-        },
-        "tool": {
-          "enum": [
-            "gallery.search",
-            "library.read",
-            "rows.add",
-            "rows.edit"
-          ]
-        },
-        "args": {
-          "type": "object"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "gallery.search"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "tools.schema.json#/$defs/gallerySearchArgs"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "library.read"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "tools.schema.json#/$defs/libraryReadArgs"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "rows.add"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "tools.schema.json#/$defs/rowsAddArgs"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "rows.edit"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "tools.schema.json#/$defs/rowsEditArgs"
-              },
-              "row": {
-                "const": 0
-              }
-            }
-          }
-        }
-      ],
-      "description": "an Agent node's call (API 1.15)"
-    },
-    "assistant": {
-      "type": "object",
-      "required": [
-        "owner_id",
-        "thread_id",
-        "call_id",
-        "tool",
-        "args"
-      ],
-      "additionalProperties": false,
-      "description": "from API 1.44: an assistant chat's call",
-      "properties": {
-        "owner_id": {
-          "$ref": "defs.schema.json#/$defs/uuid"
-        },
-        "thread_id": {
-          "$ref": "defs.schema.json#/$defs/uuid"
-        },
-        "call_id": {
-          "$ref": "assistant.schema.json#/$defs/callId"
-        },
-        "tool": {
-          "enum": [
-            "sessions",
-            "list_workflows",
-            "get_workflow",
-            "get_run",
-            "plan_run",
-            "models",
-            "hosts",
-            "search_takes",
-            "get_take",
-            "list_library",
-            "pipelines",
-            "batch_status",
-            "list_timelines",
-            "show_timeline",
-            "timeline_revisions",
-            "custom_nodes",
-            "model_sources",
-            "model_jobs",
-            "use_skill",
-            "read_skill_file",
-            "read_model_guide",
-            "look_at"
-          ]
-        },
-        "args": {
-          "type": "object"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "sessions"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/sessions/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "list_workflows"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/list_workflows/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "get_workflow"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/get_workflow/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "get_run"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/get_run/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "plan_run"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/plan_run/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "models"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/models/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "hosts"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/hosts/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "search_takes"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/search_takes/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "get_take"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/get_take/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "list_library"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/list_library/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "pipelines"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/pipelines/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "batch_status"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/batch_status/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "list_timelines"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/list_timelines/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "show_timeline"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/show_timeline/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "timeline_revisions"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/timeline_revisions/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "custom_nodes"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/custom_nodes/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "model_sources"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/model_sources/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "model_jobs"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/model_jobs/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "look_at"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/look_at/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "use_skill"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/use_skill/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "read_skill_file"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/read_skill_file/input"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "read_model_guide"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "args": {
-                "$ref": "../tools/catalog.json#/tools/read_model_guide/input"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "reply": {
-      "oneOf": [
-        {
-          "$ref": "#/$defs/ok"
-        },
-        {
-          "$ref": "#/$defs/assistantOk"
-        },
-        {
-          "$ref": "#/$defs/error"
-        }
-      ]
-    },
-    "ok": {
-      "type": "object",
-      "required": [
-        "result"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "result": {
-          "anyOf": [
-            {
-              "$ref": "tools.schema.json#/$defs/gallerySearchResult"
-            },
-            {
-              "$ref": "tools.schema.json#/$defs/libraryReadResult"
-            },
-            {
-              "$ref": "tools.schema.json#/$defs/rowsAddResult"
-            }
-          ]
-        },
-        "row": {
-          "type": "object",
-          "required": [
-            "row",
-            "inputs",
-            "seeds"
-          ],
-          "additionalProperties": false,
-          "description": "rows.add, rows.edit: the stored row as cmd.pipeline.submit carries rows (inputs `<inputs node>.<name>`, every input set; seeds drawn), so pipelines starts or updates its thread",
-          "properties": {
-            "row": {
-              "$ref": "defs.schema.json#/$defs/batchRow"
-            },
-            "inputs": {
-              "$ref": "defs.schema.json#/$defs/inputs"
-            },
-            "seeds": {
-              "type": "object",
-              "additionalProperties": {
-                "$ref": "defs.schema.json#/$defs/seed"
-              }
-            }
-          }
-        }
-      }
-    },
-    "assistantOk": {
-      "type": "object",
-      "required": [
-        "tool",
-        "result"
-      ],
-      "additionalProperties": false,
-      "description": "from API 1.44: an assistant call's result, the tool's `output`",
-      "properties": {
-        "tool": {
-          "enum": [
-            "sessions",
-            "list_workflows",
-            "get_workflow",
-            "get_run",
-            "plan_run",
-            "models",
-            "hosts",
-            "search_takes",
-            "get_take",
-            "list_library",
-            "pipelines",
-            "batch_status",
-            "list_timelines",
-            "show_timeline",
-            "timeline_revisions",
-            "custom_nodes",
-            "model_sources",
-            "model_jobs",
-            "use_skill",
-            "read_skill_file",
-            "read_model_guide",
-            "look_at"
-          ]
-        },
-        "result": {
-          "type": "object"
-        }
-      },
-      "allOf": [
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "sessions"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/sessions/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "list_workflows"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/list_workflows/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "get_workflow"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/get_workflow/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "get_run"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/get_run/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "plan_run"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/plan_run/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "models"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/models/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "hosts"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/hosts/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "search_takes"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/search_takes/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "get_take"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/get_take/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "list_library"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/list_library/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "pipelines"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/pipelines/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "batch_status"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/batch_status/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "list_timelines"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/list_timelines/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "show_timeline"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/show_timeline/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "timeline_revisions"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/timeline_revisions/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "custom_nodes"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/custom_nodes/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "model_sources"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/model_sources/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "model_jobs"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/model_jobs/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "required": [
-              "tool"
-            ],
-            "properties": {
-              "tool": {
-                "const": "look_at"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/look_at/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "use_skill"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/use_skill/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "read_skill_file"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/read_skill_file/output"
-              }
-            }
-          }
-        },
-        {
-          "if": {
-            "properties": {
-              "tool": {
-                "const": "read_model_guide"
-              }
-            }
-          },
-          "then": {
-            "properties": {
-              "result": {
-                "$ref": "../tools/catalog.json#/tools/read_model_guide/output"
-              }
-            }
-          }
-        }
-      ]
-    },
-    "error": {
-      "type": "object",
-      "required": [
-        "error",
-        "code"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "error": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 2000,
-          "description": "told to the model as the tool's error; for rows.add / rows.edit Submit's reason (`row: inputs.prompt: a value is required`)"
-        },
-        "code": {
-          "enum": [
-            "invalid",
-            "conflict",
-            "cap",
-            "not_found",
-            "forbidden",
-            "internal"
-          ],
-          "description": "invalid: the args or the row fail Submit's checks (final); conflict: rows.edit of a row that has started, or the batch has ended (final); cap: 500 rows, or 100 rows added to this batch (final); not_found: no such batch for this owner, or rows.edit of an unknown row (final); internal: retry; forbidden (API 1.44): an admin tool for an owner without the admin role (final)"
-        }
-      }
+    {
+     "$ref": "#/$defs/assistant"
     }
+   ]
+  },
+  "agent": {
+   "type": "object",
+   "required": [
+    "owner_id",
+    "batch_id",
+    "row",
+    "node",
+    "call_id",
+    "tool",
+    "args"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "owner_id": {
+     "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "batch_id": {
+     "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "row": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 500,
+     "description": "the calling row, 0 = the director's chat"
+    },
+    "node": {
+     "$ref": "defs.schema.json#/$defs/nodeId",
+     "description": "the agent node"
+    },
+    "call_id": {
+     "type": "string",
+     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}:(0|[1-9][0-9]{0,2}):[1-9][0-9]{0,3}:[a-z][a-z0-9_]{0,63}:(0|[1-9][0-9]{0,4}):t[0-9]{1,2}r?:[0-3]$",
+     "description": "<the turn's idempotency key>:<call index from 0>"
+    },
+    "tool": {
+     "enum": [
+      "gallery.search",
+      "library.read",
+      "rows.add",
+      "rows.edit"
+     ]
+    },
+    "args": {
+     "type": "object"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "gallery.search"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "tools.schema.json#/$defs/gallerySearchArgs"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "library.read"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "tools.schema.json#/$defs/libraryReadArgs"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "rows.add"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "tools.schema.json#/$defs/rowsAddArgs"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "rows.edit"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "tools.schema.json#/$defs/rowsEditArgs"
+       },
+       "row": {
+        "const": 0
+       }
+      }
+     }
+    }
+   ],
+   "description": "an Agent node's call (API 1.15)"
+  },
+  "assistant": {
+   "type": "object",
+   "required": [
+    "owner_id",
+    "thread_id",
+    "call_id",
+    "tool",
+    "args"
+   ],
+   "additionalProperties": false,
+   "description": "from API 1.44: an assistant chat's call",
+   "properties": {
+    "owner_id": {
+     "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "thread_id": {
+     "$ref": "defs.schema.json#/$defs/uuid"
+    },
+    "call_id": {
+     "$ref": "assistant.schema.json#/$defs/callId"
+    },
+    "tool": {
+     "enum": [
+      "sessions",
+      "list_workflows",
+      "get_workflow",
+      "get_run",
+      "plan_run",
+      "models",
+      "hosts",
+      "search_takes",
+      "get_take",
+      "list_library",
+      "pipelines",
+      "batch_status",
+      "list_timelines",
+      "show_timeline",
+      "timeline_revisions",
+      "custom_nodes",
+      "model_sources",
+      "model_jobs",
+      "use_skill",
+      "read_skill_file",
+      "read_model_guide",
+      "look_at",
+      "listen",
+      "list_boards",
+      "create_board",
+      "show_board",
+      "magic_kinds",
+      "try_board_edit",
+      "edit_board",
+      "restore_board",
+      "plan_board",
+      "run_blocks",
+      "cancel_runs",
+      "make_views",
+      "design_voice",
+      "save_voice",
+      "board_frame",
+      "send_to_timeline"
+     ]
+    },
+    "args": {
+     "type": "object"
+    },
+    "confirmed": {
+     "type": "boolean",
+     "description": "from API 1.87: the user's Yes on the call's card (edit_board, restore_board, run_blocks, send_to_timeline; from API 1.93 make_views; from alpha.6 design_voice and save_voice), asked again under the same call_id; absent: studio answers its `preview` first (contracts/README.md, Magic: the Assistant)"
+    },
+    "ask": {
+     "type": "boolean",
+     "description": "from API 1.93, run_blocks and make_views only (from alpha.6 design_voice too): answer the preview even within the limit (Auto mode past its hour's caps asks once; contracts/README.md, Magic: the Assistant)"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "sessions"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/sessions/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "list_workflows"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/list_workflows/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "get_workflow"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/get_workflow/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "get_run"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/get_run/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "plan_run"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/plan_run/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "models"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/models/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "hosts"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/hosts/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "search_takes"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/search_takes/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "get_take"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/get_take/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "list_library"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/list_library/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "pipelines"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/pipelines/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "batch_status"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/batch_status/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "list_timelines"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/list_timelines/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "show_timeline"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/show_timeline/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "timeline_revisions"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/timeline_revisions/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "custom_nodes"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/custom_nodes/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "model_sources"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/model_sources/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "model_jobs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/model_jobs/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "look_at"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/look_at/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "listen"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/listen/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "use_skill"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/use_skill/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "read_skill_file"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/read_skill_file/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "read_model_guide"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/read_model_guide/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "list_boards"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/list_boards/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "create_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/create_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "show_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/show_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "magic_kinds"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/magic_kinds/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "try_board_edit"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/try_board_edit/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "edit_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/edit_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "restore_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/restore_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "plan_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/plan_board/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "run_blocks"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/run_blocks/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "cancel_runs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/cancel_runs/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "make_views"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/make_views/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "design_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/design_voice/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "save_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/save_voice/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "board_frame"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/board_frame/input"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "send_to_timeline"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "args": {
+        "$ref": "../tools/catalog.json#/tools/send_to_timeline/input"
+       }
+      }
+     }
+    }
+   ]
+  },
+  "reply": {
+   "oneOf": [
+    {
+     "$ref": "#/$defs/ok"
+    },
+    {
+     "$ref": "#/$defs/assistantOk"
+    },
+    {
+     "$ref": "#/$defs/error"
+    }
+   ]
+  },
+  "ok": {
+   "type": "object",
+   "required": [
+    "result"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "result": {
+     "anyOf": [
+      {
+       "$ref": "tools.schema.json#/$defs/gallerySearchResult"
+      },
+      {
+       "$ref": "tools.schema.json#/$defs/libraryReadResult"
+      },
+      {
+       "$ref": "tools.schema.json#/$defs/rowsAddResult"
+      }
+     ]
+    },
+    "row": {
+     "type": "object",
+     "required": [
+      "row",
+      "inputs",
+      "seeds"
+     ],
+     "additionalProperties": false,
+     "description": "rows.add, rows.edit: the stored row as cmd.pipeline.submit carries rows (inputs `<inputs node>.<name>`, every input set; seeds drawn), so pipelines starts or updates its thread",
+     "properties": {
+      "row": {
+       "$ref": "defs.schema.json#/$defs/batchRow"
+      },
+      "inputs": {
+       "$ref": "defs.schema.json#/$defs/inputs"
+      },
+      "seeds": {
+       "type": "object",
+       "additionalProperties": {
+        "$ref": "defs.schema.json#/$defs/seed"
+       }
+      }
+     }
+    }
+   }
+  },
+  "assistantOk": {
+   "type": "object",
+   "required": [
+    "tool"
+   ],
+   "additionalProperties": false,
+   "description": "from API 1.44: an assistant call's result, the tool's `output`",
+   "properties": {
+    "tool": {
+     "enum": [
+      "sessions",
+      "list_workflows",
+      "get_workflow",
+      "get_run",
+      "plan_run",
+      "models",
+      "hosts",
+      "search_takes",
+      "get_take",
+      "list_library",
+      "pipelines",
+      "batch_status",
+      "list_timelines",
+      "show_timeline",
+      "timeline_revisions",
+      "custom_nodes",
+      "model_sources",
+      "model_jobs",
+      "use_skill",
+      "read_skill_file",
+      "read_model_guide",
+      "look_at",
+      "listen",
+      "list_boards",
+      "create_board",
+      "show_board",
+      "magic_kinds",
+      "try_board_edit",
+      "edit_board",
+      "restore_board",
+      "plan_board",
+      "run_blocks",
+      "cancel_runs",
+      "make_views",
+      "design_voice",
+      "save_voice",
+      "board_frame",
+      "send_to_timeline"
+     ]
+    },
+    "result": {
+     "type": "object"
+    },
+    "preview": {
+     "type": "object",
+     "description": "from API 1.87: a card tool asked without `confirmed`: what its card shows (edit_board the dry run with summary and estimate, restore_board the revision, run_blocks the plan and the frames it started, send_to_timeline the send's plan); nothing else is done. Exactly one of result and preview"
+    }
+   },
+   "allOf": [
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "sessions"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/sessions/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "list_workflows"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/list_workflows/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "get_workflow"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/get_workflow/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "get_run"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/get_run/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "plan_run"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/plan_run/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "models"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/models/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "hosts"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/hosts/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "search_takes"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/search_takes/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "get_take"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/get_take/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "list_library"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/list_library/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "pipelines"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/pipelines/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "batch_status"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/batch_status/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "list_timelines"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/list_timelines/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "show_timeline"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/show_timeline/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "timeline_revisions"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/timeline_revisions/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "custom_nodes"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/custom_nodes/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "model_sources"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/model_sources/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "model_jobs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/model_jobs/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "look_at"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/look_at/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "required": [
+       "tool"
+      ],
+      "properties": {
+       "tool": {
+        "const": "listen"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/listen/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "use_skill"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/use_skill/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "read_skill_file"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/read_skill_file/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "read_model_guide"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/read_model_guide/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "list_boards"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/list_boards/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "create_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/create_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "show_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/show_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "magic_kinds"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/magic_kinds/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "try_board_edit"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/try_board_edit/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "edit_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/edit_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "restore_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/restore_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "plan_board"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/plan_board/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "run_blocks"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/run_blocks/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "cancel_runs"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/cancel_runs/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "make_views"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/make_views/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "design_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/design_voice/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "save_voice"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/save_voice/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "board_frame"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/board_frame/output"
+       }
+      }
+     }
+    },
+    {
+     "if": {
+      "properties": {
+       "tool": {
+        "const": "send_to_timeline"
+       }
+      }
+     },
+     "then": {
+      "properties": {
+       "result": {
+        "$ref": "../tools/catalog.json#/tools/send_to_timeline/output"
+       }
+      }
+     }
+    }
+   ],
+   "oneOf": [
+    {
+     "required": [
+      "result"
+     ]
+    },
+    {
+     "required": [
+      "preview"
+     ]
+    }
+   ]
+  },
+  "error": {
+   "type": "object",
+   "required": [
+    "error",
+    "code"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "error": {
+     "type": "string",
+     "minLength": 1,
+     "maxLength": 2000,
+     "description": "told to the model as the tool's error; for rows.add / rows.edit Submit's reason (`row: inputs.prompt: a value is required`)"
+    },
+    "code": {
+     "enum": [
+      "invalid",
+      "conflict",
+      "cap",
+      "not_found",
+      "forbidden",
+      "internal"
+     ],
+     "description": "invalid: the args or the row fail Submit's checks (final); conflict: rows.edit of a row that has started, or the batch has ended (final); cap: 500 rows, or 100 rows added to this batch (final); not_found: no such batch for this owner, or rows.edit of an unknown row (final); internal: retry; forbidden (API 1.44): an admin tool for an owner without the admin role (final)"
+    }
+   }
   }
+ }
 }

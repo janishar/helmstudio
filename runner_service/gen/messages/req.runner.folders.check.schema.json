@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://helmstudio.local/contracts/messages/req.runner.folders.check.schema.json",
+  "title": "NATS request/reply runner.folders.check.<host> (studio → the host's supervising runner)",
+  "description": "From API 1.78 (contracts/README.md, Model folders). Core NATS request/reply on subject `runner.folders.check.<host>` (no queue group: the one runner of that host with RUNNER_PLUGINS on, as runner.plugins.key), bare JSON. Before PUT /v1/studio/admin/hosts/{host}/folders stores a list, studio asks what each path is on that host now: the runner expands `~`, never creates a folder, and answers per path in the request's order. Studio waits 5 s (no answer: 503 `<host> is offline`).",
+  "$defs": {
+    "request": {
+      "type": "object",
+      "required": ["paths"],
+      "additionalProperties": false,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {"type": "string", "minLength": 1, "maxLength": 400, "pattern": "^(/|~/)"}
+        }
+      }
+    },
+    "reply": {
+      "type": "object",
+      "required": ["folders"],
+      "additionalProperties": false,
+      "properties": {
+        "folders": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": ["path", "connected", "writable"],
+            "additionalProperties": false,
+            "properties": {
+              "path": {"type": "string", "maxLength": 400, "description": "as asked"},
+              "connected": {"type": "boolean", "description": "the path is a folder now"},
+              "writable": {"type": "boolean", "description": "the runner can write it (false when not connected)"},
+              "drive": {"type": "boolean", "description": "the path is on a drive (under /Volumes/): it may be listed while unplugged"},
+              "free_bytes": {"type": "integer", "minimum": 0, "description": "absent when not connected"},
+              "total_bytes": {"type": "integer", "minimum": 0}
+            }
+          }
+        }
+      }
+    }
+  }
+}

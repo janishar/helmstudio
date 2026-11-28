@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-27T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "models": [
+    {
+      "id": "stable-audio-3-small-sfx",
+      "family": "stable-audio-3",
+      "title": "Stable Audio 3",
+      "media": [
+        "audio"
+      ],
+      "runtimes": [
+        {
+          "runtime": "torch",
+          "env": "torch",
+          "devices": [
+            "mps",
+            "cuda"
+          ]
+        }
+      ],
+      "variants": [
+        {
+          "id": "small-sfx",
+          "presence": "present",
+          "bytes": 3493580929,
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Small SFX",
+          "dir": "Stable-Audio-3-Small-SFX",
+          "source": {
+            "repo": "stabilityai/stable-audio-3-small-sfx",
+            "revision": "05ca3857881c94a2b84026b1111c537d78f5f9f0",
+            "allow_patterns": [
+              "LICENSE.md",
+              "LICENSE_GEMMA.md",
+              "NOTICE",
+              "model.safetensors",
+              "model_config.json",
+              "t5gemma-b-b-ul2/config.json",
+              "t5gemma-b-b-ul2/model.safetensors",
+              "t5gemma-b-b-ul2/special_tokens_map.json",
+              "t5gemma-b-b-ul2/tokenizer.json",
+              "t5gemma-b-b-ul2/tokenizer.model",
+              "t5gemma-b-b-ul2/tokenizer_config.json"
+            ],
+            "licence": "stability-community",
+            "must_accept": true,
+            "gated": true,
+            "bytes": 3492093873
+          },
+          "components": [
+            {
+              "component": "dit",
+              "from_variant": "small-sfx",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "fp32",
+              "bytes": 2270384940
+            },
+            {
+              "component": "autoencoder",
+              "from_variant": "small-sfx",
+              "precisions": [
+                "fp32"
+              ],
+              "stored": "fp32",
+              "bytes": 0
+            },
+            {
+              "component": "text_encoder",
+              "from_variant": "small-sfx",
+              "precisions": [
+                "bf16"
+              ],
+              "stored": "bf16",
+              "bytes": 1183022944
+            }
+          ],
+          "memory": [
+            {
+              "precision": "bf16",
+              "peak_gb": 3.96,
+              "components": [
+                {
+                  "component": "text_encoder",
+                  "variant": "small-sfx",
+                  "precision": "bf16",
+                  "gb": 0.52
+                },
+                {
+                  "component": "dit",
+                  "variant": "small-sfx",
+                  "precision": "fp32",
+                  "gb": 1.71
+                },
+                {
+                  "component": "autoencoder",
+                  "variant": "small-sfx",
+                  "precision": "fp32",
+                  "gb": 0.4
+                }
+              ],
+              "planned_at": {
+                "mp": 0.0,
+                "frames": 816
+              }
+            }
+          ]
+        }
+      ],
+      "sound": "sound"
+    }
+  ]
+}

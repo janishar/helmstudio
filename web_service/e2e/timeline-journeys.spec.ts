@@ -258,7 +258,8 @@ test("j08 add a still at the end and a dissolve between two clips", async () => 
   await dur.press("Enter");
   await expect(still).toHaveAccessibleName(/ · 3\.0 s/);
   // the two halves of the split clip: both have footage past the cut
-  await clip(2).click();
+  // the playhead sits on the split (its grab band, AudioFades frame 5, covers the clip's middle): click its right end
+  await clip(2).click({ position: { x: ((await clip(2).boundingBox())?.width ?? 20) - 6, y: 8 } });
   await inspector().getByRole("combobox", { name: "Transition in" }).selectOption("12");
   await expect(clip(2)).toHaveAccessibleName(/dissolve in 12 f/);
   await expect(exportKey()).toHaveAccessibleName(/re-encode · 1 still, 1 dissolve/);

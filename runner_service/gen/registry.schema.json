@@ -116,23 +116,42 @@
           "description": "frames only: the name of the same node's int or float param that holds frames per second; the UI shows the length as frames / fps seconds"
         },
         "auto": {
-          "type": "object",
-          "required": [
-            "min_s",
-            "max_s"
-          ],
-          "additionalProperties": false,
-          "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
-          "properties": {
-            "min_s": {
-              "type": "number",
-              "exclusiveMinimum": 0
+          "description": "frames: the object below; from API 1.79 int or float: true (the value 0 means Auto: the model picks it; the chip and slider show Auto with a switch; 0 is allowed below `min`; contracts/README.md, Music and sound)",
+          "oneOf": [
+            {
+              "type": "object",
+              "required": [
+                "min_s",
+                "max_s"
+              ],
+              "additionalProperties": false,
+              "description": "frames only: present = the model can predict the clip's length from the prompt; the value \"auto\" asks for it. The prediction is clamped to min_s..max_s seconds and to the param's min..max frames, then put on the grid (contracts/README.md, Video: auto length). The UI draws the Duration slider's Auto length switch from it",
+              "properties": {
+                "min_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "max_s": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              }
             },
-            "max_s": {
-              "type": "number",
-              "exclusiveMinimum": 0
+            {
+              "const": true
             }
-          }
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9 -]{0,23}$"
+          },
+          "description": "API 1.79, text only: the tag chips over the field (lyrics: verse, chorus, bridge, intro, outro), each inserted at the caret as `[<tag>]`"
         },
         "label": {
           "type": "string",
@@ -735,11 +754,37 @@
               }
             }
           },
+          "then": {
+            "properties": {
+              "auto": {
+                "type": "object"
+              }
+            }
+          },
           "else": {
-            "not": {
-              "required": [
-                "auto"
-              ]
+            "if": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "int",
+                    "float"
+                  ]
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "auto": {
+                  "const": true
+                }
+              }
+            },
+            "else": {
+              "not": {
+                "required": [
+                  "auto"
+                ]
+              }
             }
           }
         },
@@ -961,6 +1006,22 @@
             "not": {
               "required": [
                 "script"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "text"
+              }
+            }
+          },
+          "else": {
+            "not": {
+              "required": [
+                "tags"
               ]
             }
           }
@@ -1475,6 +1536,10 @@
           "maxLength": 40,
           "description": "from API 1.24: the model component the node loads, in words (model.yaml `stages.<name>.component`: transformer, text encoder, vae); the Graph inspector reads `<family> · runs on <runtime> · uses the <component>`. Absent = it loads none (core nodes, canvas, duration, the model and LoRA stack nodes)"
         },
+        "sound": {
+          "$ref": "messages/defs.schema.json#/$defs/soundClass",
+          "description": "API 1.79, a node with an Audio output only: what its sound is (model.yaml `sound` of the stage, else of the pack); studio and check.py read Workflow.sound from the node whose Audio output an output node takes (contracts/README.md, Music and sound)"
+        },
         "help": {
           "type": "string",
           "maxLength": 300
@@ -1609,6 +1674,10 @@
           "minLength": 1,
           "maxLength": 40,
           "description": "API 1.19: the take action's label when this workflow is offered for a take (\"Use in…\", a Timeline clip's actions): Animate, Edit, Extend, Retake a section; absent = the title"
+        },
+        "standard": {
+          "$ref": "#/$defs/standard",
+          "description": "API 1.81 (plan 39 phase D): this workflow serves Magic's standard request for one kind (contracts/README.md, Magic: the standard request)"
         }
       }
     },
@@ -1691,6 +1760,10 @@
                     "minLength": 1,
                     "maxLength": 80
                   },
+                  "sound": {
+                    "$ref": "messages/defs.schema.json#/$defs/soundClass",
+                    "description": "API 1.79: the pack's model.yaml `sound`, for a model whose takes are audio (music, sound or voice); the Models page colours its cube by it. Absent = not an audio model (or one of several classes, echo)"
+                  },
                   "variants": {
                     "type": "array",
                     "description": "the model's variants on this host (section 9.2 of docs/plan/06-platform.md); absent for a model without variants (echo)",
@@ -1713,9 +1786,10 @@
                             "present",
                             "partial",
                             "missing",
-                            "mismatch"
+                            "mismatch",
+                            "unplugged"
                           ],
-                          "description": "present: every file of the variant (its own and the shared ones it loads) is on disk and no recorded hash differs; partial: some are (an interrupted or cancelled download: resume it); missing: none of its own; mismatch (API 1.16): a file's SHA-256 differs from the one recorded at download (`mismatch` names them; the variant does not load until it is downloaded again). partial and mismatch are from API 1.16; the dispatcher treats every value but present as not runnable"
+                          "description": "present: every file of the variant (its own and the shared ones it loads) is on disk and no recorded hash differs; partial: some are (an interrupted or cancelled download: resume it); missing: none of its own; mismatch (API 1.16): a file's SHA-256 differs from the one recorded at download (`mismatch` names them; the variant does not load until it is downloaded again). partial and mismatch are from API 1.16; the dispatcher treats every value but present as not runnable; from API 1.78 unplugged: its only copies are in folders of the list not connected now (not runnable)"
                         },
                         "bytes": {
                           "type": "integer",
@@ -1784,7 +1858,7 @@
                                   "images": {
                                     "type": "integer",
                                     "minimum": 0,
-                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
+                                    "description": "from API 1.14, ask workflows: the most thumbnails (each image take 1, each video take 3 keyframes; from 1.105 each video take 1, its frame grid) peak_gb was planned at; a run sending more has no plan (planned at the whole budget). Absent: not a limit"
                                   }
                                 }
                               },
@@ -2058,6 +2132,47 @@
                           "minLength": 1,
                           "maxLength": 120,
                           "description": "from API 1.39: the variant's line under its title in the model chip's menu (model.yaml `variants.<id>.help`; LTX's Distilled `8 steps, about 10× faster`)"
+                        },
+                        "folder": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{12}$",
+                          "description": "from API 1.78: the id of the folder it loads from (the first connected folder of the list with a complete copy, else the first with some files); absent when missing or unplugged"
+                        },
+                        "copies": {
+                          "type": "array",
+                          "maxItems": 8,
+                          "description": "from API 1.78 (contracts/README.md, Model folders): every folder of the host's list with files of it, in priority order: state as presence over that folder's files (unplugged: a folder not connected now that held it when last seen, CACHE/folders-seen.json); bytes its own files there, freed_bytes what deleting that copy gives back (shared parts another variant there loads not counted); bytes and freed_bytes absent when unplugged. Absent = one folder (older runners)",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "folder",
+                              "state"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "folder": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{12}$",
+                                "description": "the folder's id"
+                              },
+                              "state": {
+                                "enum": [
+                                  "present",
+                                  "partial",
+                                  "mismatch",
+                                  "unplugged"
+                                ]
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "freed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -2177,9 +2292,10 @@
                             "present",
                             "partial",
                             "missing",
-                            "mismatch"
+                            "mismatch",
+                            "unplugged"
                           ],
-                          "description": "as a variant's, over the add-on's own files only: present = its globs match and no download of it is unfinished and no recorded hash differs"
+                          "description": "as a variant's, over the add-on's own files only: present = its globs match and no download of it is unfinished and no recorded hash differs; from API 1.78 unplugged: its only copies are in folders of the list not connected now (not runnable)"
                         },
                         "bytes": {
                           "type": "integer",
@@ -2215,6 +2331,47 @@
                             }
                           },
                           "description": "presence mismatch only: its files (relative to `dir`) whose SHA-256 on disk differs from the recorded one, sorted"
+                        },
+                        "folder": {
+                          "type": "string",
+                          "pattern": "^[0-9a-f]{12}$",
+                          "description": "from API 1.78: the id of the folder it loads from (the first connected folder of the list with a complete copy, else the first with some files); absent when missing or unplugged"
+                        },
+                        "copies": {
+                          "type": "array",
+                          "maxItems": 8,
+                          "description": "from API 1.78 (contracts/README.md, Model folders): every folder of the host's list with files of it, in priority order: state as presence over that folder's files (unplugged: a folder not connected now that held it when last seen, CACHE/folders-seen.json); bytes its own files there, freed_bytes what deleting that copy gives back (shared parts another variant there loads not counted); bytes and freed_bytes absent when unplugged. Absent = one folder (older runners)",
+                          "items": {
+                            "type": "object",
+                            "required": [
+                              "folder",
+                              "state"
+                            ],
+                            "additionalProperties": false,
+                            "properties": {
+                              "folder": {
+                                "type": "string",
+                                "pattern": "^[0-9a-f]{12}$",
+                                "description": "the folder's id"
+                              },
+                              "state": {
+                                "enum": [
+                                  "present",
+                                  "partial",
+                                  "mismatch",
+                                  "unplugged"
+                                ]
+                              },
+                              "bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              },
+                              "freed_bytes": {
+                                "type": "integer",
+                                "minimum": 0
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -2614,7 +2771,7 @@
             "total_bytes"
           ],
           "additionalProperties": false,
-          "description": "from API 1.16: the volume holding the models root, measured at every write",
+          "description": "from API 1.16: the volume holding the models root, measured at every write; from API 1.78 the downloads folder's (models_disks)",
           "properties": {
             "root": {
               "type": "string",
@@ -2633,6 +2790,63 @@
             "writable": {
               "type": "boolean",
               "description": "from API 1.18: the runner can write its models root (a container whose models root is bind-mounted read-only reports false: studio refuses its model jobs, 409). Absent = true"
+            }
+          }
+        },
+        "models_disks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "description": "from API 1.78 (contracts/README.md, Model folders): the runner's model folders in priority order (the host_settings `folders`, else the one HELMSTUDIO_MODELS), measured at every write. Absent from older runners",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "root",
+              "connected",
+              "writable",
+              "downloads"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{12}$",
+                "description": "the first 12 hex of the SHA-256 of the path as stored"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "description": "/Volumes/<X>/… → X, else Mac on macOS, else the host name"
+              },
+              "root": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 400,
+                "description": "the path with the home directory written ~"
+              },
+              "connected": {
+                "type": "boolean",
+                "description": "the path is a folder now; a missing one is never created"
+              },
+              "free_bytes": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "absent when not connected"
+              },
+              "total_bytes": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "writable": {
+                "type": "boolean"
+              },
+              "downloads": {
+                "type": "boolean",
+                "description": "downloads go here: exactly one is true"
+              }
             }
           }
         },
@@ -2763,6 +2977,10 @@
             "thumbs": {
               "const": true,
               "description": "from API 1.48: this env also runs thumbs jobs (contracts/README.md, Thumbnails); absent = an older runner: studio sends it none"
+            },
+            "facts": {
+              "const": true,
+              "description": "from API 1.104: this env also runs facts jobs (contracts/README.md, Take facts); absent = an older runner: studio sends it none"
             }
           }
         }
@@ -3096,6 +3314,64 @@
                 ]
               }
             ]
+          }
+        },
+        "groups": {
+          "type": "array",
+          "maxItems": 4,
+          "description": "from 1.79: quick chips shown as one chip with one popup (ACE-Step's \"BPM · Key · Time\"), at the first item's place; each item is a param path in `quick`, in at most one group (contracts/README.md, Music and sound)",
+          "items": {
+            "type": "object",
+            "required": [
+              "label",
+              "items"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40,
+                "examples": [
+                  "BPM · Key · Time"
+                ]
+              },
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 6,
+                "items": {
+                  "type": "string",
+                  "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+                  "description": "`<node id>.<param>`, or `<node id>.bypass` for a bypassable node (a switch)",
+                  "examples": [
+                    "sample.steps",
+                    "enhance.bypass"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "count": {
+          "type": "object",
+          "required": [
+            "default",
+            "max"
+          ],
+          "additionalProperties": false,
+          "description": "from 1.79: how many takes one Generate makes (Stable Audio 3's variations: 4, at most 8); absent = Create's own count",
+          "properties": {
+            "default": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 8
+            }
           }
         },
         "inspector": {
@@ -3482,6 +3758,24 @@
             "$ref": "#/$defs/pin"
           },
           "description": "replaces RUNNER_PIN: these entries are marked pinned (pinned_why pin) whenever resident, kept by keep_pinned and the idle unload, a hand-over victim only as the last resort; an admin unload still unloads them"
+        },
+        "folders": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "pattern": "^(/|~/)"
+          },
+          "description": "from API 1.78 (contracts/README.md, Model folders): the model folders in priority order (absolute or ~/…); absent = the runner's HELMSTUDIO_MODELS. Studio writes it only when set, so an older runner keeps working"
+        },
+        "downloads": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "description": "from API 1.78: the index in folders of the downloads folder; only with folders"
         },
         "updated_at": {
           "type": "string",
@@ -3871,6 +4165,133 @@
         "note": {
           "type": "string",
           "maxLength": 300
+        }
+      }
+    },
+    "standard": {
+      "type": "object",
+      "required": [
+        "kind",
+        "model",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "description": "API 1.81: what Magic's standard request (MagicRequest) fills in this workflow. `fields` maps each shared field the workflow supports to the param it fills; a field it leaves out is greyed in Magic for this model; every other param is its Advanced. The fields: prompt and line (a text or string param), refs (a rows param whose items have an Image field: the @ picks' pictures, in order), first and last (an image param, or a rows param whose items have an Image field and a `position: seconds` field: a row at the clip's first or last frame; such a rows param left empty bypasses its node), length (a frames param: the block's length on the param's grid; from 1.85 also a float param: the block's seconds, music and sound), width and height (int params: the board's size, or the request's), seed (a seed param), voice (a voice param); from 1.85 (plan 39 phase H) lyrics (a text or string param), instrumental (a bool param: true when the lyrics are empty), key (an enum param: the request's key when it is one of its values), bpm (an int param) and from (a media param that accepts video: the shot's video take, MMAudio's video to sound). The kind must fit the workflow's media (image: image; video: video; voice, music and sound: audio). Checked by the runner at start and by contracts-check.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "image",
+            "video",
+            "voice",
+            "music",
+            "sound"
+          ]
+        },
+        "model": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "the model's name in Magic's model picker (\"LTX 2.5\")"
+        },
+        "fields": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "prompt": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "line": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "refs": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "first": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "last": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "length": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "width": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "height": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "seed": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "voice": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "lyrics": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "instrumental": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "key": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "bpm": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            },
+            "from": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$",
+              "description": "<node id>.<param> of this workflow"
+            }
+          }
+        },
+        "set": {
+          "type": "object",
+          "maxProperties": 20,
+          "propertyNames": {
+            "pattern": "^[a-z][a-z0-9_]{0,63}\\.[a-z][a-z0-9_]{0,63}$"
+          },
+          "description": "inputs every standard run of it carries (`canvas.mode: fixed`, so the size is used); the request's own fields and Advanced win"
+        },
+        "seconds": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 100000,
+          "description": "the pack's declared GPU seconds per unit, the estimate when the caller has no runs of it yet: an image at 1 megapixel (image), a second of video at 1280 × 720 (video), a second of speech (voice), a second of audio (music, sound)"
+        },
+        "default": {
+          "type": "boolean",
+          "description": "API 1.85: the kind's default model, first in Magic's picker (MiniMax Music 3, the owner's pick); absent: false. Without one the fastest declared model is first"
         }
       }
     }

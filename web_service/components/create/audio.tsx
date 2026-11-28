@@ -2,11 +2,18 @@
 // Speech on the stage (docs/mock/CreateAudio.dc.html): the take's waveform with a playhead, play / pause, the time,
 // a scrubber, Loop and the sound switch; and the shared "play one clip at a time" player the voice picker's play
 // buttons use.
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
-import { clock } from "@/lib/runs";
+import { clock } from "@/lib/format";
+import {
+  followDetail,
+  peaksFailed,
+  peaksOf as cachedPeaks,
+  type Peaks,
+} from "@/lib/timeline-detail";
 import { ErrorNote } from "@/components/kit";
 import type { S } from "@/lib/api";
+import { Range } from "@/components/range";
 
 /** How many bars the stage's waveform draws. */
 const BARS = 100;
@@ -24,49 +31,100 @@ export function peaksOf(samples: Float32Array, n = BARS): number[] {
   return top > 0 ? out.map((x) => x / top) : out;
 }
 
-/** The clip's bars, once it is fetched and decoded; null until then (or where the browser cannot decode); `failed`
- * when the clip could not be fetched or decoded. */
-function usePeaks(url?: string) {
-  const [peaks, setPeaks] = useState<{ url: string; bars: number[] | null } | null>(null);
+/** The clip's bars, once it is fetched and decoded (lib/timeline-detail's cached decoder, keyed by the url); null
+ * until then (or where the browser cannot decode); `failed` when the clip could not be fetched or decoded. */
+export function usePeaks(url?: string) {
+  const [got, setGot] = useState<{ url: string; p: Peaks | null } | null>(null);
   useEffect(() => {
-    if (!url || typeof AudioContext === "undefined") return;
-    let stop = false;
-    const ctx = new AudioContext();
-    fetch(url)
-      .then((r) => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return r.arrayBuffer();
-      })
-      .then((b) => ctx.decodeAudioData(b))
-      .then((a) => !stop && setPeaks({ url, bars: peaksOf(a.getChannelData(0)) }))
-      .catch(() => !stop && setPeaks({ url, bars: null }))
-      .finally(() => void ctx.close().catch(() => undefined));
-    return () => {
-      stop = true;
+    if (!url || typeof OfflineAudioContext === "undefined") return;
+    const read = () => {
+      const p = cachedPeaks(url, url, 0);
+      if (p || peaksFailed(url)) setGot({ url, p });
     };
+    queueMicrotask(read);
+    return followDetail(read);
   }, [url]);
-  const mine = peaks && peaks.url === url ? peaks : null;
-  return { bars: mine?.bars ?? null, failed: !!mine && !mine.bars };
+  const mine = got && got.url === url ? got : null;
+  const bars = useMemo(() => (mine?.p ? peaksOf(mine.p[0]) : null), [mine]);
+  return { bars, failed: !!mine && !mine.p };
 }
 
 /** A dialogue's speakers' colours, by first appearance (docs/mock/CreateAudio.dc.html: Mara a2, Jon a1). */
 export const cueColor = (cues: S<"AudioCue">[], c: S<"AudioCue">) =>
   [...new Set(cues.map((x) => x.voice_id))].indexOf(c.voice_id) % 2 ? "var(--a1)" : "var(--a2)";
 
+/** A song section's marker rule (RangeBar in the Design System): verse a1, chorus a2, intro and outro the sound
+ * colour, bridge the music colour. */
+export const sectionColor = (label: string) => {
+  const l = label.toLowerCase();
+  return l.startsWith("chorus")
+    ? "var(--a2)"
+    : l.startsWith("intro") || l.startsWith("outro")
+      ? "var(--kind-sound)"
+      : l.startsWith("bridge")
+        ? "var(--kind-music)"
+        : "var(--a1)";
+};
+
+/** A song's section markers over its waveform (API 1.79 `audio.sections`): a click calls `onPick` (seek, or in
+ * Repaint take that section's range). */
+export function Sections({
+  sections,
+  length,
+  onPick,
+  verb = "Jump to",
+}: {
+  sections: S<"AudioSection">[];
+  length: number;
+  onPick: (s: S<"AudioSection">) => void;
+  verb?: string;
+}) {
+  if (!sections.length || !(length > 0)) return null;
+  return (
+    <div aria-label="Sections" role="group" className="relative h-7 w-full">
+      {sections.map((c, i) => (
+        <button
+          key={i}
+          type="button"
+          title={`${verb} ${c.label}`}
+          aria-label={`${c.label}, ${clock(c.start_s)} to ${clock(c.end_s)}`}
+          onClick={() => onPick(c)}
+          className="mono absolute top-0 h-7 truncate rounded border-t-[3px] bg-[color-mix(in_srgb,var(--s2)_85%,transparent)] px-1.5 text-left text-[11px] text-t1"
+          style={{
+            left: `${(c.start_s / length) * 100}%`,
+            width: `${Math.max(0, ((c.end_s - c.start_s) / length) * 100 - 0.6)}%`,
+            borderTopColor: sectionColor(c.label),
+          }}
+        >
+          {c.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 /** The stage's player of an audio take: the waveform (played bars in the accent, the playhead), then play / pause,
  * "0:03 / 0:07", the scrubber, Loop and the sound switch. A dialogue (API 1.32) draws its cues: a marker per line
- * above the waveform (a click seeks to it), and each line's bars in its speaker's colour. */
+ * above the waveform (a click seeks to it), and each line's bars in its speaker's colour; a song (API 1.79) its
+ * sections the same way. `space`: Space plays and pauses (music and sound, the take menu's "Play  Space"). */
 export function WavePlayer({
   url,
   duration,
   cues,
   nameOf,
+  sections,
+  space,
+  autoPlay,
 }: {
   url?: string;
   duration?: number;
   cues?: S<"AudioCue">[];
   /** a cue's speaker ("Mara"), from its voice */
   nameOf?: (voiceId: string) => string;
+  sections?: S<"AudioSection">[];
+  space?: boolean;
+  /** start playing once shown (the take menu's Play) */
+  autoPlay?: boolean;
 }) {
   const ref = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -82,6 +140,29 @@ export function WavePlayer({
     if (ref.current) ref.current.currentTime = t;
   };
   const lineAt = (t: number) => cues?.find((c) => c.start_s <= t && t < c.end_s);
+  const toggle = () => {
+    const a = ref.current;
+    if (a) void (a.paused ? a.play()?.catch(() => undefined) : a.pause());
+  };
+  useEffect(() => {
+    if (autoPlay) void ref.current?.play()?.catch(() => undefined);
+  }, [autoPlay]);
+  useEffect(() => {
+    if (!space) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (
+        e.key !== " " ||
+        e.repeat ||
+        t?.closest("input, textarea, select, button, [contenteditable]")
+      )
+        return;
+      e.preventDefault();
+      toggle();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
   return (
     <div className="flex w-full max-w-[860px] flex-col items-center gap-3.5">
       <audio
@@ -123,6 +204,9 @@ export function WavePlayer({
           })}
         </div>
       )}
+      {!!sections?.length && (
+        <Sections sections={sections} length={len} onPick={(c) => seek(c.start_s)} />
+      )}
       <div
         role="group"
         aria-label="Waveform of the take"
@@ -160,10 +244,7 @@ export function WavePlayer({
         <button
           type="button"
           aria-label={playing ? "Pause" : "Play"}
-          onClick={() => {
-            const a = ref.current;
-            if (a) void (a.paused ? a.play()?.catch(() => undefined) : a.pause());
-          }}
+          onClick={toggle}
           className="grid size-11 place-items-center rounded-full bg-t1 text-ground"
         >
           {playing ? (
@@ -178,9 +259,9 @@ export function WavePlayer({
         <label htmlFor="scrub" className="sr-only">
           Scrub the take
         </label>
-        <input
+        <Range
           id="scrub"
-          type="range"
+
           min={0}
           max={len || 0}
           step={0.01}
@@ -236,4 +317,100 @@ export function usePlayer() {
     [playing],
   );
   return { playing, toggle };
+}
+
+/** The bars of a clip in a box (the variation card's and the Repaint stage's waveform; `wb` in the Design System):
+ * a2 bars on s1, as tall as the clip is loud; flat while it loads. */
+export function Bars({
+  url,
+  n = 60,
+  className = "h-[74px]",
+  lit,
+}: {
+  url?: string;
+  n?: number;
+  className?: string;
+  /** the part in the accent, as shares of the clip (Repaint's range); the rest dimmed */
+  lit?: [number, number];
+}) {
+  const { bars } = usePeaks(url);
+  return (
+    <div
+      aria-hidden
+      className={`flex items-center gap-[2px] rounded-xl bg-s1 px-[2px] ${className}`}
+    >
+      {Array.from({ length: n }, (_, i) => {
+        const b = bars ? bars[Math.floor((i / n) * bars.length)] : 0;
+        return (
+          <span
+            key={i}
+            className="min-w-[2px] flex-1 rounded-[2px] bg-a2"
+            style={{
+              height: `${Math.max(4, Math.round(b * 94))}%`,
+              opacity: lit && ((i + 0.5) / n < lit[0] || (i + 0.5) / n > lit[1]) ? 0.35 : 1,
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+/** One of Sound's variations on the stage (docs/mock/CreateMusicSound.dc.html frame 4, Variations in the Design
+ * System): a play disc, "seed 42 · 0:06", kept; the waveform. A click keeps it in the strip (again: not kept); its
+ * right-click menu is the take's. */
+export function VariationCard({
+  url,
+  label,
+  kept,
+  playing,
+  onPlay,
+  onKeep,
+  onMenu,
+}: {
+  url?: string;
+  label: string;
+  kept: boolean;
+  playing: boolean;
+  onPlay: () => void;
+  onKeep: () => void;
+  onMenu?: (e: React.MouseEvent) => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      aria-pressed={kept}
+      aria-label={`Variation, ${label}${kept ? ", kept" : ""}`}
+      title={kept ? "Kept in the strip; click to let it go" : "Click to keep it in the strip"}
+      onClick={onKeep}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") onKeep();
+      }}
+      onContextMenu={onMenu}
+      className={`flex cursor-pointer flex-col gap-2 border-2 bg-s1 p-3 text-left ${kept ? "border-a2" : "border-transparent"}`}
+      style={{ borderRadius: "14px 14px 14px 6px" }}
+    >
+      <span className="mono flex items-center gap-2 text-[11px] text-t2">
+        <button
+          type="button"
+          aria-label={playing ? `Pause ${label}` : `Play ${label}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onPlay();
+          }}
+          className="grid size-8 shrink-0 place-items-center rounded-full bg-t1 text-ground"
+        >
+          {playing ? (
+            <Pause size={12} aria-hidden className="fill-current" />
+          ) : (
+            <Play size={12} aria-hidden className="fill-current" />
+          )}
+        </button>
+        {label}
+        {kept && <span className="ml-auto text-a2">kept</span>}
+      </span>
+      <Bars url={url} />
+    </div>
+  );
 }

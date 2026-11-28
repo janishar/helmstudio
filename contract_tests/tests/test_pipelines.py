@@ -15,10 +15,12 @@ import time
 import pytest
 from conftest import headers, make_client
 from helpers import (
+    CONTRACTS,
     NO_SUCH_ID,
     STUDIO,
     TERMINAL,
     all_takes,
+    check,
     new_session,
     ok,
     png_bytes,
@@ -30,7 +32,7 @@ from helpers import (
     wait_run,
 )
 from test_batches import BATCHES, FINAL, finish, lines, rows_of, wait_batch, wait_rows
-from test_user_workflows import CONTRACTS, check, doc, keys, sort_key
+from test_user_workflows import doc, keys, sort_key
 
 PIPES = f"{STUDIO}/pipelines"
 PIPELINE_FIXTURES = sorted((CONTRACTS / "fixtures" / "pipelines").glob("*valid.*.json"))
@@ -154,12 +156,6 @@ def batch_takes(client, bid: str) -> list[dict]:
 
 
 # ---------------------------------------------------------------- documents: CRUD, caps, rules
-
-
-@pytest.fixture(scope="module")
-def palette(api) -> dict:
-    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
-    return {n["kind"]: n for g in groups for n in g["nodes"]}
 
 
 def test_crud_with_versions(api):

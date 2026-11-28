@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/jackc/pgx/v5"
@@ -183,8 +184,11 @@ func resolveImages(ctx context.Context, tx pgx.Tx, ownerID string, graph []byte)
 	gone := ""
 	eachImage(nodes, func(at imageAt) any {
 		row, ok := rows[at.TakeID]
-		media := ok && row.Kind != "image" && !text // a media param's or (API 1.22) a rows item's media field
-		image := ok && (row.Kind == "image" || (text && row.Kind == "video")) && row.Width != nil && row.Height != nil
+		// a text workflow's rows of Media (an ask's takes) send a video as an image; its media params (API 1.107,
+		// listen's source) are media values as anywhere else
+		asked := text && strings.Contains(at.Path, "[")
+		media := ok && row.Kind != "image" && !asked // a media param's or (API 1.22) a rows item's media field
+		image := ok && (row.Kind == "image" || (asked && row.Kind == "video")) && row.Width != nil && row.Height != nil
 		switch {
 		case ok && row.Etag != nil && media:
 			return mediaDescriptor(row, at.Value)

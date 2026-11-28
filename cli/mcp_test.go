@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -111,13 +112,16 @@ func TestMCPToolsAreTheCatalogs(t *testing.T) {
 		if fmt.Sprint(want) != fmt.Sprint(have) {
 			t.Errorf("%s: input schema %v, catalog %v", name, have, want)
 		}
+		if desc := cmp.Or(ct.MCPDesc, ct.Description); tl.Description != desc || strings.Contains(desc, "card") && !strings.Contains(desc, "No card over MCP") {
+			t.Errorf("%s: description %q", name, tl.Description)
+		}
 		a := tl.Annotations
 		destructive := a.DestructiveHint != nil && *a.DestructiveHint
 		if a.ReadOnlyHint != ct.ReadOnly || (!ct.ReadOnly && a.DestructiveHint == nil) || destructive != ct.Destructive {
 			t.Errorf("%s: annotations %+v, catalog read_only %v destructive %v", name, a, ct.ReadOnly, ct.Destructive)
 		}
 	}
-	for _, name := range []string{"delete_take", "delete_run", "delete_session", "edit_timeline", "restore_timeline"} {
+	for _, name := range []string{"delete_take", "delete_run", "delete_session", "edit_timeline", "restore_timeline", "edit_board", "restore_board"} {
 		if a := got[name].Annotations; a.ReadOnlyHint || !*a.DestructiveHint {
 			t.Errorf("%s: not destructive: %+v", name, a)
 		}
@@ -169,6 +173,16 @@ func TestMCPRunWaitAndTake(t *testing.T) {
 	if tk, _ := out["take"].(map[string]any); tk["id"] != "t9" {
 		t.Fatalf("get_take %v", out)
 	}
+	// API 1.104: a video with facts shows its frame grid, not its thumbnail; the facts are in the take
+	video := `{"id":"t8","kind":"video","thumb_url":"/files/none.webp","facts":{"seconds":2,"abrupt":true,"grid_url":"/files/u/o1/runs/r1/0.png?exp=1&sig=ok","at":[0.1]}}`
+	f.extra["GET /v1/studio/takes/t8"] = func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, video) }
+	f.extra["GET /v1/studio/takes/t8/uses"] = f.extra["GET /v1/studio/takes/t9/uses"]
+	f.extra["GET /v1/studio/takes/t8/decisions"] = f.extra["GET /v1/studio/takes/t9/decisions"]
+	res, out = call(t, cs, "get_take", map[string]any{"take_id": "t8"})
+	if img, ok := res.Content[1].(*mcp.ImageContent); res.IsError || !ok || !bytes.Equal(img.Data, png) ||
+		out["take"].(map[string]any)["facts"].(map[string]any)["abrupt"] != true {
+		t.Fatalf("get_take grid %s", text(res))
+	}
 
 	r, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "helm://take/t9"})
 	if err != nil || len(r.Contents) != 2 || r.Contents[0].Text != take || r.Contents[1].MIMEType != "image/png" {
@@ -176,6 +190,26 @@ func TestMCPRunWaitAndTake(t *testing.T) {
 	}
 	if _, err := cs.ReadResource(context.Background(), &mcp.ReadResourceParams{URI: "helm://workflow/echo"}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// API 1.79: search_takes takes a sound class as its kind (the catalog's enum) and sends it as is.
+func TestMCPSearchTakesByClass(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	var got string
+	f.extra["GET /v1/studio/takes"] = func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query().Get("kind")
+		fmt.Fprint(w, `{"takes":[],"next_cursor":null}`)
+	}
+	if res, _ := call(t, cs, "search_takes", map[string]any{"kind": "music"}); res.IsError || got != "music" {
+		t.Fatalf("search_takes %s, kind %q", text(res), got)
+	}
+	if res, _ := call(t, cs, "search_takes", map[string]any{"kind": "song"}); !res.IsError {
+		t.Fatal("a kind outside the catalog's enum was sent")
+	}
+	line := take{ID: "t1", Kind: "audio", Source: "create", Sound: "music", CreatedAt: "now", Title: "a song"}.line()
+	if !strings.Contains(line, " music create ") {
+		t.Fatal(line)
 	}
 }
 
@@ -531,5 +565,209 @@ func TestMCPExportWaitEndsMidRead(t *testing.T) {
 	res, out := call(t, cs, "export_timeline", map[string]any{"timeline_id": id, "out": t.TempDir() + "/cut.mp4"})
 	if res.IsError || out["job"] == nil || out["saved"] != nil {
 		t.Fatalf("export: %s", text(res))
+	}
+}
+
+// The Magic tools (plan 16 §20.8): the board routes each makes, as mcp; no card, so edit_board applies at once and
+// run_blocks plans first, answering the plan with the runs; board_frame reads the agent view.
+func TestMCPMagicBoards(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "bbbbbbbb-0000-4000-8000-000000000001"
+	base := "/v1/studio/magic/boards/" + id
+	var got []string
+	record := func(status int, answer string) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			var b map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&b)
+			got = append(got, fmt.Sprintf("%s %s?%s %v %s", r.Method, r.URL.Path, r.URL.RawQuery, b, r.Header.Get("X-Helm-Client")))
+			w.WriteHeader(status)
+			fmt.Fprint(w, answer)
+		}
+	}
+	view := `{"id":"` + id + `","revision":4,"target":{"fps":24},"lanes":[{"id":"shots","hidden":false},{"id":"x","hidden":true}],
+		"blocks":[{"id":"s1","lane":"shots","name":"Shot 1","kind":"video","at":0,"length":24,"take_id":null,"status":"draft"},
+		{"id":"s2","lane":"shots","name":"Shot 2","kind":"video","at":24,"length":24,"take_id":"t2","status":"done"},
+		{"id":"h1","lane":"x","name":"Hid","kind":"video","at":0,"length":48,"take_id":null,"status":"draft"}]}`
+	f.extra["GET /v1/studio/magic/boards"] = record(200, `{"boards":[]}`)
+	f.extra["POST /v1/studio/magic/boards"] = record(201, `{"id":"`+id+`","name":"Fox","revision":1,"doc":{}}`)
+	f.extra["GET /v1/studio/magic/kinds"] = record(200, `{"kinds":[{"kind":"video"},{"kind":"image"}]}`)
+	f.extra["POST "+base+"/assets/a1/views"] = record(202, `{"board":{"revision":7},"started":[{"view":"Front","run_id":"r8"}]}`)
+	f.extra["GET "+base] = record(200, view)
+	f.extra["POST "+base+"/plan"] = record(200, `{"seconds":12,"ask":true}`)
+	f.extra["POST "+base+"/edits"] = record(200, `{"revision":5,"dry_run":false,"board":{"doc":{}},"diff":{"blocks":{"added":["s3"]}},"warnings":[]}`)
+	f.extra["GET "+base+"/revisions"] = record(200, `{"revisions":[{"revision":5,"ops_summary":"add_block"}]}`)
+	f.extra["POST "+base+"/restore"] = record(200, `{"revision":6}`)
+	f.extra["POST "+base+"/run"] = record(202, `{"board":{"revision":6},"started":[{"block":"s1","run_id":"r9"}],"skipped":[]}`)
+	f.extra["POST "+base+"/assets/a1/voice/design"] = record(202, `{"revision":6,"voice_id":"v1","started":[{"run_id":"r7"}],"seconds":3}`)
+	f.extra["POST "+base+"/assets/a1/voice"] = record(200, `{"voice_id":"v1","revision":7,"summary":"asset"}`)
+	f.extra["POST "+base+"/send"] = record(202, `{"plan":{"bakes":1},"send":{"status":"baking"}}`)
+	ops := []any{map[string]any{"op": "delete", "ids": []any{"s1"}, "mode": "insert"}}
+	outs := map[string]map[string]any{}
+	for _, c := range []struct {
+		tool string
+		in   map[string]any
+	}{
+		{"list_boards", map[string]any{"q": "fox rain"}},
+		{"create_board", map[string]any{"name": "Fox"}},
+		{"magic_kinds", map[string]any{"kind": "image"}},
+		{"show_board", map[string]any{"board_id": id}},
+		{"try_board_edit", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}},
+		{"edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}},
+		{"restore_board", map[string]any{"board_id": id, "revision": 5, "to": 4}},
+		{"plan_board", map[string]any{"board_id": id}},
+		{"run_blocks", map[string]any{"board_id": id, "revision": 6, "lane": "shots"}},
+		{"make_views", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "views": []any{"Front"}}},
+		{"board_frame", map[string]any{"board_id": id, "at": 1.5}},
+		{"send_to_timeline", map[string]any{"board_id": id, "revision": 6}},
+		{"design_voice", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "design": "low, warm", "line": "Hello there."}},
+		{"save_voice", map[string]any{"board_id": id, "revision": 6, "asset": "a1", "take_id": "tt", "consent": true}},
+	} {
+		res, out := call(t, cs, c.tool, c.in)
+		if res.IsError {
+			t.Fatalf("%s: %s", c.tool, text(res))
+		}
+		outs[c.tool] = out
+	}
+	want := []string{
+		"GET /v1/studio/magic/boards?q=fox+rain map[] mcp",
+		"POST /v1/studio/magic/boards? map[name:Fox] mcp",
+		"GET /v1/studio/magic/kinds? map[] mcp",
+		"GET " + base + "?view=agent map[] mcp",
+		"POST " + base + "/plan? map[stale:true] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:true ops:[map[ids:[s1] mode:insert op:delete]]] mcp",
+		"POST " + base + "/edits? map[base_revision:4 dry_run:false ops:[map[ids:[s1] mode:insert op:delete]]] mcp",
+		"GET " + base + "/revisions?limit=1 map[] mcp",
+		"POST " + base + "/restore? map[revision:5 to:4] mcp",
+		"POST " + base + "/plan? map[stale:true] mcp",
+		"POST " + base + "/plan? map[lane:shots] mcp",
+		"POST " + base + "/run? map[lane:shots revision:6] mcp",
+		"POST " + base + "/assets/a1/views? map[revision:6 views:[Front]] mcp",
+		"GET " + base + "?view=agent map[] mcp",
+		"POST " + base + "/send? map[revision:6] mcp",
+		"POST " + base + "/assets/a1/voice/design? map[design:low, warm line:Hello there. revision:6] mcp",
+		"POST " + base + "/assets/a1/voice? map[consent:true revision:6 take_id:tt] mcp",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("calls:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	if o := outs["create_board"]; o["board_id"] != id || o["revision"] != float64(1) {
+		t.Errorf("create: %v", o)
+	}
+	if k := outs["magic_kinds"]["kinds"].([]any); len(k) != 1 || k[0].(map[string]any)["kind"] != "image" {
+		t.Errorf("kinds: %v", k)
+	}
+	if o := outs["make_views"]; o["revision"] != float64(7) || len(o["started"].([]any)) != 1 || o["seconds"] != nil {
+		t.Errorf("views: %v", o)
+	}
+	if o := outs["try_board_edit"]; o["board"] != nil || o["summary"] != nil || o["revision"] != float64(5) {
+		t.Errorf("try: %v", o)
+	}
+	if o := outs["edit_board"]; o["summary"] != "add_block" {
+		t.Errorf("edit: %v", o)
+	}
+	// another edit landed first: its summary is not this edit's
+	f.extra["GET "+base+"/revisions"] = record(200, `{"revisions":[{"revision":9,"ops_summary":"other"}]}`)
+	if _, o := call(t, cs, "edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": ops}); o["summary"] != nil {
+		t.Errorf("edit, newer revision: %v", o)
+	}
+	// API 1.101: a block op's gain_db (an audio block's level) passes the tool's schema and goes as given
+	level := []any{map[string]any{"op": "block", "id": "m1", "set": map[string]any{"gain_db": -6}}}
+	if res, _ := call(t, cs, "edit_board", map[string]any{"board_id": id, "base_revision": 4, "ops": level}); res.IsError {
+		t.Fatalf("edit, gain_db: %s", text(res))
+	}
+	if !slices.ContainsFunc(got, func(g string) bool { return strings.Contains(g, "set:map[gain_db:-6]") }) {
+		t.Errorf("edit, gain_db not sent: %v", got)
+	}
+	if o := outs["run_blocks"]; o["revision"] != float64(6) || o["plan"].(map[string]any)["ask"] != true || len(o["started"].([]any)) != 1 || o["seconds"] != float64(12) {
+		t.Errorf("run: %v", o)
+	}
+	shown := outs["board_frame"]["shown"].([]any)
+	if s := shown[0].(map[string]any); len(shown) != 1 || s["block"] != "s2" || s["offset_s"] != 0.5 || s["take_id"] != "t2" || outs["board_frame"]["frame"] != float64(36) {
+		t.Errorf("frame: %v", outs["board_frame"])
+	}
+	if o := outs["send_to_timeline"]; o["send"].(map[string]any)["status"] != "baking" {
+		t.Errorf("send: %v", o)
+	}
+}
+
+// cancel_runs (alpha.6; owner, 2026-11-27: "yes build it"): the board read once, each matching run still going asked
+// to stop by its own cancel; a run that ended meanwhile (409) is left out; all takes Make views' runs too.
+func TestMCPCancelRuns(t *testing.T) {
+	f, cs, _ := mcpSession(t, "")
+	const id = "bbbbbbbb-0000-4000-8000-000000000002"
+	base := "/v1/studio/magic/boards/" + id
+	var asked []string
+	f.extra["GET "+base] = func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{"doc":{"blocks":[{"id":"s1","lane":"shots"},{"id":"s2","lane":"shots"},{"id":"f1","lane":"story"}]},
+			"runs":[{"block":"s1","run_id":"r1","status":"running"},{"block":"s2","run_id":"r2","status":"queued"},
+			{"block":"f1","run_id":"r3","status":"running"},{"block":"s1","run_id":"r4","status":"succeeded"}],
+			"asset_runs":[{"asset":"a1","run_id":"r5","status":"queued"}]}`)
+	}
+	for run, answer := range map[string]string{"r1": "running", "r2": "cancelled", "r3": "", "r5": "cancelled"} {
+		f.extra["POST /v1/studio/runs/"+run+"/cancel"] = func(w http.ResponseWriter, r *http.Request) {
+			asked = append(asked, run)
+			if answer == "" {
+				w.WriteHeader(http.StatusConflict)
+				fmt.Fprint(w, `{"detail":"This run has already ended."}`)
+				return
+			}
+			w.WriteHeader(http.StatusAccepted)
+			fmt.Fprintf(w, `{"id":%q,"status":%q}`, run, answer)
+		}
+	}
+	stopped := func(in map[string]any) string {
+		t.Helper()
+		res, out := call(t, cs, "cancel_runs", in)
+		if res.IsError {
+			t.Fatalf("%v: %s", in, text(res))
+		}
+		var s []string
+		for _, x := range out["stopped"].([]any) {
+			x := x.(map[string]any)
+			s = append(s, fmt.Sprintf("%s:%s:%s", x["block"], x["run_id"], x["status"]))
+		}
+		return strings.Join(s, " ")
+	}
+	if got := stopped(map[string]any{"board_id": id, "lane": "shots"}); got != "s1:r1:running s2:r2:cancelled" {
+		t.Errorf("lane: %s", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "blocks": []any{"f1"}}); got != "" {
+		t.Errorf("ended meanwhile: %q", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "run_ids": []any{"r2"}}); got != "s2:r2:cancelled" {
+		t.Errorf("run_ids: %s", got)
+	}
+	if got := stopped(map[string]any{"board_id": id, "all": true}); got != "s1:r1:running s2:r2:cancelled a1:r5:cancelled" {
+		t.Errorf("all: %s", got)
+	}
+	if strings.Join(asked, " ") != "r1 r2 r3 r2 r1 r2 r3 r5" {
+		t.Errorf("asked: %v", asked)
+	}
+	for _, in := range []map[string]any{{"board_id": id}, {"board_id": id, "lane": "shots", "all": true}} {
+		if res, _ := call(t, cs, "cancel_runs", in); !res.IsError {
+			t.Errorf("%v: want an error", in)
+		}
+	}
+}
+
+func TestMCPListenWaitsForTheAnswerAndTranscript(t *testing.T) { // API 1.107; 1.109: the smaller model's note
+	f, cs, _ := mcpSession(t, "succeeded")
+	var body map[string]any
+	f.extra["POST /v1/studio/takes/t7/listen"] = func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		w.WriteHeader(http.StatusAccepted)
+		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"omni-listen-3b","status":"queued","host":null,"position":1,
+			"note":"Answered by the smaller listen model (Qwen2.5-Omni-3B): Qwen3-Omni is not on this Mac."}`)
+	}
+	f.extra["GET /v1/studio/runs/r9"] = func(w http.ResponseWriter, _ *http.Request) {
+		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"echo-listen","status":"succeeded","outputs":[],
+			"answer":{"text":"ECHO-LISTEN: abrupt?","tokens_in":0,"tokens_out":0,"seconds":0},
+			"resolved":{"texts":{"listen.transcript":"ECHO-TRANSCRIPT"}}}`)
+	}
+	res, out := call(t, cs, "listen", map[string]any{"take_id": "t7", "question": "abrupt?", "transcript": true})
+	if res.IsError || out["run_id"] != "r9" || out["status"] != "succeeded" || out["answer"] != "ECHO-LISTEN: abrupt?" ||
+		out["transcript"] != "ECHO-TRANSCRIPT" || fmt.Sprint(body) != "map[question:abrupt? transcript:true]" ||
+		out["note"] != "Answered by the smaller listen model (Qwen2.5-Omni-3B): Qwen3-Omni is not on this Mac." {
+		t.Fatalf("listen %v %s (sent %v)", out, text(res), body)
 	}
 }

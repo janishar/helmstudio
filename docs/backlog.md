@@ -82,6 +82,12 @@ Notes from the owner while using the app. Not scheduled; each is picked up when 
   "Film noir looks" pack. A new plugin kind after v1 (model providers and Assistant tools, alpha.2 item 33). Other
   kinds discussed and not taken for now: model packs, a dev and test pack (Echo and the fakes), pipeline nodes,
   provider presets, UI plugins.
+- **Effects packs** (owner, 2026-11-27: "note future feature: effects pack (plugins) on a video generated/uploaded,
+  effects like depth map, background change, cloth change, character swap, etc"): installable effects that act on a
+  video take, made or uploaded: a depth map, background change, clothing change, character swap, film grain, halation (halo) and more (owner, 2026-11-27: "effect - film grain, halo"). Each effect
+  makes a new take (the source stays), offered from the take's Use in and right-click menu, in Create, the Gallery,
+  the Timeline and Magic (effects are already badges on Magic blocks, plan 37 decision 6). Not scheduled; needs its
+  own plan, models and board.
 
 ## Product
 
@@ -133,6 +139,29 @@ show on the Plugins page; the user's copy of the same name wins ("replaces built
 `format` with "needs a newer helmstudio". Later: upload a zip on the Plugins page for servers without folder access,
 skills in pipeline agent nodes.
 
+**Magic director skill** (owner, 2026-11-27: "do we need magic focused skill for aour assitant in addition to animator",
+then "the skill should make assistant plan first the charector, porps, settings, etc in order"). Draft after the owner's
+real-world test of Magic, so it fixes how the Assistant actually plans boards. The craft of a whole board (the built-in
+knowledge keeps the tool mechanics; Cinematic filmmaker keeps framing and moves, referenced, not repeated). Planning
+order, enforced: 1 characters (look, outfit, age, voice; their views made first), 2 props that recur or matter, 3
+settings (places, wide and reverse angles), 4 the look (one style line every frame reuses), 5 beats (moments with
+lengths that add up to the target), then 6 storyboard frames (one per beat, @ the characters, props and setting,
+framing, move), 7 shots from the liked frames, 8 voice, music and sound tied to shots. Steps 1-5 are shown as a plan
+for the owner's OK before any GPU time. Also: cheap sketches first and finals only for picked frames (variant per
+stage), the GPU limit, model fit (LTX vs MiniMax H3, first/last frames, joins), sound with picture (ties, music
+sections on beats, MMAudio from a shot), reviewing like a director (compare, pin, say why, flag out of date before
+Send), and sample plans (30 s ad, 1 min story, music video) with lanes, block counts and a GPU budget.
+Line it up with the Animator skill (owner, 2026-11-27: "will it complement anitor skill or contradict it"): the
+order everywhere is idea and the style line first (as the Animator says: a later style change redoes every keyframe),
+then characters, props, settings, then beats, frames, shots, sound; in Magic these are board assets (Character, Prop,
+Place; Elements import as a copy), not Create Elements; the board is the shot list and Send to Timeline assembles it.
+Roles: Animator = cartoon craft, Cinematic filmmaker = camera and framing, Magic director = planning and running a
+board; each refers to the others instead of repeating them. Add one line to the Animator's SKILL.md: on a Magic board,
+follow the Magic director skill for where things live.
+**Built (2026-11-27, alpha.6 row 38; API 1.96)**: plugins/magic-director, always on for Magic and read by the
+Assistant itself on the Magic screen or after a Magic tool, once per chat (owner: "add this skill internally while
+using magic"); contracts/README.md "Skills". Variant per stage is written as the request's `model.variant` (API 1.94).
+
 ## Multi-arch images (noted 2026-11-25)
 
 The published images (ghcr.io/janishar/helmstudio-*) are linux/arm64 only (.tools/push-images): right for the Mac app's
@@ -152,3 +181,14 @@ only-you, keep the disclaimer, `run` on host mac (starts itself; Couldn't start 
 when missing), bundle it in the .dmg, check the app VM reaches it, docs page. The owner confirmed
 Anthropic's Commercial Terms are accepted (2026-11-25; the page says products running Claude Code fall under them).
 
+
+## Code health, left from the 2026-11-28 review (owner, 2026-11-28: "Backlog only")
+
+From docs/review/code-optimisation-2026-11-28.md; the rest of that review is merged (alpha.6 row 85).
+
+- Magic as its own studio package: move api/studio's Magic files (about 3,500 lines, tangled both ways with runs,
+  takes, the Timeline, the Assistant's tools and the projector) into their own package behind a small interface.
+  Needs its own plan first; not a pure move. Parked for later (owner: "we can park the studio package task").
+- The rest of the contract_tests helpers (about 850 lines that need renames).
+- The Python copy of the Timeline edit rules in contracts/check*.py: drop it once the 16 contract tests that use it
+  check against the fixtures' `expect` instead.

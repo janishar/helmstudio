@@ -82,6 +82,12 @@
           "maxLength": 300,
           "description": "model-facing"
         },
+        "mcp_description": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "plan 16: helm mcp's description in place of description, for a tool on both surfaces whose description names the in-app card or screen (no card over MCP)"
+        },
         "surfaces": {
           "type": "array",
           "minItems": 1,
@@ -105,7 +111,7 @@
         },
         "destructive": {
           "type": "boolean",
-          "description": "plan 16: a write that cannot be undone (a delete); helm mcp marks it destructiveHint so the client asks first. Absent = false"
+          "description": "plan 16: a write helm mcp serves that cannot be undone (a delete) or that changes a document in place (a sequence's or a board's edit and restore); helm mcp marks it destructiveHint so the client asks first. Absent = false"
         },
         "roles": {
           "type": "array",
@@ -218,7 +224,8 @@
               "egress",
               "final",
               "machine",
-              "disk"
+              "disk",
+              "board"
             ]
           },
           "additionalProperties": {
@@ -251,7 +258,8 @@
                     "egress",
                     "final",
                     "machine",
-                    "disk"
+                    "disk",
+                    "board"
                   ]
                 },
                 "description": "egress is shown only when something leaves the machine"

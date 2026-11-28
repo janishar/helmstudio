@@ -4,19 +4,17 @@ check (Found), refused by the provider (401: nothing written, Missing), not chec
 anyway: Found), replaced, removed (Missing). The test stack writes only to pipelines' own /tmp/provider-keys, never the
 real folder. At the end no service's log holds any test key."""
 
-import os
 import subprocess
 
-from helpers import STUDIO, ok
+from helpers import PROJECT, STUDIO, ok
 from test_director import PROVIDERS, provider, remote_body, server_body, tag
 
 KEYS = f"{STUDIO}/admin/provider-keys"
 
 
 def logs(service: str) -> str:
-    project = os.environ.get("COMPOSE_PROJECT", "helmstudio-test")
     out = subprocess.run(
-        ["docker", "logs", f"{project}-{service}-1"], capture_output=True, timeout=60, check=False
+        ["docker", "logs", f"{PROJECT}-{service}-1"], capture_output=True, timeout=60, check=False
     )
     return (out.stdout + out.stderr).decode(errors="replace")
 

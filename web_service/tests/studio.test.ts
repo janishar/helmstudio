@@ -176,8 +176,8 @@ describe("the form derived from the qwen-image workflow", () => {
   it("sends a fixed seed and the enum picked, but not a random seed (the default)", () => {
     expect(buildInputs(fs, {}).inputs).toEqual({});
     expect(
-      buildInputs(fs, { "seed.seed": "7", "model.variant": "turbo", "canvas.width": "768" }).inputs,
-    ).toEqual({ "seed.seed": 7, "model.variant": "turbo", "canvas.width": 768 });
+      buildInputs(fs, { "seed.seed": "7", "model.variant": "base", "canvas.width": "768" }).inputs,
+    ).toEqual({ "seed.seed": 7, "model.variant": "base", "canvas.width": 768 }); // turbo is the default (not sent)
   });
 });
 
@@ -435,12 +435,11 @@ describe("when expressions and tile labels", () => {
 
   it("hides steps for turbo and does not send them", () => {
     const fs = fields(qwen);
-    expect(visible(fs, {}).some((f) => f.key === "sample.steps")).toBe(true);
+    expect(visible(fs, { "model.variant": "base" }).some((f) => f.key === "sample.steps")).toBe(true);
+    expect(visible(fs, {}).some((f) => f.key === "sample.steps")).toBe(false); // turbo, the default
     const turbo = visible(fs, { "model.variant": "turbo", "sample.steps": "12" });
     expect(turbo.some((f) => f.key === "sample.steps")).toBe(false);
-    expect(buildInputs(turbo, { "model.variant": "turbo", "sample.steps": "12" }).inputs).toEqual({
-      "model.variant": "turbo",
-    });
+    expect(buildInputs(turbo, { "model.variant": "turbo", "sample.steps": "12" }).inputs).toEqual({});
   });
 
   it("reads an unplaced field in a placed field's when (the scope)", () => {

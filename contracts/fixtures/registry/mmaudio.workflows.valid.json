@@ -1,0 +1,177 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-27T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "workflows": [
+    {
+      "id": "mmaudio-sound",
+      "title": "MMAudio Sound",
+      "family": "mmaudio",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "mmaudio/model",
+          "params": {
+            "variant": "large_44k_v2",
+            "precision": "bf16"
+          }
+        },
+        "sound": {
+          "kind": "mmaudio/sound",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "avoid": "",
+            "seconds": 8,
+            "guidance": 4.5,
+            "steps": 25
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "sound.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "sound.avoid"
+        ],
+        "quick": [
+          "sound.seconds",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Quality",
+            "items": [
+              "sound.guidance",
+              "sound.steps"
+            ]
+          }
+        ],
+        "count": {
+          "default": 4,
+          "max": 8
+        }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "MMAudio",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "sound.seconds",
+          "seed": "seed.seed"
+        },
+        "seconds": 0.5
+      }
+    },
+    {
+      "id": "mmaudio-video",
+      "title": "MMAudio Sound from a video",
+      "action": "Add sound",
+      "family": "mmaudio",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "mmaudio/model",
+          "params": {
+            "variant": "large_44k_v2",
+            "precision": "bf16"
+          }
+        },
+        "foley": {
+          "kind": "mmaudio/foley",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "source": null,
+            "seconds": 0,
+            "avoid": "",
+            "guidance": 4.5,
+            "steps": 25
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "foley.audio"
+          }
+        },
+        "output_video": {
+          "kind": "output",
+          "in": {
+            "media": "foley.video"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "foley.source",
+          "foley.avoid"
+        ],
+        "quick": [
+          "foley.seconds",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "Quality",
+            "items": [
+              "foley.guidance",
+              "foley.steps"
+            ]
+          }
+        ]
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "MMAudio",
+        "fields": {
+          "from": "foley.source",
+          "prompt": "prompt.text",
+          "length": "foley.seconds",
+          "seed": "seed.seed"
+        },
+        "seconds": 1.1
+      }
+    }
+  ]
+}

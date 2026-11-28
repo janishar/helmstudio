@@ -48,10 +48,11 @@ type jobRow struct {
 	RequestedBy                    string
 	CreatedAt                      time.Time
 	ReleasedAt, StartedAt, EndedAt *time.Time
+	Folders                        []string // API 1.78: a download's folder, a delete's copies (by id); nil = none named
 }
 
 const jobCols = `id::text, kind, host, env, model, variant, addon, lora_id, title, state, progress, failure, result, keeps,
-	licence, requested_by::text, created_at, released_at, started_at, ended_at`
+	licence, requested_by::text, created_at, released_at, started_at, ended_at, folders`
 
 var jobEnded = map[string]bool{"succeeded": true, "failed": true, "cancelled": true}
 
@@ -127,8 +128,8 @@ func insertJob(ctx context.Context, tx pgx.Tx, j jobRow) (jobRow, error) {
 		j.Keeps = json.RawMessage(`[]`)
 	}
 	return one[jobRow](ctx, tx, `INSERT INTO model_jobs (id, kind, host, env, model, variant, lora_id, title, keeps,
-		licence, requested_by, addon) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING `+jobCols,
-		utility.NewID(), j.Kind, j.Host, j.Env, j.Model, j.Variant, j.LoraID, j.Title, j.Keeps, j.Licence, j.RequestedBy, j.Addon)
+		licence, requested_by, addon, folders) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING `+jobCols,
+		utility.NewID(), j.Kind, j.Host, j.Env, j.Model, j.Variant, j.LoraID, j.Title, j.Keeps, j.Licence, j.RequestedBy, j.Addon, j.Folders)
 }
 
 // downloadDB applies a download's refusals that need the jobs table: a delete of the model on the host unfinished.
@@ -146,7 +147,7 @@ func deleteDB(ctx context.Context, tx pgx.Tx, w weights, host string, del remova
 	if err != nil {
 		return err
 	}
-	if w.usedBy(host, del, runs) {
+	if del.checks && w.usedBy(host, del, runs) { // API 1.78: only when the copy a run loads goes
 		return network.NewConflictError(fmt.Sprintf("%s is in use by a queued or running run on %s", del.model.Title, host), nil)
 	}
 	if open, err := openOf(ctx, tx, "download", host, del.model.ID, ""); err != nil || !open {
@@ -206,7 +207,7 @@ func (s *Service) DownloadModel(ctx context.Context, caller common.Caller, model
 				return err
 			}
 		}
-		d, err := w.checkDownload(body.Host, model, variant, body.Addon, body.AcceptLicence)
+		d, err := w.checkDownload(body.Host, model, variant, body.Addon, body.AcceptLicence, body.Folder)
 		if err != nil {
 			return err
 		}
@@ -215,6 +216,9 @@ func (s *Service) DownloadModel(ctx context.Context, caller common.Caller, model
 		}
 		licence, _ := json.Marshal(d.licence)
 		job := jobRow{Kind: "download", Host: body.Host, Env: d.env, Model: &model, Licence: licence, RequestedBy: caller.ID}
+		if body.Folder != nil {
+			job.Folders = []string{*body.Folder}
+		}
 		if d.addon != nil {
 			job.Addon, job.Title = &d.addon.Component, d.model.Title+" · "+d.addon.Title
 		} else {
@@ -227,8 +231,8 @@ func (s *Service) DownloadModel(ctx context.Context, caller common.Caller, model
 	return out.dto(), created, err
 }
 
-// DeleteModel answers DELETE /admin/models/{model}?host=&variant=&addon=.
-func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, host string, variant, addon *string) (dto.ModelJob, bool, error) {
+// DeleteModel answers DELETE /admin/models/{model}?host=&variant=&addon=&folder= (API 1.78: folder repeatable).
+func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, host string, variant, addon *string, folders []string) (dto.ModelJob, bool, error) {
 	if !caller.IsAdmin() {
 		return dto.ModelJob{}, false, errAdmin
 	}
@@ -243,6 +247,8 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 		return dto.ModelJob{}, false, network.NewUnprocessableError("addon must be a component name", nil)
 	case addon != nil && variant != nil:
 		return dto.ModelJob{}, false, network.NewUnprocessableError("give a variant or an add-on, not both", nil)
+	case len(folders) > 8 || slices.ContainsFunc(folders, func(f string) bool { return !dto.FolderID.MatchString(f) }):
+		return dto.ModelJob{}, false, network.NewUnprocessableError("folder must be a folder id", nil)
 	case !s.registry.Ready():
 		return dto.ModelJob{}, false, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
@@ -259,7 +265,8 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 			return err
 		}
 		w := s.weights()
-		del, err := w.checkDelete(host, model, variant, addon)
+		folders = slices.Compact(slices.Sorted(slices.Values(folders)))
+		del, err := w.checkDelete(host, model, variant, addon, folders)
 		if err != nil {
 			return err
 		}
@@ -268,7 +275,7 @@ func (s *Service) DeleteModel(ctx context.Context, caller common.Caller, model, 
 		}
 		keeps, _ := json.Marshal(del.keeps)
 		out, err = insertJob(ctx, tx, jobRow{Kind: "delete", Host: host, Env: del.env, Model: &model, Variant: variant,
-			Addon: addon, Title: del.title, Keeps: keeps, RequestedBy: caller.ID})
+			Addon: addon, Title: del.title, Keeps: keeps, RequestedBy: caller.ID, Folders: folders})
 		created = err == nil
 		return err
 	})
@@ -520,7 +527,12 @@ func recheck(ctx context.Context, tx pgx.Tx, w weights, job jobRow) (*message.Mo
 	switch job.Kind {
 	case "download":
 		var d download
-		if d, err = w.checkDownload(job.Host, deref(job.Model), job.Variant, job.Addon, true); err == nil {
+		var folder *string
+		if len(job.Folders) > 0 {
+			folder = &job.Folders[0]
+		}
+		command.Folder = folder
+		if d, err = w.checkDownload(job.Host, deref(job.Model), job.Variant, job.Addon, true, folder); err == nil {
 			err = downloadDB(ctx, tx, job.Host, d, job.ID)
 		}
 		command.Env = d.env
@@ -529,7 +541,8 @@ func recheck(ctx context.Context, tx pgx.Tx, w weights, job jobRow) (*message.Mo
 		command.Licence = accepted
 	case "delete":
 		var del removal
-		if del, err = w.checkDelete(job.Host, deref(job.Model), job.Variant, job.Addon); err == nil {
+		command.Folders = job.Folders
+		if del, err = w.checkDelete(job.Host, deref(job.Model), job.Variant, job.Addon, job.Folders); err == nil {
 			err = deleteDB(ctx, tx, w, job.Host, del)
 		}
 		command.Env = del.env

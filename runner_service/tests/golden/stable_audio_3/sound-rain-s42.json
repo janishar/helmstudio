@@ -1,0 +1,16 @@
+{
+  "workflow": "sa3-sound",
+  "prompt": "heavy rain on a window, distant thunder",
+  "seconds": 2.0,
+  "seed": 42,
+  "length_s": 2.0,
+  "channels": 2,
+  "sample_rate": 44100,
+  "rms": 0.06089,
+  "peak": 0.39206,
+  "reference": "stable-audio-3 4007b6f StableAudioModel.generate, mps, fp32 (T5Gemma bf16)",
+  "torch": "2.15.0",
+  "load_s": 5.6,
+  "gen_s": 1.17,
+  "peak_footprint_gb": 4.4
+}

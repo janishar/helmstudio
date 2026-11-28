@@ -5,6 +5,10 @@ import normalizeFx from "../../contracts/fixtures/timelines/normalize.json";
 import editsFx from "../../contracts/fixtures/timelines/edits.json";
 import snapFx from "../../contracts/fixtures/timelines/snap.json";
 import frameFx from "../../contracts/fixtures/timelines/frame-at.json";
+// 1.106: audio fades, crossfades and ducking
+import normalizeFades from "../../contracts/fixtures/timelines/normalize.fades.json";
+import editsFades from "../../contracts/fixtures/timelines/edits.fades.json";
+import frameFades from "../../contracts/fixtures/timelines/frame-at.fades.json";
 import {
   Grid,
   apply,
@@ -67,6 +71,16 @@ run("snap", snapFx as unknown as Fx, (c, takes) => {
     : { index: dropIndex(doc, c.clip as string, c.mid as number, takes) };
 });
 run("frame-at", frameFx as unknown as Fx, (c, takes) =>
+  frameAt(c.document as Doc, c.frame as number, takes),
+);
+
+run("normalize, fades (1.106)", normalizeFades as unknown as Fx, (c, takes) =>
+  normalize(c.document as Doc, takes, c.previous as Doc | undefined),
+);
+run("edits, fades (1.106)", editsFades as unknown as Fx, (c, takes) =>
+  apply(c.document as Doc, c.op as Op, takes),
+);
+run("frame-at, fades (1.106)", frameFades as unknown as Fx, (c, takes) =>
   frameAt(c.document as Doc, c.frame as number, takes),
 );
 

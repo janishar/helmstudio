@@ -17,15 +17,15 @@ import wave
 import pytest
 import schemas
 from conftest import headers, make_client
-from helpers import NO_SUCH_ID, STUDIO, new_session, ok, png_bytes, upload, wait_run
+from helpers import NO_SUCH_ID, STUDIO, check, detail, new_session, ok, png_bytes, upload, wait_run
 from test_batches import BATCHES, finish
 from test_director import answer, quiet, routed_agent, turn
 from test_director import decisions as row_decisions
 from test_director import script as agent_script
-from test_elements import LIB, detail, update
+from test_elements import LIB, update
 from test_pipelines import PIPES, create, ended, inputs_node
 from test_pipelines import submit as submit_pipeline
-from test_user_workflows import check, doc
+from test_user_workflows import doc
 
 WF, ASK, SPEAK = "echo-dialogue", "echo-ask", "echo-voice-over"
 ADA, BO = "echo/ada", "echo/bo"

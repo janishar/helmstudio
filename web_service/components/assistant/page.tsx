@@ -4,6 +4,7 @@
 // Tools and Skills (the plugins' on/off switches: their only home), Auto mode (the caps), Context (the chat window and
 // the prompt cache), and their own Memory. Behind it are the admin routes as they are (providers, provider-keys, /admin/assistant, the plugins and their
 // switches, Add as provider); keys are checked by KeyArea, never kept in React state.
+import { sleep } from "@/lib/format";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -46,6 +47,7 @@ const SHORT: Record<string, string> = {
   "media-tools": "Crop, resize, trim, join, pull frames. Each edit is a new take.",
   "cinematic-filmmaker": "A short live-action film, script to MP4.",
   animator: "A cartoon film in one style, script to MP4.",
+  "magic-director": "Always on for Magic: plans a board in order, then runs it.",
   [BRIDGE]: "Your own Claude plan, through Claude Code on this Mac",
 };
 
@@ -394,6 +396,7 @@ function AdminPage({ setup }: { setup: boolean }) {
                   title={p.title}
                   sub={SHORT[p.name] ?? p.when ?? p.description}
                   on={p.enabled}
+                  readOnly={p.name === "magic-director"} // API 1.96: built in, always on for Magic
                   onToggle={() => void togglePlugin(p)}
                 />
               ))}
@@ -1183,8 +1186,6 @@ function SavedStep({ saved, settings, onCancel, saveWith }: Step & { saved: Prov
     </>
   );
 }
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /** A model-provider plugin (Your Claude subscription): no API key, its state and disclaimer; Save turns the plugin on,
  * waits for it to run, adds it as the caller's own provider once (Add as provider; its token from its host, API 1.73) and

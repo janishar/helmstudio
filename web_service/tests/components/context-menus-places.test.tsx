@@ -289,6 +289,117 @@ describe("Gallery", () => {
   });
 });
 
+describe("Gallery: music and sound (docs/mock/CreateMusicSound.dc.html 6a-6c)", () => {
+  const made = (title: string) =>
+    ({ workflow_id: "w", workflow_title: title, prompt: "p", seed: 31, inputs: {} }) as never;
+  const song = take({
+    title: "Rain on the window",
+    kind: "audio",
+    sound: "music",
+    run_id: "r1",
+    audio: { duration_s: 130 },
+    made_with: made("ACE-Step 1.5"),
+  });
+  const fx = take({
+    title: "Door creak",
+    kind: "audio",
+    sound: "sound",
+    run_id: "r2",
+    audio: { duration_s: 6 },
+    made_with: made("Stable Audio 3"),
+  });
+  const withSound = take({
+    title: "Fox trots in",
+    kind: "video",
+    run_id: "r2",
+    made_with: made("MMAudio"),
+  });
+  const offer = (workflow_id: string, action: string) => ({
+    workflow_id,
+    action,
+    title: workflow_id,
+    param: "source.source",
+    inputs: {},
+  });
+  function start() {
+    answer("GET", {
+      "/v1/studio/takes/{take_id}": () => ({ data: { ...song, children: [] } }),
+      "/v1/studio/takes/{take_id}/uses": (init) => {
+        const id = (init.params as { path: { take_id: string } }).path.take_id;
+        return {
+          data: {
+            uses:
+              id === song.id
+                ? [
+                    offer("ace-extend", "Extend"),
+                    offer("ace-repaint", "Repaint"),
+                    offer("ace-cover", "Cover"),
+                    { ...offer("ltx-a2v", "Audio to video"), title: "LTX" },
+                  ]
+                : id === fx.id
+                  ? [
+                      offer("sa-repaint", "Repaint"),
+                      offer("sa-vary", "Vary"),
+                      offer("sa-extend", "Extend"),
+                    ]
+                  : [],
+          },
+        };
+      },
+      "/v1/studio/tools": () => ({ data: { tools: [] } }),
+      "/v1/studio/library": () => ({ data: { items: [] } }),
+      "/v1/studio/looks": () => ({ data: { looks: [] } }),
+      "/v1/studio/loras": () => ({ data: { loras: [] } }),
+    });
+    render(<Gallery initial={{ takes: [song, fx, withSound], next_cursor: null }} />);
+  }
+  const card = (title: string) =>
+    screen.getByText(title, { selector: "b" }).closest('[role="listitem"]')!;
+
+  it("a music card: Play, Use in, the edits Repaint… Cover… Extend…; no looks or pipelines", async () => {
+    start();
+    rightClick(card("Rain on the window"));
+    await waitFor(() => expect(labels()).toContain("Repaint…"));
+    expect(labels()).toEqual([
+      "Play",
+      "Use in",
+      "Add to timeline",
+      "Reuse settings",
+      "Repaint…",
+      "Cover…",
+      "Extend…",
+      "Star",
+      "Rename",
+      "Export file",
+      "Delete",
+    ]);
+    fireEvent.click(item("Use in"));
+    expect(item("Audio to video · LTX")).toBeTruthy();
+    fireEvent.click(item("Cover…"));
+    expect(push).toHaveBeenCalledWith(`/?use=${song.id}&w=ace-cover`);
+  });
+
+  it("a sound card: Vary in place of Cover", async () => {
+    start();
+    rightClick(card("Door creak"));
+    await waitFor(() => expect(labels()).toContain("Vary…"));
+    expect(labels().filter((l) => l!.endsWith("…"))).toEqual(["Repaint…", "Vary…", "Extend…"]);
+    expect(labels()).not.toContain("Use in");
+  });
+
+  it("a video with its sound: Play, Full screen, Sound only opens the sound take of its run", async () => {
+    start();
+    rightClick(card("Fox trots in"));
+    expect(labels().slice(0, 2)).toEqual(["Play", "Full screen"]);
+    fireEvent.click(item("Sound only"));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("complementary", { name: "Selected take" }).querySelector("audio"),
+      ).toBeTruthy(),
+    );
+  });
+});
+
 describe("Create", () => {
   it("a session row: Open, Rename, Delete greyed while a run is going", async () => {
     answer("GET", {

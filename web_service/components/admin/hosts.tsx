@@ -28,6 +28,7 @@ import {
   type HostCard,
   type HostEntry,
 } from "@/lib/hosts";
+import { Range } from "@/components/range";
 
 type Confirm = { host: string; title: string; text: string; body: S<"HostUnload"> };
 const ALL =
@@ -653,9 +654,9 @@ function SettingsPanel({
               </Info>
             </label>
             <div className="flex items-center gap-2.5">
-              <input
+              <Range
                 id="h-reserve"
-                type="range"
+
                 min={0}
                 max={reserveMax}
                 step={0.5}

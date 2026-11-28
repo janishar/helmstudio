@@ -9,6 +9,7 @@ import { ErrorNote, Modal, UploadStatus } from "@/components/kit";
 import { Chip, TakeCard, useTakePages } from "@/components/gallery/gallery";
 import { useGridWindow } from "@/components/gallery/window";
 import { message, type S } from "@/lib/api";
+import { SearchField } from "@/components/search";
 import {
   AUDIO_ACCEPT,
   MAX_AUDIO_S,
@@ -149,7 +150,8 @@ function AudioUpload({ onDone }: { onDone: (t: Take) => void }) {
 }
 
 /** The dialog's content, mounted while it is open (so each opening starts with nothing picked). */
-function Picker({
+/** The picker's grid, search and filters (no dialog): Magic's Import puts it in a tab. `action` names its button. */
+export function Picker({
   max,
   onClose,
   onPick,
@@ -159,7 +161,9 @@ function Picker({
   audioUpload,
   help,
   frames,
+  action = "Add",
 }: {
+  action?: string;
   max: number;
   onClose: () => void;
   onPick: (takes: Take[]) => void;
@@ -188,7 +192,7 @@ function Picker({
       p.some((x) => x.id === t.id) ? p.filter((x) => x.id !== t.id) : [...p, t].slice(0, max),
     );
   return (
-    <div className="flex max-h-[76dvh] flex-col gap-3">
+    <div className="flex h-[76dvh] flex-col gap-3">
       {frames && (
         <div role="group" aria-label="Kind" className="seg self-start">
           {(["image", "video"] as const).map((k) => (
@@ -208,20 +212,14 @@ function Picker({
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-        <label htmlFor="pick-q" className="sr-only">
-          Search prompts
-        </label>
-        <input
+        <SearchField
           id="pick-q"
-          type="search"
-          placeholder="Search prompts and titles"
+          label="Search prompts and titles"
           value={q}
-          maxLength={200}
+          onChange={setQ}
+          busy={!!q.trim() && loading}
           autoFocus
-          onChange={(e) => setQ(e.target.value)}
-          // the picker sits inside the composer's form: Enter must not submit it
-          onKeyDown={(e) => e.key === "Enter" && e.preventDefault()}
-          className="h-9 flex-[1_1_220px] rounded-xl border border-s5 bg-s1 px-3 text-t1"
+          className="flex-[1_1_220px]"
         />
         <div role="group" aria-label="Filters" className="flex flex-wrap gap-1.5">
           <Chip
@@ -244,7 +242,7 @@ function Picker({
       {error && (
         <ErrorNote onRetry={() => fetchPage(takes?.length ? next : null)}>{error}</ErrorNote>
       )}
-      <div className="min-h-40 overflow-y-auto p-0.5">
+      <div className="min-h-40 flex-1 overflow-y-auto p-0.5">
         <div
           role="list"
           aria-label={kind === "image" ? "Images" : "Takes"}
@@ -327,7 +325,7 @@ function Picker({
               onClose();
             }}
           >
-            Add {picked.length || ""}
+            {action} {picked.length || ""}
           </button>
         )}
       </div>

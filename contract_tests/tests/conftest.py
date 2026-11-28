@@ -167,6 +167,13 @@ def anon():
         yield c
 
 
+@pytest.fixture(scope="module")
+def palette(api) -> dict:
+    """kind → PaletteNode, from the live hosts."""
+    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
+    return {n["kind"]: n for g in groups for n in g["nodes"]}
+
+
 @pytest.fixture(scope="session")
 def echo_done(api, user_a) -> dict:
     """User A's finished quick echo run in a new session: {"session", "run" (as created), "events" (the run's

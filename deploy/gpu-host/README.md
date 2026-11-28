@@ -176,7 +176,7 @@ from the table (and the official variants' sizes if this host keeps both).
 
 **ZONOS3 needs the native runner.** It is a second service from the same image (`runner-native`: `RUNNER_ENV=native`,
 health port `NATIVE_HEALTH_PORT`, 8082), built in `Dockerfile.cuda`'s zonos3 stage (`make zonos3-cuda`: ggml-cuda
-for sm_120, CUDA 13.2). It needs its own NATS user `runner_<h>_native` (contracts/README.md, A remote GPU host), so it
+for sm_120, CUDA 13.2; a host-native runner, docs/guides/nvidia-linux.md, fetches the release's prebuilt server instead). It needs its own NATS user `runner_<h>_native` (contracts/README.md, A remote GPU host), so it
 is behind a profile:
 
 ```sh

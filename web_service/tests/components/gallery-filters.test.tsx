@@ -90,4 +90,19 @@ describe("Gallery filters", () => {
     await waitFor(() => expect(queries.at(-1)).not.toHaveProperty("batch_id"));
     expect(screen.queryByRole("button", { name: /Clear batch/ })).toBeNull();
   });
+
+  it("Voice, Music and Sound in place of Audio send the class (API 1.79, CreateMusicSound frame 6)", async () => {
+    const queries = serve();
+    render(<Gallery initial={page(take())} />);
+    const chips = screen.getAllByRole("button").map((b) => b.textContent);
+    expect(chips).toEqual(expect.arrayContaining(["Images", "Video", "Voice", "Music", "Sound"]));
+    expect(chips).not.toContain("Audio");
+    fireEvent.click(screen.getByRole("button", { name: "Music" }));
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ kind: "music" }));
+    fireEvent.click(screen.getByRole("button", { name: "Sound" }));
+    await waitFor(() => expect(queries.at(-1)).toMatchObject({ kind: "sound" }));
+    expect(screen.getByRole("button", { name: "Music" }).getAttribute("aria-pressed")).toBe(
+      "false",
+    );
+  });
 });

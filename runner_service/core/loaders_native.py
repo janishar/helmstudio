@@ -35,11 +35,7 @@ def host_ram() -> dict:
 def device_info() -> dict:
     """The hosts key's `device`, with the vendored binary's pinned commit as the runtime."""
     try:
-        commit = next(
-            ln.split()[1]
-            for ln in (H3C / "VERSION").read_text().splitlines()
-            if ln.startswith("commit:")
-        )
+        commit = next(ln.split()[1] for ln in (H3C / "VERSION").read_text().splitlines() if ln.startswith("commit:"))
     except OSError, StopIteration, IndexError:
         commit = "unknown"
     return host_device(device()) | {"runtime": f"h3 {commit[:7]}"}

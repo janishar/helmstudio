@@ -1,0 +1,202 @@
+{
+ "name": "The Last Tide",
+ "doc": {
+  "target": {
+   "width": 1280,
+   "height": 720,
+   "fps": 24,
+   "sample_rate": 48000
+  },
+  "lanes": [
+   {
+    "id": "story",
+    "name": "Storyboard",
+    "role": "storyboard"
+   },
+   {
+    "id": "shots",
+    "name": "Shots",
+    "role": "shots"
+   },
+   {
+    "id": "lines",
+    "name": "Lines",
+    "role": "voice"
+   },
+   {
+    "id": "music",
+    "name": "Music",
+    "role": "music"
+   },
+   {
+    "id": "l5",
+    "name": "Lane 5",
+    "role": "free",
+    "hidden": false
+   }
+  ],
+  "blocks": [
+   {
+    "id": "f1",
+    "lane": "story",
+    "at": 0,
+    "length": 96,
+    "kind": "frame",
+    "name": "Frame 1",
+    "request": {
+     "kind": "frame",
+     "prompt": "a pier at dawn",
+     "style": "sketch"
+    },
+    "takes": [],
+    "effects": []
+   },
+   {
+    "id": "s1",
+    "lane": "shots",
+    "at": 0,
+    "length": 96,
+    "kind": "video",
+    "name": "Shot 1 · pier",
+    "request": {
+     "kind": "video",
+     "prompt": "the pier"
+    },
+    "takes": [
+     "11111111-1111-4111-8111-111111111111",
+     "22222222-2222-4222-8222-222222222222"
+    ],
+    "effects": [],
+    "pinned": "11111111-1111-4111-8111-111111111111"
+   },
+   {
+    "id": "s2",
+    "lane": "shots",
+    "at": 96,
+    "length": 96,
+    "kind": "video",
+    "name": "Shot 2 · rain",
+    "request": {
+     "kind": "video",
+     "prompt": "rain",
+     "refs": [
+      {
+       "asset": "mara"
+      },
+      {
+       "block": "f1",
+       "part": "last"
+      }
+     ]
+    },
+    "takes": [],
+    "effects": [],
+    "note": "slow",
+    "from_frame": "f1"
+   },
+   {
+    "id": "s3",
+    "lane": "shots",
+    "at": 192,
+    "length": 96,
+    "kind": "video",
+    "name": "Shot 3 · puddle",
+    "request": {
+     "kind": "video"
+    },
+    "takes": [],
+    "effects": [
+     {
+      "name": "Grade",
+      "params": {
+       "look": "teal"
+      }
+     }
+    ]
+   },
+   {
+    "id": "v1",
+    "lane": "lines",
+    "at": 10,
+    "length": 60,
+    "kind": "voice",
+    "name": "Line 1",
+    "request": {
+     "kind": "voice",
+     "line": "Not again.",
+     "voice": "mara"
+    },
+    "takes": [],
+    "effects": []
+   },
+   {
+    "id": "m1",
+    "lane": "music",
+    "at": 0,
+    "length": 288,
+    "kind": "music",
+    "name": "Theme",
+    "request": {
+     "kind": "music"
+    },
+    "takes": [],
+    "effects": []
+   }
+  ],
+  "links": [
+   {
+    "block": "v1",
+    "to": [
+     "s1"
+    ]
+   },
+   {
+    "block": "m1",
+    "to": [
+     "s1",
+     "s2",
+     "s3"
+    ]
+   }
+  ],
+  "transitions": [
+   {
+    "id": "t1",
+    "between": [
+     "s1",
+     "s2"
+    ],
+    "kind": "dissolve",
+    "length": 12
+   },
+   {
+    "id": "t2",
+    "start": "shots",
+    "kind": "fade",
+    "length": 24
+   },
+   {
+    "id": "t3",
+    "between": [
+     "s2",
+     "s3"
+    ],
+    "kind": "wipe",
+    "length": 12
+   }
+  ],
+  "assets": [
+   {
+    "id": "mara",
+    "kind": "character",
+    "handle": "mara",
+    "name": "Mara",
+    "sheet": [],
+    "voice_id": "warm"
+   }
+  ],
+  "notes": [
+   "keep it grey"
+  ]
+ }
+}

@@ -5,10 +5,8 @@ retake, extend and audio to video (and retake's audio window), and the checks th
 
 import logging
 import math
-import shutil
 import subprocess
 from dataclasses import replace
-from decimal import ROUND_HALF_UP, Decimal
 from io import BytesIO
 from pathlib import Path
 
@@ -17,9 +15,10 @@ import yaml
 from PIL import Image, ImageCms
 
 import config
+from core import media
 from core.graph import RunError
+from core.media import FFMPEG, rnd
 
-FFMPEG = shutil.which("ffmpeg")
 if FFMPEG is None:  # checked when the runner loads the pack: it stops with this
     raise RuntimeError("the ltx pack needs ffmpeg on PATH to write MP4s (brew install ffmpeg)")
 
@@ -33,10 +32,7 @@ SIGMAS = {"stage1": STAGE1_SIGMAS, "stage2": STAGE2_SIGMAS}
 ANCESTRAL_SEED, ANCESTRAL_SEED_2 = 10000, 20000
 MAX_TOKENS = 1024  # Gemma prompt length (left-padded; LTX2_GEMMA_MAX_LENGTH)
 SAMPLE_RATE = 48000
-RELAY_EPSILON, RELAY_STRENGTH = (
-    1e-3,
-    1.0,
-)  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
+RELAY_EPSILON, RELAY_STRENGTH = 1e-3, 1.0  # the old CLI's Prompt Relay defaults (fixed: contracts README, Video)
 # upstream 0879826: Prompt Relay also gates audio_attn2 on the distilled paths at 1.0 (its epsilon: the video one)
 RELAY_AUDIO_STRENGTH = 1.0
 # plan 19 phase 4, Recipe Detail (DFR): the detailing IC-LoRA's fixed strength (upstream _DETAILING_LORA_STRENGTH) is
@@ -46,9 +42,23 @@ SEGMENTS = (24, 32)
 SLOT_SEED = 20000
 _STAGES = yaml.safe_load((Path(__file__).parent / "model.yaml").read_text())["stages"]
 FRAMES = _STAGES["duration"]["params"]["frames"]
-CANVAS_MAX = max(
-    _STAGES["canvas"]["params"][s]["max"] for s in ("width", "height")
-)  # the largest canvas side
+CANVAS_MAX = max(_STAGES["canvas"]["params"][s]["max"] for s in ("width", "height"))  # the largest canvas side
+# LTX_2_3_PARAMS, the guided samplers' guiders (runtimes' _guiders): video cfg / stg as set, rescale 0.7, modality 3,
+# STG block 28; audio cfg 7 with the same
+RESCALE, MODALITY, STG_BLOCK, AUDIO_CFG = 0.7, 3.0, 28, 7.0
+
+# --- stages both runtimes share
+
+
+def canvas(ctx, params: dict, inputs: dict) -> dict:
+    """width x height floored to the 64 px grid (two-stage: stage 1 runs at half)."""
+    return {"canvas": {"width": params["width"] // 64 * 64, "height": params["height"] // 64 * 64}}
+
+
+def duration(ctx, params: dict, inputs: dict) -> dict:
+    """frames may be "auto": stage 1 resolves it from the prompt (DurationHead)."""
+    return {"duration": {"frames": params["frames"], "fps": params["fps"]}}
+
 
 # --- the model generation (ltx-pipelines constants.detect_params, distilled.should_use_ancestral_sampler)
 
@@ -98,9 +108,7 @@ def decode_image(img: Image.Image) -> np.ndarray:
             img = ImageCms.profileToProfile(img, ImageCms.ImageCmsProfile(BytesIO(icc)), ImageCms.ImageCmsProfile(_SRGB),
                                             outputMode="RGB")  # fmt: skip
         except (ImageCms.PyCMSError, OSError, ValueError) as e:
-            logging.getLogger(__name__).warning(
-                "ltx: an image's ICC profile could not be used: %s", e
-            )
+            logging.getLogger(__name__).warning("ltx: an image's ICC profile could not be used: %s", e)
             img = img.convert("RGB")
     else:
         img = img.convert("RGB")
@@ -134,9 +142,7 @@ def audio_window(start: int, end: int, tokens: int, fps: float) -> tuple[int, in
     frames [start, end) (latent frame k covers pixel frames [max(0, 8k - 7), 8k + 1); audio token i mel frames
     [max(0, 4i - 3), 4i + 1) of 10 ms); (0, 0) when none does."""
     t0, t1 = max(0, 8 * start - 7) / fps, max(0, 8 * end - 7) / fps
-    inside = [
-        i for i in range(tokens) if max(0, 4 * i + 1) * 0.01 > t0 and max(0, 4 * i - 3) * 0.01 < t1
-    ]
+    inside = [i for i in range(tokens) if max(0, 4 * i + 1) * 0.01 > t0 and max(0, 4 * i - 3) * 0.01 < t1]
     return (inside[0], inside[-1] + 1) if inside else (0, 0)
 
 
@@ -228,11 +234,7 @@ def check_sample(params: dict, wired: set, models: dict | None = None) -> str | 
     role, model = params.get("role"), (models or {}).get("model")
     if model is not None and params.get("detail") and model.variant != "distilled":
         return ".detail: needs model variant distilled"
-    if (
-        model is not None
-        and model.variant != "distilled"
-        and not (role == "stage2" and distilled_lora(model))
-    ):
+    if model is not None and model.variant != "distilled" and not (role == "stage2" and distilled_lora(model)):
         return ": needs model variant distilled"
     if role == "stage1" and ("latent" in wired or not {"canvas", "duration"} <= wired):
         return ": stage 1 needs canvas and duration, not latent"
@@ -244,11 +246,10 @@ def check_sample(params: dict, wired: set, models: dict | None = None) -> str | 
 
 
 def _ffmpeg(*args: str) -> None:
-    r = subprocess.run(
-        [FFMPEG, "-v", "error", "-y", *args], capture_output=True, text=True, check=False
-    )
-    if r.returncode:
-        raise RunError(f"ffmpeg failed: {r.stderr.strip()[-300:]}")
+    try:
+        media.ffmpeg(list(args), timeout=None)
+    except media.MediaError as e:
+        raise RunError(f"ffmpeg failed: {e}") from None
 
 
 # utils/constants.DEFAULT_NEGATIVE_PROMPT: fixed, not user editable (a change re-encodes: it is in the pack's code hash)
@@ -265,15 +266,8 @@ NEGATIVE_PROMPT = (
     "pauses, incorrect timing, unnatural transitions, inconsistent framing, tilted camera, flat lighting, "
     "inconsistent tone, cinematic oversaturation, stylized filters, or AI artifacts."
 )
-MAX_FRAMES = (
-    321  # ltx/duration's max: the longest clip these make (contracts check.py LTX_MAX_FRAMES)
-)
+MAX_FRAMES = 321  # ltx/duration's max: the longest clip these make (contracts check.py LTX_MAX_FRAMES)
 SOURCE_RATE = 16000  # the audio VAE encoder's input rate
-
-
-def rnd(x: float) -> int:
-    """Half away from zero, exactly (contracts check.py rnd: Go math.Round)."""
-    return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def ltx_floor(n: int) -> int:
@@ -321,9 +315,7 @@ def _failed(node: str, text: str) -> RunError:
 def distilled_lora(model) -> bool:
     """Whether the handle is the dev model with the pack's pre-fused distilled LoRA baked (ltx/distill)."""
     names = {Path(x["file"]).stem for x in model.pack.spec.get("lora", {}).get("prefused", []) if x["variant"] == "distilled"}  # fmt: skip
-    return model.variant == "dev" and any(
-        u.name in names and u.strength == 1 and u.mode == "bake" for u in model.loras
-    )
+    return model.variant == "dev" and any(u.name in names and u.strength == 1 and u.mode == "bake" for u in model.loras)
 
 
 def lora_block_prefused(pack) -> list[dict]:

@@ -1,12 +1,25 @@
 // Browser-side typed client: every call goes to the BFF (/api/*), which adds the API key and the user's token.
 import createClient from "openapi-fetch";
 import type { components, paths } from "@/gen/api";
+import { OUTAGE, OUTAGE_TEXT, netFail, reportAnswer, reportOutage } from "@/lib/health";
 
 /** Shorthand for a contract schema: S<"Run"> is components["schemas"]["Run"]. */
 export type S<K extends keyof components["schemas"]> = components["schemas"][K];
 
 /** The typed client: paths and bodies follow contracts/openapi.yaml. */
 export const api = createClient<paths>({ baseUrl: "/api" });
+// every call reports to the page-level banner (lib/health.ts; docs/mock/ErrorStates.dc.html a2r): a 502/503/504 or a
+// call that reached nothing asks one health check, any other answer says the studio is there
+api.use({
+  onResponse: ({ response }) => {
+    if (OUTAGE.has(response.status)) reportOutage();
+    else reportAnswer();
+  },
+  // a call the page stopped itself (AbortError) says nothing about the studio: no check
+  onError: ({ error }) => {
+    if ((error as { name?: unknown } | null)?.name !== "AbortError") reportOutage();
+  },
+});
 
 /** GET …/timelines/{id}: the document (the GET also answers the agent view on `view=agent`, never asked here). */
 export const getTimeline = (id: string) =>
@@ -29,6 +42,21 @@ export const editTimeline = (
     }),
   ).then((r) => r.timeline);
 
+/** Runs a timeline save `run`; on a 409 (another tab or the assistant saved first) calls `reload` and runs it once
+ * more with `retried` true. Any other error, and a second 409, is thrown. */
+export async function editTimelineRetry<T>(
+  run: (retried: boolean) => Promise<T>,
+  reload: () => Promise<unknown>,
+): Promise<T> {
+  try {
+    return await run(false);
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 409)) throw e;
+  }
+  await reload();
+  return run(true);
+}
+
 /** A failed API call: `message` is fit to show the user, `status` is the HTTP status. */
 export class ApiError extends Error {
   constructor(
@@ -42,6 +70,12 @@ export class ApiError extends Error {
 /** A readable message for an error response: `{detail}` or Kong's `{message}`. */
 export function errorText(status: number, body: unknown): string {
   const b = body as { detail?: unknown; message?: unknown } | null;
+  // the web server's proxy reached no Kong, or Kong no studio: the banner's words (studio's own 503 detail stays)
+  if (
+    OUTAGE.has(status) &&
+    (b?.detail === "the API is unreachable" || typeof b?.detail !== "string")
+  )
+    return OUTAGE_TEXT;
   if (typeof b?.detail === "string" && b.detail) return b.detail;
   if (typeof b?.message === "string") return b.message;
   if (status === 401) return "Your session ended. Sign in again.";
@@ -83,4 +117,6 @@ export async function okOr<T>(
 }
 
 /** Any caught value as text for a toast or error note. */
-export const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+export const message = (e: unknown) =>
+  // the browser reached nothing ("Failed to fetch", "Load failed", "NetworkError…"): the banner's cause in plain words
+  netFail(e) ? OUTAGE_TEXT : e instanceof Error ? e.message : String(e);

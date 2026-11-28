@@ -1,0 +1,35 @@
+{
+  "id": "echo-music-extend",
+  "title": "Echo music extend",
+  "action": "Extend",
+  "family": "echo",
+  "env": "fake",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "lengthen": {
+      "kind": "echo/lengthen",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "seconds": 10,
+        "where": "end",
+        "seed": -1,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "lengthen.audio"
+      }
+    }
+  }
+}

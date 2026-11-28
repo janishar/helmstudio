@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 from conftest import API_KEY, BASE_URL
-from helpers import QUICK, STUDIO, ok
+from helpers import QUICK, STUDIO, ok, wait_for
 
 CLI = Path(__file__).resolve().parents[2] / "cli"
 
@@ -117,3 +117,164 @@ def test_mcp_runs_echo_waits_and_gets_the_take(mcp, api, echo_done):
     a_run = ok(api.get(f"{STUDIO}/runs/{echo_done['run']['id']}"))
     res = mcp.tool("get_take", {"take_id": a_run["outputs"][0]["take_id"]})
     assert res.get("isError") and "404" in res["content"][0]["text"], res
+
+
+def test_mcp_magic_board_from_empty_to_a_sequence(mcp):
+    """plan 16 §20.8: a board made, edited, run on the echo model, looked at and sent, all through helm mcp. No card
+    over MCP: edit_board applies at once (destructiveHint, as edit_timeline), run_blocks answers its plan."""
+    tools = {t["name"]: t for t in mcp.rpc("tools/list", {})["tools"]}
+    magic = {
+        "list_boards",
+        "create_board",
+        "show_board",
+        "try_board_edit",
+        "edit_board",
+        "restore_board",
+    }
+    magic |= {"plan_board", "run_blocks", "make_views", "board_frame", "send_to_timeline"}
+    assert magic <= set(tools)
+    assert tools["edit_board"]["annotations"]["destructiveHint"] is True
+    assert tools["try_board_edit"]["annotations"]["readOnlyHint"] is True
+    assert tools["run_blocks"]["annotations"]["destructiveHint"] is False
+    assert "card" not in tools["edit_board"]["description"]
+
+    b = structured(mcp.tool("create_board", {"name": "Mcp board"}))
+    bid = b["board_id"]
+    assert b["revision"] == 1
+    assert bid in [x["id"] for x in structured(mcp.tool("list_boards", {}))["boards"]]
+    request = {
+        "kind": "video",
+        "model": "echo-video",
+        "prompt": "a fox",
+        "advanced": {"video.delay_ms": 0},
+    }
+    shot = {"id": "s1", "lane": "shots", "at": 0, "length": 24, "kind": "video", "name": "Shot 1"}
+    ops = [
+        {"op": "lane_add", "lane": {"id": "shots", "name": "Shots", "role": "shots"}},
+        {
+            "op": "add",
+            "mode": "insert",
+            "block": shot | {"request": request, "takes": [], "effects": []},
+        },
+        {
+            "op": "asset_add",
+            "asset": {"id": "a1", "kind": "character", "handle": "fox", "name": "Fox"},
+        },
+    ]
+    edit = {"board_id": bid, "base_revision": 1, "ops": ops}
+    tried = structured(mcp.tool("try_board_edit", edit))
+    assert tried["revision"] == 1 and tried["diff"]["blocks"]["added"] == ["s1"], tried
+    done = structured(mcp.tool("edit_board", edit))
+    assert done["revision"] == 2 and done["summary"], done
+    stale = mcp.tool("edit_board", edit)  # base_revision 1 is stale now
+    assert stale.get("isError") and "409" in stale["content"][0]["text"], stale
+
+    shown = structured(mcp.tool("show_board", {"board_id": bid}))
+    assert [x["id"] for x in shown["board"]["blocks"]] == ["s1"] and shown["plan"]["blocks"]
+    plan = structured(mcp.tool("plan_board", {"board_id": bid}))
+    assert [x["block"] for x in plan["blocks"]] == ["s1"]
+    ran = structured(mcp.tool("run_blocks", {"board_id": bid, "revision": 2, "blocks": ["s1"]}))
+    assert ran["plan"]["blocks"][0]["block"] == "s1" and [x["block"] for x in ran["started"]] == [
+        "s1"
+    ], ran
+    views = structured(
+        mcp.tool(
+            "make_views",
+            {"board_id": bid, "revision": ran["revision"], "asset": "a1", "views": ["Front"]},
+        )
+    )
+    assert [x["view"] for x in views["started"]] == ["Front"] and views["seconds"] is None, views
+    assert "seconds" in ran and "summary" not in tried, (ran, tried)
+
+    def board():
+        v = structured(mcp.tool("show_board", {"board_id": bid}))["board"]
+        assets = {a["id"]: a for a in v["assets"]}
+        ready = v["blocks"][0]["status"] == "done" and assets["a1"]["sheet"]
+        return v if ready else None
+
+    v = wait_for(board, what="the shot and the view done")
+    frame = structured(mcp.tool("board_frame", {"board_id": bid, "at": 0.5}))
+    assert (
+        frame["frame"] == 12 and frame["shown"][0]["block"] == "s1" and frame["shown"][0]["take_id"]
+    ), frame
+
+    sent = structured(mcp.tool("send_to_timeline", {"board_id": bid, "revision": v["revision"]}))
+    assert sent["send"]["status"] == "done" and sent["plan"]["bakes"] == 0, sent
+    back = structured(
+        mcp.tool("restore_board", {"board_id": bid, "revision": v["revision"], "to": 1})
+    )
+    assert back == {"revision": v["revision"] + 1}
+
+
+def test_mcp_cancel_runs_stops_a_boards_runs(mcp):
+    """alpha.6 (owner, 2026-11-27: "yes build it"): cancel_runs over helm mcp stops a board's runs still going, by
+    each run's own cancel: the shots lane's two slow echo runs end cancelled; a lane with none going stops nothing."""
+    tools = {t["name"]: t for t in mcp.rpc("tools/list", {})["tools"]}
+    assert tools["cancel_runs"]["annotations"]["destructiveHint"] is False
+    bid = structured(mcp.tool("create_board", {"name": "Mcp stop"}))["board_id"]
+    slow = {
+        "kind": "video",
+        "model": "echo-video",
+        "prompt": "rain",
+        "advanced": {"video.delay_ms": 3000},
+    }
+    ops = [{"op": "lane_add", "lane": {"id": "shots", "name": "Shots", "role": "shots"}}]
+    ops += [{"op": "add", "mode": "insert", "block": {"id": f"s{i}", "lane": "shots", "at": 24 * i, "length": 24,
+             "kind": "video", "name": f"Shot {i}", "request": slow, "takes": [], "effects": []}} for i in (1, 2)]  # fmt: skip
+    rev = structured(mcp.tool("edit_board", {"board_id": bid, "base_revision": 1, "ops": ops}))[
+        "revision"
+    ]
+    ran = structured(mcp.tool("run_blocks", {"board_id": bid, "revision": rev, "lane": "shots"}))
+    assert len(ran["started"]) == 2, ran
+    assert structured(mcp.tool("cancel_runs", {"board_id": bid, "lane": "music"})) == {
+        "stopped": []
+    }
+    got = structured(mcp.tool("cancel_runs", {"board_id": bid, "lane": "shots"}))["stopped"]
+    assert sorted(x["block"] for x in got) == ["s1", "s2"] and {x["status"] for x in got} <= {
+        "cancelled",
+        "running",
+    }
+    both = mcp.tool("cancel_runs", {"board_id": bid, "lane": "shots", "all": True})
+    assert both.get("isError"), both
+
+    def ended():
+        v = structured(mcp.tool("show_board", {"board_id": bid}))["board"]
+        return v if all(b["status"] != "running" for b in v["blocks"]) else None
+
+    wait_for(ended, timeout=60, what="the stopped runs ended")
+
+
+def test_mcp_designs_a_voice_and_keeps_it_with_consent(mcp):
+    """alpha.6 (owner, 2026-11-28: "yes add voice tools to mcp as well"): design_voice starts at once (no card over
+    MCP); save_voice needs consent: true (the voice-rights OK), refused without it, then sets the voice on the asset."""
+    tools = {t["name"]: t for t in mcp.rpc("tools/list", {})["tools"]}
+    assert {"design_voice", "save_voice"} <= set(tools)
+    assert "consent" in tools["save_voice"]["inputSchema"]["properties"]
+    bid = structured(mcp.tool("create_board", {"name": "Mcp voices"}))["board_id"]
+    add = {
+        "op": "asset_add",
+        "asset": {"id": "mara", "kind": "character", "handle": "mara", "name": "Mara"},
+    }
+    rev = structured(mcp.tool("edit_board", {"board_id": bid, "base_revision": 1, "ops": [add]}))[
+        "revision"
+    ]
+    line = "Hello, I am Mara, and I have walked these hills for sixty long years."
+    made = structured(mcp.tool("design_voice", {"board_id": bid, "revision": rev, "asset": "mara",
+                                                "design": "Female, about 60, low and warm", "line": line}))  # fmt: skip
+    assert made["voice_id"] and len(made["started"]) == 1, made
+    done = structured(
+        mcp.tool("wait_run", {"run_id": made["started"][0]["run_id"], "timeout_s": 120})
+    )
+    assert done["run"]["status"] == "succeeded", done
+    keep = {
+        "board_id": bid,
+        "revision": rev,
+        "asset": "mara",
+        "take_id": done["run"]["outputs"][0]["take_id"],
+    }
+    refused = mcp.tool("save_voice", keep)
+    assert refused.get("isError") and "consent" in refused["content"][0]["text"], refused
+    kept = structured(mcp.tool("save_voice", keep | {"consent": True}))
+    assert kept["voice_id"] == made["voice_id"] and kept["revision"] == rev + 1, kept
+    assets = structured(mcp.tool("show_board", {"board_id": bid}))["board"]["assets"]
+    assert assets[0]["voice_id"] == made["voice_id"]

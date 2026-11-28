@@ -1776,7 +1776,7 @@
             "null"
           ],
           "minimum": 0,
-          "description": "a video take's keyframe (frame index); null for an image take"
+          "description": "a video take's keyframe (frame index) until API 1.104; null for an image take and (1.104) a video's frame grid"
         },
         "key": {
           "$ref": "#/$defs/thumbKey"
@@ -1819,7 +1819,7 @@
         },
         "tool_calls": {
           "type": "array",
-          "maxItems": 4,
+          "maxItems": 12,
           "description": "from API 1.15, a server-ask run (or a remote call) with `tools`: the native OpenAI tool calls of the answer, as sent (pipelines normalises them into a turn)",
           "items": {
             "type": "object",
@@ -1875,7 +1875,7 @@
           "items": {
             "$ref": "#/$defs/seenItem"
           },
-          "description": "every thumbnail sent, in order (media items in order, a video's 3 keyframes in frame order)"
+          "description": "every thumbnail sent, in order (media items in order; a video until 1.104 its 3 keyframes in frame order, from 1.104 its one frame grid)"
         },
         "tokens_in": {
           "type": "integer",
@@ -3405,6 +3405,41 @@
         }
       }
     },
+    "section": {
+      "type": "object",
+      "description": "API 1.79: one part of a song in its take (evt.run.output audio.sections, Take.audio.sections): its label as the lyrics tag it (verse, chorus, bridge, intro, outro, or the tag's own text), [start_s, end_s) in the take's own seconds; from a music model's lyric timestamps (ACE-Step), in order, never overlapping",
+      "required": [
+        "label",
+        "start_s",
+        "end_s"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "start_s": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 600
+        },
+        "end_s": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 600
+        }
+      }
+    },
+    "soundClass": {
+      "enum": [
+        "music",
+        "sound",
+        "voice"
+      ],
+      "description": "API 1.79 (contracts/README.md, Music and sound): what an audio take or workflow is: music (songs, ACE-Step, MiniMax Music 3), sound (effects and ambience, Stable Audio 3, MMAudio) or voice (speech, Qwen3-TTS, ZONOS3); a class on take kind audio, never a take kind of its own"
+    },
     "takeThumb": {
       "description": "API 1.48 (contracts/README.md, Thumbnails): a take's thumbnail, a WebP (quality 80, alpha kept) of the image or the poster with its short side 512 px (never upscaled) and its long side at most 1024; made only when it is smaller than the original and the original's short side is over 360 (until 2026-11-23: 512)",
       "type": "object",
@@ -3439,6 +3474,89 @@
         "bytes": {
           "type": "integer",
           "minimum": 1
+        }
+      }
+    },
+    "takeFacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "seconds",
+        "sound_seconds",
+        "lufs",
+        "peak_db",
+        "silence_start",
+        "silence_end",
+        "end_lufs",
+        "abrupt"
+      ],
+      "description": "from API 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg on its file. The sound facts are null when it has no sound; `cuts` only for a video",
+      "properties": {
+        "seconds": {
+          "type": "number",
+          "minimum": 0,
+          "description": "the file's real length (ffprobe)"
+        },
+        "sound_seconds": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "its first sound's length"
+        },
+        "lufs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "integrated loudness (EBU R128), LUFS; -70 is silence"
+        },
+        "peak_db": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "true peak, dBTP"
+        },
+        "silence_start": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "seconds under -50 dB at the start"
+        },
+        "silence_end": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "seconds under -50 dB at the end"
+        },
+        "end_lufs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "description": "the loudness of the last 0.5 s, LUFS"
+        },
+        "abrupt": {
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "description": "the sound stops within 10 LU of its loudness, with no silence at the end (no fade out)"
+        },
+        "cuts": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "type": "number",
+            "minimum": 0
+          },
+          "description": "a video's scene cuts (seconds; scene score over 0.3), the first 32"
         }
       }
     }

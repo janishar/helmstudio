@@ -21,7 +21,7 @@ export function roundEven(x: number) {
  * seconds and its max, floored onto the grid, one step up when that fell below the minimum. */
 export function autoFrames(p: Param, seconds: number, fps: number) {
   const g = gridOf(p);
-  const auto = p.auto ?? { min_s: 0, max_s: Infinity };
+  const auto = typeof p.auto === "object" ? p.auto : { min_s: 0, max_s: Infinity }; // frames only (1.79: true elsewhere)
   const top = g.min + Math.floor((g.max - g.min) / g.step) * g.step;
   const lo = roundEven(auto.min_s * fps);
   const hi = Math.min(roundEven(auto.max_s * fps), top);

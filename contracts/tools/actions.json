@@ -1,2569 +1,2725 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://helmstudio.local/contracts/tools/actions.json",
-  "title": "The assistant's screen actions and cards (API 1.44)",
-  "description": "Not a message: what a screen registers for the assistant (plan 18, 22.5 and 22.6), assistant only. Each action calls the screen's existing entry point in the tab that sent the message. `effect`: line (an action line), undo (a line with Undo), card (the card of kind `card` first; Yes is the user's click), dialog (opens the screen's own dialog prefilled; resolves on close with the new id and @handle, or cancelled). The shell's actions are on every screen; a screen with `roles` registers only for them. `input` is model-facing and self-contained.",
-  "tags": {
-    "gpu": "uses the GPU",
-    "egress": "sends to <provider>",
-    "final": "can't be undone",
-    "machine": "uses the machine",
-    "disk": "uses disk and network"
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "https://helmstudio.local/contracts/tools/actions.json",
+ "title": "The assistant's screen actions and cards (API 1.44)",
+ "description": "Not a message: what a screen registers for the assistant (plan 18, 22.5 and 22.6), assistant only. Each action calls the screen's existing entry point in the tab that sent the message. `effect`: line (an action line), undo (a line with Undo), card (the card of kind `card` first; Yes is the user's click), dialog (opens the screen's own dialog prefilled; resolves on close with the new id and @handle, or cancelled). The shell's actions are on every screen; a screen with `roles` registers only for them. `input` is model-facing and self-contained.",
+ "tags": {
+  "gpu": "uses the GPU",
+  "egress": "sends to <provider>",
+  "final": "can't be undone",
+  "machine": "uses the machine",
+  "disk": "uses disk and network",
+  "board": "changes the board"
+ },
+ "cards": {
+  "generate": {
+   "tags": [
+    "gpu"
+   ],
+   "shows": "model and version, machine and place in line, size, run count, time and memory (runs/plan), the prompt"
   },
-  "cards": {
-    "generate": {
-      "tags": [
-        "gpu"
-      ],
-      "shows": "model and version, machine and place in line, size, run count, time and memory (runs/plan), the prompt"
+  "batch": {
+   "tags": [
+    "gpu",
+    "egress"
+   ],
+   "shows": "rows, caps, what leaves the machine"
+  },
+  "stop": {
+   "tags": [
+    "final"
+   ],
+   "shows": "rows that stop"
+  },
+  "pick": {
+   "tags": [
+    "gpu"
+   ],
+   "shows": "the row, the take, what runs next"
+  },
+  "judge_test": {
+   "tags": [
+    "gpu",
+    "egress"
+   ],
+   "shows": "takes, criteria, provider"
+  },
+  "export": {
+   "tags": [
+    "machine"
+   ],
+   "shows": "preset, size, fps, time (export/plan)"
+  },
+  "hear": {
+   "tags": [
+    "gpu"
+   ],
+   "shows": "tries, voice model"
+  },
+  "download": {
+   "tags": [
+    "disk"
+   ],
+   "shows": "size, machine, licence state; Yes is the row's own Download, on only once ticked"
+  },
+  "web_search": {
+   "tags": [
+    "egress"
+   ],
+   "shows": "the query, the provider"
+  },
+  "look": {
+   "tags": [
+    "gpu"
+   ],
+   "shows": "the takes, the question, machine and place in line"
+  },
+  "delete": {
+   "tags": [
+    "final"
+   ],
+   "shows": "what goes, what stays"
+  },
+  "board_edit": {
+   "tags": [
+    "board"
+   ],
+   "shows": "what the change adds, moves and removes (drawn on the board with Apply and Discard), the estimate to run what it adds"
+  },
+  "magic_run": {
+   "tags": [
+    "gpu"
+   ],
+   "shows": "what runs and about how long against your limit, the machine, the board frames that ran on their own"
+  },
+  "send": {
+   "tags": [
+    "machine"
+   ],
+   "shows": "the new sequence's name, what goes, the joins baked and their time, the warnings"
+  }
+ },
+ "screens": {
+  "shell": {
+   "routes": [
+    "*"
+   ],
+   "actions": {
+    "navigate": {
+     "description": "Go to a screen with the right thing open. Actions after it in the same batch are dropped; the new screen's summary comes back.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "to": {
+        "enum": [
+         "/",
+         "/gallery",
+         "/timeline",
+         "/pipelines",
+         "/pipelines/{id}",
+         "/pipelines/batches/{id}",
+         "/pipelines/batches/{id}/review",
+         "/pipelines/batches/{id}/rows/{row}",
+         "/models",
+         "/admin",
+         "/magic"
+        ]
+       },
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "row": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+       },
+       "query": {
+        "description": "The target's URL params, each only on its route: / s (a session id), reuse (a take id), use (a take id) with w (a workflow id), the two always together; /gallery batch; /timeline t; /pipelines/{id} view studio; a row attempt; /models tab loras; /admin tab hosts, keys or providers. To pick a workflow on Create, go to / and call switchTo there. /magic b (a board id).",
+        "type": "object",
+        "additionalProperties": {
+         "type": "string",
+         "maxLength": 200
+        },
+        "propertyNames": {
+         "enum": [
+          "s",
+          "reuse",
+          "use",
+          "w",
+          "batch",
+          "t",
+          "view",
+          "attempt",
+          "tab",
+          "b"
+         ]
+        }
+       }
+      },
+      "required": [
+       "to"
+      ]
+     }
     },
-    "batch": {
-      "tags": [
-        "gpu",
-        "egress"
-      ],
-      "shows": "rows, caps, what leaves the machine"
+    "await": {
+     "description": "Wait for a run, model job, download, export or clone in this tab (at most 10 min, then still running).",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "what": {
+        "enum": [
+         "run",
+         "job",
+         "download",
+         "export",
+         "clone"
+        ]
+       },
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "what",
+       "id"
+      ]
+     }
+    }
+   }
+  },
+  "create": {
+   "routes": [
+    "/"
+   ],
+   "actions": {
+    "change": {
+     "description": "Set one form field (prompt, size, variant, Enhance, Think, references, bindings, source, LoRAs, looks, dialogue…). Refused when the form shows it greyed or hidden.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       },
+       "value": {
+        "description": "a form value, as the field takes it"
+       }
+      },
+      "required": [
+       "key",
+       "value"
+      ]
+     }
+    },
+    "switchTo": {
+     "description": "Switch the form to another workflow.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "workflow": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      },
+      "required": [
+       "workflow"
+      ]
+     }
+    },
+    "preset": {
+     "description": "Apply a preset (refused when greyed).",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      },
+      "required": [
+       "name"
+      ]
+     }
+    },
+    "runOn": {
+     "description": "Pick Auto or a machine the form allows, with a reason.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "host": {
+        "type": "string",
+        "pattern": "^(auto|[a-z0-9]{1,32})$"
+       },
+       "reason": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       }
+      },
+      "required": [
+       "host",
+       "reason"
+      ]
+     }
+    },
+    "seeds": {
+     "description": "How many takes to make.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "n": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4
+       }
+      },
+      "required": [
+       "n"
+      ]
+     }
+    },
+    "view": {
+     "description": "Studio or Graph view.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "view": {
+        "enum": [
+         "studio",
+         "graph"
+        ]
+       }
+      },
+      "required": [
+       "view"
+      ]
+     }
+    },
+    "newSession": {
+     "description": "Start a new session.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     }
+    },
+    "renameWorkflow": {
+     "description": "Rename this workflow.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      },
+      "required": [
+       "title"
+      ]
+     }
+    },
+    "duplicateWorkflow": {
+     "description": "Duplicate this workflow.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     }
+    },
+    "deleteWorkflow": {
+     "description": "Delete this workflow (its takes stay).",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "delete"
+    },
+    "frameIn": {
+     "description": "A video take's first or last frame (made as an image) into the frame input. An image take goes in with useIn.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "at": {
+        "enum": [
+         "first",
+         "last"
+        ]
+       }
+      },
+      "required": [
+       "take_id",
+       "at"
+      ]
+     }
+    },
+    "useIn": {
+     "description": "Put a take into a workflow's input, as its Use in… menu does: an image as a video's first frame (Animate), an image to Edit, a video to Extend. Switches the form to that workflow.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "workflow": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80,
+        "description": "a workflow id, title or family (ltx); left out, the open one"
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
+    },
+    "select": {
+     "description": "Select a take.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
+    },
+    "star": {
+     "description": "Star or unstar a take.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "on": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "take_id",
+       "on"
+      ]
+     }
     },
     "stop": {
-      "tags": [
-        "final"
-      ],
-      "shows": "rows that stop"
+     "description": "Stop a run.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "run_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the run"
+       }
+      },
+      "required": [
+       "run_id"
+      ]
+     }
     },
-    "pick": {
-      "tags": [
-        "gpu"
-      ],
-      "shows": "the row, the take, what runs next"
+    "generate": {
+     "description": "Generate with the form as it is.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "generate"
     },
-    "judge_test": {
-      "tags": [
-        "gpu",
-        "egress"
-      ],
-      "shows": "takes, criteria, provider"
+    "saveAsLook": {
+     "description": "Open Save as look, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      }
+     }
     },
-    "export": {
-      "tags": [
-        "machine"
-      ],
-      "shows": "preset, size, fps, time (export/plan)"
+    "saveAsElement": {
+     "description": "Open Save as element, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "handle": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       }
+      }
+     }
+    },
+    "editItem": {
+     "description": "Open a library item's Edit.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "item_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the item"
+       }
+      },
+      "required": [
+       "item_id"
+      ]
+     }
+    },
+    "cloneVoice": {
+     "description": "Open Clone a voice, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "from_s": {
+        "type": "number",
+        "minimum": 0
+       },
+       "to_s": {
+        "type": "number",
+        "minimum": 0
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
+    },
+    "designVoice": {
+     "description": "Open Design a voice, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "description": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      }
+     }
     },
     "hear": {
-      "tags": [
-        "gpu"
-      ],
-      "shows": "tries, voice model"
+     "description": "Hear tries in the open clone or design dialog.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "hear"
     },
-    "download": {
-      "tags": [
-        "disk"
-      ],
-      "shows": "size, machine, licence state; Yes is the row's own Download, on only once ticked"
+    "deleteItem": {
+     "description": "Delete a library item.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "item_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the item"
+       }
+      },
+      "required": [
+       "item_id"
+      ]
+     },
+     "card": "delete"
     },
-    "web_search": {
-      "tags": [
-        "egress"
-      ],
-      "shows": "the query, the provider"
+    "renameLora": {
+     "description": "Rename a LoRA.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "lora_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      },
+      "required": [
+       "lora_id",
+       "name"
+      ]
+     }
     },
-    "look": {
-      "tags": [
-        "gpu"
-      ],
-      "shows": "the takes, the question, machine and place in line"
+    "deleteLora": {
+     "description": "Delete a LoRA.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "lora_id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "lora_id"
+      ]
+     },
+     "card": "delete"
+    }
+   }
+  },
+  "graph": {
+   "routes": [
+    "/"
+   ],
+   "actions": {
+    "addNode": {
+     "description": "Add a node, wired around the selected one.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "near": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     }
+    },
+    "removeNodes": {
+     "description": "Remove nodes and their wires.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "ids": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 32,
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 64
+        }
+       }
+      },
+      "required": [
+       "ids"
+      ]
+     }
+    },
+    "connect": {
+     "description": "Wire `ref` (<node>.<output>) into a node's input.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "ref": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 130
+       }
+      },
+      "required": [
+       "node",
+       "key",
+       "ref"
+      ]
+     }
+    },
+    "disconnect": {
+     "description": "Remove the wire into a node's input.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "node",
+       "key"
+      ]
+     }
+    },
+    "setParam": {
+     "description": "Set a node's param.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "value": {
+        "description": "a form value, as the field takes it"
+       }
+      },
+      "required": [
+       "node",
+       "key",
+       "value"
+      ]
+     }
+    },
+    "setBypass": {
+     "description": "Bypass a node or not.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "on": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "node",
+       "on"
+      ]
+     }
+    },
+    "generate": {
+     "description": "Generate with the graph as it is.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "generate"
+    }
+   }
+  },
+  "pipeline_editor": {
+   "routes": [
+    "/pipelines/{id}"
+   ],
+   "actions": {
+    "addNode": {
+     "description": "Add a pipeline node.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "fields": {
+        "type": "object"
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     }
+    },
+    "setNode": {
+     "description": "Change a node's fields.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "fields": {
+        "type": "object"
+       }
+      },
+      "required": [
+       "id",
+       "fields"
+      ]
+     }
+    },
+    "removeNode": {
+     "description": "Remove a node and its edges.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    },
+    "connect": {
+     "description": "Add an edge (a branch of a judge or decide: `branch`).",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "from": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "to": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "branch": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "from",
+       "to"
+      ]
+     }
+    },
+    "disconnect": {
+     "description": "Remove an edge.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "from": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "to": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "from",
+       "to"
+      ]
+     }
+    },
+    "newPipeline": {
+     "description": "A new pipeline.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      }
+     }
+    },
+    "renamePipeline": {
+     "description": "Rename this pipeline.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      },
+      "required": [
+       "title"
+      ]
+     }
+    },
+    "deletePipeline": {
+     "description": "Delete this pipeline.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "delete"
+    },
+    "judgeTest": {
+     "description": "Test a judge on picked takes.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "take_ids": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+         "type": "string",
+         "format": "uuid"
+        }
+       }
+      },
+      "required": [
+       "node"
+      ]
+     },
+     "card": "judge_test"
+    },
+    "addMemory": {
+     "description": "Open Add note, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+       }
+      }
+     }
+    },
+    "deleteMemory": {
+     "description": "Delete a memory item.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "item_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the item"
+       }
+      },
+      "required": [
+       "item_id"
+      ]
+     },
+     "card": "delete"
+    },
+    "runStep": {
+     "description": "Run one Studio step.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "node"
+      ]
+     },
+     "card": "generate"
+    },
+    "pickTake": {
+     "description": "Pick a step's take in the Studio view.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "node": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       }
+      },
+      "required": [
+       "node",
+       "take_id"
+      ]
+     }
+    }
+   }
+  },
+  "batches": {
+   "routes": [
+    "/pipelines",
+    "/pipelines/batches/{id}",
+    "/pipelines/batches/{id}/review",
+    "/pipelines/batches/{id}/rows/{row}"
+   ],
+   "actions": {
+    "newBatch": {
+     "description": "Fill New batch: rows, seeds, looks.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "rows": {
+        "type": "array",
+        "maxItems": 100,
+        "items": {
+         "type": "object"
+        }
+       },
+       "seeds": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 8
+       },
+       "looks": {
+        "type": "array",
+        "maxItems": 8,
+        "items": {
+         "type": "string",
+         "minLength": 1,
+         "maxLength": 130
+        }
+       }
+      }
+     }
+    },
+    "start": {
+     "description": "Start the batch (Submit on New batch).",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "batch"
+    },
+    "resume": {
+     "description": "Resume the batch.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "batch"
+    },
+    "retry": {
+     "description": "Retry a row, optionally from a step.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+       },
+       "from_step": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "row"
+      ]
+     },
+     "card": "batch"
+    },
+    "again": {
+     "description": "Run the batch again.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "batch"
+    },
+    "stop": {
+     "description": "Stop the batch.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "stop"
+    },
+    "pause": {
+     "description": "Pause the batch.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     }
+    },
+    "pick": {
+     "description": "Pick at a gate.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+       },
+       "take_ids": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 8,
+        "items": {
+         "type": "string",
+         "format": "uuid"
+        }
+       }
+      },
+      "required": [
+       "row",
+       "take_ids"
+      ]
+     },
+     "card": "pick"
+    },
+    "reviewNote": {
+     "description": "Open the review note, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 500
+       },
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+       }
+      }
+     }
+    }
+   }
+  },
+  "timeline": {
+   "routes": [
+    "/timeline"
+   ],
+   "actions": {
+    "edit": {
+     "description": "Edit clips: place, trim, split, order (saved; a conflict reloads and retries).",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "ops": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 32,
+        "items": {
+         "type": "object",
+         "required": [
+          "op"
+         ],
+         "oneOf": [
+          {
+           "title": "move",
+           "description": "V1: to `index` (V1 ripples); an audio clip: a new start `at`, optionally on another audio `track`",
+           "type": "object",
+           "required": [
+            "op",
+            "clip"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "move"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "index": {
+             "type": "integer",
+             "minimum": 0
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            }
+           }
+          },
+          {
+           "title": "trim",
+           "description": "move one edge by `delta` seconds (snapped to frames), clamped to the take and the dissolves",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "edge",
+            "delta"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "trim"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "edge": {
+             "type": "string",
+             "enum": [
+              "in",
+              "out"
+             ]
+            },
+            "delta": {
+             "type": "number",
+             "minimum": -86400,
+             "maximum": 86400
+            }
+           }
+          },
+          {
+           "title": "split",
+           "description": "cut the clip of `track` under the playhead `at`; the right part gets `id` (absent: studio makes one)",
+           "type": "object",
+           "required": [
+            "op",
+            "track",
+            "at"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "split"
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 32,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             },
+             "description": "from 1.50, V1: ids for the right parts of its linked sound clips cut with it, in track order (absent ones: studio makes them)"
+            }
+           }
+          },
+          {
+           "title": "remove",
+           "description": "remove the clip (V1 ripples; from 1.50 with `ripple` an audio track does too)",
+           "type": "object",
+           "required": [
+            "op",
+            "clip"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "remove"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "ripple": {
+             "type": "boolean",
+             "description": "from 1.50, an audio-track clip: the later clips of its track move left by its length (V1 always ripples)"
+            }
+           }
+          },
+          {
+           "title": "lift",
+           "description": "V1 only: an empty slot of the clip's length, same id",
+           "type": "object",
+           "required": [
+            "op",
+            "clip"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "lift"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            }
+           }
+          },
+          {
+           "title": "replace",
+           "description": "the clip's take becomes `take_id`, one of its alternatives",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "take_id"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "replace"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "take_id": {
+             "type": "string",
+             "format": "uuid"
+            }
+           }
+          },
+          {
+           "title": "set",
+           "description": "set the clip's fields; null removes one",
+           "type": "object",
+           "required": [
+            "op",
+            "clip"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "set"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "gain_db": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": -60,
+             "maximum": 12
+            },
+            "mute": {
+             "type": [
+              "boolean",
+              "null"
+             ]
+            },
+            "hold": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "exclusiveMinimum": 0,
+             "maximum": 3600
+            },
+            "transition_in": {
+             "oneOf": [
+              {
+               "type": "object",
+               "required": [
+                "type",
+                "frames"
+               ],
+               "additionalProperties": false,
+               "properties": {
+                "type": {
+                 "type": "string",
+                 "const": "dissolve"
+                },
+                "frames": {
+                 "type": "integer",
+                 "minimum": 2,
+                 "maximum": 240,
+                 "multipleOf": 2,
+                 "description": "centred on the cut: half before it, half after"
+                }
+               }
+              },
+              {
+               "type": "null"
+              }
+             ]
+            },
+            "link": {
+             "oneOf": [
+              {
+               "type": "string",
+               "pattern": "^[a-z0-9]{1,16}$",
+               "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+              },
+              {
+               "type": "null"
+              }
+             ],
+             "description": "from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)"
+            },
+            "fade_in": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "seconds the clip's sound rises from silence (0 or null removes it)"
+            },
+            "fade_out": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "seconds its sound falls to silence at its end (0 or null removes it)"
+            },
+            "crossfade": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "an audio-track clip: Crossfade into next, seconds into the clip touching its end (2 is the menu's; a blend when its take has sound past its cut, else a dip; 0 or null removes it)"
+            }
+           }
+          },
+          {
+           "title": "add",
+           "description": "append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)",
+           "type": "object",
+           "required": [
+            "op",
+            "take_ids"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "add"
+            },
+            "take_ids": {
+             "type": "array",
+             "minItems": 1,
+             "maxItems": 100,
+             "items": {
+              "type": "string",
+              "format": "uuid"
+             }
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 100,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             }
+            }
+           }
+          },
+          {
+           "title": "insert",
+           "description": "an empty slot of `hold` seconds at the V1 cut nearest `at`",
+           "type": "object",
+           "required": [
+            "op",
+            "at",
+            "hold"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "insert"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "hold": {
+             "type": "number",
+             "exclusiveMinimum": 0,
+             "maximum": 3600
+            },
+            "id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            }
+           }
+          },
+          {
+           "title": "place",
+           "description": "an empty slot of `hold` seconds at exactly `at` on V1 (Make shot's edit); `gap_id` for a gap it needs",
+           "type": "object",
+           "required": [
+            "op",
+            "at",
+            "hold"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "place"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "hold": {
+             "type": "number",
+             "exclusiveMinimum": 0,
+             "maximum": 3600
+            },
+            "id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "gap_id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            }
+           }
+          },
+          {
+           "title": "add_track",
+           "description": "a new audio track at the end",
+           "type": "object",
+           "required": [
+            "op"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "add_track"
+            }
+           }
+          },
+          {
+           "title": "remove_track",
+           "description": "remove an audio track and its clips",
+           "type": "object",
+           "required": [
+            "op",
+            "track"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "remove_track"
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            }
+           }
+          },
+          {
+           "title": "track",
+           "description": "a track's gain or mute",
+           "type": "object",
+           "required": [
+            "op",
+            "track"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "track"
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            },
+            "gain_db": {
+             "type": "number",
+             "minimum": -60,
+             "maximum": 12
+            },
+            "mute": {
+             "type": "boolean"
+            }
+           }
+          },
+          {
+           "title": "roll",
+           "description": "from 1.50, V1: the cut before the clip moves by `delta` (the clip before ends later, this one starts later; the length is kept, the dissolve on the cut moves with it)",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "delta"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "roll"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "delta": {
+             "type": "number",
+             "minimum": -86400,
+             "maximum": 86400,
+             "description": "seconds, snapped to frames"
+            }
+           }
+          },
+          {
+           "title": "slip",
+           "description": "from 1.50: the clip shows other frames of its take, in and out moved by `delta` (place and length kept)",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "delta"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "slip"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "delta": {
+             "type": "number",
+             "minimum": -86400,
+             "maximum": 86400,
+             "description": "seconds, snapped to frames"
+            }
+           }
+          },
+          {
+           "title": "slide",
+           "description": "from 1.50, V1: the clip moves along V1 by `delta`, its content and length kept; the clip before and the one after give and take the frames",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "delta"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "slide"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "delta": {
+             "type": "number",
+             "minimum": -86400,
+             "maximum": 86400,
+             "description": "seconds, snapped to frames"
+            }
+           }
+          },
+          {
+           "title": "overwrite",
+           "description": "from 1.50: the clip goes in at `at` over what is there, no ripple (V1: it leaves an empty slot where it was; audio: onto `track`, default its own)",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "at"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "overwrite"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "track": {
+             "type": "string",
+             "pattern": "^(V1|A[2-9])$"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 32,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             },
+             "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
+            }
+           }
+          },
+          {
+           "title": "split_all",
+           "description": "from 1.50: blade on every track at `at` (a clip with a shot or a cut there is skipped)",
+           "type": "object",
+           "required": [
+            "op",
+            "at"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "split_all"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 32,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             },
+             "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
+            }
+           }
+          },
+          {
+           "title": "remove_range",
+           "description": "from 1.50: every track cut at `from` and `to`, what is between removed; V1 and the audio tracks ripple",
+           "type": "object",
+           "required": [
+            "op",
+            "from",
+            "to"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "remove_range"
+            },
+            "from": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "to": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 32,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             },
+             "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
+            }
+           }
+          },
+          {
+           "title": "lift_range",
+           "description": "from 1.50: every track cut at `from` and `to`, what is between lifted (V1: one empty slot; audio: a gap); nothing moves",
+           "type": "object",
+           "required": [
+            "op",
+            "from",
+            "to"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "lift_range"
+            },
+            "from": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "to": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "ids": {
+             "type": "array",
+             "maxItems": 32,
+             "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9]{1,16}$",
+              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+             },
+             "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
+            }
+           }
+          },
+          {
+           "title": "marker",
+           "description": "from 1.50: put a marker (a new `id` adds one, a known one is replaced whole; absent: studio makes one)",
+           "type": "object",
+           "required": [
+            "op",
+            "at"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "marker"
+            },
+            "id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "at": {
+             "type": "number",
+             "minimum": 0,
+             "maximum": 86400,
+             "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
+            },
+            "name": {
+             "type": "string",
+             "minLength": 1,
+             "maxLength": 80
+            },
+            "color": {
+             "type": "string",
+             "enum": [
+              "red",
+              "orange",
+              "yellow",
+              "green",
+              "blue",
+              "purple"
+             ],
+             "description": "a marker's colour, drawn with the theme's own shade"
+            }
+           }
+          },
+          {
+           "title": "remove_marker",
+           "description": "from 1.50: remove a marker",
+           "type": "object",
+           "required": [
+            "op",
+            "id"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "remove_marker"
+            },
+            "id": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            }
+           }
+          },
+          {
+           "title": "fill",
+           "description": "studio's: fill an empty slot `clip` with `take_id`",
+           "type": "object",
+           "required": [
+            "op",
+            "clip",
+            "take_id"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "fill"
+            },
+            "clip": {
+             "type": "string",
+             "pattern": "^[a-z0-9]{1,16}$",
+             "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+            },
+            "take_id": {
+             "type": "string",
+             "format": "uuid"
+            }
+           }
+          },
+          {
+           "title": "ducking",
+           "description": "the sequence's Duck music: on or off and how far (absent fields kept)",
+           "type": "object",
+           "required": [
+            "op"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "ducking"
+            },
+            "on": {
+             "type": "boolean"
+            },
+            "db": {
+             "type": "number",
+             "minimum": -24,
+             "maximum": -3,
+             "description": "how far music dips under voice clips, dB (-12 by default)"
+            }
+           }
+          }
+         ],
+         "description": "one Timeline edit: each op with its own fields (openapi TimelineOp, plus fill)"
+        }
+       }
+      },
+      "required": [
+       "ops"
+      ]
+     }
+    },
+    "newSequence": {
+     "description": "A new sequence.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      }
+     }
+    },
+    "renameSequence": {
+     "description": "Rename this sequence.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 120
+       }
+      },
+      "required": [
+       "title"
+      ]
+     }
+    },
+    "deleteSequence": {
+     "description": "Delete this sequence.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "delete"
+    },
+    "setPlayhead": {
+     "description": "Move the playhead.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "at_s": {
+        "type": "number",
+        "minimum": 0
+       }
+      },
+      "required": [
+       "at_s"
+      ]
+     }
+    },
+    "setRange": {
+     "description": "Set the in and out range.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "in_s": {
+        "type": "number",
+        "minimum": 0
+       },
+       "out_s": {
+        "type": "number",
+        "minimum": 0
+       }
+      },
+      "required": [
+       "in_s",
+       "out_s"
+      ]
+     }
+    },
+    "shot": {
+     "description": "New shot, or a shot action on a clip (extend, retake, insert, replace, redo).",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "new",
+         "extend",
+         "retake",
+         "insert",
+         "replace",
+         "redo"
+        ]
+       },
+       "clip": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       },
+       "at_s": {
+        "type": "number",
+        "minimum": 0
+       },
+       "seconds": {
+        "type": "number",
+        "minimum": 0.5,
+        "maximum": 30
+       },
+       "prompt": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 2000
+       }
+      },
+      "required": [
+       "kind"
+      ]
+     },
+     "card": "generate"
+    },
+    "newLine": {
+     "description": "Voice a new dialogue line.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "text": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 600
+       },
+       "voice": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 130
+       }
+      },
+      "required": [
+       "text"
+      ]
+     },
+     "card": "generate"
+    },
+    "saveAsVoice": {
+     "description": "Open Save as voice for a clip, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "clip": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64
+       }
+      },
+      "required": [
+       "clip"
+      ]
+     }
+    },
+    "rerender": {
+     "description": "Re-render the changed shots.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "batch"
+    },
+    "export": {
+     "description": "Export the sequence.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "preset": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       }
+      }
+     },
+     "card": "export"
+    },
+    "cancelExport": {
+     "description": "Cancel an export.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the media job"
+       }
+      },
+      "required": [
+       "job_id"
+      ]
+     }
+    }
+   }
+  },
+  "gallery": {
+   "routes": [
+    "/gallery"
+   ],
+   "actions": {
+    "search": {
+     "description": "Search takes.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "q": {
+        "type": "string",
+        "minLength": 0,
+        "maxLength": 200
+       }
+      },
+      "required": [
+       "q"
+      ]
+     }
+    },
+    "filter": {
+     "description": "Filter takes.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "image",
+         "video",
+         "audio",
+         "music",
+         "sound",
+         "voice"
+        ]
+       },
+       "source": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       },
+       "starred": {
+        "type": "boolean"
+       },
+       "batch_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a batch's collection"
+       }
+      }
+     }
+    },
+    "sort": {
+     "description": "Sort takes.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "order": {
+        "enum": [
+         "newest",
+         "oldest",
+         "starred",
+         "name"
+        ],
+        "description": "newest (default), oldest, starred first, name"
+       }
+      },
+      "required": [
+       "order"
+      ]
+     }
+    },
+    "select": {
+     "description": "Select takes.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_ids": {
+        "type": "array",
+        "maxItems": 60,
+        "items": {
+         "type": "string",
+         "format": "uuid"
+        }
+       }
+      },
+      "required": [
+       "take_ids"
+      ]
+     }
+    },
+    "star": {
+     "description": "Star or unstar a take.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "on": {
+        "type": "boolean"
+       }
+      },
+      "required": [
+       "take_id",
+       "on"
+      ]
+     }
+    },
+    "rename": {
+     "description": "Rename a take.",
+     "effect": "undo",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "title": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 200
+       }
+      },
+      "required": [
+       "take_id",
+       "title"
+      ]
+     }
+    },
+    "saveAsPipeline": {
+     "description": "Save how a take was made as a pipeline.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
+    },
+    "saveAsElement": {
+     "description": "Open Save as element, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "handle": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 40
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
+    },
+    "saveAsLook": {
+     "description": "Open Save as look, prefilled.",
+     "effect": "dialog",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "a take"
+       },
+       "name": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       }
+      },
+      "required": [
+       "take_id"
+      ]
+     }
     },
     "delete": {
-      "tags": [
-        "final"
-      ],
-      "shows": "what goes, what stays"
+     "description": "Delete takes.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "take_ids": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 60,
+        "items": {
+         "type": "string",
+         "format": "uuid"
+        }
+       }
+      },
+      "required": [
+       "take_ids"
+      ]
+     },
+     "card": "delete"
     }
+   }
   },
-  "screens": {
-    "shell": {
-      "routes": [
-        "*"
-      ],
-      "actions": {
-        "navigate": {
-          "description": "Go to a screen with the right thing open. Actions after it in the same batch are dropped; the new screen's summary comes back.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "to": {
-                "enum": [
-                  "/",
-                  "/gallery",
-                  "/timeline",
-                  "/pipelines",
-                  "/pipelines/{id}",
-                  "/pipelines/batches/{id}",
-                  "/pipelines/batches/{id}/review",
-                  "/pipelines/batches/{id}/rows/{row}",
-                  "/models",
-                  "/admin"
-                ]
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "row": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 500
-              },
-              "query": {
-                "description": "The target's URL params, each only on its route: / s (a session id), reuse (a take id), use (a take id) with w (a workflow id), the two always together; /gallery batch; /timeline t; /pipelines/{id} view studio; a row attempt; /models tab loras; /admin tab hosts, keys or providers. To pick a workflow on Create, go to / and call switchTo there.",
-                "type": "object",
-                "additionalProperties": {
-                  "type": "string",
-                  "maxLength": 200
-                },
-                "propertyNames": {
-                  "enum": [
-                    "s",
-                    "reuse",
-                    "use",
-                    "w",
-                    "batch",
-                    "t",
-                    "view",
-                    "attempt",
-                    "tab"
-                  ]
-                }
-              }
-            },
-            "required": [
-              "to"
-            ]
-          }
-        },
-        "await": {
-          "description": "Wait for a run, model job, download, export or clone in this tab (at most 10 min, then still running).",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "what": {
-                "enum": [
-                  "run",
-                  "job",
-                  "download",
-                  "export",
-                  "clone"
-                ]
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "what",
-              "id"
-            ]
-          }
-        }
-      }
+  "models": {
+   "routes": [
+    "/models"
+   ],
+   "roles": [
+    "admin"
+   ],
+   "actions": {
+    "openRow": {
+     "description": "Open a model's row on a machine.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "model": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "variant": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "host": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+       }
+      },
+      "required": [
+       "model",
+       "variant",
+       "host"
+      ]
+     }
     },
-    "create": {
-      "routes": [
-        "/"
-      ],
-      "actions": {
-        "change": {
-          "description": "Set one form field (prompt, size, variant, Enhance, Think, references, bindings, source, LoRAs, looks, dialogue…). Refused when the form shows it greyed or hidden.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "key": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              },
-              "value": {
-                "description": "a form value, as the field takes it"
-              }
-            },
-            "required": [
-              "key",
-              "value"
-            ]
-          }
-        },
-        "switchTo": {
-          "description": "Switch the form to another workflow.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "workflow": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            },
-            "required": [
-              "workflow"
-            ]
-          }
-        },
-        "preset": {
-          "description": "Apply a preset (refused when greyed).",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            },
-            "required": [
-              "name"
-            ]
-          }
-        },
-        "runOn": {
-          "description": "Pick Auto or a machine the form allows, with a reason.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "host": {
-                "type": "string",
-                "pattern": "^(auto|[a-z0-9]{1,32})$"
-              },
-              "reason": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200
-              }
-            },
-            "required": [
-              "host",
-              "reason"
-            ]
-          }
-        },
-        "seeds": {
-          "description": "How many takes to make.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "n": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 4
-              }
-            },
-            "required": [
-              "n"
-            ]
-          }
-        },
-        "view": {
-          "description": "Studio or Graph view.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "view": {
-                "enum": [
-                  "studio",
-                  "graph"
-                ]
-              }
-            },
-            "required": [
-              "view"
-            ]
-          }
-        },
-        "newSession": {
-          "description": "Start a new session.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          }
-        },
-        "renameWorkflow": {
-          "description": "Rename this workflow.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "required": [
-              "title"
-            ]
-          }
-        },
-        "duplicateWorkflow": {
-          "description": "Duplicate this workflow.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          }
-        },
-        "deleteWorkflow": {
-          "description": "Delete this workflow (its takes stay).",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "delete"
-        },
-        "frameIn": {
-          "description": "A video take's first or last frame (made as an image) into the frame input. An image take goes in with useIn.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "at": {
-                "enum": [
-                  "first",
-                  "last"
-                ]
-              }
-            },
-            "required": [
-              "take_id",
-              "at"
-            ]
-          }
-        },
-        "useIn": {
-          "description": "Put a take into a workflow's input, as its Use in… menu does: an image as a video's first frame (Animate), an image to Edit, a video to Extend. Switches the form to that workflow.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "workflow": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80,
-                "description": "a workflow id, title or family (ltx); left out, the open one"
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "select": {
-          "description": "Select a take.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "star": {
-          "description": "Star or unstar a take.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "on": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "take_id",
-              "on"
-            ]
-          }
-        },
-        "stop": {
-          "description": "Stop a run.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "run_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the run"
-              }
-            },
-            "required": [
-              "run_id"
-            ]
-          }
-        },
-        "generate": {
-          "description": "Generate with the form as it is.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "generate"
-        },
-        "saveAsLook": {
-          "description": "Open Save as look, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            }
-          }
-        },
-        "saveAsElement": {
-          "description": "Open Save as element, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "handle": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 40
-              }
-            }
-          }
-        },
-        "editItem": {
-          "description": "Open a library item's Edit.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "item_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the item"
-              }
-            },
-            "required": [
-              "item_id"
-            ]
-          }
-        },
-        "cloneVoice": {
-          "description": "Open Clone a voice, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "from_s": {
-                "type": "number",
-                "minimum": 0
-              },
-              "to_s": {
-                "type": "number",
-                "minimum": 0
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "designVoice": {
-          "description": "Open Design a voice, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "description": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 600
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            }
-          }
-        },
-        "hear": {
-          "description": "Hear tries in the open clone or design dialog.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "hear"
-        },
-        "deleteItem": {
-          "description": "Delete a library item.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "item_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the item"
-              }
-            },
-            "required": [
-              "item_id"
-            ]
-          },
-          "card": "delete"
-        },
-        "renameLora": {
-          "description": "Rename a LoRA.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "lora_id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "required": [
-              "lora_id",
-              "name"
-            ]
-          }
-        },
-        "deleteLora": {
-          "description": "Delete a LoRA.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "lora_id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "lora_id"
-            ]
-          },
-          "card": "delete"
-        }
-      }
+    "download": {
+     "description": "Download on the open row (the licence tick stays yours).",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {}
+     },
+     "card": "download"
     },
-    "graph": {
-      "routes": [
-        "/"
-      ],
-      "actions": {
-        "addNode": {
-          "description": "Add a node, wired around the selected one.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "near": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          }
-        },
-        "removeNodes": {
-          "description": "Remove nodes and their wires.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "ids": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 32,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 64
-                }
-              }
-            },
-            "required": [
-              "ids"
-            ]
-          }
-        },
-        "connect": {
-          "description": "Wire `ref` (<node>.<output>) into a node's input.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "key": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "ref": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 130
-              }
-            },
-            "required": [
-              "node",
-              "key",
-              "ref"
-            ]
-          }
-        },
-        "disconnect": {
-          "description": "Remove the wire into a node's input.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "key": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "node",
-              "key"
-            ]
-          }
-        },
-        "setParam": {
-          "description": "Set a node's param.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "key": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "value": {
-                "description": "a form value, as the field takes it"
-              }
-            },
-            "required": [
-              "node",
-              "key",
-              "value"
-            ]
-          }
-        },
-        "setBypass": {
-          "description": "Bypass a node or not.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "on": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "node",
-              "on"
-            ]
-          }
-        },
-        "generate": {
-          "description": "Generate with the graph as it is.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "generate"
-        }
-      }
+    "cancelJob": {
+     "description": "Cancel a model job.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "job_id": {
+        "type": "string",
+        "format": "uuid",
+        "description": "the model job"
+       }
+      },
+      "required": [
+       "job_id"
+      ]
+     }
     },
-    "pipeline_editor": {
-      "routes": [
-        "/pipelines/{id}"
-      ],
-      "actions": {
-        "addNode": {
-          "description": "Add a pipeline node.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 40
-              },
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "fields": {
-                "type": "object"
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          }
-        },
-        "setNode": {
-          "description": "Change a node's fields.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "fields": {
-                "type": "object"
-              }
-            },
-            "required": [
-              "id",
-              "fields"
-            ]
-          }
-        },
-        "removeNode": {
-          "description": "Remove a node and its edges.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "id"
-            ]
-          }
-        },
-        "connect": {
-          "description": "Add an edge (a branch of a judge or decide: `branch`).",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "from": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "to": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "branch": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "from",
-              "to"
-            ]
-          }
-        },
-        "disconnect": {
-          "description": "Remove an edge.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "from": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "to": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "from",
-              "to"
-            ]
-          }
-        },
-        "newPipeline": {
-          "description": "A new pipeline.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            }
-          }
-        },
-        "renamePipeline": {
-          "description": "Rename this pipeline.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "required": [
-              "title"
-            ]
-          }
-        },
-        "deletePipeline": {
-          "description": "Delete this pipeline.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "delete"
-        },
-        "judgeTest": {
-          "description": "Test a judge on picked takes.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "take_ids": {
-                "type": "array",
-                "maxItems": 8,
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                }
-              }
-            },
-            "required": [
-              "node"
-            ]
-          },
-          "card": "judge_test"
-        },
-        "addMemory": {
-          "description": "Open Add note, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "text": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              }
-            }
-          }
-        },
-        "deleteMemory": {
-          "description": "Delete a memory item.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "item_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the item"
-              }
-            },
-            "required": [
-              "item_id"
-            ]
-          },
-          "card": "delete"
-        },
-        "runStep": {
-          "description": "Run one Studio step.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "node"
-            ]
-          },
-          "card": "generate"
-        },
-        "pickTake": {
-          "description": "Pick a step's take in the Studio view.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "node": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              }
-            },
-            "required": [
-              "node",
-              "take_id"
-            ]
-          }
-        }
-      }
-    },
-    "batches": {
-      "routes": [
-        "/pipelines",
-        "/pipelines/batches/{id}",
-        "/pipelines/batches/{id}/review",
-        "/pipelines/batches/{id}/rows/{row}"
-      ],
-      "actions": {
-        "newBatch": {
-          "description": "Fill New batch: rows, seeds, looks.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "rows": {
-                "type": "array",
-                "maxItems": 100,
-                "items": {
-                  "type": "object"
-                }
-              },
-              "seeds": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 8
-              },
-              "looks": {
-                "type": "array",
-                "maxItems": 8,
-                "items": {
-                  "type": "string",
-                  "minLength": 1,
-                  "maxLength": 130
-                }
-              }
-            }
-          }
-        },
-        "start": {
-          "description": "Start the batch (Submit on New batch).",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "batch"
-        },
-        "resume": {
-          "description": "Resume the batch.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "batch"
-        },
-        "retry": {
-          "description": "Retry a row, optionally from a step.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "row": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 500
-              },
-              "from_step": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "row"
-            ]
-          },
-          "card": "batch"
-        },
-        "again": {
-          "description": "Run the batch again.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "batch"
-        },
-        "stop": {
-          "description": "Stop the batch.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "stop"
-        },
-        "pause": {
-          "description": "Pause the batch.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          }
-        },
-        "pick": {
-          "description": "Pick at a gate.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "row": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 500
-              },
-              "take_ids": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 8,
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                }
-              }
-            },
-            "required": [
-              "row",
-              "take_ids"
-            ]
-          },
-          "card": "pick"
-        },
-        "reviewNote": {
-          "description": "Open the review note, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "row": {
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 500
-              },
-              "text": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              }
-            }
-          }
-        }
-      }
-    },
-    "timeline": {
-      "routes": [
-        "/timeline"
-      ],
-      "actions": {
-        "edit": {
-          "description": "Edit clips: place, trim, split, order (saved; a conflict reloads and retries).",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "ops": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 32,
-                "items": {
-                  "type": "object",
-                  "required": [
-                    "op"
-                  ],
-                  "oneOf": [
-                    {
-                      "title": "move",
-                      "description": "V1: to `index` (V1 ripples); an audio clip: a new start `at`, optionally on another audio `track`",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "move"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "index": {
-                          "type": "integer",
-                          "minimum": 0
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        }
-                      }
-                    },
-                    {
-                      "title": "trim",
-                      "description": "move one edge by `delta` seconds (snapped to frames), clamped to the take and the dissolves",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "edge",
-                        "delta"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "trim"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "edge": {
-                          "type": "string",
-                          "enum": [
-                            "in",
-                            "out"
-                          ]
-                        },
-                        "delta": {
-                          "type": "number",
-                          "minimum": -86400,
-                          "maximum": 86400
-                        }
-                      }
-                    },
-                    {
-                      "title": "split",
-                      "description": "cut the clip of `track` under the playhead `at`; the right part gets `id` (absent: studio makes one)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "track",
-                        "at"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "split"
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 32,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          },
-                          "description": "from 1.50, V1: ids for the right parts of its linked sound clips cut with it, in track order (absent ones: studio makes them)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "remove",
-                      "description": "remove the clip (V1 ripples; from 1.50 with `ripple` an audio track does too)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "remove"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "ripple": {
-                          "type": "boolean",
-                          "description": "from 1.50, an audio-track clip: the later clips of its track move left by its length (V1 always ripples)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "lift",
-                      "description": "V1 only: an empty slot of the clip's length, same id",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "lift"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "replace",
-                      "description": "the clip's take becomes `take_id`, one of its alternatives",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "take_id"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "replace"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "take_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        }
-                      }
-                    },
-                    {
-                      "title": "set",
-                      "description": "set the clip's fields; null removes one",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "set"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "gain_db": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "minimum": -60,
-                          "maximum": 12
-                        },
-                        "mute": {
-                          "type": [
-                            "boolean",
-                            "null"
-                          ]
-                        },
-                        "hold": {
-                          "type": [
-                            "number",
-                            "null"
-                          ],
-                          "exclusiveMinimum": 0,
-                          "maximum": 3600
-                        },
-                        "transition_in": {
-                          "oneOf": [
-                            {
-                              "type": "object",
-                              "required": [
-                                "type",
-                                "frames"
-                              ],
-                              "additionalProperties": false,
-                              "properties": {
-                                "type": {
-                                  "type": "string",
-                                  "const": "dissolve"
-                                },
-                                "frames": {
-                                  "type": "integer",
-                                  "minimum": 2,
-                                  "maximum": 240,
-                                  "multipleOf": 2,
-                                  "description": "centred on the cut: half before it, half after"
-                                }
-                              }
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ]
-                        },
-                        "link": {
-                          "oneOf": [
-                            {
-                              "type": "string",
-                              "pattern": "^[a-z0-9]{1,16}$",
-                              "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                            },
-                            {
-                              "type": "null"
-                            }
-                          ],
-                          "description": "from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "add",
-                      "description": "append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "take_ids"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "add"
-                        },
-                        "take_ids": {
-                          "type": "array",
-                          "minItems": 1,
-                          "maxItems": 100,
-                          "items": {
-                            "type": "string",
-                            "format": "uuid"
-                          }
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 100,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          }
-                        }
-                      }
-                    },
-                    {
-                      "title": "insert",
-                      "description": "an empty slot of `hold` seconds at the V1 cut nearest `at`",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "at",
-                        "hold"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "insert"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "hold": {
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 3600
-                        },
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "place",
-                      "description": "an empty slot of `hold` seconds at exactly `at` on V1 (Make shot's edit); `gap_id` for a gap it needs",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "at",
-                        "hold"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "place"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "hold": {
-                          "type": "number",
-                          "exclusiveMinimum": 0,
-                          "maximum": 3600
-                        },
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "gap_id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "add_track",
-                      "description": "a new audio track at the end",
-                      "type": "object",
-                      "required": [
-                        "op"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "add_track"
-                        }
-                      }
-                    },
-                    {
-                      "title": "remove_track",
-                      "description": "remove an audio track and its clips",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "track"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "remove_track"
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        }
-                      }
-                    },
-                    {
-                      "title": "track",
-                      "description": "a track's gain or mute",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "track"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "track"
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        },
-                        "gain_db": {
-                          "type": "number",
-                          "minimum": -60,
-                          "maximum": 12
-                        },
-                        "mute": {
-                          "type": "boolean"
-                        }
-                      }
-                    },
-                    {
-                      "title": "roll",
-                      "description": "from 1.50, V1: the cut before the clip moves by `delta` (the clip before ends later, this one starts later; the length is kept, the dissolve on the cut moves with it)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "delta"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "roll"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "delta": {
-                          "type": "number",
-                          "minimum": -86400,
-                          "maximum": 86400,
-                          "description": "seconds, snapped to frames"
-                        }
-                      }
-                    },
-                    {
-                      "title": "slip",
-                      "description": "from 1.50: the clip shows other frames of its take, in and out moved by `delta` (place and length kept)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "delta"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "slip"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "delta": {
-                          "type": "number",
-                          "minimum": -86400,
-                          "maximum": 86400,
-                          "description": "seconds, snapped to frames"
-                        }
-                      }
-                    },
-                    {
-                      "title": "slide",
-                      "description": "from 1.50, V1: the clip moves along V1 by `delta`, its content and length kept; the clip before and the one after give and take the frames",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "delta"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "slide"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "delta": {
-                          "type": "number",
-                          "minimum": -86400,
-                          "maximum": 86400,
-                          "description": "seconds, snapped to frames"
-                        }
-                      }
-                    },
-                    {
-                      "title": "overwrite",
-                      "description": "from 1.50: the clip goes in at `at` over what is there, no ripple (V1: it leaves an empty slot where it was; audio: onto `track`, default its own)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "at"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "overwrite"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "track": {
-                          "type": "string",
-                          "pattern": "^(V1|A[2-9])$"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 32,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          },
-                          "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "split_all",
-                      "description": "from 1.50: blade on every track at `at` (a clip with a shot or a cut there is skipped)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "at"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "split_all"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 32,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          },
-                          "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "remove_range",
-                      "description": "from 1.50: every track cut at `from` and `to`, what is between removed; V1 and the audio tracks ripple",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "from",
-                        "to"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "remove_range"
-                        },
-                        "from": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "to": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 32,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          },
-                          "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "lift_range",
-                      "description": "from 1.50: every track cut at `from` and `to`, what is between lifted (V1: one empty slot; audio: a gap); nothing moves",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "from",
-                        "to"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "lift_range"
-                        },
-                        "from": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "to": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "ids": {
-                          "type": "array",
-                          "maxItems": 32,
-                          "items": {
-                            "type": "string",
-                            "pattern": "^[a-z0-9]{1,16}$",
-                            "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                          },
-                          "description": "ids for the clips it makes, in track order, then left to right (absent ones: studio makes them; too few in a web replay: ids_short)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "marker",
-                      "description": "from 1.50: put a marker (a new `id` adds one, a known one is replaced whole; absent: studio makes one)",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "at"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "marker"
-                        },
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "at": {
-                          "type": "number",
-                          "minimum": 0,
-                          "maximum": 86400,
-                          "description": "seconds, snapped by studio onto the frame grid (an audio track's in/out: the sample grid); contracts/README.md, Timeline rules: time"
-                        },
-                        "name": {
-                          "type": "string",
-                          "minLength": 1,
-                          "maxLength": 80
-                        },
-                        "color": {
-                          "type": "string",
-                          "enum": [
-                            "red",
-                            "orange",
-                            "yellow",
-                            "green",
-                            "blue",
-                            "purple"
-                          ],
-                          "description": "a marker's colour, drawn with the theme's own shade"
-                        }
-                      }
-                    },
-                    {
-                      "title": "remove_marker",
-                      "description": "from 1.50: remove a marker",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "id"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "remove_marker"
-                        },
-                        "id": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        }
-                      }
-                    },
-                    {
-                      "title": "fill",
-                      "description": "studio's: fill an empty slot `clip` with `take_id`",
-                      "type": "object",
-                      "required": [
-                        "op",
-                        "clip",
-                        "take_id"
-                      ],
-                      "additionalProperties": false,
-                      "properties": {
-                        "op": {
-                          "const": "fill"
-                        },
-                        "clip": {
-                          "type": "string",
-                          "pattern": "^[a-z0-9]{1,16}$",
-                          "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
-                        },
-                        "take_id": {
-                          "type": "string",
-                          "format": "uuid"
-                        }
-                      }
-                    }
-                  ],
-                  "description": "one Timeline edit: each op with its own fields (openapi TimelineOp, plus fill)"
-                }
-              }
-            },
-            "required": [
-              "ops"
-            ]
-          }
-        },
-        "newSequence": {
-          "description": "A new sequence.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            }
-          }
-        },
-        "renameSequence": {
-          "description": "Rename this sequence.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 120
-              }
-            },
-            "required": [
-              "title"
-            ]
-          }
-        },
-        "deleteSequence": {
-          "description": "Delete this sequence.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "delete"
-        },
-        "setPlayhead": {
-          "description": "Move the playhead.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "at_s": {
-                "type": "number",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "at_s"
-            ]
-          }
-        },
-        "setRange": {
-          "description": "Set the in and out range.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "in_s": {
-                "type": "number",
-                "minimum": 0
-              },
-              "out_s": {
-                "type": "number",
-                "minimum": 0
-              }
-            },
-            "required": [
-              "in_s",
-              "out_s"
-            ]
-          }
-        },
-        "shot": {
-          "description": "New shot, or a shot action on a clip (extend, retake, insert, replace, redo).",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "enum": [
-                  "new",
-                  "extend",
-                  "retake",
-                  "insert",
-                  "replace",
-                  "redo"
-                ]
-              },
-              "clip": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              },
-              "at_s": {
-                "type": "number",
-                "minimum": 0
-              },
-              "seconds": {
-                "type": "number",
-                "minimum": 0.5,
-                "maximum": 30
-              },
-              "prompt": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 2000
-              }
-            },
-            "required": [
-              "kind"
-            ]
-          },
-          "card": "generate"
-        },
-        "newLine": {
-          "description": "Voice a new dialogue line.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "text": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 600
-              },
-              "voice": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 130
-              }
-            },
-            "required": [
-              "text"
-            ]
-          },
-          "card": "generate"
-        },
-        "saveAsVoice": {
-          "description": "Open Save as voice for a clip, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "clip": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 64
-              }
-            },
-            "required": [
-              "clip"
-            ]
-          }
-        },
-        "rerender": {
-          "description": "Re-render the changed shots.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "batch"
-        },
-        "export": {
-          "description": "Export the sequence.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "preset": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 40
-              }
-            }
-          },
-          "card": "export"
-        },
-        "cancelExport": {
-          "description": "Cancel an export.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "job_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the media job"
-              }
-            },
-            "required": [
-              "job_id"
-            ]
-          }
-        }
-      }
-    },
-    "gallery": {
-      "routes": [
-        "/gallery"
-      ],
-      "actions": {
-        "search": {
-          "description": "Search takes.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "q": {
-                "type": "string",
-                "minLength": 0,
-                "maxLength": 200
-              }
-            },
-            "required": [
-              "q"
-            ]
-          }
-        },
-        "filter": {
-          "description": "Filter takes.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "kind": {
-                "enum": [
-                  "image",
-                  "video",
-                  "audio"
-                ]
-              },
-              "source": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 40
-              },
-              "starred": {
-                "type": "boolean"
-              },
-              "batch_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a batch's collection"
-              }
-            }
-          }
-        },
-        "sort": {
-          "description": "Sort takes.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "order": {
-                "enum": [
-                  "newest",
-                  "oldest",
-                  "starred",
-                  "name"
-                ],
-                "description": "newest (default), oldest, starred first, name"
-              }
-            },
-            "required": [
-              "order"
-            ]
-          }
-        },
-        "select": {
-          "description": "Select takes.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_ids": {
-                "type": "array",
-                "maxItems": 60,
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                }
-              }
-            },
-            "required": [
-              "take_ids"
-            ]
-          }
-        },
-        "star": {
-          "description": "Star or unstar a take.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "on": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "take_id",
-              "on"
-            ]
-          }
-        },
-        "rename": {
-          "description": "Rename a take.",
-          "effect": "undo",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "title": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 200
-              }
-            },
-            "required": [
-              "take_id",
-              "title"
-            ]
-          }
-        },
-        "saveAsPipeline": {
-          "description": "Save how a take was made as a pipeline.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "saveAsElement": {
-          "description": "Open Save as element, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "handle": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 40
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "saveAsLook": {
-          "description": "Open Save as look, prefilled.",
-          "effect": "dialog",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "a take"
-              },
-              "name": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              }
-            },
-            "required": [
-              "take_id"
-            ]
-          }
-        },
-        "delete": {
-          "description": "Delete takes.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "take_ids": {
-                "type": "array",
-                "minItems": 1,
-                "maxItems": 60,
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                }
-              }
-            },
-            "required": [
-              "take_ids"
-            ]
-          },
-          "card": "delete"
-        }
-      }
-    },
-    "models": {
-      "routes": [
-        "/models"
-      ],
-      "roles": [
-        "admin"
-      ],
-      "actions": {
-        "openRow": {
-          "description": "Open a model's row on a machine.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "model": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "variant": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "host": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 32
-              }
-            },
-            "required": [
-              "model",
-              "variant",
-              "host"
-            ]
-          }
-        },
-        "download": {
-          "description": "Download on the open row (the licence tick stays yours).",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {}
-          },
-          "card": "download"
-        },
-        "cancelJob": {
-          "description": "Cancel a model job.",
-          "effect": "line",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "job_id": {
-                "type": "string",
-                "format": "uuid",
-                "description": "the model job"
-              }
-            },
-            "required": [
-              "job_id"
-            ]
-          }
-        },
-        "delete": {
-          "description": "Delete a downloaded variant from a machine.",
-          "effect": "card",
-          "input": {
-            "type": "object",
-            "additionalProperties": false,
-            "properties": {
-              "model": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "variant": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 80
-              },
-              "host": {
-                "type": "string",
-                "minLength": 1,
-                "maxLength": 32
-              }
-            },
-            "required": [
-              "model",
-              "variant",
-              "host"
-            ]
-          },
-          "card": "delete"
-        }
-      }
+    "delete": {
+     "description": "Delete a downloaded variant from a machine.",
+     "effect": "card",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "model": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "variant": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 80
+       },
+       "host": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+       }
+      },
+      "required": [
+       "model",
+       "variant",
+       "host"
+      ]
+     },
+     "card": "delete"
     }
+   }
+  },
+  "magic": {
+   "routes": [
+    "/magic"
+   ],
+   "actions": {
+    "select": {
+     "description": "Select blocks on the board (none: clear); the side panel shows the first.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "ids": {
+        "type": "array",
+        "maxItems": 200,
+        "uniqueItems": true,
+        "items": {
+         "type": "string",
+         "pattern": "^[A-Za-z0-9_-]{1,40}$"
+        }
+       }
+      },
+      "required": [
+       "ids"
+      ]
+     }
+    },
+    "openBlock": {
+     "description": "Open a block's dialog (a frame's, a morph's, a block's) to show it to the user.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "id": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9_-]{1,40}$"
+       }
+      },
+      "required": [
+       "id"
+      ]
+     }
+    },
+    "play": {
+     "description": "Play the board from the playhead (at_s: from there), or pause it.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "pause": {
+        "type": "boolean"
+       },
+       "at_s": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 86400
+       }
+      }
+     }
+    },
+    "scrub": {
+     "description": "Move the playhead to a board time.",
+     "effect": "line",
+     "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "at_s": {
+        "type": "number",
+        "minimum": 0,
+        "maximum": 86400
+       }
+      },
+      "required": [
+       "at_s"
+      ]
+     }
+    }
+   }
   }
+ }
 }

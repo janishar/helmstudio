@@ -138,8 +138,7 @@ async def test_run_stops_at_a_cancel_point():
         raise Cancelled
 
     with pytest.raises(Cancelled):
-        await graph.run({"a": {"kind": "k"}}, {"k": Node(node)}, {"k": SINK | {"inputs": []}},
-                        ctx(check), Cache())  # fmt: skip
+        await graph.run({"a": {"kind": "k"}}, {"k": Node(node)}, {"k": SINK | {"inputs": []}}, ctx(check), Cache())
     assert ran == []
 
 
@@ -148,9 +147,7 @@ def test_resolve_picks_a_seed_for_null_and_minus_one_only():
     schemas = SCHEMAS | {"seed": {"params": [{"name": "seed", "type": "seed"}]}}
     out, resolved = graph.resolve(nodes, schemas)
     assert nodes["s"]["params"]["seed"] is None  # not modified in place
-    assert 0 <= out["s"]["params"]["seed"] <= 2**53 - 1 and resolved == {
-        "seed": out["s"]["params"]["seed"]
-    }
+    assert 0 <= out["s"]["params"]["seed"] <= 2**53 - 1 and resolved == {"seed": out["s"]["params"]["seed"]}
     nodes["s"]["params"]["seed"] = -1
     assert graph.resolve(nodes, schemas)[0]["s"]["params"]["seed"] >= 0
     nodes["s"]["params"]["seed"] = 7
@@ -231,9 +228,7 @@ async def test_model_input_of_another_type_is_rejected_by_validate(tmp_path, mon
     q = FakeQwen(tmp_path, monkeypatch)
     nodes = qwen_nodes()
     nodes["sample"]["in"]["cond"] = "prompt.text"
-    assert "sample.cond: wants Conditioning[qwen-image], prompt.text is Text" in graph.validate(
-        nodes, q.schemas
-    )
+    assert "sample.cond: wants Conditioning[qwen-image], prompt.text is Text" in graph.validate(nodes, q.schemas)
 
 
 async def test_progress_eta_is_per_phase(monkeypatch):
@@ -275,8 +270,7 @@ def lora_nodes(rows=None) -> dict:
     stack at all, the M2 graph)."""
     nodes = qwen_nodes()
     if rows is not None:
-        nodes["lora"] = {"kind": "qwen-image/lora-stack", "in": {"model": "model.model"},
-                         "params": {"rows": rows}}  # fmt: skip
+        nodes["lora"] = {"kind": "qwen-image/lora-stack", "in": {"model": "model.model"}, "params": {"rows": rows}}
         nodes["sample"]["in"]["model"] = "lora.model"
     return nodes
 
@@ -315,18 +309,12 @@ async def test_a_strength_change_reruns_sample_and_decode_with_no_load(tmp_path,
         [row(SHARED, 0.5), row(OTHER)],
     ):
         assert await run_graph(q, lora_nodes(rows), cache, res) == ["sample", "decode"]
-    assert (
-        len(q.loads) == loads
-    )  # adapters: strength changes and swaps never reload the transformer
-    assert (
-        await run_graph(q, lora_nodes([row(SHARED, 0.5)]), cache, res) == []
-    )  # seen before: all hits
+    assert len(q.loads) == loads  # adapters: strength changes and swaps never reload the transformer
+    assert await run_graph(q, lora_nodes([row(SHARED, 0.5)]), cache, res) == []  # seen before: all hits
     assert q.active[-1] == ("transformer", ((SHARED["sha256"], 0.5), (OTHER["sha256"], 1.0)))
     transformer = next(k for k in q.loads if k[2] == "transformer")
     gb = ModelRef(q.pack, "turbo", "int8").gb("transformer")[0]
-    assert res.entries[transformer][0] == pytest.approx(
-        gb + 0.002
-    )  # the two adapters count, with their base
+    assert res.entries[transformer][0] == pytest.approx(gb + 0.002)  # the two adapters count, with their base
 
     # bake: its own transformer entry (one load), listed with its LoRAs in the hosts value
     assert await run_graph(q, lora_nodes([row(SHARED, 0.5, "bake")]), cache, res) == [
@@ -340,7 +328,7 @@ async def test_a_strength_change_reruns_sample_and_decode_with_no_load(tmp_path,
     )
     state = res.state()
     baked = [r for r in state["resident"] if r.get("loras")]
-    assert baked[0]["loras"] == [{"lora_id": SHARED["lora_id"], "name": "ink-wash", "strength": 0.5, "bytes": 1000}]  # fmt: skip
+    assert baked[0]["loras"] == [{"lora_id": SHARED["lora_id"], "name": "ink-wash", "strength": 0.5, "bytes": 1000}]
     value = {"schema_version": 1, "host": "mac", "env": "torch", "state": "idle", "run_id": None,
              "updated_at": "2026-11-15T10:00:00Z", "published_by": "t"} | state  # fmt: skip
     from messaging import schemas
@@ -353,7 +341,7 @@ async def test_two_stacks_on_one_base_run_one_after_the_other(tmp_path, monkeypa
     nodes = lora_nodes([row(SHARED, 0.8)])
     nodes["lora_2"] = {"kind": "qwen-image/lora-stack", "in": {"model": "model.model"},
                        "params": {"rows": [row(OTHER, 0.3)]}}  # fmt: skip
-    nodes["sample_2"] = copy.deepcopy(nodes["sample"]) | {"in": nodes["sample"]["in"] | {"model": "lora_2.model"}}  # fmt: skip
+    nodes["sample_2"] = copy.deepcopy(nodes["sample"]) | {"in": nodes["sample"]["in"] | {"model": "lora_2.model"}}
     nodes["decode_2"] = {"kind": "qwen-image/decode", "in": {"model": "model.model", "latent": "sample_2.latent"},
                          "params": {"tiled": "auto"}}  # fmt: skip
     nodes["output_2"] = {"kind": "output", "in": {"media": "decode_2.image"}}
@@ -413,20 +401,12 @@ async def test_a_bake_twice_is_one_delta_and_a_rename_is_the_same_entry(tmp_path
     assert key[4] == ((SHARED["sha256"], 0.75),)  # merged: one delta, the summed strength
     nodes["lora"]["params"]["rows"] = [row(SHARED | {"name": "renamed"}, 0.5, "bake")]
     await run_graph(q, nodes, Cache(), res)
-    assert (
-        q.loads[-1] == key and sum(k[2] == "transformer" for k in q.loads) == 1
-    )  # no reload for a rename
+    assert q.loads[-1] == key and sum(k[2] == "transformer" for k in q.loads) == 1  # no reload for a rename
     listed = next(r["loras"] for r in res.state()["resident"] if r.get("loras"))
-    assert listed == [
-        {"lora_id": SHARED["lora_id"], "name": "renamed", "strength": 0.75, "bytes": 1000}
-    ]
-    ref = ModelRef(
-        q.pack, "turbo", "int8", (LoraUse.of(row(SHARED | {"bytes": 2**30}, 1.0, "bake")),)
-    )
+    assert listed == [{"lora_id": SHARED["lora_id"], "name": "renamed", "strength": 0.75, "bytes": 1000}]
+    ref = ModelRef(q.pack, "turbo", "int8", (LoraUse.of(row(SHARED | {"bytes": 2**30}, 1.0, "bake")),))
     base = ModelRef(q.pack, "turbo", "int8").gb("transformer")
-    assert ref.gb("transformer") == pytest.approx(
-        (base[0], base[1] + 2.0)
-    )  # 1 GiB file: ≤ 2 GiB of fp32 deltas
+    assert ref.gb("transformer") == pytest.approx((base[0], base[1] + 2.0))  # 1 GiB file: ≤ 2 GiB of fp32 deltas
 
 
 async def test_adapters_that_do_not_fit_fail_before_anything_is_attached(tmp_path, monkeypatch):
@@ -444,9 +424,7 @@ def test_a_row_field_left_out_takes_its_default():
     nodes, _ = graph.resolve(nodes, _qwen_schemas())
     assert nodes["lora"]["params"]["rows"] == [{"lora": SHARED, "mode": "adapter", "strength": 1}]
     bad = lora_nodes([{"lora": SHARED, "mode": "adapter", "strength": 9}])
-    assert graph.validate(bad, _qwen_schemas()) == [
-        "lora.rows item 1.strength is above the maximum 2"
-    ]
+    assert graph.validate(bad, _qwen_schemas()) == ["lora.rows item 1.strength is above the maximum 2"]
 
 
 def test_an_auto_length_is_reported_as_the_stored_clips_frames():

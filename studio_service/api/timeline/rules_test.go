@@ -2,6 +2,7 @@ package timeline
 
 import (
 	"encoding/json"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -353,4 +354,83 @@ func TestTrimAudioTakeClamps(t *testing.T) {
 	if code != "" || *got.Tracks[1].Clips[0].Out != 2 {
 		t.Fatalf("%s %+v", code, got.Tracks[1].Clips[0])
 	}
+}
+
+// TestFadesFixtures runs the API 1.106 cases (plan 41: audio fades, crossfades and ducking), kept in their own
+// *.fades.json files until every implementation reads them.
+func TestFadesFixtures(t *testing.T) {
+	common, _, cases := load(t, "normalize.fades.json")
+	for _, c := range cases {
+		n, probs := Normalize(c.Document, takesOf(common, c.Takes), c.Previous)
+		var got any = map[string]any{"problems": probs}
+		if n != nil {
+			got = map[string]any{"document": n}
+			if again, p := Normalize(*n, takesOf(common, c.Takes), n); p != nil || !same(t, again, n) {
+				t.Errorf("%q: normalize is not idempotent: %v", c.Description, p)
+			}
+		}
+		check(t, "normalize.fades", c, got)
+	}
+	common, _, cases = load(t, "edits.fades.json")
+	for _, c := range cases {
+		r := Apply(c.Document, c.Op, takesOf(common, c.Takes))
+		var got any = map[string]any{"problems": r.Problems}
+		switch {
+		case r.Error != "":
+			got = map[string]any{"error": r.Error}
+		case r.Document != nil:
+			got = map[string]any{"document": r.Document}
+		}
+		check(t, "edits.fades", c, got)
+	}
+	common, _, cases = load(t, "frame-at.fades.json")
+	for _, c := range cases {
+		// a duck factor is pow(10, …): Go's and C's pow may differ in the last place, so numbers compare to 1e-12
+		var got, want any
+		raw, _ := json.Marshal(FrameAt(c.Document, c.Frame, takesOf(common, c.Takes)))
+		_, _ = json.Unmarshal(raw, &got), json.Unmarshal(c.Expect, &want)
+		if !near(got, want) {
+			t.Errorf("frame-at.fades %q:\n got  %s\n want %s", c.Description, raw, c.Expect)
+		}
+	}
+	common, _, cases = load(t, "agent_view.fades.json")
+	for _, c := range cases {
+		check(t, "agent_view.fades", c, Agent(c.Document, takesOf(common, c.Takes)))
+	}
+	_, _, cases = load(t, "diffs.fades.json")
+	for _, c := range cases {
+		check(t, "diffs.fades", c, DiffDocs(c.Before, c.After))
+	}
+}
+
+// near is JSON equality with numbers within 1e-12.
+func near(a, b any) bool {
+	switch x := a.(type) {
+	case float64:
+		y, ok := b.(float64)
+		return ok && math.Abs(x-y) <= 1e-12
+	case []any:
+		y, ok := b.([]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for i := range x {
+			if !near(x[i], y[i]) {
+				return false
+			}
+		}
+		return true
+	case map[string]any:
+		y, ok := b.(map[string]any)
+		if !ok || len(x) != len(y) {
+			return false
+		}
+		for k := range x {
+			if !near(x[k], y[k]) {
+				return false
+			}
+		}
+		return true
+	}
+	return reflect.DeepEqual(a, b)
 }

@@ -118,6 +118,16 @@
           "Tense",
           "Whisper"
         ]
+      },
+      "standard": {
+        "kind": "voice",
+        "model": "ZONOS3",
+        "fields": {
+          "line": "prompt.text",
+          "voice": "speak.voice",
+          "seed": "seed.seed"
+        },
+        "seconds": 2
       }
     },
     {

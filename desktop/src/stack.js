@@ -5,8 +5,10 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const { spawn } = require('node:child_process');
 const { exec } = require('./steps');
+const rules = require('./rules');
 
 function layout(home, res) {
   // Lima's sockets (…/_lima/colima-<profile>/ssh.sock.<16 digits>) must stay under 104 characters: under
@@ -97,6 +99,63 @@ function validateAdmin(a) {
 
 const gb = (n) => (n / 1e9).toFixed(1);
 
+// 2e: the lowest free space of these folders' disks, in GB, and that disk's name ("Macintosh HD", "T9")
+function freeDisk(dirs) {
+  let low = null;
+  for (const dir of dirs) {
+    let st;
+    try {
+      st = fs.statfsSync(tilde(dir));
+    } catch {
+      continue; // not there (an unplugged drive: 2d says it)
+    }
+    const free = (st.bavail * st.bsize) / 1e9;
+    if (!low || free < low.free) low = { free, name: volumeName(tilde(dir)) };
+  }
+  return low;
+}
+
+// the boot volume is the /Volumes entry that points at /
+function volumeName(dir) {
+  const m = /^\/Volumes\/([^/]+)/.exec(dir);
+  if (m) return m[1];
+  try {
+    return fs.readdirSync('/Volumes').find((v) => fs.realpathSync(path.join('/Volumes', v)) === '/') || 'this Mac';
+  } catch {
+    return 'this Mac';
+  }
+}
+
+// 2c: who holds a host port: null when it is free (on 127.0.0.1 and on every address), else the app's name from lsof
+// (null when lsof cannot see it: another user's) and whether it is ours (our VM's port forwarder or our runners: the
+// command runs from one of `mine`)
+const bindable = (host, port) =>
+  new Promise((resolve) => {
+    const s = net.createServer();
+    s.once('error', () => resolve(false));
+    s.listen(port, host, () => s.close(() => resolve(true)));
+  });
+async function portHolder(port, mine) {
+  if ((await bindable('127.0.0.1', port)) && (await bindable('0.0.0.0', port))) return null;
+  const h = rules.lsofHolder(await exec('/usr/sbin/lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fpc']).catch(() => ''));
+  const cmd = h ? await exec('/bin/ps', ['-p', `${h.pid}`, '-o', 'command=']).catch(() => '') : '';
+  return { name: h?.name || null, ours: mine.some((m) => cmd.includes(m)) };
+}
+
+// the last n lines of a log file (its last 16 KB)
+function tailOf(file, n) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    const size = fs.fstatSync(fd).size;
+    const buf = Buffer.alloc(Math.min(size, 16384));
+    fs.readSync(fd, buf, 0, buf.length, size - buf.length);
+    fs.closeSync(fd);
+    return buf.toString().split('\n').filter((l) => l.trim()).slice(-n);
+  } catch {
+    return [];
+  }
+}
+
 // "38 of 112 MB", "1.2 of 2.0 GB"; with no first number only the total ("112 MB")
 function sizeOf(n, total) {
   const [d, unit, digits] = total >= 1e9 ? [1e9, 'GB', 1] : [1e6, 'MB', 0];
@@ -126,7 +185,7 @@ function oldImages(refs, keep, prefix) {
 
 function stackSteps({ p, cfg: shipped, settings, runners }) {
   const cfg = imagesCfg(shipped);
-  const e = envs(p, cfg);
+  let e = envs(p, cfg); // made again when a port changes (2c)
   const compose = (args) => [
     'compose',
     '-p',
@@ -162,8 +221,35 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     });
   };
 
-  const services = async (c) => {
+  // 2c: before the services and the runners start, every host port they use is free or ours; one another app holds
+  // asks for another (saved in settings.ports: the stack, the runners and the studio's address follow it)
+  const checkPorts = async (c) => {
+    const mine = [p.vm, p.venvs, p.res, p.home];
+    for (;;) {
+      const clash = await rules.portClash(rules.hostPorts(cfg), (n) => portHolder(n, mine));
+      if (!clash) return;
+      c.log(`port ${clash.port} is in use by ${clash.holder}`);
+      const port = Number(await c.ask('port', clash));
+      // Try again with the same port checks again; one another of ours uses would clash with it
+      if (!rules.validPort(port) || rules.hostPorts(cfg).some((x) => x.port === port)) continue;
+      settings.ports = { ...settings.ports, [clash.key]: port };
+      settings.save();
+      rules.applyPorts(shipped, settings.ports);
+      rules.applyPorts(cfg, settings.ports); // a copy in the developer path (imagesCfg)
+      e = envs(p, cfg);
+      c.log(`${clash.label}: port ${port}`);
+      // the Mac runners' NATS URLs carry the port: make-secrets writes them again (their passwords stay)
+      const dir = path.join(p.stack, 'deploy', cfg.composeEnv.HELM_SECRETS);
+      if (clash.key === 'NATS_HOST_PORT' && fs.existsSync(dir))
+        for (const f of fs.readdirSync(dir, { withFileTypes: true }).filter((d) => /^nats_runner_mac_.*_url$/.test(d.name)))
+          fs.rmSync(path.join(dir, f.name), { force: true });
+    }
+  };
+
+  // extra: compose up's flags (a restart recreates the containers)
+  const services = async (c, extra = []) => {
     dockerConfig(p);
+    await checkPorts(c);
     await secrets(c);
     // API 1.64: ~/.helm/plugins (the user's plugins, mounted read-only into studio) exists before compose mounts it
     const helm = process.env.HELM_HOME || path.join(os.homedir(), '.helm');
@@ -172,13 +258,39 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     const t0 = Date.now();
     const tick = setInterval(() => c.detail(`${Math.round((Date.now() - t0) / 1000)} s`), 1000);
     try {
-      await c.run('docker', compose(['up', '-d', '--wait']), { env: e.compose, cwd: p.stack });
+      await c.run('docker', compose(['up', '-d', '--wait', ...extra]), { env: e.compose, cwd: p.stack });
     } finally {
       clearInterval(tick);
     }
   };
 
+  // 2d: the models folder's drive is unplugged: Continue starts with what is there, Choose folder… picks another, and
+  // the start goes on by itself when the drive is back
+  const checkDrive = async (c) => {
+    const gone = () => rules.missingVolume(settings.modelsDir, fs.existsSync);
+    for (let volume = gone(); volume; volume = gone()) {
+      c.log(`the models folder ${settings.modelsDir} is on ${volume}, not connected`);
+      const a = await c.ask('drive', { volume, dir: settings.modelsDir }, () => !gone());
+      if (typeof a?.dir !== 'string' || !path.isAbsolute(tilde(a.dir))) return; // Continue, or the drive is back
+      settings.modelsDir = tilde(a.dir);
+      settings.save();
+    }
+  };
+
+  // 2e: at every start, the system disk and the models folder's disk
+  const checkDisk = async (c) => {
+    const d = freeDisk([p.home, settings.modelsDir || cfg.defaultModelsDir]);
+    const rule = d ? rules.diskRule(d.free, settings.diskWarnedAt, Date.now()) : 'ok';
+    if (rule === 'stop')
+      throw Object.assign(new Error(`About ${cfg.minFreeGB} GB of free disk is needed; ${d.free.toFixed(0)} GB is free.`), { title: 'Check this Mac failed' });
+    if (rule !== 'warn') return;
+    settings.diskWarnedAt = Date.now();
+    settings.save();
+    await c.ask('disk', { free: Math.floor(d.free), disk: d.name });
+  };
+
   const startRunners = async (c) => {
+    await checkDrive(c);
     await runners.start();
     await runners.waitReady(c.signal);
   };
@@ -270,14 +382,16 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     const n = cfg.venvs.length;
     for (const [i, v] of cfg.venvs.entries()) {
       c.progress(i / n, `${i + 1} of ${n}`);
-      await c.run(
-        p.uv,
-        ['sync', '--frozen', '--no-dev', '--managed-python', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
-        { env: { ...e.base, UV_PROJECT_ENVIRONMENT: path.join(p.venvs, v.name), UV_PYTHON_INSTALL_DIR: p.python } },
-      );
+      await syncVenv(v, c.run);
     }
     c.detail('');
   };
+  const syncVenv = (v, run) =>
+    run(
+      p.uv,
+      ['sync', '--frozen', '--no-dev', '--managed-python', '--project', path.join(p.runner, v.project), ...v.extras.flatMap((x) => ['--extra', x])],
+      { env: { ...e.base, UV_PROJECT_ENVIRONMENT: path.join(p.venvs, v.name), UV_PYTHON_INSTALL_DIR: p.python } },
+    );
 
   // after an update, once the new version runs: our images not in use any more (an older tag, or the helmstudio/*
   // ones a developer build loaded), then the dangling layers
@@ -353,7 +467,7 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
   ];
 
   const every = [
-    { id: 'vm', title: 'VM', hint: 'The VM did not start.', run: vm },
+    { id: 'vm', title: 'VM', hint: 'The VM did not start.', run: async (c) => (await checkDisk(c), await vm(c)) },
     { id: 'services', title: 'Services', hint: 'The services did not start.', run: services },
     { id: 'runners', title: 'Runners', hint: 'The runners did not start.', run: startRunners },
   ];
@@ -368,6 +482,16 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     { id: 'clean', title: 'Remove old images', hint: 'The old images could not be removed. Show log says why.', run: removeOld },
   ];
 
+  // 2a's Restart and the menu's Restart stack: the services recreated (data stays in the volumes), the runners again
+  const restart = [
+    every[0],
+    { ...every[1], run: (c) => services(c, ['--force-recreate']) },
+    { ...every[2], run: async (c) => (await runners.stop(), await startRunners(c)) },
+  ];
+
+  // 2a's VM row
+  const vmUp = () => exec(p.colima, ['status', '--profile', cfg.profile], { env: e.vm }).then(() => true, () => false);
+
   // Quit: the runners, the stack (data stays) and the VM
   const stopAll = async (run) => {
     await runners.stop();
@@ -375,7 +499,10 @@ function stackSteps({ p, cfg: shipped, settings, runners }) {
     await run(p.colima, ['stop', '--profile', cfg.profile], { env: e.vm }).catch(() => {});
   };
 
-  return { first, every, update, stopAll, envs: e };
+  // 2b's Restart runner for one that didn't start: its venv set up again first
+  const setupVenv = (name, run) => syncVenv(cfg.venvs.find((v) => v.name === name), run);
+
+  return { first, every, update, restart, stopAll, vmUp, setupVenv, freeDisk: () => freeDisk([p.home, settings.modelsDir || cfg.defaultModelsDir]) };
 }
 
 // Activity Monitor names a process after its binary, and the venv's python is a symlink to uv's python3.14: so the
@@ -398,12 +525,55 @@ function runnerExe(bin) {
   return exe;
 }
 
-// The native runners as `make runners` starts them (root Makefile): one process per env with its env vars, restarted
-// after a stall (exit 70) or a SIGKILL (jetsam), stopped with SIGTERM. Their pids go to runners.json, so a start after
-// the app was killed or crashed first stops the runners it left behind (else they hold the health ports, unstoppable)
+// The native runners as `make runners` starts them (root Makefile): one process per env with its env vars, stopped
+// with SIGTERM. One that stops (any exit code) is restarted with back-off (2b: 2, 4, 8, 16, 32 s, then every minute)
+// until 5 stops in 10 minutes; then, or when it cannot be spawned, it waits for Restart runner (`issues`). Their pids
+// go to runners.json, so a start after the app was killed or crashed first stops the runners it left behind (else
+// they hold the health ports, unstoppable). backoff: the tests' shorter waits
 class Runners {
-  constructor({ p, cfg, settings, onChange = () => {} }) {
-    Object.assign(this, { p, cfg, settings, onChange, procs: {}, stopping: false, pidFile: path.join(p.home, 'runners.json') });
+  constructor({ p, cfg, settings, onChange = () => {}, backoff = rules.backoff }) {
+    Object.assign(this, { p, cfg, settings, onChange, backoff, procs: {}, stopping: false, pidFile: path.join(p.home, 'runners.json') });
+    this.reset();
+  }
+
+  // the stop counts, the restarts waiting and the runners given up (a start, Restart runners)
+  reset(env) {
+    for (const k of ['stops', 'streak', 'pending', 'issues']) {
+      if (!this[k]) this[k] = {};
+      for (const e of env ? [env] : Object.keys(this[k])) {
+        if (k === 'pending') clearTimeout(this.pending[e]?.timer);
+        delete this[k][e];
+      }
+    }
+  }
+
+  logOf(env) {
+    return path.join(this.p.logs, `runner-${env}.log`);
+  }
+
+  // the app's own lines in a runner's log (its exits, a spawn error, a setup), so 2b's last lines say what happened
+  note(env, line) {
+    try {
+      fs.mkdirSync(this.p.logs, { recursive: true });
+      fs.appendFileSync(this.logOf(env), `${new Date().toISOString()} ${line}\n`);
+    } catch {}
+  }
+
+  // 2b: not restarted again until Restart runner; kind keeps | nostart
+  giveUp(r, kind, cause) {
+    this.issues[r.env] = { kind, cause, lines: tailOf(this.logOf(r.env), 4) };
+    this.onChange();
+  }
+
+  // per env: 'run', {wait: ms until its restart}, {kind, cause, lines} (given up) or 'down' (stopping, or starting)
+  state() {
+    const now = Date.now();
+    return Object.fromEntries(
+      this.cfg.runners.map((r) => [
+        r.env,
+        this.issues[r.env] || (this.pending[r.env] ? { wait: this.pending[r.env].at - now } : this.procs[r.env] ? 'run' : 'down'),
+      ]),
+    );
   }
 
   savePids() {
@@ -488,29 +658,74 @@ class Runners {
 
   async start() {
     this.stopping = false;
+    this.reset();
     await this.reap();
     for (const r of this.cfg.runners) if (!this.procs[r.env]) this.spawn(r);
   }
 
   spawn(r) {
     fs.mkdirSync(this.p.logs, { recursive: true });
-    const out = fs.openSync(path.join(this.p.logs, `runner-${r.env}.log`), 'a');
-    const child = spawn(runnerExe(path.join(this.p.venvs, r.venv, 'bin')), ['main.py'], {
-      cwd: path.join(this.p.runner, 'runner_service'),
-      env: this.env(r),
-      stdio: ['ignore', out, out],
-    });
+    const bin = path.join(this.p.venvs, r.venv, 'bin');
+    let exe;
+    try {
+      exe = runnerExe(bin);
+    } catch (e) {
+      this.note(r.env, `spawn runner-${r.env}: ${e.message}`);
+      return this.giveUp(r, 'nostart', e.code === 'ENOENT' ? 'Its Python environment is missing.' : e.message);
+    }
+    const out = fs.openSync(this.logOf(r.env), 'a');
+    const child = spawn(exe, ['main.py'], { cwd: path.join(this.p.runner, 'runner_service'), env: this.env(r), stdio: ['ignore', out, out] });
     fs.closeSync(out);
+    const started = Date.now();
     this.procs[r.env] = child;
     this.savePids();
-    child.on('error', () => {}); // reported by exit
-    child.on('exit', (code, sig) => {
-      if (this.procs[r.env] !== child) return;
+    const gone = () => {
+      if (this.procs[r.env] !== child) return false;
       delete this.procs[r.env];
       this.savePids();
-      if (!this.stopping && (code === 70 || code === 137 || sig === 'SIGKILL')) setTimeout(() => !this.stopping && !this.procs[r.env] && this.spawn(r), 2000);
+      return true;
+    };
+    child.on('error', (e) => {
+      if (!gone()) return;
+      this.note(r.env, `spawn runner-${r.env}: ${e.message}`);
+      if (!this.stopping) this.giveUp(r, 'nostart', e.message);
+      else this.onChange();
+    });
+    child.on('exit', (code, sig) => {
+      if (!gone()) return;
+      if (!this.stopping) this.stopped(r, code ?? sig, Date.now() - started);
       this.onChange();
     });
+    this.onChange();
+  }
+
+  stopped(r, how, lived) {
+    const now = Date.now();
+    this.note(r.env, `exit ${how}`);
+    const s = rules.stopped(this.stops[r.env] || [], now, lived < 5000);
+    this.stops[r.env] = s.stops;
+    if (s.giveUp) {
+      this.note(r.env, `stopped ${s.stops.length} of 5 · not restarted`);
+      return this.giveUp(r, s.nostart ? 'nostart' : 'keeps', s.nostart ? 'It stops within 5 s of every start.' : null);
+    }
+    if (lived >= 120000) this.streak[r.env] = 0; // it ran 2 minutes: the back-off starts again at 2 s
+    const n = this.streak[r.env] || 0;
+    this.streak[r.env] = n + 1;
+    const ms = this.backoff(n);
+    const timer = setTimeout(() => {
+      delete this.pending[r.env];
+      if (!this.stopping && !this.procs[r.env]) this.spawn(r);
+    }, ms);
+    this.pending[r.env] = { at: now + ms, timer };
+  }
+
+  // 2b's Restart runner: that one's count reset, started now
+  restartOne(env) {
+    const r = this.cfg.runners.find((x) => x.env === env);
+    if (!r) return;
+    this.reset(env);
+    this.stopping = false;
+    if (!this.procs[env]) this.spawn(r);
     this.onChange();
   }
 
@@ -520,6 +735,8 @@ class Runners {
 
   async stop() {
     this.stopping = true;
+    for (const x of Object.values(this.pending)) clearTimeout(x.timer);
+    this.pending = {};
     const live = Object.values(this.procs);
     await Promise.all(
       live.map(
@@ -553,10 +770,15 @@ class Runners {
     const end = Date.now() + ms;
     while (!(await this.healthy())) {
       if (signal?.aborted) throw new Error('cancelled');
+      const [env, given] = Object.entries(this.issues)[0] || [];
+      if (given)
+        throw Object.assign(new Error(given.cause || (given.kind === 'keeps' ? 'It stopped 5 times in 10 minutes, so it is not restarted again until you say so.' : `See ${this.logOf(env)}.`)), {
+          title: `The ${env} runner ${given.kind === 'keeps' ? 'keeps stopping' : 'didn’t start'}`,
+        });
       if (Date.now() > end) throw new Error(`The runners did not answer on their health ports: see ${this.p.logs}/runner-*.log`);
       await new Promise((r) => setTimeout(r, 1000));
     }
   }
 }
 
-module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs, imagesCfg, openMode, oldImages, layers, sizeOf, bytesOf };
+module.exports = { layout, loadSettings, stackSteps, Runners, validateAdmin, envs, imagesCfg, openMode, oldImages, layers, sizeOf, bytesOf, tailOf, freeDisk };

@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -16,6 +17,7 @@ import (
 	"github.com/helmstudio/helmgo/storage"
 
 	"github.com/helmstudio/studio_service/api/gallery"
+	gallerymodel "github.com/helmstudio/studio_service/api/gallery/model"
 	"github.com/helmstudio/studio_service/registry"
 )
 
@@ -52,13 +54,14 @@ type inputTake struct {
 	Etag                       *string
 	Width, Height              *int
 	Video, Audio               json.RawMessage
+	Sound                      *string // API 1.79: an audio take's class
 }
 
 // inputTakes reads the owner's ready, undeleted takes among ids (an explicit owner check: the caller's transaction or
 // System).
 func inputTakes(ctx context.Context, tx pgx.Tx, ownerID string, ids []string) (map[string]inputTake, error) {
-	rows, err := collect[inputTake](ctx, tx, `SELECT id::text, kind, key, content_type, bytes, etag, width, height, video, audio
-		FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready`, uuids(ids), ownerID)
+	rows, err := collect[inputTake](ctx, tx, `SELECT id::text, kind, key, content_type, bytes, etag, width, height, video, audio,
+		sound FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready`, uuids(ids), ownerID)
 	out := map[string]inputTake{}
 	for _, row := range rows {
 		out[row.ID] = row
@@ -176,7 +179,8 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 				return "", err
 			}
 		}
-		takes[row.ID] = gallery.Facts(row.ID, row.Kind, row.Width, row.Height, row.Video, row.Audio)
+		takes[row.ID] = gallery.FactsOf(gallerymodel.Take{ID: row.ID, Kind: row.Kind, Width: row.Width, Height: row.Height,
+			Video: row.Video, Audio: row.Audio, Sound: row.Sound})
 	}
 	return mediaRules(nodes, schemas, takes), nil
 }
@@ -185,11 +189,14 @@ func checkMedia(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 // snaps them in place: the 422 detail of the first bad one, "" when all are good. Each value fits its param
 // (media_fit) and a trim part lies inside the take within min_s..max_s (in 0, out min(d, max_s) when left out); a rows
 // param's items together keep its max_total_s (API 1.22); a span needs the workflow's one video source (a media
-// param, never a rows item).
+// param, never a rows item), or from API 1.79 without one its one audio source. From API 1.91 a media param (not a rows
+// item) takes a take by the offers' class rule (gallery.ByClass).
 func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema, takes map[string]gallery.MediaTake) string {
 	slots := mediaSlots(nodes, schemas)
-	var source *gallery.MediaTake // the one media param that accepts video: the spans' source
-	sources, total := 0, 0.0
+	class := registry.WorkflowSound(nodes, schemas)
+	// the spans' source: the one media param that accepts video, else (API 1.79) the one that accepts audio
+	var source, heard *gallery.MediaTake
+	sources, heards, total := 0, 0, 0.0
 	for i, slot := range slots {
 		id, _ := slot.Value["take_id"].(string)
 		take, ok := takes[id]
@@ -199,9 +206,15 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 		if detail := gallery.MediaFit(slot.Param, take); detail != "" {
 			return slot.Path + ": " + detail
 		}
+		if slot.Rows == "" && !gallery.ByClass(class, take, slot.Param) {
+			return fmt.Sprintf("%s: take %s is %s; this workflow takes %s only", slot.Path, id, cmp.Or(take.Sound, "a video"), class)
+		}
 		if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "video") { // never an item's field
 			sources++
 			source = &take
+		} else if slot.Rows == "" && slices.Contains(slot.Param.Accepts, "audio") {
+			heards++
+			heard = &take
 		}
 		value, detail := snapMedia(slot.Param, take, slot.Value)
 		if detail != "" {
@@ -223,6 +236,9 @@ func mediaRules(nodes map[string]registry.Node, schemas map[string]registry.Node
 			return fmt.Sprintf("%s: the takes last %.1f s in all; at most %.1f s", slot.Rows, total, slot.Total)
 		}
 		total = 0
+	}
+	if sources == 0 && heards == 1 { // API 1.79: a span on a song (Repaint), snapped to whole milliseconds
+		sources, source = 1, heard
 	}
 	for _, path := range slices.Sorted(maps.Keys(paramsOf(nodes, schemas, "span"))) {
 		id, name, _ := strings.Cut(path, ".")

@@ -7,22 +7,25 @@ import json
 import uuid
 
 import pytest
-from conftest import FakeJS, FakeStudio, FakeTools, engine, idle, until
-from test_stage_b import (
+from conftest import (
     CAPS,
+    FakeJS,
+    FakeStudio,
+    FakeTools,
     Script,
     agent,
     chat_cmd,
     director,
     doc,
-    fake,  # noqa: F401 - the fixture
+    engine,
     finish,
+    idle,
     node_of,
     remote_doc,
-    remote_on,  # noqa: F401 - the fixture
     server_provider,
     submit,
     turn,
+    until,
 )
 
 import agent_loop
@@ -49,10 +52,8 @@ def test_text_inside_a_block_can_never_close_it():
 # --- providers: the host rule at connect, no redirects, tools as a list, usage, tool calls
 
 
-async def test_a_redirect_is_never_followed(fake):  # noqa: F811
-    fake.script["m"] = [
-        {"status": 307, "headers": {"Location": "https://attacker.example/v1/chat/completions"}}
-    ]
+async def test_a_redirect_is_never_followed(fake):
+    fake.script["m"] = [{"status": 307, "headers": {"Location": "https://attacker.example/v1/chat/completions"}}]
     with pytest.raises(providers.CallError) as err:
         await providers.chat("local", server_provider(fake.url), {"model": "m", "system": "s", "prompt": "p",
                                                                    "max_tokens": 8})  # fmt: skip
@@ -61,42 +62,30 @@ async def test_a_redirect_is_never_followed(fake):  # noqa: F811
 
 async def test_the_connection_goes_only_to_a_checked_address(monkeypatch):
     pinned = providers._Pinned("x", "server")
-    with pytest.raises(
-        providers.CallError
-    ) as err:  # a name that resolves elsewhere at connect (rebinding)
+    with pytest.raises(providers.CallError) as err:  # a name that resolves elsewhere at connect (rebinding)
         await pinned.connect_tcp("8.8.8.8", 80)
     assert err.value.kind == "refused"
-    assert not providers.allowed_ip("10.0.0.5", "remote") and providers.allowed_ip(
-        "8.8.8.8", "remote"
-    )
-    assert not providers.allowed_ip("169.254.169.254", "remote") and not providers.allowed_ip(
-        "127.0.0.1", "remote"
-    )
+    assert not providers.allowed_ip("10.0.0.5", "remote") and providers.allowed_ip("8.8.8.8", "remote")
+    assert not providers.allowed_ip("169.254.169.254", "remote") and not providers.allowed_ip("127.0.0.1", "remote")
     monkeypatch.setattr(config, "REMOTE_ALLOW_PRIVATE", True)
-    assert providers.allowed_ip("10.0.0.5", "remote") and not providers.allowed_ip(
-        "169.254.169.254", "remote"
-    )
+    assert providers.allowed_ip("10.0.0.5", "remote") and not providers.allowed_ip("169.254.169.254", "remote")
     monkeypatch.setattr(config, "REMOTE_MODELS", True)
     with pytest.raises(providers.CallError) as err:
-        await providers.check_host(
-            "x", {"kind": "remote", "base_url": "https://169.254.169.254/v1"}
-        )
+        await providers.check_host("x", {"kind": "remote", "base_url": "https://169.254.169.254/v1"})
     assert err.value.kind == "refused"
 
 
-async def test_tools_go_out_as_a_list_usage_is_estimated_and_extra_calls_refuse_the_turn(fake):  # noqa: F811
+async def test_tools_go_out_as_a_list_usage_is_estimated_and_extra_calls_refuse_the_turn(fake):
     p = server_provider(fake.url)
-    tools = agents.compact(
-        agents.native_tools(agent())
-    )  # as submit puts them in ask.tools: JSON text
-    calls = [{"name": "memory_read", "arguments": {}}] * 5
+    tools = agents.compact(agents.native_tools(agent()))  # as submit puts them in ask.tools: JSON text
+    calls = [{"name": "memory_read", "arguments": {}}] * 13  # one over providers.MAX_TOOL_CALLS (12)
     fake.script["m"] = [{"no_usage": True, "content": "hi"}, {"tool_calls": calls}]
     req = {"model": "m", "system": "s" * 40, "prompt": "p" * 400, "max_tokens": 300, "tools": tools}
     got = await providers.chat("local", p, req)
     assert isinstance(fake.requests[0]["body"]["tools"], list)
     assert (got["tokens_in"], got["tokens_out"]) == (110, 300)  # no usage: the bound counted
     got = await providers.chat("local", p, req)
-    assert len(got["tool_calls"]) == 4 and "5 tool calls" in got["error"]
+    assert len(got["tool_calls"]) == 12 and "13 tool calls" in got["error"]
     assert providers.answer_of(got)["tries"][0]["error"] == got["error"]
 
 
@@ -123,7 +112,7 @@ async def test_pause_between_retries_puts_the_call_back():
 # --- the remote queue: tokens reserved, a shutdown keeps calls in flight
 
 
-async def test_queued_calls_reserve_their_tokens(pool, remote_on):  # noqa: F811
+async def test_queued_calls_reserve_their_tokens(pool, remote_on):
     studio, js = FakeStudio(), FakeJS()
     e = engine(pool, studio, js)
     b = str(uuid.uuid4())
@@ -136,7 +125,7 @@ async def test_queued_calls_reserve_their_tokens(pool, remote_on):  # noqa: F811
     assert got["kind"] == "cap" and got["error"] == "remote cap reached: 1500 tokens"
 
 
-async def test_a_shutdown_keeps_a_call_in_flight_sent(pool, remote_on):  # noqa: F811
+async def test_a_shutdown_keeps_a_call_in_flight_sent(pool, remote_on):
     srv = remote_on
     srv.script["fake-large"] = [{"content": '{"route": "keep", "reason": "ok"}', "delay_s": 1.0}]
     studio, js = FakeStudio(), FakeJS()
@@ -176,11 +165,7 @@ async def test_a_turn_is_asked_only_when_its_prompt_fits_the_tokens(pool):
     # a prompt larger than the visit's tokens: stopped before any model is asked
     studio2, js2 = FakeStudio(), FakeJS()
     e2 = engine(pool, studio2, js2, tool=FakeTools())
-    await e2.submit(
-        submit(
-            str(uuid.uuid4()), doc(plan=agent(caps=CAPS | {"max_tokens": 1000})), script="x" * 4000
-        )
-    )
+    await e2.submit(submit(str(uuid.uuid4()), doc(plan=agent(caps=CAPS | {"max_tokens": 1000})), script="x" * 4000))
     await idle(e2)
     assert studio2.asked == [] and js2.rows()[1]["error"] == "plan: stopped at tokens"
 
@@ -207,9 +192,7 @@ async def test_rows_edit_holds_the_rows_lock_until_its_inputs_are_stored():
     call = {"node": "plan", "rows": [], "notices": []}
     c = {"tool": "rows_edit", "args": {"row": 2, "inputs": {"script": "x"}}}
     await lock.acquire()  # the row's drive holds it
-    task = asyncio.create_task(
-        agent_loop.run_tool({"batch_id": "b", "row": 0}, Ctx(), {}, call, c, "id", True)
-    )
+    task = asyncio.create_task(agent_loop.run_tool({"batch_id": "b", "row": 0}, Ctx(), {}, call, c, "id", True))
     await asyncio.sleep(0.05)
     assert stored == [] and not task.done()
     lock.release()
@@ -242,17 +225,13 @@ async def test_a_wake_resumed_after_a_failure_clears_its_inbox(pool):
     await finish(e, studio, "plan", rows=(0,))
     assert [m["data"]["message"]["text"] for m in js.events("chat")] == ["Hello."]
     assert await e._all("SELECT id FROM director_inbox") == []
-    assert not [
-        k for k in studio.asked if k.startswith(f"{b}:0:") and ":plan:1:" in k
-    ]  # no second wake
+    assert not [k for k in studio.asked if k.startswith(f"{b}:0:") and ":plan:1:" in k]  # no second wake
     assert json.loads(json.dumps(await e._one("SELECT wakes FROM directors")))["wakes"] == 1
 
 
-async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_in_the_system(fake):  # noqa: F811
+async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_in_the_system(fake):
     p = server_provider(fake.url)
-    schema = json.dumps(
-        {"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]}
-    )
+    schema = json.dumps({"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]})
     fake.script["m"] = [
         {"status": 400},
         {"content": '{"text": "hi"}'},
@@ -263,15 +242,9 @@ async def test_a_provider_without_json_schema_gets_json_object_with_the_schema_i
     got = await providers.chat("nojs", p, req)
     first, second = (r["body"] for r in fake.requests[:2])
     assert first["response_format"]["type"] == "json_schema" and got["text"] == '{"text": "hi"}'
-    assert (
-        second["response_format"] == {"type": "json_object"}
-        and schema in second["messages"][0]["content"]
-    )
+    assert second["response_format"] == {"type": "json_object"} and schema in second["messages"][0]["content"]
     await providers.chat("nojs", p, req)  # remembered: straight to json_object
-    assert (
-        fake.requests[2]["body"]["response_format"] == {"type": "json_object"}
-        and len(fake.requests) == 3
-    )
+    assert fake.requests[2]["body"]["response_format"] == {"type": "json_object"} and len(fake.requests) == 3
     providers._NO_JSON_SCHEMA.discard("nojs")
 
 
@@ -298,17 +271,11 @@ async def test_a_server_may_live_at_what_host_docker_internal_resolves_to(monkey
         with pytest.raises(providers.CallError) as err:
             await providers.check_host("x", {"kind": "server", "base_url": url})
         assert err.value.kind == "refused"
-    monkeypatch.setattr(
-        config, "REMOTE_MODELS", True
-    )  # a remote is unchanged: https and public only
+    monkeypatch.setattr(config, "REMOTE_MODELS", True)  # a remote is unchanged: https and public only
     with pytest.raises(providers.CallError) as err:
-        await providers.check_host(
-            "x", {"kind": "remote", "base_url": "https://host.docker.internal/v1"}
-        )
+        await providers.check_host("x", {"kind": "remote", "base_url": "https://host.docker.internal/v1"})
     assert err.value.kind == "refused"
-    names["host.docker.internal"] = [
-        "192.168.65.254"
-    ]  # Docker Desktop: OrbStack's address is refused again
+    names["host.docker.internal"] = ["192.168.65.254"]  # Docker Desktop: OrbStack's address is refused again
     for url in ("http://other.example/v1", "http://0.250.250.254/v1"):
         with pytest.raises(providers.CallError):
             await providers.check_host("x", {"kind": "server", "base_url": url})

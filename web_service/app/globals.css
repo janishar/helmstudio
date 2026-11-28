@@ -28,6 +28,64 @@
   html {
     @apply font-sans;
   }
+  /* every slider one design (the shared Range component sets --z): a 4 px track filled in t2 to the value, a 12 px t1 handle (owner, 2026-11-28:
+     "can this slide ui get better everywhere") */
+  input[type="range"] {
+    height: 16px;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--t1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--t1);
+  }
+  /* every scrollbar the theme's: a 0.25rem square accent bar on no track. Chromium and Safari (the Mac app too) take
+     the ::-webkit-scrollbar rules, which they ignore once scrollbar-width / -color are set, so those are Firefox's only */
+  ::-webkit-scrollbar {
+    width: 0.25rem;
+    height: 0.25rem;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  /* clear until its area scrolls (components/scrollbars.tsx marks it data-scrolling for 0.8 s) */
+  ::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 0;
+  }
+  [data-scrolling]::-webkit-scrollbar-thumb {
+    background: var(--a1);
+  }
+  @supports not selector(::-webkit-scrollbar) {
+    * {
+      scrollbar-width: thin;
+      scrollbar-color: var(--a1) transparent;
+    }
+  }
   /* 14/20 text on the body, not the root: the root stays 16px, so Tailwind's rem units land on the mock's px */
   body {
     font-size: 14px;
@@ -363,6 +421,43 @@
   .cm .mi[aria-disabled="true"] > span {
     opacity: 1;
   }
+  /* a length typed beside the menu (AudioFades frame 4: Fade in…): the seconds, the quick picks, the limits */
+  .cm.sub.secs {
+    gap: 8px;
+    padding: 8px 10px 10px;
+    border-radius: 16px;
+  }
+  .cm .secs-in {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    height: 34px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: var(--s3);
+    font-family: var(--font-mono);
+    color: var(--t2);
+  }
+  .cm .secs-in input {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    background: transparent;
+    font: 600 14px var(--font-mono);
+    color: var(--t1);
+    outline: none;
+  }
+  .cm .secs-picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cm .secs-note {
+    margin: 0;
+    font-size: 12px;
+    color: var(--t2);
+  }
   /* a chip whose choice cannot run now (Run on a machine that went offline) */
   .chip.warn {
     background: color-mix(in srgb, var(--bad) 10%, var(--s4));
@@ -449,6 +544,121 @@
     color: var(--t1);
     font-size: 13px;
     padding: 0 12px;
+  }
+  /* SearchField (docs/mock/Search.dc.html frame 0): the Field look, a glyph, the count, × and the / hint */
+  .sf {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    padding: 0 8px 0 12px;
+    border-radius: 10px;
+    background: var(--s4);
+    color: var(--t1);
+    font-size: 13px;
+  }
+  .sf:focus-within {
+    box-shadow: inset 0 0 0 1px var(--a1);
+  }
+  .sf .g {
+    flex: 0 0 auto;
+    color: var(--t2);
+  }
+  .sf input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--t1);
+    font: inherit;
+    padding: 0;
+  }
+  .sf input::placeholder {
+    color: var(--t2);
+  }
+  .sf input::-webkit-search-cancel-button {
+    display: none;
+  }
+  .sf:focus-within .k {
+    display: none;
+  }
+  .sfx {
+    display: grid;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 0;
+    border-radius: 6px;
+    background: var(--s5);
+    color: var(--t1);
+  }
+  .sfh {
+    font: 11px var(--font-mono);
+    color: var(--t2);
+  }
+  .sf .k {
+    min-width: 18px;
+    padding: 0 5px;
+    border-radius: 5px;
+    background: var(--s5);
+    color: var(--t1);
+    font: 500 11px/18px var(--font-mono);
+    text-align: center;
+  }
+  @media (max-width: 640px) {
+    .sf {
+      height: 44px;
+    }
+  }
+  mark {
+    border-radius: 3px;
+    padding: 0 1px;
+    background: color-mix(in srgb, var(--a1) 28%, transparent);
+    color: var(--t1);
+  }
+  /* the row Enter opens (↑ ↓ move it) */
+  .sf-on {
+    box-shadow: inset 0 0 0 1px var(--a1);
+  }
+  .sf-older {
+    display: flex;
+    flex: 0 0 auto;
+    flex-direction: column;
+    gap: 2px;
+    margin-top: 4px;
+    padding-top: 6px;
+    border-top: 1px solid var(--s5);
+  }
+  .sf-older .oh {
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    color: var(--t2);
+  }
+  .sf-older .srch {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    color: var(--t2);
+  }
+  .sf-none {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px;
+  }
+  .sf-none p {
+    margin: 0;
+    font-size: 13px;
+    color: var(--t2);
   }
   /* a mention in a prompt's highlight layer (docs/mock/Elements .mn): drawn behind the textarea's text */
   .mention-chip {
@@ -673,6 +883,8 @@
     width: 2px;
     background: var(--t1);
     pointer-events: none;
+    /* scrolled under the 72px track names: clipped from its left (--sl, the scroll, set on scroll) */
+    clip-path: inset(-40px -40px -40px calc(72px + var(--sl, 0px) - var(--x, 0px)));
   }
   .tl-ph::before {
     content: "";
@@ -949,6 +1161,9 @@
     border-radius: 50%;
     background: #f2c14e;
     box-shadow: 0 0 0 2px var(--s1);
+  }
+  .dock-item .dot.new {
+    background: var(--a1);
   }
   .ast {
     position: fixed;
@@ -1232,6 +1447,15 @@
     font-weight: 600;
     color: var(--t2);
   }
+  .ast .chats .sf {
+    margin-bottom: 4px;
+  }
+  .ast .chats button.sf-on[role] {
+    box-shadow: inset 0 0 0 1px var(--a1);
+  }
+  .ast .sf button.sfx {
+    box-shadow: none;
+  }
   .ast .chats .chh .mono {
     font-size: 10px;
     font-weight: 400;
@@ -1307,6 +1531,10 @@
   .ast .msg p + p,
   .ast .msg p + .al {
     margin-top: 6px;
+  }
+  /* the steps come first in a reply (alpha.6): the answer and the choices sit 8px under them */
+  .ast .msg .al + * {
+    margin-top: 8px;
   }
   .ast .src {
     margin: 4px 0 0;
@@ -2152,16 +2380,42 @@
       margin: 14px 0 14px 14px;
     }
   }
-  @media (min-width: 48rem) and (max-height: 880px) {
+  /* Setup at the menu panel's foot (one panel, items 56 px with 10 px gaps since 2026-11-28; was 943 px): an admin's three tiles need the whole rail about 805 px tall (14 + logo
+     64 + 14 + tools and Assistant 575 + 14 + Setup 248 + 14); shorter, they fold into one gear tile (787 px, as a
+     non-admin's Settings-only panel). ponytail: fixed heights (the studio's state rides on the logo, so nothing else
+     joins the rail) */
+  .rail-setup,
+  .rail-gear {
+    display: none;
+  }
+  @media (min-width: 48rem) {
+    .rail-setup {
+      display: flex;
+    }
+  }
+  @media (min-width: 48rem) and (max-height: 805px) {
+    .rail-setup.admin {
+      display: none;
+    }
+    .rail-gear {
+      display: flex;
+    }
+  }
+  @media (min-width: 48rem) and (max-height: 799px) {
     .rail-wrap {
       max-height: 100dvh;
       margin: 0 -16px 0 0;
       padding: 14px 16px 40px 14px;
       overflow-x: hidden;
       overflow-y: auto;
-      scrollbar-width: thin;
-      scrollbar-color: var(--s4) transparent;
     }
+  }
+  /* the rail's tiles 10% under the shared tile (owner, 2026-11-28: "just reduce the size by 10%", "icon") */
+  .dock-item .tile,
+  .rail-logo .tile {
+    width: 32px;
+    height: 32px;
+    border-radius: 11px;
   }
   .dock-item:not([aria-current]) .tile {
     filter: saturate(0.55) brightness(0.8);
@@ -3048,4 +3302,564 @@
 }
 .ast .sb:disabled {
   opacity: 0.6;
+}
+
+/* Create's kind tabs: the kind's glowing orb above the label (docs/mock/TextToVideo.dc.html .ktab, Magic.dc.html .ki) */
+.ktab {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+/* the picked kind: a thin accent ring inside, as Magic's picked chips (the focus ring stays the outline outside); the
+   other tabs' orbs dimmed until hover or focus, their label at --t2, the dimmest text that keeps AA in every theme
+   (owner, 2026-11-27: "make selected one more differentiated from on active ones") */
+.ktab[aria-selected="true"] {
+  box-shadow:
+    inset 0 0 0 1px var(--a1),
+    0 3px 6px color-mix(in srgb, var(--shd) 35%, transparent);
+}
+.ktab[aria-selected="false"] .ki {
+  opacity: 0.4;
+  filter: saturate(0.45);
+}
+.ktab .ki {
+  transition:
+    opacity 0.12s,
+    filter 0.12s;
+}
+.ktab[aria-selected="false"]:is(:hover, :focus-visible) {
+  color: var(--t1);
+}
+.ktab[aria-selected="false"]:is(:hover, :focus-visible) .ki {
+  opacity: 1;
+  filter: none;
+}
+.ki {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 40%, transparent);
+}
+.ki.k-video {
+  --k: #ff9a6e;
+}
+.ki.k-image {
+  --k: #b8abff;
+}
+.ki.k-board {
+  --k: #e8d88a;
+}
+.ki.k-voice {
+  --k: #f2b84b;
+}
+
+/* ---- error states (docs/mock/ErrorStates.dc.html) */
+/* a1, a2: the page-level banner; .ok is Back online */
+.ban {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px 6px 14px;
+  border-radius: 14px 14px 14px 6px;
+  background: color-mix(in srgb, var(--bad) 11%, var(--s2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--bad) 55%, transparent);
+  font-size: 13px;
+}
+.ban > svg {
+  color: var(--bad);
+  flex: 0 0 auto;
+}
+.ban.ok {
+  background: color-mix(in srgb, var(--a1) 11%, var(--s2));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--a1) 55%, transparent);
+  animation: ban-fade 3s ease-in forwards;
+}
+.ban.ok > svg {
+  color: var(--a1);
+}
+@keyframes ban-fade {
+  70% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin,
+  .ban.ok {
+    animation: none;
+  }
+}
+/* b: why Generate is greyed, a visible line under the composer (never hover-only) */
+.why {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--t1b);
+}
+.why > svg {
+  flex: 0 0 auto;
+  color: var(--bad);
+}
+.why a {
+  text-decoration: underline;
+}
+/* c1, e: a progress piece that waits (amber); c2: the failed piece */
+.step.wait {
+  background: color-mix(in srgb, #f2c14e 12%, var(--s1));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #f2c14e 70%, transparent);
+  color: #f2c14e;
+  font-weight: 500;
+}
+/* a run tile that tries again or waits (amber), or failed (red) */
+.rtile.wait {
+  color: #f2c14e;
+  font-family: var(--font-sans, Inter, sans-serif);
+  font-weight: 600;
+  border-color: #f2c14e;
+}
+.rtile.failed {
+  color: var(--bad);
+  font-weight: 600;
+  border-color: var(--bad);
+  background: color-mix(in srgb, var(--bad) 8%, var(--s1));
+}
+/* c2: the run-failed card on the stage, its raw error under Show details */
+.fpanel {
+  width: 560px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 20px;
+  border-radius: 18px 18px 18px 8px;
+  background: var(--s2);
+  text-align: left;
+}
+.fpanel .ft {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--bad);
+}
+.fpanel p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 21px;
+  color: var(--t1);
+}
+.fpanel .raw {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--in, var(--s1));
+}
+.fpanel .raw pre {
+  margin: 0;
+  flex: 1;
+  font-size: 11px;
+  line-height: 16px;
+  color: var(--t2);
+  white-space: pre-wrap;
+  user-select: text;
+}
+/* d: Live updates paused · retrying */
+.live {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #f2c14e 12%, var(--s2));
+  color: #f2c14e;
+  font-size: 12px;
+  font-weight: 500;
+}
+/* g: the rail logo's dot while something is down (owner, 2026-11-28: the separate status tile is gone), and its
+   popover */
+.logo-dot {
+  position: absolute;
+  right: -3px;
+  top: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--bad);
+  box-shadow: 0 0 0 2px var(--s1);
+  pointer-events: none;
+}
+.hpop {
+  width: 400px;
+  max-width: calc(100vw - 32px);
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 2px;
+}
+.hpop:popover-open {
+  display: flex;
+}
+.hpop .hh {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 2px 6px 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t2);
+}
+.hpop .hh .mono {
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0;
+}
+.hpop .hrw {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 8px;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.hpop .hrw:hover {
+  background: var(--s4);
+}
+.hpop .hn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.hpop .hn small {
+  font: 11px var(--font-mono, monospace);
+  color: var(--t2);
+}
+.hpop .sd {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.hpop .sd.ok {
+  background: var(--a1);
+  box-shadow: 0 0 8px var(--a1);
+}
+.hpop .sd.bad {
+  background: var(--bad);
+}
+.hpop .sd.off {
+  background: var(--t2);
+}
+.hpop .hs {
+  font-size: 12px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.hpop .hs.bad {
+  color: var(--bad);
+  font-weight: 500;
+}
+.hpop .hft {
+  display: flex;
+  gap: 8px;
+  padding: 8px 4px 2px;
+  border-top: 1px solid var(--s5);
+  margin-top: 6px;
+}
+.hpop .hint {
+  margin: 6px 6px 0;
+  font-size: 12px;
+  color: var(--t2);
+}
+
+/* Audio fades, crossfades and ducking (plan 41, docs/mock/AudioFades.dc.html; components/fades.tsx), shared by the
+   Timeline and Magic: the curve over the waveform, the handles under the title row, the crossfade badge (sky; amber
+   for a dip), the dip warning, the ducked stretches (sky), the Duck music row, the playhead grabbed by its line */
+.fov {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.fh-h {
+  position: absolute;
+  top: 17px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: var(--s1);
+  box-shadow:
+    inset 0 0 0 2px var(--t1),
+    0 0 0 2px var(--g);
+  z-index: 20;
+  cursor: ew-resize;
+  touch-action: none;
+  opacity: 0;
+}
+/* the Timeline's handles beside their clip's button (no control inside a button) */
+.fhs {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+.fhs .fh-h {
+  pointer-events: auto;
+}
+/* hollow on hover; filled when the clip is selected */
+.fhost:hover .fh-h,
+.fhost:hover + .fhs .fh-h,
+.fhs:hover .fh-h,
+.fh-h.drag {
+  opacity: 1;
+}
+.fsel .fh-h {
+  opacity: 1;
+  background: var(--t1);
+  box-shadow:
+    0 0 0 2px var(--g),
+    0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.fh-h.drag,
+.fsel .fh-h.drag {
+  background: #ffe07a;
+  box-shadow:
+    0 0 0 2px var(--g),
+    0 0 0 5px color-mix(in srgb, #ffe07a 35%, transparent);
+}
+.fh-rd {
+  position: absolute;
+  top: -22px;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-sans, Inter, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
+}
+.fh-rd .mono {
+  color: #2a2000;
+}
+/* a blend's tail: the outgoing sound running on under the next clip's head */
+.tl-ext {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  box-sizing: border-box;
+  border-radius: 0 11px 11px 0;
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--xk, #86cdea) 26%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--xk, #86cdea) 70%, transparent);
+  z-index: 4;
+  pointer-events: none;
+}
+/* the Timeline's crossfade badge (Magic's joins have their own .tj) */
+.tlx {
+  position: absolute;
+  top: 50%;
+  z-index: 21;
+  height: 26px;
+  min-width: 26px;
+  margin-top: -13px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--s2);
+  border: 1.5px solid var(--k);
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--t1);
+}
+.tlx svg {
+  width: 14px;
+  height: 14px;
+}
+.tj.xf,
+.tlx.xf {
+  --k: #86cdea;
+}
+.tj.dip,
+.tlx.dip {
+  --k: #f2c14e;
+  color: #f2c14e;
+}
+.xpop {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  padding: 8px 10px 10px;
+}
+.xpop-rm {
+  align-self: flex-start;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dipw {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #e8c468 18%, var(--s2));
+  box-shadow: inset 0 0 0 1px #e8c468;
+  font-size: 12px;
+  color: var(--t1);
+}
+.duck {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, #7cc7f2 20%, transparent), transparent 70%);
+  border-left: 1px dashed #7cc7f2;
+  border-right: 1px dashed #7cc7f2;
+}
+.duck > span {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: 5px;
+  background: #7cc7f2;
+  color: #06202e;
+  font: 600 9px/14px var(--font-mono);
+  white-space: nowrap;
+}
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  font-size: 13px;
+  min-width: 0;
+}
+.srow small {
+  font-size: 11px;
+  color: var(--t2);
+}
+.dk-tog {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 34px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--s5);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.dk-tog::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--t2);
+}
+.dk-tog[aria-checked="true"] {
+  background: var(--a1);
+}
+.dk-tog[aria-checked="true"]::after {
+  left: 17px;
+  background: var(--on1);
+}
+.dbc {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 9px;
+  background: var(--s4);
+  font: 500 12px/28px var(--font-mono);
+  color: var(--t1);
+}
+/* the playhead grabbed by its line (frame 5): a 4 px band each side, ↔, brighter while held; a yellow readout */
+.phg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 10px;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.phg:hover,
+.phg.on {
+  background: color-mix(in srgb, var(--t1) 9%, transparent);
+}
+.grab {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--t1) 30%, transparent),
+    0 0 12px color-mix(in srgb, var(--t1) 45%, transparent);
+}
+.phr {
+  position: absolute;
+  left: 10px;
+  z-index: 30;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
 }

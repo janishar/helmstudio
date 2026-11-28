@@ -57,12 +57,36 @@ def child_env(exe: Path, env=os.environ) -> dict[str, str]:
     return {"PATH": os.pathsep.join([*paths, env.get("PATH", os.defpath)]), **extra}
 
 
+HOSTNAME_MAX = 63  # ponytail: a guess; 65 characters broke on 2026-11-25 (Linux allows 64), set it on the GPU check
+
+
+def preflight(node: str, exe: Path, env=os.environ) -> None:
+    """What SGLang's start needs from the host, checked before a 30-minute READY_S wait (docs/guides: NVIDIA on Linux):
+    the two links its JIT kernels expect in the cu13 wheel (made here when missing: `lib64` → lib and
+    lib/libcudart.so → libcudart.so.13; the CUDA image had them), a short hostname (torch.distributed's "File name
+    too long") and gcc / g++ on PATH."""
+    cuda = next(exe.parent.parent.glob("lib/python*/site-packages/nvidia/cu13"), None)
+    if cuda:
+        for link, to in ((cuda / "lib64", "lib"), (cuda / "lib/libcudart.so", "libcudart.so.13")):
+            if link.is_symlink() or link.exists():
+                continue
+            try:
+                link.symlink_to(to)
+            except OSError as e:
+                raise RunError(f"{node}: SGLang needs the link {link} ({e.strerror}): ln -s {to} {link}") from None
+    if len(host := socket.gethostname()) > HOSTNAME_MAX:
+        raise RunError(f"{node}: the hostname {len(host)} characters long breaks SGLang's start (torch.distributed "
+                       "'File name too long'): sudo hostnamectl set-hostname gpu1")  # fmt: skip
+    path = child_env(exe, env)["PATH"]
+    if missing := [c for c in ("gcc", "g++") if not shutil.which(c, path=path)]:
+        raise RunError(f"{node}: SGLang compiles its kernels with gcc and g++ ({', '.join(missing)} not found): "
+                       "sudo apt install build-essential")  # fmt: skip
+
+
 SGLANG = find()
 # uvicorn's start line (use_colors: the URL may be wrapped in ANSI codes); SGLang starts it after the weights loaded
 READY = re.compile(r"Uvicorn running on (?:\x1b\[[0-9;]*m)?http://127\.0\.0\.1:(\d+)")
-READY_S = (
-    1800  # cold: ~70 GB of weights from disk plus JIT kernels; ponytail: flat, measure on the VM
-)
+READY_S = 1800  # cold: ~70 GB of weights from disk plus JIT kernels; ponytail: flat, measure on the VM
 POLL = 1.0
 REQUEST_S = 60
 IDLE_S = 1800  # no progress change for this long fails the run (the decode reports none)
@@ -95,9 +119,7 @@ def shape(short: int, rw: int, rh: int) -> tuple[int, int]:
 def target(task: str, width: int, height: int, frames: int) -> dict:
     """The request's target for a w × h canvas, or RunError's text as ValueError when SGLang cannot make it."""
     if not MIN_FRAMES <= frames <= MAX_FRAMES:
-        raise ValueError(
-            f"the Base fp8 variant makes {MIN_FRAMES} to {MAX_FRAMES} frames (4 to 15 s), not {frames}"
-        )
+        raise ValueError(f"the Base fp8 variant makes {MIN_FRAMES} to {MAX_FRAMES} frames (4 to 15 s), not {frames}")
     short, g = min(width, height), math.gcd(width, height)
     ratios = RATIOS if task != "fl2va" else (f"{width // g}:{height // g}",)
     for ratio in ratios:
@@ -111,16 +133,10 @@ def request(prompt: str, seed: int, steps: int, size: dict, frames: int, first, 
             images: list[Path], audios: list[Path], videos: list[Path], *, quality: str = "lossless",
             flow_shift: float = FLOW_SHIFT, audio_flow_shift: float = AUDIO_FLOW_SHIFT) -> dict:  # fmt: skip
     """The /v1/videos body; first / last are PNG paths or None; quality and the shifts only when not the default."""
-    refs = (
-        [("image", p) for p in images]
-        + [("audio", p) for p in audios]
-        + [("video", p) for p in videos]
-    )
+    refs = [("image", p) for p in images] + [("audio", p) for p in audios] + [("video", p) for p in videos]
     keys = [(0, first), (-1, last)]
     task = "ref2va" if refs else "fl2va" if first or last else "t2va"
-    conditions = [
-        {"type": "image", "role": "keyframe", "uri": str(p), "frame_index": i} for i, p in keys if p
-    ]
+    conditions = [{"type": "image", "role": "keyframe", "uri": str(p), "frame_index": i} for i, p in keys if p]
     conditions += [{"type": kind, "role": "reference", "uri": str(p)} for kind, p in refs]
     body = {"prompt": prompt, "task": task, "conditions": conditions,
             "target": target(task, size["width"], size["height"], frames),
@@ -196,14 +212,10 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
-def call(
-    node: str, port: int, path: str, body: dict | None = None, timeout: float = REQUEST_S
-) -> bytes:
+def call(node: str, port: int, path: str, body: dict | None = None, timeout: float = REQUEST_S) -> bytes:
     """One HTTP call to the server; an HTTP error fails the run with its `detail`."""
     data = json.dumps(body).encode() if body is not None else None
-    req = urllib.request.Request(
-        f"http://127.0.0.1:{port}{path}", data, {"Content-Type": "application/json"}
-    )
+    req = urllib.request.Request(f"http://127.0.0.1:{port}{path}", data, {"Content-Type": "application/json"})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.read()
@@ -214,9 +226,7 @@ def call(
         except ValueError, AttributeError:
             msg = raw
         msg = msg if isinstance(msg, str) else json.dumps(msg)
-        raise RunError(
-            f"{node}: SGLang refused the request ({e.code}): {media.last_line(msg)}"
-        ) from None
+        raise RunError(f"{node}: SGLang refused the request ({e.code}): {media.last_line(msg)}") from None
     except (TimeoutError, urllib.error.URLError) as e:
         raise RunError(f"{node}: SGLang could not be reached ({getattr(e, 'reason', e)})") from None
 
@@ -231,20 +241,12 @@ def wait(ctx, port: int, job: str) -> None:
             return
         if v["status"] == "failed":
             why = (v.get("error") or {}).get("message") or "no reason given"
-            log.error(
-                "sglang job %s failed: %s", job, why
-            )  # the whole message: its last line can be only "stderr:"
-            text = " ".join(
-                line.strip()
-                for line in why.splitlines()
-                if line.strip() and line.strip() != "stderr:"
-            )
+            log.error("sglang job %s failed: %s", job, why)  # the whole message: its last line can be only "stderr:"
+            text = " ".join(line.strip() for line in why.splitlines() if line.strip() and line.strip() != "stderr:")
             raise RunError(f"{ctx.node}: SGLang failed: {text[-400:] or why}")
         if (p := int(v.get("progress") or 0)) > sent:
             ctx.progress(p, 100, "sampling", "sample")
-            if (
-                p >= 99
-            ):  # ponytail: the denoise's last report taken as the decode's start; SGLang names no decode
+            if p >= 99:  # ponytail: the denoise's last report taken as the decode's start; SGLang names no decode
                 ctx.progress(1, 1, "decoding", "decode_video")
             sent, seen = p, time.monotonic()
         if time.monotonic() - seen > IDLE_S:
@@ -255,9 +257,8 @@ def wait(ctx, port: int, job: str) -> None:
 def generate(ctx, model, body: dict, out: Path, tmp: Path, lora: Path | None = None) -> None:
     """Start the partition's server (with `lora`: its LoRA), run `body`, write its MP4 to `out`."""
     if not SGLANG.is_file():
-        raise RunError(
-            f"{ctx.node}: SGLang is not found at {SGLANG} (set SGLANG_BIN; docs/guides: NVIDIA on Linux)"
-        )
+        raise RunError(f"{ctx.node}: SGLang is not found at {SGLANG} (set SGLANG_BIN; docs/guides: NVIDIA on Linux)")
+    preflight(ctx.node, SGLANG)
     partition = "ref2va" if body["task"] == "ref2va" else "fl2va"
     ctx.progress(1, 1, "starting sglang", "encode")  # a phase without steps: 1 of 1
     lora = ready_lora(lora) if lora else None

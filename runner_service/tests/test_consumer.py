@@ -82,9 +82,7 @@ async def test_echo_run_succeeds_with_progress_and_a_png():
         "etag": hashlib.md5(data).hexdigest(),
         "thumb": out["thumb"],
     }
-    assert (
-        out["thumb"]["key"] == PREFIX + "0.thumb.webp" and out["thumb"]["width"] == image.width
-    )  # never upscaled
+    assert out["thumb"]["key"] == PREFIX + "0.thumb.webp" and out["thumb"]["width"] == image.width  # never upscaled
     assert msg.log == [("ack", len(js.sent))]  # acked after the terminal status
     assert c.host.run_id is None and json.loads(c.host.kv.data["fake.fake"])["state"] == "idle"
 
@@ -305,9 +303,7 @@ async def test_after_run_unload_empties_the_residency(tmp_path, monkeypatch):
     c, _ = qwen_consumer(q, js, after_run="unload")
     await c.handle(FakeMsg(qwen_command(seed=3), js))
     assert kinds(js)[-1] == "succeeded" and not c.residency.entries
-    assert (
-        len(c.cache) == 0
-    )  # cached node results go too: the same run again loads its components again
+    assert len(c.cache) == 0  # cached node results go too: the same run again loads its components again
 
 
 async def test_a_run_that_does_not_fit_fails_with_numbers(tmp_path, monkeypatch):
@@ -362,9 +358,7 @@ async def test_a_video_output_stores_the_mp4_and_its_poster_and_reports_the_vide
     cmd["data"]["workflow"]["nodes"] = {"clip": {"kind": "t/clip", "params": {}},
                                         "output": {"kind": "output", "params": {}, "in": {"media": "clip.video"}}}  # fmt: skip
     js = FakeJS()
-    c = consumer(
-        js, impls=IMPLS | {"t/clip": Node(clip)}, node_schemas=SCHEMAS | {"t/clip": schema}
-    )
+    c = consumer(js, impls=IMPLS | {"t/clip": Node(clip)}, node_schemas=SCHEMAS | {"t/clip": schema})
     await c.handle(FakeMsg(cmd, js))
     assert kinds(js) == ["running", "output", "succeeded"]
     check_events(js)
@@ -435,9 +429,7 @@ async def test_runner_unload_frees_everything_when_idle_and_is_busy_during_a_run
         )
         == []
     )
-    assert (
-        json.loads(c.host.kv.data["fake.fake"])["resident"] == []
-    )  # the hosts key was rewritten first
+    assert json.loads(c.host.kv.data["fake.fake"])["resident"] == []  # the hosts key was rewritten first
     c.ctx = object()  # a run in progress
     assert await main.unload_reply(c, c.host, {"for_env": "torch"}) == {
         "error": "a run is in progress",

@@ -112,12 +112,18 @@ export function filterItems(
     q = "",
   }: { group?: Group | ""; source?: S<"LibrarySource"> | ""; q?: string },
 ) {
-  const words = q.trim().replace(/^@/, "").toLowerCase().split(/\s+/).filter(Boolean);
+  // every word in the name, the handle or the text (a word's leading @ ignored; Search.dc.html frame 6)
+  const words = q
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => w.replace(/^@/, ""));
+  const hay = (x: Item) => [x.name, x.handle ?? "", x.text ?? ""].map((f) => f.toLowerCase());
   return items.filter(
     (x) =>
       (!group || x.group === group) &&
       (!source || (x.source ?? "mine") === source) &&
-      words.every((w) => x.name.toLowerCase().includes(w) || x.handle?.includes(w)),
+      words.every((w) => hay(x).some((f) => f.includes(w))),
   );
 }
 

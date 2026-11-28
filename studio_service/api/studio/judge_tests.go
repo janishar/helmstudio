@@ -179,7 +179,7 @@ func (s *Service) CreateJudgeTest(ctx context.Context, caller common.Caller, pip
 		media, thumbs := make([]any, len(takes)), 0
 		for i, t := range takes {
 			media[i] = map[string]any{"take": map[string]any{"take_id": t.ID}}
-			thumbs += map[bool]int{true: 3, false: 1}[t.Kind == "video"] // as a batch's ask run counts them
+			thumbs++ // a video is one grid // as a batch's ask run counts them
 		}
 		inputs[ask+".media"] = media
 		for k, v := range stored.askModel(body.Node) { // a family ask at the judged step's variant and precision

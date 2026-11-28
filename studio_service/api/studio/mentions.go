@@ -190,7 +190,7 @@ func expandMentions(nodes map[string]registry.Node, schemas map[string]registry.
 	}
 	all := prompts(nodes, schemas)
 	var errs, used []string
-	if workflowMedia(nodes, schemas) == "audio" { // API 1.30: spoken text is never expanded; a mention is refused
+	if Spoken(nodes, schemas) { // API 1.30: spoken text is never expanded; a mention is refused (1.79: class voice)
 		for _, p := range all {
 			if len(mentioned(p.Parts)) > 0 {
 				errs = append(errs, p.Node+"."+p.Param.Name+": mentions are not read aloud; use a dialogue script")

@@ -1,0 +1,49 @@
+{
+  "id": "echo-sound-video",
+  "title": "Echo sound from a video",
+  "action": "Add sound",
+  "family": "echo",
+  "env": "fake",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "foley": {
+      "kind": "echo/foley",
+      "in": {
+        "text": "prompt.text"
+      },
+      "params": {
+        "source": null,
+        "seed": -1,
+        "delay_ms": 300
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "foley.audio"
+      }
+    },
+    "output_video": {
+      "kind": "output",
+      "in": {
+        "media": "foley.video"
+      }
+    }
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "Echo sound",
+    "fields": {
+      "from": "foley.source",
+      "prompt": "prompt.text",
+      "seed": "foley.seed"
+    },
+    "seconds": 0.2
+  }
+}

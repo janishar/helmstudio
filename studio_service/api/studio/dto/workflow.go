@@ -15,12 +15,14 @@ import (
 
 // Workflow is a template (source template) or one of the caller's own (source mine) with the schemas of its kinds.
 type Workflow struct {
-	ID          string                         `json:"id"`
-	Title       string                         `json:"title"`
-	Action      string                         `json:"action,omitempty"` // API 1.19, templates: the take action's label
-	Family      string                         `json:"family"`
-	Env         string                         `json:"env"`
-	Media       string                         `json:"media"` // image | video
+	ID     string `json:"id"`
+	Title  string `json:"title"`
+	Action string `json:"action,omitempty"` // API 1.19, templates: the take action's label
+	Family string `json:"family"`
+	Env    string `json:"env"`
+	Media  string `json:"media"` // image | video
+	// API 1.79: an audio workflow's sound class (music, sound, voice), computed; "" is left out
+	Sound       string                         `json:"sound,omitempty"`
 	Nodes       map[string]registry.Node       `json:"nodes"`
 	NodeSchemas map[string]registry.NodeSchema `json:"node_schemas"`
 	Source      string                         `json:"source"`
@@ -37,8 +39,11 @@ type Workflow struct {
 
 // StudioLayout is which params Create shows and where (contracts StudioLayout).
 type StudioLayout struct {
-	Composer  []string                  `json:"composer,omitempty"`
-	Quick     []string                  `json:"quick,omitempty"`
+	Composer []string `json:"composer,omitempty"`
+	Quick    []string `json:"quick,omitempty"`
+	// API 1.79 (contracts/README.md, Music and sound): quick chips shown as one, and how many takes one Generate makes
+	Groups    []StudioGroup             `json:"groups,omitempty"`
+	Count     *StudioCount              `json:"count,omitempty"`
 	Inspector []StudioSection           `json:"inspector,omitempty"`
 	Labels    map[string]string         `json:"labels,omitempty"`
 	Presets   map[string]map[string]any `json:"presets,omitempty"`
@@ -48,6 +53,18 @@ type StudioLayout struct {
 	PresetHelp []PresetHelp `json:"preset_help,omitempty"`
 	// API 1.37: the image params a New shot binds its frames into (Workflow.keyframes)
 	Keyframes *timeline.FrameParams `json:"keyframes,omitempty"`
+}
+
+// StudioGroup is quick chips shown as one chip with one popup (API 1.79): each item a quick param path.
+type StudioGroup struct {
+	Label string   `json:"label"`
+	Items []string `json:"items"`
+}
+
+// StudioCount is how many takes one Generate makes (API 1.79).
+type StudioCount struct {
+	Default int `json:"default"`
+	Max     int `json:"max"`
 }
 
 // PresetHelp is one of the Preset heading's texts (API 1.47).
@@ -282,6 +299,27 @@ func (l *StudioLayout) validate() string {
 	}
 	if detail := paths("quick", l.Quick, 12); detail != "" {
 		return detail
+	}
+	if len(l.Groups) > 4 { // API 1.79 (check.py group_errors)
+		return "studio.groups: at most 4"
+	}
+	grouped := map[string]bool{}
+	for i, group := range l.Groups {
+		if n := utf8.RuneCountInString(group.Label); n == 0 || n > 40 || len(group.Items) < 2 || len(group.Items) > 6 {
+			return fmt.Sprintf("studio.groups[%d]: a label of 1-40 characters and 2-6 items", i)
+		}
+		for _, path := range group.Items {
+			switch {
+			case !slices.Contains(l.Quick, path) || IsTile(path):
+				return fmt.Sprintf("studio.groups: %s is not a quick chip", path)
+			case grouped[path]:
+				return fmt.Sprintf("studio.groups: %s is in two groups", path)
+			}
+			grouped[path] = true
+		}
+	}
+	if c := l.Count; c != nil && (c.Default < 1 || c.Max > 8 || c.Default > c.Max) {
+		return "studio.count: 1 <= default <= max <= 8"
 	}
 	if len(l.Inspector) > 12 {
 		return "studio.inspector: at most 12 sections"

@@ -951,7 +951,7 @@ test("J16 I write while it works: it reads me at the next step, or takes it as t
   await say("make a rainy London still");
   // a · the box stays open while it works
   await expect(box()).toHaveAttribute("placeholder", "Steer the answer…");
-  await expect(drawer().getByText("steers", { exact: true })).toBeVisible();
+  await expect(drawer().getByText("Enter steers", { exact: true })).toBeVisible();
   await expect(drawer().getByRole("button", { name: "Stop" })).toBeVisible();
   await shot("j16-steer-working");
   // b · sent: at the bottom, dimmed, at the next step (the first model call runs by now)
@@ -1249,5 +1249,70 @@ test("J19 I move the drawer off the prompt, it stays there after a reload, and I
     await expect(drawer(p)).not.toHaveClass(/float/);
   } finally {
     await p.close();
+  }
+});
+
+test("J20 Magic: I stop the Assistant while its runs go, and it offers to stop them too (alpha.6)", async () => {
+  // owner, 2026-11-27: "yes build it" (the Assistant's Stop also offers "Stop its runs too"); MagicBoard frame 10
+  const slow = (id: string, at: number) => ({
+    id,
+    lane: "shots",
+    at,
+    length: 24,
+    kind: "video",
+    name: `Shot ${id.slice(1)}`,
+    request: {
+      kind: "video",
+      model: "echo-video",
+      prompt: "rain",
+      advanced: { "video.delay_ms": 3000 },
+    },
+    takes: [],
+    effects: [],
+  });
+  const ids = ["s1", "s2", "s3"];
+  const doc = {
+    target: { width: 1280, height: 720, fps: 24, sample_rate: 48000 },
+    lanes: [{ id: "shots", name: "Shots", role: "shots" }],
+    blocks: ids.map((id, i) => slow(id, i * 24)),
+    links: [],
+    transitions: [],
+    assets: [],
+    notes: [],
+  };
+  const a = api(page);
+  await a.put("/v1/studio/magic/settings", { ask_above_gpu_minutes: 60 });
+  const board = await a.post("/v1/studio/magic/boards", { name: "Stop runs", doc });
+  try {
+    await page.goto(`/magic?b=${board.id}`);
+    await open();
+    script(
+      MODEL,
+      {
+        content: "Running.",
+        tool_calls: [
+          { tool: "run_blocks", args: { board_id: board.id, revision: 1, blocks: ids } },
+        ],
+      },
+      { delay_s: 20, content: "All three are running." },
+    );
+    await say("run all the shots");
+    // run_blocks answers at once; the model's next call is slow, so the turn still works (its lines come at its end)
+    await expect(working()).toBeVisible();
+    await page.waitForTimeout(4000);
+    await drawer().getByRole("button", { name: "Stop" }).click();
+    const offer = drawer()
+      .getByRole("status")
+      .filter({ hasText: /Its \d+ runs? (are|is) still going/ });
+    await expect(offer).toBeVisible();
+    await shot("j20-stop-its-runs");
+    await offer.getByRole("button", { name: "Stop its runs too" }).click();
+    await expect(offer).toBeHidden();
+    await expect(page.getByRole("button", { name: /^Stop runs \(\d+\)$/ })).toBeHidden({
+      timeout: 60_000,
+    });
+  } finally {
+    await page.request.delete(`/api/v1/studio/magic/boards/${board.id}`);
+    await a.put("/v1/studio/magic/settings", { ask_above_gpu_minutes: 5 });
   }
 });

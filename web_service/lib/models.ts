@@ -123,13 +123,16 @@ export function variantBytes(v: Variant, host?: string): number | null {
   return Math.max(0, ...on) || null;
 }
 
-/** The variant's folder on a host: "~/GenAI/models/Qwen-Image-2.1-Turbo" ("" without a root or dir). */
+/** The variant's folder on a host: "~/GenAI/models/Qwen-Image-2.1-Turbo" ("" without a root or dir); in the folder its
+ * runs load it from (API 1.78), else the downloads folder. */
 export function folderOf(
   list: S<"ModelList">,
-  v: Pick<Part, "dir">,
+  v: Pick<Part, "dir"> & { hosts?: VariantHost[] },
   host: string | undefined,
 ): string {
-  const root = list.hosts.find((h) => h.host === host)?.models_root;
+  const h = list.hosts.find((x) => x.host === host);
+  const used = v.hosts?.find((x) => x.host === host)?.folder;
+  const root = h?.folders?.find((f) => f.id === used)?.root ?? h?.models_root;
   return root && v.dir ? `${root.replace(/\/$/, "")}/${v.dir}` : (v.dir ?? "");
 }
 
@@ -267,4 +270,98 @@ export function downloaded(
   return ms.some((m) =>
     m.variants.some((v) => v.hosts.some((h) => h.state === "present" && live.has(h.host))),
   );
+}
+
+// ------------------------------------------------------------------ model folders (API 1.78, plan 40, ModelFolders board)
+
+type Folder = S<"ModelFolder">;
+type Copy = S<"ModelCopy">;
+
+/** A host's model folders in priority order ([] from a runner older than 1.78). */
+export const foldersOf = (list: S<"ModelList">, host: string): Folder[] =>
+  list.hosts.find((h) => h.host === host)?.folders ?? [];
+
+/** The folder of a host by id. */
+export const folderById = (list: S<"ModelList">, host: string, id: string | null | undefined) =>
+  foldersOf(list, host).find((f) => f.id === id);
+
+/** A host chip's disk tag and note (frames 1, 3): the folder it loads from (only on a host with more than one) and
+ * `also on T9`, `T9 not connected` or, when it fell back past an unplugged one, `T9 not connected · using Mac`. */
+export function copyNote(
+  list: S<"ModelList">,
+  h: VariantHost,
+): { tag: string | null; note: string | null } {
+  const fs = foldersOf(list, h.host);
+  if (fs.length < 2) return { tag: null, note: null };
+  const used = fs.find((f) => f.id === h.folder);
+  const rank = (id: string) => fs.findIndex((f) => f.id === id);
+  const others = (h.copies ?? []).filter((c) => c.folder !== h.folder);
+  const name = (c: Copy) => fs.find((f) => f.id === c.folder)?.name ?? c.folder;
+  const away = others.find((c) => c.state === "unplugged");
+  const spare = others.find((c) => c.state !== "unplugged");
+  if (h.state === "unplugged")
+    return { tag: null, note: away ? `${name(away)} not connected` : null };
+  const note = away
+    ? `${name(away)} not connected${used && rank(away.folder) < rank(used.id) ? ` · using ${used.name}` : ""}`
+    : spare
+      ? `also on ${name(spare)}`
+      : null;
+  return { tag: used?.name ?? null, note };
+}
+
+/** The Hosts row's words: `present · Mac` on a host with more than one folder, `T9 not connected` when unplugged. */
+export function hostText(list: S<"ModelList">, h: VariantHost): string {
+  if (h.state === "unplugged") return copyNote(list, h).note ?? "not connected";
+  const tag = copyNote(list, h).tag;
+  return tag && h.state === "present" ? `${stateText(h)} · ${tag}` : stateText(h);
+}
+
+/** Download's Folder pick (frame 4): the downloads folder first, then the rest in priority order; the one picked at
+ * first is the downloads folder when it can take files, else the next connected writable one. */
+export function downloadFolders(
+  list: S<"ModelList">,
+  host: string,
+): { folders: Folder[]; pick: string | null } {
+  const fs = foldersOf(list, host);
+  const folders = [...fs.filter((f) => f.downloads), ...fs.filter((f) => !f.downloads)];
+  const pick =
+    folders.find((f) => f.downloads && f.connected && f.writable) ??
+    fs.find((f) => f.connected && f.writable);
+  return { folders, pick: pick?.id ?? null };
+}
+
+/** Delete's copies (frame 6): each folder with its files of it, the used one first. */
+export function deleteCopies(
+  list: S<"ModelList">,
+  h: VariantHost | undefined,
+): { copy: Copy; folder: Folder | undefined; used: boolean }[] {
+  if (!h) return [];
+  const rows = (h.copies ?? []).map((copy) => ({
+    copy,
+    folder: folderById(list, h.host, copy.folder),
+    used: copy.folder === h.folder,
+  }));
+  return [...rows.filter((r) => r.used), ...rows.filter((r) => !r.used)];
+}
+
+/** A folder's name for a path not yet on the list (the runner names it on Save): `/Volumes/<X>/…` → X, else the
+ * host's name. */
+export const pathName = (path: string, host: string) =>
+  /^\/Volumes\/([^/]+)/.exec(path)?.[1] ?? host;
+
+/** Edit folders' own checks before Save (the server words them alike and checks the rest). */
+export function pathProblem(path: string, paths: string[]): string | null {
+  if (!/^(\/|~\/)/.test(path) || path.split("/").includes(".."))
+    return "paths must be absolute or start with ~/";
+  if (path.length > 400) return "paths are at most 400 characters";
+  const norm = (p: string) => p.replace(/\/+$/, "");
+  if (paths.some((p) => norm(p) === norm(path))) return `${path} is listed twice`;
+  return null;
+}
+
+/** A disk's space as the Folders board writes it: "43 GB", "1.8 TB", "2 TB" ("" for null). */
+export function diskText(n: number | null | undefined): string {
+  if (n == null) return "";
+  if (n >= 1e12) return `${+(n / 1e12).toFixed(1)} TB`;
+  return n >= 1e9 ? `${Math.round(n / 1e9)} GB` : bytesText(n);
 }

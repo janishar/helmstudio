@@ -373,7 +373,7 @@ export function NewBatch({
       <form onSubmit={submit} className="flex max-h-[78dvh] flex-col gap-4 overflow-y-auto">
         {loadError && <ErrorNote>{loadError}</ErrorNote>}
         {!pipeline && workflows?.length === 0 && (
-          <ErrorNote>No workflows yet: no runner has published any.</ErrorNote>
+          <ErrorNote>No workflows yet: no runner is on. Start helmstudio on your Mac.</ErrorNote>
         )}
         <div className="grid gap-3 sm:grid-cols-2">
           {pipeline ? (

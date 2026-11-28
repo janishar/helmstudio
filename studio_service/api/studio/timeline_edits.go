@@ -31,6 +31,7 @@ type TimelineEditError struct {
 }
 
 func (e *TimelineEditError) Error() string { return e.Detail }
+func (*TimelineEditError) unprocessable()  {}
 
 // EditTimeline applies body.Ops in order to the sequence at body.BaseRevision and stores the result as one user
 // revision, or (dry run) answers it without storing.
@@ -158,7 +159,7 @@ func applyOps(doc timeline.Doc, ops []timeline.Op, rules map[string]timeline.Tak
 		}
 		doc = *r.Document
 	}
-	return doc, warnings, nil
+	return doc, append(warnings, timeline.Dips(doc, rules)...), nil
 }
 
 // snapped is a warning for each of op's times that the frame grid moves.
@@ -262,12 +263,22 @@ func (s *Service) GetTimelineAgent(ctx context.Context, caller common.Caller, id
 	}
 	takes := map[string]timeline.Take{}
 	for tid, t := range tl.Takes {
-		takes[tid] = timeline.Take{Kind: t.Kind}
+		tk := timeline.Take{Kind: t.Kind} // 1.106: its length and class (a crossfade's mode, ducking)
+		switch {
+		case t.Video != nil:
+			tk.DurationS = t.Video.DurationS
+		case t.Audio != nil:
+			tk.DurationS = t.Audio.DurationS
+		}
+		if t.Sound != nil {
+			tk.Sound = *t.Sound
+		}
+		takes[tid] = tk
 	}
 	v := timeline.Agent(timeline.Doc{Target: tl.Target, Tracks: tl.Tracks, DurationS: tl.DurationS, Frames: tl.Frames,
-		Markers: tl.Markers}, takes)
+		Markers: tl.Markers, Ducking: tl.Ducking}, takes)
 	out := dto.TimelineAgentView{ID: tl.ID, Name: tl.Name, Revision: tl.Revision, Target: v.Target, DurationS: v.DurationS,
-		Frames: v.Frames, Tracks: v.Tracks, Clips: []dto.TimelineAgentClip{}, Links: v.Links, Markers: v.Markers}
+		Frames: v.Frames, Tracks: v.Tracks, Clips: []dto.TimelineAgentClip{}, Links: v.Links, Markers: v.Markers, Ducking: v.Ducking}
 	for _, c := range v.Clips {
 		ac := dto.TimelineAgentClip{AgentClip: c}
 		if t, ok := tl.Takes[deref(c.TakeID)]; ok {

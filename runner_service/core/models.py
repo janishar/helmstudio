@@ -20,6 +20,7 @@ variant (its folder's manifest, components, presence), the hash index, the host'
   variant (presence, components, files, bytes, delete); it has its own entry in the model's `addons`, its own
   download and delete. Its folder is its own `dir`, else the first variant's (then only its globs are its files)."""
 
+import contextlib
 import hashlib
 import importlib
 import json
@@ -34,14 +35,12 @@ from fnmatch import fnmatchcase
 from pathlib import Path
 
 from core import pack as packs
+from core.folders import MARKER
 
 log = logging.getLogger("models")
 
 SIDECARS = Path(".cache/huggingface/download")
-MARKER = Path(".cache/helmstudio/download.json")
-SGLANG_COPIES = Path(
-    ".cache/helmstudio/sglang"
-)  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
+SGLANG_COPIES = Path(".cache/helmstudio/sglang")  # minimax_h3 sgl.ready_lora: <stem>-<key12><suffix> per file
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 MAX_FILES = 4096  # registry: files[] maxItems
 
@@ -187,9 +186,7 @@ def own_files(folder: Path) -> list[Path]:
     return sorted(
         p.relative_to(folder)
         for p in folder.rglob("*")
-        if p.is_file()
-        and not p.is_symlink()
-        and not any(x.startswith(".") for x in p.relative_to(folder).parts)
+        if p.is_file() and not p.is_symlink() and not any(x.startswith(".") for x in p.relative_to(folder).parts)
     )
 
 
@@ -207,26 +204,26 @@ def own_globs(pack, vid: str) -> list[str] | None:
     """The globs of a variant's own files when its folder is another variant's too: its components it does not
     share. None: the whole folder is its own (a folder of its own, or the first variant's)."""
     v, root = pack.spec["variants"][vid], folder(pack, vid)
-    if not v.get("shares") or not any(
-        x != vid and folder(pack, x) == root for x in pack.spec["variants"]
-    ):
+    if not v.get("shares") or not any(x != vid and folder(pack, x) == root for x in pack.spec["variants"]):
         return None
     return [g for c in packs.needed(pack, vid) if c not in v["shares"] for g in globs(pack, c, vid)]
 
 
-def addon_folder(pack, component: str) -> Path:
-    """An add-on's folder: the component's own `dir`, else the first variant's."""
+def addon_dir(pack, component: str) -> str:
+    """An add-on's model folder: the component's own `dir`, else the first variant's."""
     own = pack.component(component).get("dir")
-    return packs.models_root() / (
-        own or pack.spec["variants"][next(iter(pack.spec["variants"]))]["dir"]
-    )
+    return own or pack.spec["variants"][next(iter(pack.spec["variants"]))]["dir"]
+
+
+def addon_folder(pack, component: str) -> Path:
+    return packs.place(addon_dir(pack, component))
 
 
 def addon_dest(pack, component: str) -> Path:
     """Where a download of the add-on puts the repo's files: model.yaml `addon.source.dir` under the models root
     (LTX's detailer: the repo's root file into ltx-2.5/loras, a folder inside the add-on's), else its folder."""
     d = pack.component(component)["addon"].get("source", {}).get("dir")
-    return packs.models_root() / d if d else addon_folder(pack, component)
+    return packs.place(d) if d else addon_folder(pack, component)
 
 
 def addon_globs_in(pack, root: Path) -> list[str]:
@@ -240,9 +237,7 @@ def own_folder(pack, component: str) -> bool:
     """Whether the add-on's folder is its own alone: a `dir` of its own that no other add-on names (API 1.41: MiniMax
     H3's Turbo LoRA and Turbo Ref LoRA share MiniMax-H3-Turbo, so each goes by its own file there)."""
     own = pack.component(component).get("dir")
-    return bool(own) and not any(
-        c != component and pack.component(c).get("dir") == own for c in packs.addons(pack)
-    )
+    return bool(own) and not any(c != component and pack.component(c).get("dir") == own for c in packs.addons(pack))
 
 
 def marked(pack, component: str, root: Path) -> bool:
@@ -281,7 +276,7 @@ def variant_files(pack, vid: str) -> list[Path]:
 
 
 def folder(pack, variant: str) -> Path:
-    return packs.models_root() / pack.spec["variants"][variant]["dir"]
+    return packs.place(pack.spec["variants"][variant]["dir"])
 
 
 def manifest(pack, variant: str, addon: str | None = None) -> tuple[list[dict], list[str]]:
@@ -378,8 +373,7 @@ def variant_entry(pack, vid: str) -> dict:
         owner = ref.owner(c)
         ok = ok and bool(found)
         unfinished = unfinished or (folder(pack, owner) / MARKER).exists()
-        item = {"component": c, "from_variant": owner,
-                "precisions": packs.component_precisions(pack, vid, c)}  # fmt: skip
+        item = {"component": c, "from_variant": owner, "precisions": packs.component_precisions(pack, vid, c)}
         if d := stored_dtype(found):
             item["stored"] = d
         if found:
@@ -418,18 +412,14 @@ def addon_entry(pack, c: str) -> dict:
     root = addon_folder(pack, c)
     if mismatch:
         presence = "mismatch"
-    elif (
-        addon_weights(pack, c)
-        and not marked(pack, c, root)
-        and not marked(pack, c, addon_dest(pack, c))
-    ):
+    elif addon_weights(pack, c) and not marked(pack, c, root) and not marked(pack, c, addon_dest(pack, c)):
         presence = "present"
     else:
         presence = "partial" if files else "missing"
     out = {"component": c, "title": spec["addon"]["title"]}
     # API 1.40: the controls' name, the Models card's mono line and the task (references or not) that needs it
     out |= {k: spec["addon"][k] for k in ("short", "tag", "refs", "help") if k in spec["addon"]}
-    out |= {"dir": root.relative_to(packs.models_root()).as_posix(), "presence": presence}
+    out |= {"dir": addon_dir(pack, c), "presence": presence}
     if files:
         out["bytes"] = sum(f["bytes"] for f in files)
     if "source" in spec["addon"]:  # its `dir` is model.yaml's (addon_dest), not the contract's
@@ -463,10 +453,12 @@ def entry(pack) -> dict:
         out["runtimes"] = [{"runtime": r, "env": x["env"]} | ({"devices": x["devices"]} if "devices" in x else {})
                            for r, x in spec["runtimes"].items()]  # fmt: skip
         out["variants"] = [
-            variant_entry(pack, vid) for vid in spec["variants"] if runs_here(pack, vid)
-        ]
+            with_copies(lambda v=vid: variant_entry(pack, v), spec["variants"][vid]["dir"],
+                        lambda v=vid: variant_freed(pack, v))
+            for vid in spec["variants"] if runs_here(pack, vid)
+        ]  # fmt: skip
         if (extra := listed_addons(pack)) and out["variants"]:
-            out["addons"] = [addon_entry(pack, c) for c in extra]
+            out["addons"] = [with_copies(lambda x=c: addon_entry(pack, x), addon_dir(pack, c), None) for c in extra]
         # API 1.39: the components a non-default compute keys apart
         if compute := packs.compute_spec(pack):
             out["compute"] = {"components": compute["components"]}
@@ -492,6 +484,143 @@ def licences(loaded) -> list[dict]:
     return list(out.values())
 
 
+# --- model folders (API 1.78, contracts/README.md "Model folders")
+
+seen: dict[str, list[str]] = {}  # folder id → its model folders when last connected (CACHE/folders-seen.json)
+
+
+def refresh_seen() -> None:
+    """Note what each connected folder of the list holds now (its top-level folders), kept across restarts, so an
+    unplugged drive's models show `unplugged`, not missing. Called by every models scan."""
+    import config
+
+    global seen
+    if not config.ROOTS:  # one folder: nothing can be unplugged
+        return
+    path = config.CACHE / "folders-seen.json"
+    if not seen:
+        try:
+            seen = json.loads(path.read_text())
+        except OSError, ValueError:
+            seen = {}
+    now = dict(seen)
+    for text, root in packs.roots():
+        if root.is_dir():
+            with contextlib.suppress(OSError):
+                now[packs.folder_id(text)] = sorted(x.name for x in root.iterdir() if x.is_dir() and not x.name.startswith("."))  # fmt: skip
+    if now != seen:
+        seen = now
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(seen))
+        except OSError:
+            log.warning("could not keep %s", path, exc_info=True)
+
+
+def matches(rel: str, only: list[str]) -> bool:
+    """delete_in's selection: a folder prefix ending in / or a glob."""
+    return any(rel.startswith(k) if k.endswith("/") else fnmatchcase(rel, k) for k in only)
+
+
+def variant_freed(pack, vid: str) -> int:
+    """What deleting this copy of the variant gives back (call within a strict rooted scope): its own files, but the
+    shared components another variant in the same folder still loads."""
+    _kept, only = kept_components(pack, {vid})
+    sel = only if (own := own_globs(pack, vid)) is None else own
+    root = folder(pack, vid)
+    return sum((root / f).stat().st_size for f in variant_files(pack, vid) if sel is None or matches(f.as_posix(), sel))
+
+
+def with_copies(make, d: str, freed) -> dict:
+    """`make()` (a variant's or add-on's entry as the resolver reads it) with, once a folder list is set, `folder`
+    (the copy a run loads) and `copies` (every folder of the list with files of it; unplugged ones from `seen`); a
+    variant missing everywhere connected but seen on an unplugged folder is `unplugged`."""
+    import config
+
+    out = make()
+    if not config.ROOTS:
+        return out
+    copies, top = [], d.split("/")[0]
+    for text, root in packs.roots():
+        fid = packs.folder_id(text)
+        if not root.is_dir():
+            if top in seen.get(fid, ()):
+                copies.append({"folder": fid, "state": "unplugged"})
+            continue
+        # a link is not a copy (and is never deleted)
+        if not (root / d).exists() or (root / d).is_symlink():
+            continue
+        with packs.rooted(root, strict=False):
+            e = make()
+        if e["presence"] == "missing":
+            continue
+        with packs.rooted(root):
+            gives = freed() if freed else e.get("bytes", 0)
+        copies.append(
+            {
+                "folder": fid,
+                "state": e["presence"],
+                "bytes": e.get("bytes", 0),
+                "freed_bytes": gives,
+            }
+        )
+    if out["presence"] == "missing" and copies:  # only unplugged copies
+        out["presence"] = "unplugged"
+    elif out["presence"] != "missing" and (r := packs.root_of(packs.place(d))):
+        out["folder"] = packs.folder_id(r[0])
+    if copies:
+        out["copies"] = copies
+    return out
+
+
+def folder_name(root: Path) -> str:
+    """`/Volumes/<X>/…` → X, else Mac on macOS, else the host name."""
+    from config import HOST
+
+    if root.parts[:2] == ("/", "Volumes") and len(root.parts) > 2:
+        return root.parts[2][:80]
+    return "Mac" if sys.platform == "darwin" else HOST
+
+
+def disks() -> list[dict]:
+    """The hosts key's `models_disks`: each folder of the list in order."""
+    down, out = packs.downloads_root(), []
+    for text, root in packs.roots():
+        item = {
+            "id": packs.folder_id(text),
+            "name": folder_name(root),
+            "root": packs.shown(root)[:400],
+        }
+        if root.is_dir():
+            u = shutil.disk_usage(root)
+            item |= {"connected": True, "free_bytes": u.free, "total_bytes": u.total, "writable": os.access(root, os.W_OK)}  # fmt: skip
+        else:
+            item |= {"connected": False, "writable": False}
+        out.append(item | {"downloads": root == down})
+    return out
+
+
+def check_folders(paths) -> dict:
+    """req.runner.folders.check's reply: what each path is here now (never created)."""
+    out = []
+    for text in paths if isinstance(paths, list) else []:
+        if not isinstance(text, str) or not text.startswith(("/", "~/")) or len(text) > 400:
+            continue
+        p = Path(text).expanduser()
+        item = {"path": text, "connected": p.is_dir(), "drive": p.parts[:2] == ("/", "Volumes")}
+        if item["connected"]:
+            u = shutil.disk_usage(p)
+            item |= {
+                "writable": os.access(p, os.W_OK),
+                "free_bytes": u.free,
+                "total_bytes": u.total,
+            }
+        else:
+            item["writable"] = False
+        out.append(item)
+    return {"folders": out[:8]}
+
+
 # --- the host
 
 
@@ -501,10 +630,8 @@ def disk(root: Path) -> dict:
     while not p.exists() and p != p.parent:
         p = p.parent
     u = shutil.disk_usage(p)
-    home = str(Path.home())
-    shown = "~" + str(root)[len(home) :] if str(root).startswith(home + "/") else str(root)
     return {
-        "root": shown[:400],
+        "root": packs.shown(root)[:400],
         "free_bytes": u.free,
         "total_bytes": u.total,
         "writable": os.access(p, os.W_OK),
@@ -516,8 +643,7 @@ def machine(device: str, ram_gb: float) -> dict:
     mac = sys.platform == "darwin"
     accel = "cuda" if device == "cuda" else "metal" if mac and device in ("mps", "gpu") else "cpu"
     packaging = "container" if Path("/.dockerenv").exists() else "native"
-    return {"os": "macos" if mac else "linux", "accel": accel, "packaging": packaging,
-            "ram_gb": round(ram_gb, 1)}  # fmt: skip
+    return {"os": "macos" if mac else "linux", "accel": accel, "packaging": packaging, "ram_gb": round(ram_gb, 1)}
 
 
 # --- delete
@@ -537,21 +663,13 @@ def kept_components(pack, deleted: set[str]) -> tuple[list[str], list[str] | Non
     owner = None
     for vid, v in pack.spec["variants"].items():
         lender = packs.share_owner(pack, vid)
-        if (
-            vid not in deleted
-            and lender in deleted
-            and v.get("shares")
-            and variant_files(pack, vid)
-        ):
+        if vid not in deleted and lender in deleted and v.get("shares") and variant_files(pack, vid):
             owner = lender
-            kept += [c for c in v["shares"]
-                     if c not in kept and not packs.owns_copy(pack, vid, c)]  # fmt: skip
+            kept += [c for c in v["shares"] if c not in kept and not packs.owns_copy(pack, vid, c)]
     if not kept:
         return [], None
     # a folder shared with a kept variant: only these files (its own ones stay); else their folders
-    same = any(
-        folder(pack, v) == folder(pack, owner) for v in pack.spec["variants"] if v not in deleted
-    )
+    same = any(folder(pack, v) == folder(pack, owner) for v in pack.spec["variants"] if v not in deleted)
     only = [g if same else (g.rsplit("/", 1)[0] + "/" if "/" in g else g)
             for c in pack.spec["components"] if c not in kept for g in globs(pack, c, owner)]  # fmt: skip
     return kept, only
@@ -594,15 +712,14 @@ def delete_addon(pack, c: str) -> tuple[int, int]:
 
 def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int, int]:
     """delete_variant's work in `base`, keeping the files `addon`'s globs match."""
-    root = packs.models_root()
+    root = (packs.root_of(base) or ("", packs.models_root()))[1]
     if not base.exists():
         return 0, 0
     if base.is_symlink() or not inside(root, base) or base.resolve() == root.resolve():
-        raise InUse(
-            f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand"
-        )
+        raise InUse(f"{os.path.relpath(base, root)} is a link or outside the models root: remove it by hand")
 
-    lent = linked_from_outside(root, base)
+    # API 1.78: a link in any folder of the list keeps what it points to (one in ~/GenAI/models into the T9's copy)
+    lent = set().union(*(linked_from_outside(r, base) for r in {root, *packs.connected()}))
 
     def kept(rel: str) -> bool:
         side, copies = SIDECARS.as_posix() + "/", SGLANG_COPIES.as_posix() + "/"
@@ -626,17 +743,11 @@ def delete_in(base: Path, only: list[str] | None, addon: list[str]) -> tuple[int
                 continue
             size, link = p.lstat().st_size, p.is_symlink()
             p.unlink()
-            if not link and not rel.startswith(
-                ".cache/"
-            ):  # sidecars and markers are not the model's
+            if not link and not rel.startswith(".cache/"):  # sidecars and markers are not the model's
                 files, freed = files + 1, freed + size
         for name in dirnames:
             with_empty = d / name
-            if (
-                not with_empty.is_symlink()
-                and with_empty.is_dir()
-                and not any(with_empty.iterdir())
-            ):
+            if not with_empty.is_symlink() and with_empty.is_dir() and not any(with_empty.iterdir()):
                 with_empty.rmdir()
     if not any(base.iterdir()):
         base.rmdir()

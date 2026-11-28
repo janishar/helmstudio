@@ -6,7 +6,8 @@
 // was made on (plan 24 28.8 A; the server's answer replaces the draft); a 409 reloads, says so and re-applies the
 // edit to the new revision once.
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useStoredFlag } from "@/lib/hydrated";
 import {
   ArrowRight,
   ArrowUpDown,
@@ -40,9 +41,11 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { mod, openMenu, type Item } from "@/components/context-menu";
+import { DipWarn, DuckRow, clipFadeItems, sText } from "@/components/fades";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
-import { say, timelineTools, type FormSlot, type Want } from "@/components/timeline/assistant";
+import { timelineTools } from "@/components/timeline/assistant";
+import { useTimelineEdits } from "@/components/timeline/use-timeline-edits";
 import { until, useScreenTools } from "@/components/assistant/tools";
 import { useLibraryDialog } from "@/components/assistant/library";
 import { markRange, rangeInTake, removeTrack } from "@/lib/source";
@@ -68,14 +71,16 @@ import {
   Sequences,
   planLine,
 } from "@/components/timeline/dialogs";
-import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
+import { api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { useLibrary, useLooks, useVoices } from "@/lib/library";
 import { MAX_LOOKS, chosenFrom, type Chosen } from "@/lib/looks";
-import { followSession, renderTime } from "@/lib/runs";
+import { failWords, followSession, renderTime } from "@/lib/runs";
 import { firstHint } from "@/components/create/sessions";
 import { Preview } from "@/lib/timeline-preview";
 import {
+  DUCK_DB,
+  FADE_MAX,
   Grid,
   apply,
   clipAt,
@@ -84,6 +89,7 @@ import {
   frameAt,
   kindOf,
   newId,
+  xfade,
   shortTime,
   span,
   timecode,
@@ -91,22 +97,22 @@ import {
   type MarkerColor,
   type Norm,
   type Op,
-  type Problem,
   type Track,
   retitled,
+  say,
+  sayProblems,
   shotBusy,
+  type FormSlot,
+  type Want,
 } from "@/lib/timeline";
 import {
   MERGE_MS,
-  describe,
   keyOf,
   merge,
   shuttle,
-  noun,
   signed,
   spanText,
   sticky,
-  withIds,
   zoomBounds,
   type KeyId,
   type Tool,
@@ -114,18 +120,8 @@ import {
 
 type Timeline = S<"Timeline">;
 
-const sayProblems = (p: Problem[]) => say(p[0][0]);
 const sameSet = (a: string[], b: string[]) =>
   a.length === b.length && a.every((x) => b.includes(x));
-
-/** A clip's name in the live region ("Shot 3", a take's title). */
-function nameIn(d: Norm, cid: string, takes: Timeline["takes"]): string {
-  const ti = d.tracks.findIndex((t) => t.clips.some((c) => c.id === cid));
-  const c = d.tracks[ti]?.clips.find((x) => x.id === cid);
-  if (!c) return "the clip";
-  const title = c.take_id ? takes[c.take_id]?.title : undefined;
-  return ti === 0 ? shotName(c, title ?? "the empty slot") : (title ?? "the line");
-}
 
 /** The V1 clip ids and the audio-track clips linked to each (plan 23 §27.5: selecting either selects both). */
 function linkedTo(d: Norm, cid: string): string[] {
@@ -142,14 +138,6 @@ function linkedTo(d: Norm, cid: string): string[] {
 
 /** Whether the Timeline's side panel is closed ("0"), in this browser (alpha.5 item 11). */
 const PANEL = "timeline-side-panel";
-const noSub = () => () => undefined;
-const readPanel = () => {
-  try {
-    return localStorage.getItem(PANEL) !== "0";
-  } catch {
-    return true;
-  }
-};
 /** What a menu opened in the clip inspector: Make shot, Use in…, a frame's Use in (first, last), an offer's form
  * (`offer:<workflow> <param>`). */
 type Opened = string | null;
@@ -174,15 +162,7 @@ export function TimelineEditor({ id }: { id?: string }) {
   const [sheet, setSheet] = useState(false);
   // the side panel on the right (alpha.5 item 11): open by default, a closed one remembered in this browser ("0");
   // selecting a clip or a track while it is closed opens it
-  const storedPanel = useSyncExternalStore(noSub, readPanel, () => true);
-  const [panelSet, setPanelState] = useState<boolean | null>(null);
-  const panel = panelSet ?? storedPanel;
-  const setPanel = (on: boolean) => {
-    setPanelState(on);
-    try {
-      localStorage.setItem(PANEL, on ? "1" : "0");
-    } catch {}
-  };
+  const [panel, setPanel, setPanelState] = useStoredFlag(PANEL);
   const [picked, setPicked] = useState({ sel, track });
   if (picked.sel !== sel || picked.track !== track) {
     setPicked({ sel, track });
@@ -228,8 +208,6 @@ export function TimelineEditor({ id }: { id?: string }) {
   useEffect(() => {
     tlRef.current = tl;
   }, [tl]);
-  const queue = useRef<Promise<void>>(Promise.resolve());
-  const pending = useRef(0);
   const pv = useRef<Preview | null>(null);
 
   // ------------------------------------------------------------------ loading
@@ -276,13 +254,6 @@ export function TimelineEditor({ id }: { id?: string }) {
       .catch(() => undefined);
   }, []);
 
-  const reload = useCallback(async () => {
-    const cur = tlRef.current;
-    if (!cur) return;
-    const t = await getTimeline(cur.id);
-    if (!pending.current) setTl(t);
-  }, []);
-
   // ------------------------------------------------------------------ the document shown
   const facts = useMemo(() => (tl ? factsOf(tl.takes) : {}), [tl]);
   const base: Norm | null = draft ?? tl;
@@ -312,86 +283,16 @@ export function TimelineEditor({ id }: { id?: string }) {
   }, []);
 
   // ------------------------------------------------------------------ edits
-  /** Saves `op` on the latest stored revision through /edits; a 409 reloads and tries once more on the new one. */
-  const save = useCallback(
-    async (op: Op): Promise<void> => {
-      for (let attempt = 0; attempt < 2; attempt++) {
-        const cur = tlRef.current;
-        if (!cur) return;
-        const r = apply(cur, op, factsOf(cur.takes));
-        // it no longer fits the newer revision (a slide past a handle another tab just trimmed): dropped, and said
-        // (plan 23 §27.7)
-        if (!("document" in r))
-          return setNotice(
-            `The sequence changed: your ${noun(op)} no longer fits and was not saved.`,
-          );
-        try {
-          const t = await editTimeline(cur, [op]);
-          tlRef.current = t;
-          setTl(t);
-          if (attempt)
-            setNotice(
-              "The sequence changed since you opened it: reloaded, and your edit applied to it.",
-            );
-          return;
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 409 && !attempt) {
-            const t = await getTimeline(cur.id);
-            tlRef.current = t;
-            setTl(t);
-            continue;
-          }
-          setError(message(e));
-          await reload().catch(() => undefined);
-          return;
-        }
-      }
-    },
-    [reload],
-  );
-
-  const commit = useCallback(
-    (raw: Op) => {
-      const b = draft ?? tlRef.current;
-      if (!b) return;
-      const op = withIds(raw, b); // the ids it makes, the same on a 409 re-apply
-      const r = apply(b, op, facts);
-      if ("error" in r) return setNotice(say(r.error));
-      if ("problems" in r) return setNotice(sayProblems(r.problems));
-      setNotice("");
-      setError("");
-      setSaid(describe(op, b, facts, (cid) => nameIn(b, cid, tlRef.current?.takes ?? {})));
-      setDraft(r.document);
-      pending.current++;
-      queue.current = queue.current.then(async () => {
-        await save(op);
-        if (!--pending.current) setDraft(null);
-      });
-    },
-    [draft, facts, save],
-  );
-
-  /** A server-side change (undo, redo, add clips…) after the edits in flight. */
-  const server = useCallback(
-    (f: (t: Timeline) => Promise<Timeline>) => {
-      queue.current = queue.current.then(async () => {
-        const cur = tlRef.current;
-        if (!cur) return;
-        try {
-          const t = await f(cur);
-          tlRef.current = t;
-          setTl(t);
-          setDraft(null);
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 409) {
-            await reload().catch(() => undefined);
-            setNotice("The sequence changed since you opened it: reloaded.");
-          } else setError(message(e));
-        }
-      });
-    },
-    [reload],
-  );
+  const { queueRef, reload, commit, server } = useTimelineEdits({
+    tlRef,
+    setTl,
+    draft,
+    setDraft,
+    facts,
+    setNotice,
+    setError,
+    setSaid,
+  });
 
   const undo = (redo = false) =>
     server((t) =>
@@ -1091,6 +992,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           checked: !!c.mute,
           onPick: () => commit({ op: "set", clip: c.id, mute: !c.mute }),
         },
+        ...(take && !c.offline ? clipFadeItems(doc, ti, c, commit, off) : []),
         "-",
         ...edit,
       ];
@@ -1191,8 +1093,8 @@ export function TimelineEditor({ id }: { id?: string }) {
       get: () => tlRef.current,
       set: stored,
       inQueue: (f) => {
-        const p = queue.current.then(f);
-        queue.current = p.then(
+        const p = queueRef.current.then(f);
+        queueRef.current = p.then(
           () => undefined,
           () => undefined,
         );
@@ -1735,6 +1637,12 @@ export function TimelineEditor({ id }: { id?: string }) {
                 step a frame, [ ] trim, Alt+← → move, S splits, M adds a marker, Delete removes; ?
                 lists them all.
               </span>
+              {/* 1.106 (AudioFades frame 3): off for a sequence until set */}
+              <DuckRow
+                on={!!doc.ducking?.on}
+                db={doc.ducking?.db ?? DUCK_DB}
+                onSet={(d) => commit({ op: "ducking", ...d })}
+              />
               {v1.some((c) => c.take_id && !c.offline) && (
                 <button type="button" className="act" onClick={() => setDialog("rerender")}>
                   Re-render the sequence…
@@ -2127,6 +2035,16 @@ function ClipPanel({
             </div>
           </Cell>
         )}
+        {(kind === "video" || kind === "audio") && !!c.take_id && !c.offline && (
+          // 1.106 (AudioFades frame 1): the clip's sound fades, typed in seconds
+          <>
+            <FadeCell label="Fade in" clip={c} k="fade_in" onCommit={onCommit} disabled={busy} />
+            <FadeCell label="Fade out" clip={c} k="fade_out" onCommit={onCommit} disabled={busy} />
+            <span className="col-span-2 text-[12px] text-t2">
+              0 to 10 s each.{ti > 0 ? " Drag a top corner of the clip, or type here." : ""}
+            </span>
+          </>
+        )}
         {ti > 0 && (
           // 1.50, linked sound (plan 23 §27.5): a sound clip that follows a V1 clip's edits
           <Cell label="Linked to">
@@ -2149,6 +2067,27 @@ function ClipPanel({
           </Cell>
         )}
       </div>
+
+      {(() => {
+        // 1.106 (AudioFades frame 2): a crossfade with no sound past the cut dips
+        const x = ti > 0 ? xfade(doc, c, facts) : null;
+        if (x?.mode !== "dip") return null;
+        const dur = take?.audio?.duration_s ?? take?.video?.duration_s;
+        const short = dur !== undefined ? (c.out ?? 0) + g.s(x.frames) - dur : 0;
+        return (
+          <DipWarn
+            text={`${title} has no sound past its cut: it dips instead.${short > 0 ? ` Trim it ${sText(short)} shorter for a blend.` : ""}`}
+          >
+            <button
+              type="button"
+              className="chip h-7 rounded-lg px-2 text-[12px] text-bad"
+              onClick={() => onCommit({ op: "set", clip: c.id, crossfade: null })}
+            >
+              Remove
+            </button>
+          </DipWarn>
+        );
+      })()}
 
       {ti > 0 && (
         <AudioClip
@@ -2400,7 +2339,11 @@ function AudioClip({
     return (
       c.shot?.status === "failed" && (
         <div className="flex flex-col gap-2">
-          <span className="mono text-[12px] text-bad">{c.shot.error ?? "The run failed."}</span>
+          {/* ErrorStates c2: plain words first, the raw text under them */}
+          <span className="text-[13px] text-bad">{failWords(c.shot.error)}</span>
+          <span className="mono text-[11px] break-words text-t2 select-text">
+            {c.shot.error ?? "The run failed."}
+          </span>
           <div className="flex gap-2">
             {c.shot.run_id && (
               <button type="button" className="chip bevel" onClick={() => void retry()}>
@@ -2644,6 +2587,47 @@ function MarkerPanel({
         Remove marker
       </button>
     </div>
+  );
+}
+
+/** 1.106: a Fade in / Fade out tile, typed in seconds (0 to 10; 0 removes). */
+function FadeCell({
+  label,
+  clip: c,
+  k,
+  onCommit,
+  disabled,
+}: {
+  label: string;
+  clip: Clip;
+  k: "fade_in" | "fade_out";
+  onCommit: (op: Op) => void;
+  disabled?: boolean;
+}) {
+  const [v, setV] = useDraft(String(+(c[k] ?? 0).toFixed(2)));
+  const set = () => {
+    const n = Math.max(0, Math.min(FADE_MAX, Number(v)));
+    if (Number.isFinite(n) && Math.abs(n - (c[k] ?? 0)) > 1e-6)
+      onCommit({ op: "set", clip: c.id, [k]: n || null });
+    else setV(String(+(c[k] ?? 0).toFixed(2)));
+  };
+  return (
+    <Cell label={label}>
+      <span className="mono flex items-baseline gap-1 font-medium">
+        <input
+          aria-label={`${label} in seconds`}
+          className="mono min-w-0 bg-transparent font-medium text-t1 outline-0"
+          size={Math.max(1, v.length)}
+          inputMode="decimal"
+          value={v}
+          disabled={disabled}
+          onChange={(e) => setV(e.target.value)}
+          onBlur={set}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+        s
+      </span>
+    </Cell>
   );
 }
 

@@ -65,11 +65,23 @@ e227a7ee) is replaced.
     @; hovering an asset lights the frames and shots that use it ("used in 3 frames · 2 shots"); changing one marks them out of
     date. The Assistant can make the cast and props from the brief first.
 
+13. **The whole concept in the first version** (owner, 2026-11-26: "Everything in the concept", asked whether alpha.6 gets a
+    small first version or all of it): every lane (Assets, Storyboard, Shots, Voice, Music, sound effects), every
+    transition and morph, effects, and every block ability (open, run, pin a take, @ references, run history, notes).
+14. **Music and sound from local open models the owner picks** (owner, 2026-11-26: "Local open model", then "music and
+    sound i will find some model i will tell you the these new model"): the owner finds the music and sound-effect
+    models; each is then added as a new pack behind the standard request. Magic waits until then ("stop for now").
+    Picked (2026-11-27, "lets get both", "keep xl"): music ACE-Step 1.5 (2B turbo, the default) and 1.5 XL turbo, and
+    MiniMax Music 3 (best quality, slower); sound Stable Audio 3 Small-SFX (from text) and MMAudio large 44k v2 (matched
+    to a shot's video). Licences are not a filter (owner: "ignore liscene etc"). They run on the latest PyTorch, the
+    runner's pin in [plan 14](14-dependencies.md) (2.15 today), never a model repo's older pin such as Stable Audio 3's
+    2.7.1 (owner: "make sure to run in latest pythorch version").
+15. **The standard request covers every pack we have**: Image (Qwen Image 2.1 and Turbo, MiniMax H3 Image), Video (LTX
+    2.5, MiniMax H3), Voice (Qwen3-TTS, ZONOS3), Music (the new pack). Outside services stay later (decision 2).
+
 ## Open
 
-- What a block can do in the first version (open it, run it, pin a take, @ references, run history, notes), in Magic's own
-  terms.
-- Where the standard request lives (contract, adapters in the runner) and the first models it covers.
+- Where the standard request lives (contract, adapters) is a build choice, settled in the plan.
 
 ## Release
 

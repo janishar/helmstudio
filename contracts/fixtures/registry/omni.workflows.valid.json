@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "mlx",
+  "published_at": "2026-11-28T12:00:00Z",
+  "published_by": "runner mlx 0.4.0",
+  "workflows": [
+    {
+      "id": "omni-listen-3b",
+      "title": "Listen (Qwen2.5-Omni-3B)",
+      "family": "omni",
+      "env": "mlx",
+      "media": "text",
+      "nodes": {
+        "model": {
+          "kind": "omni/model",
+          "params": {
+            "variant": "3b",
+            "precision": "int8"
+          }
+        },
+        "listen": {
+          "kind": "omni/listen",
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "listen.answer"
+          }
+        }
+      }
+    },
+    {
+      "id": "omni-listen",
+      "title": "Listen (Qwen3-Omni)",
+      "family": "omni",
+      "env": "mlx",
+      "media": "text",
+      "nodes": {
+        "model": {
+          "kind": "omni/model",
+          "params": {
+            "variant": "q8",
+            "precision": "int8"
+          }
+        },
+        "listen": {
+          "kind": "omni/listen",
+          "in": {
+            "model": "model.model"
+          }
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "listen.answer"
+          }
+        }
+      }
+    }
+  ]
+}

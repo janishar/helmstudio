@@ -46,6 +46,7 @@ from langchain_openai import ChatOpenAI
 
 import config
 from messaging import schemas
+from messaging.responder import request, respond
 
 log = logging.getLogger(__name__)
 
@@ -65,9 +66,7 @@ OUTSIDE = (
     "remote",
     "search",
 )  # kinds that leave the machine (API 1.44: search, the assistant's web search)
-DOCKER_HOST = (
-    "host.docker.internal"  # its addresses here are the Docker host's: a server may live there
-)
+DOCKER_HOST = "host.docker.internal"  # its addresses here are the Docker host's: a server may live there
 ALLOWED = [ipaddress.ip_network(n) for n in
            ("127.0.0.0/8", "::1/128", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7")]  # fmt: skip
 
@@ -76,6 +75,10 @@ class CallError(Exception):
     def __init__(self, kind: str, message: str, retry_after: float | None = None) -> None:
         super().__init__(message)
         self.kind, self.retry_after = kind, retry_after  # network | answer | refused | off
+
+
+# tool calls an answer may carry (API 1.100: 12, from 4; a Magic board starts views for each of its assets at once)
+MAX_TOOL_CALLS = 12
 
 
 def _addr(ip: str):
@@ -190,19 +193,13 @@ def _http(name: str, p: dict):
     """The HTTP client of one call: no redirects followed, no proxy from the environment, connections only to
     addresses that pass the host rule (_Pinned). A provider without a key (a server) sends no Authorization at
     all: the SDK insists on some api_key, so the header it builds from the "none" placeholder is dropped here."""
-    keyless = not (
-        p.get("key_secret") or p.get("bearer")
-    )  # bearer: the caller sets its own (a plugin's pass)
+    keyless = not (p.get("key_secret") or p.get("bearer"))  # bearer: the caller sets its own (a plugin's pass)
     transport = httpx2.AsyncHTTPTransport()
-    transport._pool._network_backend = _Pinned(
-        name, p["kind"]
-    )  # ponytail: httpx has no public hook for this
+    transport._pool._network_backend = _Pinned(name, p["kind"])  # ponytail: httpx has no public hook for this
 
     async def no_redirect(response) -> None:
         if response.is_redirect:
-            raise CallError(
-                "answer", f"{name}: a redirect (HTTP {response.status_code}) is never followed"
-            )
+            raise CallError("answer", f"{name}: a redirect (HTTP {response.status_code}) is never followed")
 
     hooks = {"request": [_no_auth] if keyless else [], "response": [no_redirect]}
     headers = (p.get("compat") or {}).get("headers") or {}  # API 1.55: allow-listed by the schema
@@ -211,16 +208,10 @@ def _http(name: str, p: dict):
     )
 
 
-def _client(
-    name: str, p: dict, model: str, max_tokens: int, http, body: dict | None = None
-) -> ChatOpenAI:
+def _client(name: str, p: dict, model: str, max_tokens: int, http, body: dict | None = None) -> ChatOpenAI:
     """body: the thinking fragment (API 1.53), merged into the request body as is."""
     # langchain-openai sends max_completion_tokens; local servers (Ollama, llama-server) read max_tokens
-    limit = (
-        {"max_tokens": max_tokens}
-        if p["kind"] == "remote"
-        else {"extra_body": {"max_tokens": max_tokens}}
-    )
+    limit = {"max_tokens": max_tokens} if p["kind"] == "remote" else {"extra_body": {"max_tokens": max_tokens}}
     if body:
         limit["extra_body"] = limit.get("extra_body", {}) | body
     return ChatOpenAI(
@@ -256,9 +247,7 @@ def _classify(name: str, e: Exception) -> CallError:
                 after = min(float(e.response.headers.get("retry-after")), RETRY_AFTER_MAX)
             except TypeError, ValueError:
                 pass
-            return CallError(
-                "network", f"{name}: the provider is busy or down (HTTP {code})", after
-            )
+            return CallError("network", f"{name}: the provider is busy or down (HTTP {code})", after)
         if code == 401:
             return CallError("answer", f"{name}: the key was refused")
         return CallError("answer", f"{name}: HTTP {code}")
@@ -269,13 +258,9 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     """One chat completion: req {model, system, prompt, max_tokens, schema? (JSON text), tools? (OpenAI tool
     definitions)} → {text, tool_calls [{id, name, arguments}], tokens_in, tokens_out, seconds}; CallError else."""
     await check_host(name, p)
-    strict = (p.get("compat") or {}).get(
-        "strict_schema"
-    ) is True  # API 1.51: never retried as json_object
+    strict = (p.get("compat") or {}).get("strict_schema") is True  # API 1.51: never retried as json_object
     kw = {}
-    if req.get(
-        "tools"
-    ):  # a list; an ask's `tools` param (JSON text) is parsed here for every caller
+    if req.get("tools"):  # a list; an ask's `tools` param (JSON text) is parsed here for every caller
         tools = json.loads(req["tools"]) if isinstance(req["tools"], str) else req["tools"]
         kw = {"tools": tools, "tool_choice": "auto"}
     elif req.get("schema"):
@@ -284,8 +269,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
                                   "json_schema": {"name": "answer", "schema": schema, "strict": strict}}}  # fmt: skip
     # API 1.65: a model that sees gets the message's pictures (JPEG, base64) as image parts after the text
     user = [{"type": "text", "text": req["prompt"]}] + [
-        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b}"}}
-        for b in req.get("images") or []
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{b}"}} for b in req.get("images") or []
     ]
     msgs = [SystemMessage(req["system"]), HumanMessage(user if len(user) > 1 else req["prompt"])]
     if "response_format" in kw and not strict and name in _NO_JSON_SCHEMA:
@@ -303,9 +287,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
                     msg = await llm.bind(**kw).ainvoke(msgs)
                     if dropped:  # remembered only once the call without it answered (another 400 is not its fault)
                         _NO_THINKING.add((name, req["model"]))
-                        log.warning(
-                            "%s %s: thinking setting refused, sent without it", name, req["model"]
-                        )
+                        log.warning("%s %s: thinking setting refused, sent without it", name, req["model"])
                     break
                 except openai.BadRequestError:
                     # some OpenAI-compatible providers (DeepSeek) refuse response_format json_schema but take
@@ -323,7 +305,7 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     raw = [(c["id"], c["name"], json.dumps(c["args"])) for c in msg.tool_calls]
     raw += [(c["id"], c["name"], c["args"] or "") for c in msg.invalid_tool_calls]
     calls = [{"id": str(i or n)[:200], "name": (name_ or "")[:64], "arguments": a[:16384]}
-             for n, (i, name_, a) in enumerate(raw[:4])]  # fmt: skip
+             for n, (i, name_, a) in enumerate(raw[:MAX_TOOL_CALLS])]  # fmt: skip
     text = msg.content if isinstance(msg.content, str) else json.dumps(msg.content)
     usage = msg.usage_metadata or {}
     if not usage.get("input_tokens") and not usage.get("output_tokens"):
@@ -335,8 +317,8 @@ async def chat(name: str, p: dict, req: dict) -> dict:
     out = {"text": text[:32768], "tool_calls": calls, "tokens_in": usage.get("input_tokens", 0),
            "tokens_out": usage.get("output_tokens", 0), "seconds": round(time.monotonic() - t, 3),
            "cache": cache_hits(msg.response_metadata.get("token_usage"))}  # fmt: skip
-    if len(raw) > 4:  # never cut silently: the turn is invalid (asked once more)
-        out["error"] = f"the answer has {len(raw)} tool calls; at most 4 per turn"
+    if len(raw) > MAX_TOOL_CALLS:  # never cut silently: the turn is invalid (asked once more)
+        out["error"] = f"the answer has {len(raw)} tool calls; at most {MAX_TOOL_CALLS} per turn"
     return out
 
 
@@ -356,12 +338,8 @@ def cache_hits(u: dict | None) -> tuple[int, int] | None:
     return None
 
 
-_NO_JSON_SCHEMA: set[str] = (
-    set()
-)  # providers that refused response_format json_schema (this process)
-_NO_THINKING: set[tuple[str, str]] = (
-    set()
-)  # (provider, model) that refused its thinking fragment (this process)
+_NO_JSON_SCHEMA: set[str] = set()  # providers that refused response_format json_schema (this process)
+_NO_THINKING: set[tuple[str, str]] = set()  # (provider, model) that refused its thinking fragment (this process)
 
 
 def _json_object(req: dict, msgs: list) -> tuple[dict, list]:
@@ -423,9 +401,7 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
             r = await http.get(f"{p['base_url'].rstrip('/')}/web/search", headers=headers,
                                params={"q": query, "count": SEARCH_RESULTS}, timeout=p["timeout_s"])  # fmt: skip
             if r.status_code == 429 or r.status_code >= 500:
-                raise CallError(
-                    "network", f"{name}: the provider is busy or down (HTTP {r.status_code})"
-                )
+                raise CallError("network", f"{name}: the provider is busy or down (HTTP {r.status_code})")
             if r.status_code >= 400:
                 raise CallError("answer", f"{name}: HTTP {r.status_code}")
             found = ((r.json().get("web") or {}).get("results")) or []
@@ -441,9 +417,7 @@ async def search(name: str, p: dict, query: str) -> list[dict]:
             raise CallError("network", f"{name}: timed out") from None
         if isinstance(e, httpx2.TransportError):
             raise CallError("network", f"{name}: could not connect") from None
-        raise CallError(
-            "answer", f"{name}: the answer is not a search result ({type(e).__name__})"
-        ) from None
+        raise CallError("answer", f"{name}: the answer is not a search result ({type(e).__name__})") from None
     return [{"title": str(x.get("title") or "")[:200], "url": str(x.get("url") or "")[:500],
              "text": str(x.get("description") or "")[:SEARCH_TEXT]}
             for x in found[:SEARCH_RESULTS] if isinstance(x, dict)]  # fmt: skip
@@ -461,8 +435,7 @@ async def plugin_tool(title: str, url: str, tool: str, args: dict, headers: dict
     try:
         await check_host(title, p)
         async with _http(title, p) as http:
-            r = await http.post(f"{url}/tools/{tool}", json={"input": args}, headers=headers,
-                                timeout=PLUGIN_TIMEOUT)  # fmt: skip
+            r = await http.post(f"{url}/tools/{tool}", json={"input": args}, headers=headers, timeout=PLUGIN_TIMEOUT)
     except Exception as e:  # noqa: BLE001 - every failure is classed
         cause = e
         while cause is not None:  # the host rule refused (before or at connect), a redirect
@@ -496,9 +469,7 @@ async def test(req: dict) -> dict:
                                     max_retries=0, http_client=_http(name, p))  # fmt: skip
         try:
             models, reasoning = [], {}
-            async for (
-                m
-            ) in client.models.list():  # ponytail: pages past MODELS_MAX are still read; cut here
+            async for m in client.models.list():  # ponytail: pages past MODELS_MAX are still read; cut here
                 if len(models) < MODELS_MAX:
                     models.append(m.id[:128])
                     if r := reasoning_of(m.model_extra or {}):
@@ -534,12 +505,9 @@ def reasoning_of(extra: dict) -> dict | None:
 
 
 async def answer_test(body: bytes) -> dict:
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_test_errors("request", req):
-        return {"error": "not a pipelines.providers.test request", "code": "internal"}
+    req, bad = request(body, schemas.providers_test_errors, SUBJECT, "internal")
+    if bad:
+        return bad
     return await test(req)
 
 
@@ -548,12 +516,9 @@ async def answer_test(body: bytes) -> dict:
 
 def answer_key(body: bytes) -> dict:
     """{found, writable} for a key_secret: stat only, never the file's content."""
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_key_errors("request", req):
-        return {"error": "not a pipelines.providers.key request", "code": "internal"}
+    req, bad = request(body, schemas.providers_key_errors, KEY_SUBJECT, "internal")
+    if bad:
+        return bad
     try:
         return {"found": key_found(req["key_secret"]), "writable": writable()}
     except OSError:
@@ -579,9 +544,7 @@ def writable() -> bool:
 
 def _target(name: str):
     if not KEY_NAME.fullmatch(name):
-        raise ValueError(
-            "not a key file name"
-        )  # the schema refuses it first; never a path out of the folder
+        raise ValueError("not a key file name")  # the schema refuses it first; never a path out of the folder
     if not writable():
         raise KeyFileError("readonly", "keys are set in files on this deployment")
     f = config.PROVIDER_KEYS_DIRS[0] / name
@@ -658,12 +621,9 @@ async def check_key(name: str, p: dict, key: str) -> tuple[str, str]:
 
 async def answer_write(body: bytes) -> dict:
     """save: check (unless force), then write; remove: delete. Never the key in a reply or a log line."""
-    try:
-        req = json.loads(body)
-    except ValueError:
-        req = None
-    if not isinstance(req, dict) or schemas.providers_key_write_errors("request", req):
-        return {"error": "not a pipelines.providers.key.write request", "code": "internal"}
+    req, bad = request(body, schemas.providers_key_write_errors, WRITE_SUBJECT, "internal")
+    if bad:
+        return bad
     name = req["key_secret"]
     try:
         if req["op"] == "remove":
@@ -672,9 +632,7 @@ async def answer_write(body: bytes) -> dict:
             return {"found": key_found(name), "writable": writable()}
         key = req["key"].strip()
         _target(name)  # readonly or not_file before a call
-        check, detail = (
-            ("skipped", "") if req.get("force") else await check_key(name, req["provider"], key)
-        )
+        check, detail = ("skipped", "") if req.get("force") else await check_key(name, req["provider"], key)
         if check in ("ok", "skipped"):
             write_key(name, key)
             log.info("key file %s written (check %s)", name, check)
@@ -705,15 +663,8 @@ async def serve(nc):
     """Subscribe the test, key and (API 1.52) key write responders; returns the subscriptions."""
     make_first_folder()
 
-    async def on(msg) -> None:
-        await msg.respond(json.dumps(await answer_test(msg.data)).encode())
-
-    async def on_key(msg) -> None:
-        await msg.respond(json.dumps(answer_key(msg.data)).encode())
-
-    async def on_write(msg) -> None:
-        await msg.respond(json.dumps(await answer_write(msg.data)).encode())
-
-    return [await nc.subscribe(SUBJECT, queue="pipelines", cb=on),
-            await nc.subscribe(KEY_SUBJECT, queue="pipelines", cb=on_key),
-            await nc.subscribe(WRITE_SUBJECT, queue="pipelines", cb=on_write)]  # fmt: skip
+    return [
+        await respond(nc, SUBJECT, answer_test),
+        await respond(nc, KEY_SUBJECT, answer_key),
+        await respond(nc, WRITE_SUBJECT, answer_write),
+    ]

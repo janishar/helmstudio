@@ -2,17 +2,31 @@
 // Create: one session's runs of one workflow (docs/mock/Main.dc.html). The form comes from the workflow's node
 // schemas; progress comes live from the session's event stream (SSE through the BFF, ?since= polling when the stream
 // can't be held).
+import { stored, useStoredFlag } from "@/lib/hydrated";
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import dynamic from "next/dynamic";
+import Link from "next/link";
 import {
   ArrowRight,
   AtSign,
+  AudioLines,
   Check,
+  Clock3,
+  Download,
+  Film,
+  Clapperboard,
   Columns2,
+  Copy,
   Eye,
+  LoaderCircle,
+  RefreshCw,
+  TriangleAlert,
+  WifiOff,
+  Image as ImageIcon,
   Info as InfoIcon,
   Maximize,
   MessageCircleQuestion,
+  Mic,
   Trash2,
   StepForward,
   Minus,
@@ -33,19 +47,23 @@ import {
   canvasOf,
   choiceBypass,
   idOf,
+  type KindModel,
 } from "@/components/create/form";
 import { TileWords, tileClass } from "@/components/create/elements";
 import { FirstFrameTile, takeDrop, useRefUploads } from "@/components/create/refs";
 import {
   MediaRows,
   MediaTile,
+  OfferPop,
+  SoundStage,
   SourceStage,
   SpanTile,
   extensionOf,
+  muxTake,
+  spanSource,
   useFrameGrid,
-  videoSource,
 } from "@/components/create/source";
-import { mediaItem, offerLabel } from "@/lib/source";
+import { actionOffers, mediaItem, offerLabel, partOf, soundActions, videoOf } from "@/lib/source";
 import { useTakes, useUses } from "@/lib/take-cache";
 import { clipOf, placeRows, positionOf } from "@/lib/video";
 import { WorkflowPicker } from "@/components/create/workflows";
@@ -56,8 +74,8 @@ import { Compare, ExplainDrawer } from "@/components/create/compare";
 import { ElementsPicker } from "@/components/create/elements";
 import { AddToTimeline, AddedNote, addToTimeline } from "@/components/timeline/add";
 import { LooksPicker, LooksSection, QuickTiles } from "@/components/create/looks";
-import { MentionChips, insertAtCaret } from "@/components/create/prompt";
-import { WavePlayer } from "@/components/create/audio";
+import { LyricsBox, MentionChips, insertAtCaret } from "@/components/create/prompt";
+import { VariationCard, WavePlayer, usePlayer } from "@/components/create/audio";
 import {
   CastRows,
   CastTile,
@@ -108,22 +126,27 @@ import { docOf, graphProblems, paletteOf, type Palette, type Problem } from "@/l
 import { presetNames, studioView } from "@/lib/studio";
 import { ApiError, api, message, ok, okOr, type S } from "@/lib/api";
 import { downloaded, precisionPins } from "@/lib/models";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import {
-  SIDES,
-  mediaKinds,
+  KIND_LABEL,
+  audioFormat,
+  createKinds,
+  kindOf,
+  kindTemplates,
   mediaOf,
   secondsText,
   sideOf,
+  soundText,
   workflowFor,
-  type MediaKind,
-  type Side,
+  type Kind,
 } from "@/lib/media";
 import {
   applyEvent,
-  clock,
   deleteRuns,
   etaText,
+  GENERIC_FAIL,
+  failDetails,
+  failWords,
   failedCount,
   followSession,
   fraction,
@@ -138,24 +161,24 @@ import {
   seedOf,
   segments,
   track,
+  waitText,
   type RunTrack,
 } from "@/lib/runs";
-import { rememberProject, stripItems } from "@/lib/takes";
+import { isDown, onBack, OUTAGE_TEXT, useHealth } from "@/lib/health";
+import { rememberProject, soundOf, soundTakeOf, stripItems } from "@/lib/takes";
 import { hostMemory } from "@/lib/hosts";
 import { estimateText, Memory, useHosts, usePlan } from "@/components/create/memory-chip";
 import { RunOnChip } from "@/components/create/run-on";
+import { useAddonGates } from "@/components/create/use-addon-gates";
+import { useDrafts } from "@/components/create/use-drafts";
 import {
-  addonBlocks,
-  addonNeeds,
-  needed,
   chosenVariants,
   clashNote,
-  machineReason,
   machines,
   pinnedMachine,
-  valueBlock,
-  valueNeeds,
-  valueNeedsAt,
+  planWhy,
+  runnerWhy,
+  unpluggedDrive,
   versionRow,
 } from "@/lib/run-on";
 import {
@@ -175,6 +198,7 @@ import { createTools } from "@/components/create/assistant";
 import {
   buildInputs,
   carryKind,
+  chipText,
   display,
   fields as fieldsOf,
   isVoice,
@@ -182,6 +206,7 @@ import {
   queueInputs,
   rawsFrom,
   presetHelp,
+  pretty,
   ruleErrors,
   toRaw,
   visible,
@@ -228,16 +253,28 @@ function usePalette(when: string | null) {
   return p;
 }
 
-/** Calls `onEvent` for each new event of the session (see followSession). */
+/** Calls `onEvent` for each new event of the session (see followSession); returns "Live updates paused" (its
+ * polling failed for 5 s, docs/mock/ErrorStates.dc.html d) with the call that tries the stream now. */
 function useSessionEvents(sessionId: string | null, onEvent: (e: SessionEvent) => void) {
   const handler = useRef(onEvent);
+  const [paused, setPaused] = useState<(() => void) | null>(null);
   useEffect(() => {
     handler.current = onEvent;
   });
-  useEffect(
-    () => (sessionId ? followSession(sessionId, (e) => handler.current(e)) : undefined),
-    [sessionId],
-  );
+  useEffect(() => {
+    if (!sessionId) return;
+    const stop = followSession(
+      sessionId,
+      (e) => handler.current(e),
+      undefined,
+      (on, now) => setPaused(on ? () => now : null),
+    );
+    return () => {
+      stop();
+      setPaused(null);
+    };
+  }, [sessionId]);
+  return paused;
 }
 
 /** What the page read on the server: the sessions and workflows, the open session (null: none yet) and its runs and
@@ -250,21 +287,12 @@ export type CreateInitial = {
   takes: Take[];
   /** how new sessions get their title (API 1.43): the session menu's remote-naming line */
   naming?: S<"SessionList">["naming"];
+  /** the session list's next page (API 1.92): the session menu's Load older */
+  sessionsNext?: string | null;
 };
 
 /** Whether the settings drawer is open, in this browser (alpha.5 item 10). */
 const DRAWER = "create-settings-drawer";
-const noSub = () => () => undefined;
-const storedDrawer = () => {
-  try {
-    return localStorage.getItem(DRAWER) !== "0";
-  } catch {
-    return true;
-  }
-};
-/** The browser's key of a session's half-written prompt or script ("" before the first session), one per side
- * (picture, sound: sideOf), so neither replaces the other. */
-const draftKey = (session: string | null, side: Side) => `create-draft:${session ?? ""}:${side}`;
 
 /** The Create screen; `initialSession` comes from `?s=`, `reuse` (a take id whose settings fill the form) from
  * `?reuse=`, `use` (a take to use in a workflow: the gallery's "Use in…") from `?use=&w=`, `initial` from the server
@@ -282,6 +310,7 @@ export function Create({
 }) {
   const [sessions, setSessions] = useState<S<"StudioSession">[] | null>(initial?.sessions ?? null);
   const [naming, setNaming] = useState(initial?.naming);
+  const [sessionsNext, setSessionsNext] = useState(initial?.sessionsNext ?? null);
   // the model that just named the open session: "named by Qwen3.8" under the title, once per browser
   const [hint, setHint] = useState("");
   useEffect(() => {
@@ -317,6 +346,19 @@ export function Create({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [count, setCount] = useState(1);
+  // Sound's variations (docs/mock/CreateMusicSound.dc.html frame 4): the runs of the last Generate of a workflow with
+  // a `studio.count`, a grid on the stage, and the takes kept from them for the strip; held in this browser per
+  // session until the next Generate (plan 38 44.10.6: an unkept one stays an ordinary take in the Gallery)
+  const [variations, setVariationsState] = useState<{ runs: string[]; kept: string[] } | null>(
+    null,
+  );
+  // the take the menu's Play started: its stage player plays once shown
+  const [autoplay, setAutoplay] = useState<string | null>(null);
+  // Repaint on the stage (3a): the workflow its Cancel goes back to
+  const backTo = useRef<string | null>(null);
+  // Match a video (4, 5a): the video workflow's picker opens once it is open
+  const pickOnOpen = useRef(false);
+  const player = usePlayer();
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [elementsOpen, setElementsOpen] = useState(false);
   // studio's 422 on a dialogue script (API 1.32): its lines' errors, for the script they were about
@@ -333,15 +375,7 @@ export function Create({
   const [inlineGroup, setInlineGroup] = useState<S<"LibraryGroup"> | null>(null);
   // the settings drawer (alpha.5 item 10, docs/mock/TextToVideo.dc.html): open by default (owner, 2026-11-26:
   // "keep the setting open by default"), a closed one remembered in this browser ("0")
-  const stored = useSyncExternalStore(noSub, storedDrawer, () => true);
-  const [drawerSet, setDrawerState] = useState<boolean | null>(null);
-  const drawer = drawerSet ?? stored;
-  const setDrawer = (on: boolean) => {
-    setDrawerState(on);
-    try {
-      localStorage.setItem(DRAWER, on ? "1" : "0");
-    } catch {}
-  };
+  const [drawer, setDrawer] = useStoredFlag(DRAWER);
   // a reused take's look ids, put under their groups once the looks are known
   const [reusedLooks, setReusedLooks] = useState<string[] | null>(null);
   // what Reuse said about the elements the take was made with (changed, deleted, renamed since)
@@ -405,6 +439,7 @@ export function Create({
       .then(([s, w]) => {
         setError("");
         setSessions(s.sessions);
+        setSessionsNext(s.next_cursor ?? null);
         setNaming(s.naming);
         open(s.sessions.find((x) => x.id === initialSession)?.id ?? s.sessions[0]?.id ?? null);
         setWorkflows(w.workflows);
@@ -428,6 +463,17 @@ export function Create({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const varKey = (id: string | null) => `create-variations:${id ?? ""}`;
+  const setVariations = (v: { runs: string[]; kept: string[] } | null) => {
+    setVariationsState(v); // no storage here: kept for this page only
+    stored.set(varKey(sessionRef.current), v ? JSON.stringify(v) : null);
+  };
+  useEffect(() => {
+    const v = stored.json<{ runs: string[]; kept: string[] }>(varKey(sessionId));
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
+    setVariationsState(v && Array.isArray(v.runs) && Array.isArray(v.kept) ? v : null);
+  }, [sessionId]);
 
   // the open session is in the URL, without a server round trip
   useEffect(() => {
@@ -556,7 +602,7 @@ export function Create({
   );
   const listTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(listTimer.current), []);
-  useSessionEvents(runs === null ? null : sessionId, (e) => {
+  const livePaused = useSessionEvents(runs === null ? null : sessionId, (e) => {
     if (e.type === "session") {
       // the namer's title (API 1.43); the replay brings it again on open, so the hint shows the first time only
       setSessions((l) => l && l.map((x) => (x.id === sessionId ? { ...x, ...e.data } : x)));
@@ -605,90 +651,29 @@ export function Create({
   );
   const machineList = useMemo(() => machines(hosts), [hosts]);
   const runOn = pinnedMachine(machineList, runOnHost);
-  // optional add-ons (API 1.36): a node whose add-on is not where the run may go has its controls greyed, and stays
-  // bypassed so the run check never refuses it (contracts/README.md, Optional add-ons)
-  // (API 1.40) an add-on scoped to other variants than the chosen one is not needed; one a node the workflow always
-  // runs needs greys its variants' rows instead (Dev without the distilled LoRA)
-  const allNeeds = useMemo(() => addonNeeds(workflow, modelList), [workflow, modelList]);
-  const chosenModels = chosenVariants(all, { ...held, ...pins }, modelList);
-  // (API 1.40) and one for the other task (`refs`): an edit needs Qwen's PE-I2I, text to image its PE-T2I
-  const withRefs = refCount(all, held) > 0;
-  const needs = allNeeds.filter((n) => needed(n, chosenModels, withRefs));
-  const blocks = addonBlocks(needs, runOn);
-  const forced = Object.fromEntries(Object.keys(blocks).map((n) => [`${n}.bypass`, true]));
-  const raws =
-    Object.keys(pins).length || Object.keys(forced).length ? { ...held, ...pins, ...forced } : held;
-  // (API 1.41) an add-on one value of a param asks for (MiniMax H3's lora turbo: Turbo LoRA, with a reference Turbo
-  // Ref LoRA): that option and every preset that picks it are greyed where the run may go, and a form that holds it
-  // anyway keeps it, greyed, with Generate blocked (it never drops to another value by itself; H3Options 11-13)
-  const allValueNeeds = useMemo(() => valueNeeds(workflow, modelList), [workflow, modelList]);
-  const valueOn = (node: string) =>
-    (raws[`${node}.bypass`] ?? workflow?.nodes[node]?.bypass) !== true;
-  const wiredIn = (node: string) => (name: string) => {
-    const v = raws[`${node}.${name}`] ?? all.find((f) => f.key === `${node}.${name}`)?.initial;
-    return (Array.isArray(v) && v.length > 0) || !!workflow?.nodes[node]?.in?.[name];
-  };
-  const canRun = machineList.filter(
-    (mc) => machineReason(mc, workflow?.env, chosenModels) === null,
+  const { allNeeds, needs, blocks, raws, valueBlocks, heldNeeds, heldBlock } = useAddonGates(
+    workflow,
+    modelList,
+    all,
+    held,
+    pins,
+    machineList,
+    runOn,
   );
-  const valueBlocks: Record<string, Record<string, string>> = {};
-  const heldNeeds: typeof allValueNeeds = [];
-  let heldBlock: string | null = null;
-  for (const f of all.filter((x) =>
-    allValueNeeds.some((n) => n.field === x.key && valueOn(n.node)),
-  )) {
-    const cur = String(raws[f.key] ?? toRaw(f.initial, f.param));
-    for (const o of f.param.enum ?? []) {
-      const why = valueBlock(allValueNeeds, f.key, o, wiredIn(f.node), canRun, runOn, chosenModels);
-      if (why) (valueBlocks[f.key] ??= {})[o] = why;
-    }
-    heldNeeds.push(...valueNeedsAt(allValueNeeds, f.key, cur, wiredIn(f.node)));
-    heldBlock ??= valueBlocks[f.key]?.[cur] ?? null;
-  }
   // a workflow with a Studio block shows exactly what it places (lib/studio.ts)
   const layout = useMemo(() => (workflow ? studioView(workflow, all) : null), [workflow, all]);
   // the params whose `when` holds now: the others are neither shown nor sent
   const fields = visible(layout ? layout.shown : all, raws, all);
-  // a half-written prompt survives a reload (owner, 2026-11-25): kept in this browser per session (a reload starts
-  // with an empty leftForm), dropped once Generate sends it; switching to another session brings back its own
-  const promptKey = all.find((f) => f.param.type === "text")?.key;
-  const draft = promptKey ? held[promptKey] : undefined;
-  const sentDraft = useRef<unknown>(undefined);
-  const draftRead = useRef<string | null | undefined>(undefined); // the session whose draft was read
-  // each side's draft (alpha.2 item 14): the open workflow's side goes into the form, the other waits in keptTexts
-  // for a switch (carryKind), so a script never lands in a picture prompt after a reload, nor the reverse
-  const side = workflow ? sideOf(workflow) : undefined;
-  useEffect(() => {
-    if (!workflows || !side || draftRead.current === sessionId) return;
-    const first = draftRead.current === undefined;
-    draftRead.current = sessionId;
-    if (first && (back || reuse || use)) return;
-    try {
-      for (const s of SIDES) {
-        const d = JSON.parse(localStorage.getItem(draftKey(sessionId, s)) ?? "null");
-        if (!d?.key || typeof d.text !== "string") continue;
-        // only the words: the workflow follows the session as after any reload (its other inputs are not kept)
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- the browser store is only read in the browser
-        if (s === side) setRaws((h) => ({ ...h, [d.key]: d.text }));
-        else keptTexts.current[s] = { [d.key]: d.text };
-      }
-    } catch {
-      /* no storage here: the draft is not kept */
-    }
-  }, [workflows, side, back, reuse, use, sessionId]);
-  useEffect(() => {
-    if (draftRead.current !== sessionId || !promptKey || !side) return;
-    try {
-      if (typeof draft === "string" && draft.trim() && draft !== sentDraft.current)
-        localStorage.setItem(
-          draftKey(sessionId, side),
-          JSON.stringify({ key: promptKey, text: draft }),
-        );
-      else localStorage.removeItem(draftKey(sessionId, side));
-    } catch {
-      /* no storage here */
-    }
-  }, [draft, promptKey, sessionId, side]);
+  const draftSent = useDrafts({
+    sessionId,
+    workflows,
+    workflow,
+    all,
+    held,
+    setRaws,
+    keptRef: keptTexts,
+    restored: !!(back || reuse || use),
+  });
   // API 1.47 (contracts/README.md, Param rules): what studio would refuse, in red under its param before Generate,
   // which they block ("fix 2 problems"); an item field's line is its row's (MediaRows), studio's 422s after a send
   const rules = ruleErrors(workflow, all, raws, fields);
@@ -701,7 +686,8 @@ export function Create({
     ? String(raws[scriptField.key] ?? toRaw(scriptField.initial, scriptField.param))
     : "";
   const cast = useCast(script, workflow);
-  const modes = workflows ? speechModes(workflows, workflow) : null;
+  // Voice-over / Dialogue: a voice family's switch, never Music's or Sound's
+  const modes = workflows && kindOf(workflow) === "voice" ? speechModes(workflows, workflow) : null;
   const castTake = useTakes(
     cast.flatMap((c) => (c.voice?.voice?.clip ? [c.voice.voice.clip.take_id] : [])),
   );
@@ -822,8 +808,22 @@ export function Create({
   useEffect(() => {
     switchRef.current = switchTo;
   });
+  // how many one Generate makes (API 1.79 `studio.count`: Sound starts at 4, at most 8); a workflow without one
+  // has Create's own 1 to 4. A new count resets it to its default (the React "adjust state on prop change" pattern)
+  const countCfg = workflow?.studio?.count;
+  const maxCount = countCfg?.max ?? MAX_QUEUE;
+  // a workflow that starts at several takes makes variations (Sound: 4 of 8, a grid on the stage); MiniMax's 1 of 4
+  // is Create's usual queue of seeds
+  const several = (countCfg?.default ?? 1) > 1;
+  const [countFor, setCountFor] = useState<number | undefined>(undefined);
+  if (countCfg?.default !== countFor) {
+    setCountFor(countCfg?.default);
+    setCount(countCfg?.default ?? 1);
+  }
   const media = workflow ? mediaOf(workflow) : "image";
-  const kinds = workflows ? mediaKinds(workflows) : [];
+  const kinds = workflows ? createKinds(workflows) : [];
+  // the open tab (plan 38): Voice, Music and Sound are classes of audio
+  const kind = kindOf(workflow) ?? "image";
   const video = media === "video";
   // speech (API 1.30, docs/mock/CreateAudio.dc.html): the prompt is spoken, no elements or looks
   const audio = media === "audio";
@@ -898,10 +898,54 @@ export function Create({
   // the composer holds the quick switches and one-value choices; a quick rows editor is its own inspector section
   const quick =
     layout?.groups.find((g) => g.title === "Quick")?.fields.filter((f) => fields.includes(f)) ?? [];
+  // music and sound (docs/mock/CreateMusicSound.dc.html): the lyrics box with its tag chips and Instrumental, the
+  // composer's short texts (Avoid), the quick settings as chips with popups, a `studio.groups` group as one chip
+  const musical = kind === "music" || kind === "sound";
+  const quickAll = (musical && layout?.groups.find((g) => g.title === "Quick")?.fields) || [];
+  const lyricsAll = musical
+    ? all.find((f) => f.param.type === "text" && !!f.param.tags?.length)
+    : undefined;
+  const instrumental =
+    lyricsAll &&
+    all.find(
+      (f) =>
+        f.param.type === "bool" &&
+        f.node === lyricsAll.node &&
+        !!lyricsAll.param.when?.includes(f.param.name),
+    );
+  const instrumentalOn =
+    !!instrumental &&
+    (raws[instrumental.key] ?? toRaw(instrumental.initial, instrumental.param)) === true;
+  const shortTexts = musical ? quick.filter((f) => f.param.type === "string") : [];
+  const chipGroups = musical
+    ? (workflow?.studio?.groups ?? []).flatMap((g) => {
+        const fs = g.items.flatMap((p) => quickAll.filter((f) => f.key === p));
+        return fs.length ? [{ label: g.label, fields: fs }] : [];
+      })
+    : [];
+  const grouped = new Set(chipGroups.flatMap((g) => g.fields.map((f) => f.key)));
+  const valueChips = quickAll.filter(
+    (f) =>
+      ["int", "float", "enum"].includes(f.param.type) &&
+      !f.model &&
+      !grouped.has(f.key) &&
+      !(f.param.type === "enum" && (f.param.enum?.length ?? 0) < 2),
+  );
+  // Instrumental greys the vocal settings (2e), and one its `when` hides now
+  const offChips = Object.fromEntries(
+    valueChips.flatMap((f) =>
+      instrumentalOn && (/language/.test(f.param.name) || !fields.includes(f))
+        ? [[f.key, "Off while Instrumental is on"]]
+        : !fields.includes(f)
+          ? [[f.key, "Not used with these settings"]]
+          : [],
+    ),
+  );
   // a node's bypass placed with its rows is the rows tile's "No keyframes", not a switch of its own
   const toggles = quick.filter(
     (f) =>
       f.param.type === "bool" &&
+      f !== instrumental &&
       !(
         f.param.name === "bypass" &&
         fields.some((x) => x.node === f.node && x.param.type === "rows")
@@ -984,12 +1028,32 @@ export function Create({
   const mediaRowFields = fields.filter((f) => mediaItem(f.param));
   const spanField = fields.find((f) => f.param.type === "span");
   const grid = useFrameGrid(mediaFields.length ? workflow?.family : undefined);
-  const source = videoSource(fields);
+  // the media a span is a range on: the video source, else (API 1.79) the one audio input (a song's Repaint)
+  const source = spanSource(fields);
   const sourceSet = !!source && typeof (raws[source.key] ?? "") === "object";
   const sourceId = sourceSet ? (raws[source.key] as { take_id: string }).take_id : undefined;
   const sourceTake = useTakes(sourceId ? [sourceId] : [])(sourceId ?? "");
   const wholeClip =
     spanField && sourceTake?.video ? `whole clip · ${sourceTake.video.frames} frames` : "";
+  // a Length on Auto beside a video source follows the clip (MMAudio, board CreateMusicSound 5): "0:05 · video"
+  const clipS =
+    source && sourceTake?.video
+      ? (([a, b]) => b - a)(
+          partOf(raws[source.key] as S<"MediaRef">, sourceTake.video.duration_s, source.param),
+        )
+      : 0;
+  const autoTexts = Object.fromEntries(
+    clipS > 0
+      ? valueChips
+          .filter(
+            (f) => f.param.auto === true && f.param.name === "seconds" && f.node === source?.node,
+          )
+          .map((f) => [
+            f.key,
+            { text: `${chipText(f, String(clipS))} · video`, title: "From the video" },
+          ])
+      : [],
+  );
   // the mentions: what they add for this workflow (the line under the prompt), checked as studio checks them
   const library = useLibrary();
   const looks = useLooks();
@@ -1022,7 +1086,17 @@ export function Create({
   );
   const texts = textFields.map((f) => String(raws[f.key] ?? toRaw(f.initial, f.param)));
   // an empty prompt is never sent: the model would refuse it (SGLang: "prompt must be a non-empty string")
-  const noPrompt = textFields.length > 0 && texts[0].trim() === "";
+  // (a sound matched to a video needs no words: MMAudio's prompt is optional, frame 5)
+  const noPrompt =
+    textFields.length > 0 &&
+    texts[0].trim() === "" &&
+    !(
+      kindOf(workflow) === "sound" &&
+      fields.some(
+        (f) =>
+          f.param.type === "media" && f.param.accepts?.includes("video") && isRefRaw(raws[f.key]),
+      )
+    );
   const handles = [...new Set(texts.flatMap(mentioned))];
   const formInputs = buildInputs(fields, raws).inputs;
   // the graph as the form sets it: what the picker's fit reasons are about
@@ -1088,6 +1162,88 @@ export function Create({
       .filter((l) => l.trim()).length;
   })();
   const familyTitle = (f: string) => palette?.groups.find((g) => g.family === f)?.title ?? f;
+  // the model chip of Music and Sound (ModelPopup; 2a, 4a): the kind's models, the default first (MiniMax Music 3 for
+  // Music), a model with several versions one row each ("ACE-Step 1.5 · 2B", "· XL"), each with its line
+  const modelOf = (w: S<"Workflow">) => modelList?.models.find((m) => m.family === w.family);
+  const variantOf = (w: S<"Workflow">) =>
+    fieldsOf(w).find((f) => f.model && f.param.name === "variant" && f.param.type === "enum");
+  const modelName = (w: S<"Workflow">, v?: string | null) => {
+    const m = modelOf(w);
+    const base = m?.title ?? (w.family === workflow?.family ? familyName : undefined) ?? w.title;
+    const vf = variantOf(w);
+    if (!m || !vf || m.variants.length < 2) return base;
+    const id = v ?? String((w.id === workflow?.id && raws[vf.key]) || vf.initial);
+    return `${base} · ${m.variants.find((x) => x.id === id)?.title ?? pretty(id)}`;
+  };
+  const kindModels =
+    musical && workflow && workflows
+      ? {
+          title: modelName(workflow),
+          rows: kindTemplates(workflows, kind).flatMap((w): KindModel[] => {
+            const m = modelOf(w);
+            const vf = variantOf(w);
+            const vs = vf && m && m.variants.length > 1 ? (vf.param.enum ?? []) : [null];
+            const held = vf && String((w.id === workflow.id && raws[vf.key]) || vf.initial);
+            const here = downloaded(modelList, w.family);
+            return vs.map((v) => ({
+              key: `${w.id} ${v ?? ""}`,
+              title: modelName(w, v),
+              sub: [
+                (v ? m?.variants.find((x) => x.id === v) : m?.variants[0])?.help,
+                !here && "Not downloaded",
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              checked: w.id === workflow.id && (!v || held === v),
+              onPick: () => {
+                if (w.id !== workflow.id) switchTo(w.id);
+                if (v && vf) setRaws((r) => ({ ...r, [vf.key]: v }));
+              },
+            }));
+          }),
+        }
+      : undefined;
+  // what the kind's other models have that this one lacks stays in place, greyed with why (2b: "Not on MiniMax
+  // Music 3"): their quick settings (a group by its name) and their composer tiles (Reference)
+  const lacks = (() => {
+    if (!musical || !workflow || !workflows) return { chips: [], tiles: [] };
+    const why = `Not on ${modelName(workflow)}`;
+    const label = (f: Field) => f.param.label ?? f.param.name;
+    const mine = new Set([
+      ...quickAll.map(label),
+      ...chipGroups.map((g) => g.label),
+      ...fields.filter((f) => f.param.type === "media").map(label),
+    ]);
+    const chips = new Map<string, string>();
+    const tiles = new Map<string, string>();
+    for (const o of kindTemplates(workflows, kind)) {
+      if (o.family === workflow.family) continue;
+      const v = studioView(o, fieldsOf(o));
+      const q = v?.groups.find((g) => g.title === "Quick")?.fields ?? [];
+      const inGroup = new Map(
+        (o.studio?.groups ?? []).flatMap((g) => g.items.map((p) => [p, g.label] as const)),
+      );
+      for (const f of q) {
+        const name = inGroup.get(f.key) ?? label(f);
+        if (mine.has(name) || f.model || f.param.type === "seed" || f.param.type === "bool")
+          continue;
+        if (f.param.type === "media") tiles.set(name, why);
+        else if (["int", "float", "enum"].includes(f.param.type)) chips.set(name, why);
+      }
+    }
+    const list = (m: Map<string, string>) => [...m].map(([l, w]) => ({ label: l, why: w }));
+    return { chips: list(chips), tiles: list(tiles) };
+  })();
+  // Match a video (4): Sound's workflow that takes a video (MMAudio's), when this one takes none
+  const matchVideo =
+    kind === "sound" &&
+    !fields.some((f) => f.param.type === "media" && f.param.accepts?.includes("video"))
+      ? workflows?.find(
+          (w) =>
+            kindOf(w) === "sound" &&
+            fieldsOf(w).some((f) => f.param.type === "media" && f.param.accepts?.includes("video")),
+        )
+      : undefined;
   const designSession = useRef<string | null>(null);
   const designWf = audio && workflows ? designWorkflow(workflows, workflow?.family) : undefined;
   // Clone from a clip's Hear it (API 1.31): the template that clones a clip (ZONOS3's voice-over)
@@ -1110,18 +1266,22 @@ export function Create({
     design: designWf && tries(designWf),
     clone: cloneWf && tries(cloneWf),
   };
-  const paramCards = audio
-    ? [
-        ...quick.filter(
-          (f) =>
-            !["voice", "bool", "text", "rows", "image", "media", "span"].includes(f.param.type) &&
-            !(f.model && f.param.type === "enum"),
-        ),
-        ...(seedField && !quick.includes(seedField) && fields.includes(seedField)
-          ? [seedField]
-          : []),
-      ]
-    : [];
+  const paramCards = musical
+    ? seedField && fields.includes(seedField)
+      ? [seedField]
+      : []
+    : audio
+      ? [
+          ...quick.filter(
+            (f) =>
+              !["voice", "bool", "text", "rows", "image", "media", "span"].includes(f.param.type) &&
+              !(f.model && f.param.type === "enum"),
+          ),
+          ...(seedField && !quick.includes(seedField) && fields.includes(seedField)
+            ? [seedField]
+            : []),
+        ]
+      : [];
 
   async function newSession(title?: string) {
     // Generate's slice of the prompt is not the user's title: the namer may replace it (API 1.43 from_prompt)
@@ -1137,7 +1297,7 @@ export function Create({
   const sending = useRef(false);
   async function generate(e: React.FormEvent) {
     e.preventDefault();
-    if (workflow && !blocked && !notDownloaded && !runOnOffline && !heldBlock)
+    if (workflow && !blocked && !notDownloaded && !runOnOffline && !heldBlock && !noRunner && !down)
       await send(workflow, fields);
   }
   /** Queues runs of `w` (Graph view passes the version it just saved) with the form's settings for it. */
@@ -1174,7 +1334,10 @@ export function Create({
     setError("");
     const ids = lookIdsOf(w);
     try {
-      const prompt = fields.find((f) => f.param.type === "text");
+      // the prompt (the `text` param: a song's style, never its lyrics)
+      const prompt =
+        fields.find((f) => f.param.type === "text" && f.param.name === "text") ??
+        fields.find((f) => f.param.type === "text");
       const title = prompt
         ? String(raws[prompt.key] ?? "")
             .trim()
@@ -1198,14 +1361,11 @@ export function Create({
         setLastRun(run.id);
         queuedIds.push(run.id);
       }
+      // several takes of a workflow with a count are its variations (frame 4); the next Generate starts afresh
+      if ((w.studio?.count?.default ?? 1) > 1 && queuedIds.length > 1)
+        setVariations({ runs: queuedIds, kept: [] });
       setReuseNote("");
-      sentDraft.current = prompt ? raws[prompt.key] : undefined;
-      try {
-        localStorage.removeItem(draftKey(sessionId, sideOf(workflow)));
-        localStorage.removeItem(draftKey(sid, sideOf(workflow)));
-      } catch {
-        /* no storage here */
-      }
+      draftSent(prompt ? raws[prompt.key] : undefined, sid, sideOf(workflow));
       return { ids: queuedIds, error: "" };
     } catch (err) {
       // a dialogue's line errors go on its lines (API 1.32), the rest as before
@@ -1248,8 +1408,28 @@ export function Create({
     }
   }
 
-  // the strip: takes, and the runs without one; a selected run that finished shows its take
-  const items = runs ? stripItems(runs, takes) : [];
+  // the strip: takes, and the runs without one; a selected run that finished shows its take. A variation not kept
+  // stays out of it while its grid is the last Generate's (frame 4: "a click keeps one in the strip")
+  const unkept = (t?: Take) =>
+    !!t?.run_id && !!variations?.runs.includes(t.run_id) && !variations.kept.includes(t.id);
+  const items = runs
+    ? stripItems(runs, takes).filter(
+        (i) =>
+          !unkept(i.take) &&
+          !(!i.take && variations?.runs.includes(i.run.id) && i.run.status === "succeeded"),
+      )
+    : [];
+  // the grid of variations is on the stage while one of them is picked (its run, or a take of it)
+  const gridRuns =
+    variations && variations.runs.length > 1
+      ? (runs ?? []).filter((r) => variations.runs.includes(r.id))
+      : [];
+  // nothing picked yet (a reload): the grid while it is the session's newest Generate
+  const sel = selected ?? (runs?.[0] && variations?.runs.includes(runs[0].id) ? runs[0].id : null);
+  const inGrid =
+    gridRuns.length > 0 &&
+    (gridRuns.some((r) => r.id === sel) ||
+      takes.some((t) => t.id === sel && !!t.run_id && variations!.runs.includes(t.run_id)));
   const picked =
     items.find((i) => (i.take ?? i.run).id === selected) ??
     items.find((i) => i.take?.run_id === selected) ??
@@ -1267,6 +1447,92 @@ export function Create({
   };
   /** ✕, Clear and a text answer's Delete (API 1.43 DELETE /runs/{id}; plan 21 25.3). */
   const removeRuns = (ids: string[]) => deleteRuns(ids, dropRun).catch((e) => setError(message(e)));
+  /** A host as Run on names it ("Mac"). */
+  const hostLabel = (h: string) => machineList.find((x) => x.host === h)?.label ?? h;
+  /** Retry a failed run (docs/mock/ErrorStates.dc.html c2): a new run with the same request and seed (Run on as
+   * the chip is now), whose tile takes the failed one's place; the failed run is deleted. */
+  // the failed runs a Retry is on its way for: a second click (card, menu) makes no second run
+  const retrying = useRef(new Set<string>());
+  async function retryRun(r: Run) {
+    if (retrying.current.has(r.id)) return;
+    retrying.current.add(r.id);
+    const w = workflows?.find((x) => x.id === r.workflow_id);
+    const key = seedKeyOf(w);
+    const seed = r.resolved?.seed;
+    // Run on as the chip is now, when that machine has a runner of this run's env (the chip may be another workflow's)
+    const pin = runOn && hosts?.some((h) => h.host === runOn.host && h.env === w?.env);
+    try {
+      const n = await ok(
+        api.POST("/v1/studio/sessions/{session_id}/runs", {
+          params: { path: { session_id: r.session_id } },
+          body: {
+            workflow_id: r.workflow_id,
+            inputs: { ...r.inputs, ...(key && seed != null && { [key]: seed }) },
+            ...(r.looks?.length && { looks: r.looks }),
+            ...(pin && { host: runOn.host }),
+          },
+        }),
+      );
+      // in the failed one's place (once: the session's events may have brought it already)
+      if (r.session_id === sessionRef.current) {
+        const list = runsRef.current.filter((x) => x.id !== n.id);
+        put(
+          list.some((x) => x.id === r.id)
+            ? list.map((x) => (x.id === r.id ? n : x))
+            : mergeRuns(list, [n]),
+        );
+      }
+      setSelected(n.id);
+      setLastRun(n.id);
+      // a list read meanwhile may bring the failed run back: it goes as its delete lands
+      await deleteRuns([r.id], () => put(runsRef.current.filter((x) => x.id !== r.id)));
+    } catch (err) {
+      setError(message(err));
+    } finally {
+      retrying.current.delete(r.id);
+    }
+  }
+  /** A failed run's right-click menu (ErrorStates c2): Retry, Show details, Copy error, then Delete. */
+  const failMenu = (e: React.MouseEvent, r: Run, title: string) =>
+    openMenu(e, {
+      title,
+      items: [
+        { label: "Retry", icon: RefreshCw, onPick: () => void retryRun(r) },
+        {
+          label: "Show details",
+          icon: Eye,
+          onPick: () => {
+            setSelected(r.id);
+            setSourceView(false);
+            showDetails(r.id);
+          },
+        },
+        {
+          label: "Copy error",
+          icon: Copy,
+          onPick: () => void navigator.clipboard?.writeText(failDetails(r)),
+        },
+        "-",
+        { label: "Delete", icon: Trash2, danger: true, onPick: () => void removeRuns([r.id]) },
+      ],
+    });
+  // the studio is back (lib/health.ts, ErrorStates a2): read again what the page shows
+  const reload = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    reload.current = () => {
+      if (!sessions || !workflows) return load();
+      if (error === OUTAGE_TEXT) setError("");
+      const id = sessionRef.current;
+      if (id) {
+        void loadRuns(id);
+        void loadTakes(id);
+      }
+    };
+  });
+  useEffect(() => {
+    const off = onBack(() => reload.current());
+    return () => off();
+  }, []);
   /** A take's Delete: the Gallery's call; its run keeps no output for it, so no run tile takes its place. */
   async function removeTake(t: Take) {
     try {
@@ -1288,7 +1554,14 @@ export function Create({
     }
   }
   const failed = failedCount(runs ?? []);
-  const shownTake = picked?.take;
+  // in the grid, the variation picked (its run, or its take) is the shown take: the strip's actions and menus act on it
+  const gridTake = inGrid
+    ? takes.find(
+        (t) =>
+          (t.id === sel || t.run_id === sel) && !!t.run_id && variations!.runs.includes(t.run_id),
+      )
+    : undefined;
+  const shownTake = gridTake ?? (inGrid ? undefined : picked?.take);
   useFullScreenKey(!!shownTake && !full, () => setFull(true));
   const offers = useUses(shownTake?.id);
   const takeFamily =
@@ -1300,7 +1573,200 @@ export function Create({
           .filter((o) => o.action === "Extend")
           .sort((a, b) => +(b.family === takeFamily) - +(a.family === takeFamily))[0]
       : undefined;
-  const shown = picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id);
+  const shown = inGrid
+    ? gridRuns.find((r) => r.id === (gridTake?.run_id ?? sel))
+    : (picked?.run ?? runs?.find((r) => r.id === shownTake?.run_id));
+  // a queued run's place in line is read on each fetch (Run.position, ErrorStates e): read it again every 5 s
+  const queuedId = shown?.status === "queued" ? shown.id : null;
+  useEffect(() => {
+    if (!queuedId) return;
+    // while the banner shows, the studio's checks say when it is back (no read every 5 s into nothing)
+    const t = setInterval(() => !isDown() && void refetchRun(queuedId), 5000);
+    return () => clearInterval(t);
+  }, [queuedId, refetchRun]);
+  // music and sound takes (docs/mock/CreateMusicSound.dc.html): the strip's Repaint, Cover or Vary, Extend from the
+  // take's offers (by `action`), greyed with why where none is offered; a sound from a video beside the video made
+  // with it (5b: one run, two takes)
+  const classOf = (t?: Take) => {
+    const c = t && soundOf(t);
+    return c === "music" || c === "sound" ? c : null;
+  };
+  const shownClass = classOf(shownTake);
+  const stripActions = shownClass ? soundActions(shownClass) : [];
+  const actOffers = actionOffers(offers ?? [], stripActions, takeFamily);
+  const takeWorkflow = (t: Take) => workflows?.find((w) => w.id === t.made_with?.workflow_id);
+  const takeModel = (t: Take) => {
+    const w = takeWorkflow(t);
+    return w
+      ? modelName(w, t.made_with?.model?.variant)
+      : (t.made_with?.workflow_title ?? "this model");
+  };
+  /** The other take of the same run (5b): a video's sound, or a sound's video with it. */
+  const siblingOf = (t: Take) =>
+    t.run_id
+      ? takes.find((x) => x.run_id === t.run_id && x.id !== t.id && x.kind !== t.kind)
+      : undefined;
+  /** Cover, Extend, Vary from a popup (3b, 3c): a run of the offer's workflow, beside the take in the strip. */
+  async function queueRun(w: S<"Workflow">, inputs: S<"RunInputs">) {
+    const sid = sessionId ?? (await newSession());
+    const run = await ok(
+      api.POST("/v1/studio/sessions/{session_id}/runs", {
+        params: { path: { session_id: sid } },
+        body: { workflow_id: w.id, inputs, ...(runOn && { host: runOn.host }) },
+      }),
+    );
+    if (sid === sessionRef.current) put(mergeRuns(runsRef.current, [run]));
+    setSelected(run.id);
+    setLastRun(run.id);
+    setSourceView(false);
+  }
+  const estimateFor = (wid: string) => {
+    const t = runs ? lastDuration(runs, wid) : null;
+    return t != null ? `≈ ${t >= 60 ? clock(t) : `${Math.round(t)} s`}` : null;
+  };
+  /** Repaint (3a): its workflow with the take and the whole song as the range; the range is picked on the stage. */
+  const startRepaint = (o: S<"TakeOffer">) => {
+    backTo.current = workflow?.id ?? null;
+    applyOffer(o);
+  };
+  /** Save with the video (5c, API 1.79): the new video take of the video the sound was made from. */
+  const [muxing, setMuxing] = useState<string | null>(null);
+  async function saveWithVideo(t: Take, videoId: string) {
+    setMuxing(t.id);
+    try {
+      const id = await muxTake(t.id, videoId);
+      const n = await ok(
+        api.GET("/v1/studio/takes/{take_id}", { params: { path: { take_id: id } } }),
+      );
+      setTakes((l) => (l.some((x) => x.id === n.id) ? l : [n, ...l]));
+      setSelected(n.id);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      setMuxing(null);
+    }
+  }
+  const downloadItem = (t: Take): Item => ({
+    label: "Download",
+    icon: Download,
+    onPick: () => {
+      const a = document.createElement("a");
+      a.href = safeUrl(t.url) ?? "";
+      a.download = t.title || t.id;
+      a.click();
+    },
+  });
+  /** The right-click menu of a music or sound take, a variation, and a video made with its sound (3d, 4b, 5c, 5d):
+   * Play, Use in › (Timeline and the offers that are not the strip's), Repaint…, Cover… or Vary…, Extend…, Save
+   * with the video or Sound only, Download, Delete. */
+  function soundMenu(e: React.MouseEvent, t: Take, title: string) {
+    const cls = classOf(t);
+    // a video made with a sound (its run's other take, or Save with the video's audio parent): Sound only opens it
+    const sib = soundTakeOf(t, takes);
+    const video = cls === "sound" ? videoOf(t, takeWorkflow(t)) : undefined;
+    const del: Item = {
+      label: "Delete",
+      icon: Trash2,
+      danger: true,
+      onPick: () => setDeleting({ take: t }),
+    };
+    const build = (uses: S<"TakeOffer">[] | null): Item[] => {
+      // a sound matched to a video (5c) lists only the edits it is offered; the others grey with why (3d, 4b)
+      const acts = (cls ? soundActions(cls) : []).filter(
+        (a) => !video || !!uses?.some((o) => o.action === a),
+      );
+      const by = actionOffers(uses ?? [], acts, takeWorkflow(t)?.family);
+      return [
+        {
+          label: "Play",
+          icon: Play,
+          keys: "Space",
+          onPick: () => {
+            setSelected(t.id);
+            setSourceView(false);
+            setAutoplay(t.id);
+          },
+        },
+        t.kind === "video" && {
+          label: "Full screen",
+          icon: Maximize,
+          keys: "F",
+          onPick: () => (setSelected(t.id), setFull(true)),
+        },
+        t.kind === "video" &&
+          pictures.length > 1 && {
+            label: "Compare",
+            icon: Columns2,
+            onPick: () => (setSelected(t.id), setComparing(true)),
+          },
+        uses === null
+          ? { label: "Use in", icon: ArrowRight, off: "Reading what it fits" }
+          : {
+              label: "Use in",
+              icon: ArrowRight,
+              items: [
+                {
+                  label: "Timeline",
+                  onPick: () =>
+                    void addToTimeline([t.id], t.kind === "audio")
+                      .then((r) => setAdded({ ...r, n: 1 }))
+                      .catch((err) => setError(message(err))),
+                },
+                ...uses
+                  .filter((o) => !o.action || !acts.includes(o.action))
+                  .map((o) => ({ label: offerLabel(o), onPick: () => applyOffer(o) })),
+              ],
+            },
+        "-",
+        ...acts.map((a): Item => {
+          const o = by[a];
+          return o
+            ? {
+                label: `${a}…`,
+                onPick: () => {
+                  if (a === "Repaint") return startRepaint(o);
+                  setSelected(t.id);
+                  // the popup over its strip button, once the take is the shown one and its offers are read (a
+                  // strip tile's take is not shown yet: its button comes with them; given up after about 2 s)
+                  const open = (n: number) => {
+                    const el = document.getElementById(`offer-${a.toLowerCase()}`);
+                    if (el?.showPopover) el.showPopover();
+                    else if (n > 0) requestAnimationFrame(() => open(n - 1));
+                  };
+                  requestAnimationFrame(() => open(120));
+                },
+              }
+            : {
+                label: `${a}…`,
+                off: uses === null ? "Reading what it fits" : `Not on ${takeModel(t)}`,
+              };
+        }),
+        cls === "sound" &&
+          !!video && {
+            label: muxing === t.id ? "Saving with the video…" : "Save with the video",
+            icon: Film,
+            off: muxing === t.id ? "Saving" : undefined,
+            onPick: () => void saveWithVideo(t, video),
+          },
+        t.kind === "video" &&
+          !!sib && {
+            label: "Sound only",
+            icon: AudioLines,
+            onPick: () => (setSelected(sib.id), setSourceView(false)),
+          },
+        downloadItem(t),
+        "-",
+        del,
+      ];
+    };
+    const h = openMenu(e, { title, items: build(null) });
+    if (!h) return;
+    ok(api.GET("/v1/studio/takes/{take_id}/uses", { params: { path: { take_id: t.id } } }))
+      .then((r) => h.update({ title, items: build(r.uses) }))
+      .catch(() => h.update({ title, items: build([]) }));
+  }
+  /** A take of music or sound, or a video with a sound sibling: the sound menu; the others keep theirs. */
+  const soundy = (t?: Take) => !!t && (!!classOf(t) || !!classOf(soundTakeOf(t, takes)));
   // the session's pictures Compare offers: image and video takes, newest first
   const pictures = takes.filter((t) => t.kind === "image" || t.kind === "video");
   // Add to timeline from a menu: its note under the strip
@@ -1314,6 +1780,17 @@ export function Create({
     tile: boolean,
   ) {
     const t = it.take;
+    if (t && soundy(t))
+      return soundMenu(
+        e,
+        t,
+        [
+          t.made_with?.seed != null ? `Seed ${t.made_with.seed}` : t.title,
+          (t.audio ?? t.video) && clock((t.audio ?? t.video)!.duration_s),
+        ]
+          .filter(Boolean)
+          .join(" · "),
+      );
     const id = (t ?? it.run)!.id;
     const del: Item = {
       label: "Delete",
@@ -1410,6 +1887,12 @@ export function Create({
   const card = (video || audio) && !empty;
   // what opens the first tile's picker (the + chip)
   const firstPicker = useRef<(() => void) | null>(null);
+  // Match a video opened the video workflow: its picker opens (the tile's opener is set by then)
+  useEffect(() => {
+    if (!pickOnOpen.current || !workflow) return;
+    pickOnOpen.current = false;
+    firstPicker.current?.();
+  }, [workflow]);
   // its + and @ chips (docs/mock/TextToVideo.dc.html, VideoSource.dc.html); a workflow with its own add controls
   // (reference rows, image params, video or audio rows: docs/mock/CreateMediaRefs.dc.html) has none
   const plusAt =
@@ -1451,7 +1934,10 @@ export function Create({
   // the shown take's sample rate is the model's only while that take is this family's (another model's take stays
   // on the stage after a switch: Qwen3-TTS speaks 24 kHz, ZONOS3 44.1 kHz)
   const rateTake =
-    shownTake?.kind === "audio" && shownWorkflow?.family === workflow?.family
+    shownTake?.kind === "audio" &&
+    shownWorkflow?.family === workflow?.family &&
+    // music and sound: a take of the open kind only (a song's facts never under Sound)
+    (!musical || soundOf(shownTake) === kind)
       ? shownTake
       : undefined;
   const anyActive = !!runs?.some((r) => isActive(r.status));
@@ -1466,16 +1952,45 @@ export function Create({
           ...(runOn && { host: runOn.host }),
         }
       : null,
+    liveHosts,
   );
   const took =
     workflow && runs
       ? lastDuration(runs, workflow.id, bypass, runOn?.host ?? plan.host ?? undefined)
       : null;
-  const estimate = estimateText(
-    took != null ? clock(took) : null,
-    plan.gb,
-    Object.values(bypass).some(Boolean),
-  );
+  // docs/mock/ErrorStates.dc.html: the studio down (a1), no runner for the workflow's env (b1: the hosts now, else
+  // the plan's reason), its model only on a drive not connected (f)
+  const down = useHealth().down;
+  const noRunner = runOnOffline
+    ? null
+    : (runnerWhy(hosts, workflow?.env, runOn) ?? planWhy(plan.reason));
+  const drive = notDownloaded ? unpluggedDrive(modelList, workflow?.family) : null;
+  // a song's time is per 30 s of it (2b: "≈ 2:30 per 30 s · 26.6 GB"), from this workflow's last take; music and
+  // sound show the planned peak to one decimal, as the drawer's Memory
+  const perSong = (() => {
+    if (kind !== "music") return null;
+    const t = takes.find(
+      (x) =>
+        x.made_with?.workflow_id === workflow?.id && x.made_with?.render_s && x.audio?.duration_s,
+    );
+    return t ? (t.made_with!.render_s! / t.audio!.duration_s) * 30 : null;
+  })();
+  const estimated = musical
+    ? [
+        perSong != null
+          ? `≈ ${clock(perSong)} per 30 s`
+          : took != null && `≈ ${took >= 60 ? clock(took) : `${Math.round(took)} s`}`,
+        plan.gb != null && `${+plan.gb.toFixed(1)} GB`,
+      ]
+        .filter(Boolean)
+        .join(" · ") || null
+    : estimateText(took != null ? clock(took) : null, plan.gb, Object.values(bypass).some(Boolean));
+  // ErrorStates e: the machine it would go to is busy with runs of this session ahead: "≈ 2:40 · after 2"
+  const lineHost = runOn?.host ?? plan.host;
+  const ahead = machineList.find((m) => m.host === lineHost)?.busy
+    ? (runs ?? []).filter((r) => isActive(r.status) && r.host === lineHost).length
+    : 0;
+  const estimate = estimated && ahead ? `${estimated} · after ${ahead}` : estimated;
   const pinned = pinnedNote(runs?.find((r) => r.id === lastRun));
   // with several hosts of the env: the host an active run is lined up on, else the shown run's (contracts "Several hosts")
   const host = hostMemory(
@@ -1489,6 +2004,12 @@ export function Create({
     <div className="flex flex-wrap items-center gap-3">
       <SessionMenu
         sessions={sessions}
+        next={sessionsNext}
+        onFound={(f) => setSessions((l) => [...(l ?? []), f])}
+        onOlder={(more, next) => {
+          setSessions((l) => [...(l ?? []), ...more.filter((m) => !l?.some((x) => x.id === m.id))]);
+          setSessionsNext(next);
+        }}
         current={sessionId}
         naming={naming}
         hint={hint}
@@ -1505,8 +2026,8 @@ export function Create({
       />
       {workflows && workflows.length > 0 && (
         <WorkflowPicker
-          // the Image / Video switch is a filter on what the chip offers
-          workflows={workflows.filter((w) => mediaOf(w) === media)}
+          // the kind tabs are a filter on what the chip offers
+          workflows={workflows.filter((w) => kindOf(w) === kind)}
           current={workflow}
           label={badge ?? (workflow ? workflowLabel : "Workflow")}
           onPick={switchTo}
@@ -1580,11 +2101,17 @@ export function Create({
               ? "pick a voice first"
               : badLine
                 ? `fix line ${badLine} first`
-                : notDownloaded
-                  ? "not downloaded · Models"
-                  : runOnOffline
-                    ? `${runOn.label} is offline`
-                    : null;
+                : down
+                  ? "Studio isn’t answering"
+                  : notDownloaded
+                    ? drive
+                      ? `On ${drive} · not connected · Models`
+                      : "not downloaded · Models"
+                    : runOnOffline
+                      ? `${runOn.label} is offline`
+                      : noRunner
+                        ? noRunner.key
+                        : null;
   // what Run on's rows are greyed by: the chosen variants and the add-ons of the nodes that run
   const runOnPicks = chosenVariants(all, raws, modelList);
   const runOnNeeds = [
@@ -1733,12 +2260,141 @@ export function Create({
           </ErrorNote>
         )}
         {workflows?.length === 0 && (
-          <ErrorNote onRetry={load}>No workflows yet: no runner has published any.</ErrorNote>
+          <ErrorNote onRetry={load}>
+            No workflows yet: no runner is on. Start helmstudio on your Mac, then Retry.
+          </ErrorNote>
         )}
         {added && <AddedNote {...added} />}
 
         {spanField && sourceSet && sourceView ? (
-          <SourceStage span={spanField} fields={fields} raws={raws} onChange={change} grid={grid} />
+          source?.param.accepts?.includes("video") ? (
+            <SourceStage
+              span={spanField}
+              fields={fields}
+              raws={raws}
+              onChange={change}
+              grid={grid}
+            />
+          ) : (
+            <SoundStage
+              span={spanField}
+              fields={fields}
+              raws={raws}
+              onChange={change}
+              busy={busy}
+              estimate={estimate}
+              onCancel={() => {
+                const back = backTo.current;
+                backTo.current = null;
+                setSourceView(false);
+                if (back && back !== workflow?.id) switchTo(back);
+              }}
+              onRun={() => {
+                if (!workflow) return;
+                void send(workflow, fields).then((r) => {
+                  if (!r.ids.length) return;
+                  setSourceView(false);
+                  // back to the song's own workflow: the new take is in the strip beside the old (3a)
+                  const back = backTo.current;
+                  backTo.current = null;
+                  if (back && back !== workflow.id) switchTo(back);
+                });
+              }}
+            />
+          )
+        ) : inGrid ? (
+          <div className="panel relative flex min-h-[400px] grow flex-col bg-inset px-6 pt-[68px] pb-6">
+            <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px]">
+                {[
+                  `${gridRuns.length} variations`,
+                  ...(() => {
+                    const t = takes.find((x) => x.run_id === gridRuns[0]?.id);
+                    return t?.audio ? [clock(t.audio.duration_s), soundText(t.audio)] : [];
+                  })(),
+                ].join(" · ")}
+              </span>
+              <span className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className="bevel h-9 rounded-lg border border-s5 bg-s2/90 px-3 text-[13px]"
+                  onClick={() =>
+                    setVariations({
+                      runs: variations!.runs,
+                      kept: takes
+                        .filter((t) => t.run_id && variations!.runs.includes(t.run_id))
+                        .map((t) => t.id),
+                    })
+                  }
+                >
+                  Keep all
+                </button>
+                {shownWorkflow && (
+                  <button
+                    type="button"
+                    onClick={() => setExplaining(true)}
+                    className="bevel h-9 rounded-lg border border-s5 bg-s2/90 px-3 text-[13px]"
+                  >
+                    Explain run
+                  </button>
+                )}
+              </span>
+            </div>
+            <div
+              role="group"
+              aria-label="Variations"
+              className="mx-auto grid w-full max-w-[860px] grid-cols-2 gap-3"
+            >
+              {[...gridRuns]
+                .sort((a, b) => variations!.runs.indexOf(a.id) - variations!.runs.indexOf(b.id))
+                .map((r) => {
+                  const t = takes.find((x) => x.run_id === r.id);
+                  const seed = t?.made_with?.seed ?? seedOf(r);
+                  const label = [
+                    seed != null ? `seed ${seed}` : "take",
+                    t?.audio && clock(t.audio.duration_s),
+                  ]
+                    .filter(Boolean)
+                    .join(" · ");
+                  if (!t)
+                    return (
+                      <div
+                        key={r.id}
+                        className="mono flex min-h-[132px] items-center justify-center border-2 border-dashed border-dash bg-s1 p-3 text-[12px] text-t2"
+                        style={{ borderRadius: "14px 14px 14px 6px" }}
+                      >
+                        {label} ·{" "}
+                        {isActive(r.status)
+                          ? progressText(r)
+                          : r.status === "failed"
+                            ? "failed"
+                            : "…"}
+                      </div>
+                    );
+                  const kept = variations!.kept.includes(t.id);
+                  return (
+                    <VariationCard
+                      key={r.id}
+                      url={safeUrl(t.url)}
+                      label={label}
+                      kept={kept}
+                      playing={player.playing === t.id}
+                      onPlay={() => player.toggle(t.id, safeUrl(t.url) ?? "")}
+                      onKeep={() => {
+                        setSelected(t.id);
+                        setVariations({
+                          runs: variations!.runs,
+                          kept: kept
+                            ? variations!.kept.filter((x) => x !== t.id)
+                            : [...variations!.kept, t.id],
+                        });
+                      }}
+                      onMenu={(e) => takeMenu(e, { take: t }, label, false)}
+                    />
+                  );
+                })}
+            </div>
+          </div>
         ) : empty ? (
           <div className="flex flex-col items-center gap-2 pt-7 pb-1 text-center">
             <h1 className="m-0 font-display text-[40px] leading-[44px] font-bold tracking-[0.01em]">
@@ -1753,6 +2409,20 @@ export function Create({
             run={shown}
             take={shownTake}
             workflow={shownWorkflow}
+            autoPlay={!!shownTake && autoplay === shownTake.id}
+            tabs={(() => {
+              const sib = shownTake && siblingOf(shownTake);
+              if (!shownTake || !sib || !soundy(shownTake)) return undefined;
+              const [snd, vid] = shownTake.kind === "audio" ? [shownTake, sib] : [sib, shownTake];
+              return [
+                { label: "Sound", on: shownTake === snd, onPick: () => setSelected(snd.id) },
+                {
+                  label: "Video with sound",
+                  on: shownTake === vid,
+                  onPick: () => setSelected(vid.id),
+                },
+              ];
+            })()}
             onStar={shownTake && (() => void star(shownTake))}
             onFull={() => setFull(true)}
             onMenu={
@@ -1768,6 +2438,10 @@ export function Create({
               })
             }
             onDrop={refField && intoRefs}
+            onRetry={
+              shown?.status === "failed" && !shown.batch_id ? () => void retryRun(shown) : undefined
+            }
+            hostLabel={hostLabel}
             compare={
               comparing &&
               shownTake &&
@@ -1820,9 +2494,13 @@ export function Create({
             workflow={shownWorkflow}
             track={tracks[shown.id]}
             onCancel={() => void cancel(shown.id)}
+            paused={livePaused}
           />
         )}
-        {shown && shownWorkflow && <ResolvedTexts run={shown} workflow={shownWorkflow} />}
+        {/* music and sound show the plan in the drawer (docs/mock/CreateMusicSound.dc.html frame 1) */}
+        {shown && shownWorkflow && !["music", "sound"].includes(kindOf(shownWorkflow) ?? "") && (
+          <ResolvedTexts run={shown} workflow={shownWorkflow} />
+        )}
 
         {!!items.length && (
           <div
@@ -1835,6 +2513,8 @@ export function Create({
               const seed = it.take ? it.take.made_with?.seed : seedOf(it.run);
               const name = seed != null ? `seed ${seed}` : `take ${items.length - i}`;
               const menu = it.take || (it.run.status === "succeeded" && !it.run.batch_id); // a batch's run goes with its batch
+              // a failed run of Create's own (ErrorStates c2): Retry, Show details, Copy error, Delete
+              const failed = !it.take && it.run.status === "failed" && !it.run.batch_id;
               return (
                 <div
                   key={id}
@@ -1848,12 +2528,15 @@ export function Create({
                             `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
                             true,
                           )
-                      : undefined
+                      : failed
+                        ? (e) => failMenu(e, it.run, `Run · ${name}`)
+                        : undefined
                   }
                 >
                   {it.take ? (
                     <TakeTile
                       take={it.take}
+                      pair={it.take.kind === "video" && !!classOf(siblingOf(it.take))}
                       current={it === picked}
                       onPick={() => {
                         setSelected(it.take.id);
@@ -1873,17 +2556,23 @@ export function Create({
                       }}
                     />
                   )}
-                  {menu && (
+                  {(menu || failed) && (
                     <TileMenu
-                      label={`${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`}
+                      label={
+                        failed
+                          ? `Run · ${name}`
+                          : `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`
+                      }
                       current={it === picked}
                       onMenu={(e) =>
-                        takeMenu(
-                          e,
-                          it,
-                          `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
-                          true,
-                        )
+                        failed
+                          ? failMenu(e, it.run, `Run · ${name}`)
+                          : takeMenu(
+                              e,
+                              it,
+                              `${it.take ? "Take" : "Answer"} ${seed != null ? name : items.length - i}`,
+                              true,
+                            )
                       }
                     />
                   )}
@@ -1934,6 +2623,59 @@ export function Create({
                 Extend
               </button>
             )}
+            {/* a music or sound take's actions (docs/mock/CreateMusicSound.dc.html frames 1, 3, 4): Repaint picks
+                its range on the stage, Cover, Vary and Extend open their popup; none offered: greyed with why */}
+            {shownTake &&
+              stripActions.map((a) => {
+                const o = actOffers[a];
+                const id = `offer-${a.toLowerCase()}`;
+                const w = o && workflows?.find((x) => x.id === o.workflow_id);
+                if (!o || !w)
+                  return (
+                    <button
+                      key={a}
+                      type="button"
+                      aria-disabled
+                      title={
+                        offers === null ? "Reading what it fits" : `Not on ${takeModel(shownTake)}`
+                      }
+                      className="chip bevel h-11 shrink-0 cursor-not-allowed rounded-[10px] text-t2 opacity-45"
+                    >
+                      {a}
+                    </button>
+                  );
+                return a === "Repaint" ? (
+                  <button
+                    key={a}
+                    type="button"
+                    className="chip bevel h-11 shrink-0 rounded-[10px]"
+                    title={offerLabel(o)}
+                    onClick={() => startRepaint(o)}
+                  >
+                    {a}
+                  </button>
+                ) : (
+                  <span key={`${a} ${shownTake.id}`} className="contents">
+                    <button
+                      type="button"
+                      popoverTarget={id}
+                      className="chip bevel h-11 shrink-0 rounded-[10px]"
+                      title={offerLabel(o)}
+                      style={{ anchorName: `--${id}` } as React.CSSProperties}
+                    >
+                      {a}
+                    </button>
+                    <OfferPop
+                      id={id}
+                      offer={o}
+                      workflow={w}
+                      take={shownTake}
+                      estimate={estimateFor(w.id)}
+                      onRun={queueRun}
+                    />
+                  </span>
+                );
+              })}
             {shownTake && (
               <AddToTimeline
                 key={`add-${shownTake.id}`}
@@ -1945,6 +2687,7 @@ export function Create({
             {/* Save as voice (API 1.31): a cloned voice where a workflow clones, or the designed voice the take was
                 made with, kept with its clip */}
             {shownTake?.kind === "audio" &&
+              soundOf(shownTake) === "voice" &&
               voiceCtx &&
               (voiceCtx.clone || designedOf(shownTake)) && (
                 <SaveAsVoice
@@ -1974,7 +2717,7 @@ export function Create({
           {kinds.length > 1 && (
             <MediaSwitch
               kinds={kinds}
-              media={media}
+              kind={kind}
               onPick={(m) => {
                 const id = workflows && workflowFor(workflows, runs ?? [], m, workflow?.id);
                 if (id) switchTo(id);
@@ -2001,13 +2744,15 @@ export function Create({
               // the empty screen's big tiles: equal columns, so a tile that wraps keeps their width; the cards of a
               // video or audio workflow too, one width per line however they wrap (alpha.2 item 16)
               <div
-                className={
+                // empty:hidden: a row whose tiles all render nothing (a song's, until the prompt has an @mention) takes
+                // no place and no gap (owner, 2026-11-27: "switch between audio, video etc make blank spaces")
+                className={`empty:hidden ${
                   empty
                     ? "grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2"
                     : card
                       ? "grid grid-cols-[repeat(auto-fit,minmax(130px,1fr))] gap-2 [&>*]:max-w-none [&>*]:min-w-0"
                       : "flex flex-wrap items-center gap-2"
-                }
+                }`}
               >
                 {scriptField && linesKey && (
                   <CastTile
@@ -2052,8 +2797,35 @@ export function Create({
                     raws={raws}
                     onChange={change}
                     openerRef={i === 0 ? firstPicker : undefined}
+                    clearable={musical}
                   />
                 ))}
+                {/* another model's tiles this one lacks, greyed in place (2b: Reference on MiniMax Music 3) */}
+                {lacks.tiles.map((t) => (
+                  <span
+                    key={t.label}
+                    aria-disabled
+                    title={t.why}
+                    className="bevel flex min-h-12 cursor-not-allowed flex-col justify-center rounded-xl bg-s3 px-3 py-1.5 opacity-45"
+                  >
+                    <small className="mono text-[10px] text-t2">{t.label}</small>
+                    <b className="text-[13px] font-semibold text-t2">Drop one</b>
+                  </span>
+                ))}
+                {/* Match a video (frame 4): Sound's video workflow (MMAudio) with its video picker open */}
+                {matchVideo && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      pickOnOpen.current = true;
+                      switchTo(matchVideo.id);
+                    }}
+                    className="bevel flex min-h-12 flex-col justify-center rounded-xl bg-s3 px-3 py-1.5 text-left"
+                  >
+                    <small className="mono text-[10px] text-t2">Match a video</small>
+                    <b className="text-[13px] font-semibold">Pick a take</b>
+                  </button>
+                )}
                 {spanField && (
                   <SpanTile
                     f={spanField}
@@ -2102,13 +2874,44 @@ export function Create({
             )}
             <TextFields
               fields={(layout ? fields.filter((f) => layout.text.includes(f)) : fields).filter(
-                (f) => !f.param.script,
+                (f) => !f.param.script && f !== lyricsAll,
               )}
               raws={raws}
               errors={errors}
               onChange={change}
-              spoken={audio}
+              spoken={audio && !musical}
+              kind={musical ? (kind as "music" | "sound") : undefined}
             />
+            {lyricsAll && (
+              <LyricsBox
+                id={idOf(lyricsAll.key)}
+                label={lyricsAll.param.label ?? lyricsAll.param.name}
+                tags={lyricsAll.param.tags ?? []}
+                value={String(raws[lyricsAll.key] ?? toRaw(lyricsAll.initial, lyricsAll.param))}
+                onChange={(v) => change(lyricsAll.key, v)}
+                hidden={!fields.includes(lyricsAll)}
+                error={errors[lyricsAll.key]}
+                instrumental={
+                  instrumental && {
+                    on: instrumentalOn,
+                    set: (on) => change(instrumental.key, on),
+                  }
+                }
+              />
+            )}
+            {/* a short text on the composer (Avoid, frame 4) */}
+            {shortTexts.map((f) => (
+              <input
+                key={f.key}
+                id={idOf(f.key)}
+                aria-label={f.param.label ?? f.param.name}
+                placeholder={f.param.label ?? f.param.name}
+                maxLength={f.param.max}
+                value={String(raws[f.key] ?? toRaw(f.initial, f.param))}
+                onChange={(e) => change(f.key, e.target.value)}
+                className="h-8 border-0 border-t border-s4 bg-transparent text-[13px] text-t1 outline-0 placeholder:text-t2"
+              />
+            ))}
             {note && (
               <p
                 role={preview?.errors.length ? "alert" : "status"}
@@ -2140,13 +2943,27 @@ export function Create({
             {fields.some((f) => f.param.type !== "text" && errors[f.key]) && (
               <ErrorNote>Some settings are not valid: see the Inspector.</ErrorNote>
             )}
-            {workflow &&
-              hosts &&
-              !hosts.some((h) => h.env === workflow.env && h.state !== "offline") && (
-                <p role="status" className="text-[12px] text-t2">
-                  No runner for {workflow.env} is online; runs wait until one is.
+            {/* why Generate is greyed, as a line (ErrorStates b1, f); the banner says the studio's own */}
+            {!down && drive ? (
+              <p role="status" className="why">
+                <TriangleAlert size={14} aria-hidden />
+                <span>
+                  On {drive} · not connected ·{" "}
+                  <Link href="/models" className="text-t1">
+                    Models
+                  </Link>
+                </span>
+              </p>
+            ) : (
+              !down &&
+              !notDownloaded &&
+              noRunner && (
+                <p role="status" className="why">
+                  <TriangleAlert size={14} aria-hidden />
+                  {noRunner.line}
                 </p>
-              )}
+              )
+            )}
             <div className="flex flex-wrap items-center gap-2">
               {empty && refsAndMentions}
               {plusAt && (
@@ -2194,6 +3011,12 @@ export function Create({
                 models={chipModels}
                 family={familyName}
                 spoken={audio}
+                kindModels={kindModels}
+                values={valueChips}
+                autoTexts={autoTexts}
+                groups={chipGroups}
+                greyed={lacks.chips}
+                off={offChips}
                 versions={(f, o) => versionRow(modelList, runOn, f, o, allNeeds)}
                 blocks={blocks}
                 valueBlocks={valueBlocks}
@@ -2205,6 +3028,7 @@ export function Create({
                     env={workflow?.env}
                     picks={runOnPicks}
                     needs={runOnNeeds}
+                    why={noRunner?.line}
                     onPick={(h) => {
                       setRunOnHost(h);
                       setRunNote("");
@@ -2213,7 +3037,7 @@ export function Create({
                 }
               />
               {/* the shown take's sample rate (docs/mock/CreateAudio.dc.html: "24 kHz"; none before a take) */}
-              {audio && rateTake?.audio?.sample_rate && (
+              {audio && !musical && rateTake?.audio?.sample_rate && (
                 <span className="chip bevel rounded-[10px] bg-s4">
                   {+(rateTake.audio.sample_rate / 1000).toFixed(1)} kHz
                 </span>
@@ -2221,9 +3045,10 @@ export function Create({
               {seedField && (
                 <div
                   role="group"
-                  aria-label="Seeds to queue"
+                  aria-label={several ? "How many variations" : "Seeds to queue"}
                   className="bevel flex h-9 items-center rounded-[10px] bg-s4 text-[13px] font-medium"
                 >
+                  {several && <span className="pl-3 text-t2">Variations</span>}
                   <button
                     type="button"
                     aria-label="Fewer seeds"
@@ -2234,12 +3059,12 @@ export function Create({
                     <Minus size={14} aria-hidden />
                   </button>
                   <span className="mono" aria-live="polite">
-                    {count} / {MAX_QUEUE}
+                    {count} / {maxCount}
                   </span>
                   <button
                     type="button"
                     aria-label="More seeds"
-                    disabled={count >= MAX_QUEUE}
+                    disabled={count >= maxCount}
                     onClick={() => setCount((n) => n + 1)}
                     className="grid size-9 place-items-center rounded-[10px] disabled:text-t2 disabled:opacity-60"
                   >
@@ -2275,6 +3100,8 @@ export function Create({
                   badLine > 0 ||
                   notDownloaded ||
                   runOnOffline ||
+                  !!noRunner ||
+                  down ||
                   noPrompt ||
                   !!heldBlock
                 }
@@ -2283,12 +3110,14 @@ export function Create({
                   {busy
                     ? "Sending…"
                     : notDownloaded
-                      ? "Not downloaded"
+                      ? drive
+                        ? "Generate"
+                        : "Not downloaded"
                       : blocked
                         ? `${blocked} problem${blocked === 1 ? "" : "s"}`
                         : noVoice
                           ? "Pick a voice"
-                          : badLine
+                          : badLine || down || noRunner
                             ? "Generate"
                             : noPrompt && rules.length === 0 && !runOnOffline && !heldBlock
                               ? "Write a prompt"
@@ -2304,6 +3133,13 @@ export function Create({
                   </span>
                 ) : heldBlock && !busy && !runOnOffline ? (
                   <span className="mono text-[11px] font-medium">{heldBlock}</span>
+                ) : down && !busy ? (
+                  // ErrorStates a1, f, b1: why the key is greyed
+                  <span className="mono text-[11px] font-medium">Studio isn’t answering</span>
+                ) : drive && !busy ? (
+                  <span className="mono text-[11px] font-medium">On {drive} · not connected</span>
+                ) : noRunner && !busy && !notDownloaded ? (
+                  <span className="mono text-[11px] font-medium">{noRunner.key}</span>
                 ) : runOnOffline && !busy ? (
                   <span className="mono text-[11px] font-medium">{runOn.label} is offline</span>
                 ) : pinned && !busy ? (
@@ -2376,7 +3212,19 @@ export function Create({
           className="aside m-3.5 flex flex-[1_1_320px] flex-col gap-[22px] px-[18px] pt-4 pb-6 md:ml-0"
         >
           <Inspector
-            groups={groups}
+            groups={
+              musical
+                ? // what the composer already holds (the lyrics, Instrumental, Avoid) is not repeated here
+                  groups
+                    ?.map((g) => ({
+                      ...g,
+                      fields: g.fields.filter(
+                        (f) => !shortTexts.includes(f) && f !== instrumental && f !== lyricsAll,
+                      ),
+                    }))
+                    .filter((g) => g.fields.length || g.choices?.length)
+                : groups
+            }
             resolved={shown?.workflow_id === workflow?.id ? shown?.resolved?.params : undefined}
             presets={workflow?.studio?.presets}
             presetOrder={presetNames(workflow?.studio)}
@@ -2401,13 +3249,25 @@ export function Create({
             valueBlocks={valueBlocks}
             addonOwner={modelList?.models.find((m) => m.family === workflow?.family)?.title}
           />
-          {audio && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
+          {audio && !musical && <SpeechOutput take={rateTake} text={texts[0] ?? ""} />}
+          {musical && (
+            <SoundOutput
+              take={rateTake}
+              run={shown?.workflow_id === workflow?.id ? shown : undefined}
+              workflow={workflow}
+              gb={plan.gb}
+              video={kind === "sound" && sourceSet && !!source?.param.accepts?.includes("video")}
+            />
+          )}
         </aside>
       )}
       {lib.node}
     </>
   );
 }
+
+/** A media param's raw holds a take. */
+const isRefRaw = (v: Raw | undefined) => !!v && typeof v === "object" && "take_id" in v;
 
 /** A video workflow's name in the top bar: "LTX-2.5 · Text to video", the family then the rest of the title, or the
  * action when it says more ("LTX-2.5 · Retake a section", docs/mock/VideoSource.dc.html); else the title. */
@@ -2442,9 +3302,21 @@ function Stage({
   onCompare,
   onExplain,
   onMenu,
+  tabs,
+  autoPlay,
+  onRetry,
+  hostLabel,
 }: {
   /** a right-click on the take: its menu */
   onMenu?: (e: React.MouseEvent) => void;
+  /** a failed run's Retry (docs/mock/ErrorStates.dc.html c2): a new run, same request and seed, in its place */
+  onRetry?: () => void;
+  /** a host as Run on names it ("Mac"), for a failure's plain words */
+  hostLabel?: (host: string) => string;
+  /** a run that gave a sound and the video with it (docs/mock/CreateMusicSound.dc.html 5b): Sound / Video with sound */
+  tabs?: { label: string; on: boolean; onPick: () => void }[];
+  /** the take menu's Play: the sound starts once shown */
+  autoPlay?: boolean;
   run?: Run;
   take?: Take;
   workflow?: S<"Workflow">;
@@ -2473,17 +3345,20 @@ function Stage({
   const [playingKey, setPlayingKey] = useState<string | undefined>();
   const playing = !!outKey && playingKey === outKey;
   const videoRef = useRef<HTMLVideoElement>(null);
-  // an audio take's badge: "seed 12 · 24 kHz mono" (docs/mock/CreateAudio.dc.html)
+  // an audio take's badge: "seed 12 · 24 kHz mono" (docs/mock/CreateAudio.dc.html); music and sound with their
+  // length and channels: "seed 31 · 2:10 · 44.1 kHz stereo" (CreateMusicSound.dc.html)
   const sound = out?.kind === "audio";
+  const cls = take && soundOf(take);
+  const musical = cls === "music" || cls === "sound";
   const outSeed = take?.made_with?.seed ?? (out && "seed" in out ? out.seed : undefined);
   const audioBadge =
     sound && (!run || run.status === "succeeded")
       ? [
           outSeed != null && `seed ${outSeed}`,
           // a dialogue's length and lines (docs/mock/CreateAudio.dc.html: "seed 7 · 0:09 · 3 lines")
-          out.audio?.cues?.length && clock(out.audio.duration_s),
+          (out.audio?.cues?.length || musical) && out.audio && clock(out.audio.duration_s),
           out.audio?.cues?.length && `${out.audio.cues.length} lines`,
-          out.audio?.sample_rate && `${+(out.audio.sample_rate / 1000).toFixed(1)} kHz mono`,
+          soundText(out.audio),
         ]
           .filter(Boolean)
           .join(" · ")
@@ -2496,13 +3371,17 @@ function Stage({
         : ""
       : node && p
         ? [`${node} · step ${p.step} of ${p.of}`, p.phase].filter(Boolean).join(" · ")
-        : {
-            queued: "Queued",
-            running: "Starting",
-            succeeded: "Take",
-            failed: "Failed",
-            cancelled: "Stopped",
-          }[run.status];
+        : run.status === "queued" && waitText(run)
+          ? waitText(run)!.retry
+            ? "Waiting for a runner…"
+            : waitText(run)!.line
+          : {
+              queued: "Queued",
+              running: "Starting",
+              succeeded: "Take",
+              failed: "Failed",
+              cancelled: "Stopped",
+            }[run.status];
   // a finished take's render time, low text (API 1.60; docs/mock/Main.dc.html "A finished take"): its own only, none
   // until the take is in (a run of several outputs has one per take)
   const took = label === "Take" || audioBadge ? renderTime(take?.made_with?.render_s) : "";
@@ -2535,16 +3414,33 @@ function Stage({
       </span>
       {(run || take) && (
         <div className="absolute inset-x-4 top-4 flex flex-wrap items-center justify-between gap-2">
-          <span
-            className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run?.status === "failed" ? "text-bad" : ""}`}
-          >
-            {label}
-            {took && (
-              <span className="text-t2" title="Render time (start to file)">
-                {" "}
-                · {took}
+          <span className="flex flex-wrap items-center gap-2">
+            {tabs && (
+              <span role="group" aria-label="Show" className="seg">
+                {tabs.map((t) => (
+                  <button
+                    key={t.label}
+                    type="button"
+
+                    aria-pressed={t.on}
+                    onClick={() => !t.on && t.onPick()}
+                  >
+                    {t.label}
+                  </button>
+                ))}
               </span>
             )}
+            <span
+              className={`mono rounded-lg bg-s2/90 px-2.5 py-1.5 text-[12px] ${run?.status === "failed" ? "text-bad" : ""}`}
+            >
+              {label}
+              {took && (
+                <span className="text-t2" title="Render time (start to file)">
+                  {" "}
+                  · {took}
+                </span>
+              )}
+            </span>
           </span>
           <span className="flex items-center gap-2">
             {out?.kind === "video" && (
@@ -2632,6 +3528,9 @@ function Stage({
             duration={out.audio?.duration_s}
             cues={out.audio?.cues}
             nameOf={(v) => speakerOf(library, v)}
+            sections={out.audio?.sections}
+            space={musical}
+            autoPlay={autoPlay}
           />
         ) : out?.kind === "image" || out?.kind === "video" ? (
           <Media
@@ -2660,10 +3559,7 @@ function Stage({
             style={{ aspectRatio: size ? `${size.w} / ${size.h}` : "16 / 9" }}
           >
             {run.status === "failed" ? (
-              <>
-                <span className="text-[15px] font-medium text-bad">Failed</span>
-                <span className="mono text-[12px] break-words text-t1">{run.error}</span>
-              </>
+              <FailCard run={run} onRetry={onRetry} hostLabel={hostLabel} />
             ) : (
               <span className="text-[15px] font-medium text-t1">
                 {isActive(run.status)
@@ -2680,6 +3576,69 @@ function Stage({
   );
 }
 
+/** Show details of the failed run whose card or menu asked for it (one at a time). */
+const detailsStore = { id: "", subs: new Set<() => void>() };
+const showDetails = (id: string) => {
+  detailsStore.id = detailsStore.id === id ? "" : id;
+  detailsStore.subs.forEach((f) => f());
+};
+const useDetails = () =>
+  useSyncExternalStore(
+    (f) => (detailsStore.subs.add(f), () => detailsStore.subs.delete(f)),
+    () => detailsStore.id,
+    () => "",
+  );
+
+/** A failed run on the stage (docs/mock/ErrorStates.dc.html c2): "This run stopped", one plain sentence from the raw
+ * error, Show details (the raw text, mono, selectable, Copy) and Retry. */
+function FailCard({
+  run,
+  onRetry,
+  hostLabel,
+}: {
+  run: Run;
+  onRetry?: () => void;
+  hostLabel?: (host: string) => string;
+}) {
+  const open = useDetails() === run.id;
+  const raw = failDetails(run);
+  return (
+    <div className="fpanel" role="alert">
+      <b className="ft">This run stopped</b>
+      <p>{failWords(run.error, hostLabel)}</p>
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          className="chip h-8 border border-s5 bg-transparent"
+          aria-expanded={open}
+          onClick={() => showDetails(run.id)}
+        >
+          Show details
+        </button>
+        {onRetry && (
+          <button type="button" className="chip h-8 bg-a1 text-[var(--on1)]" onClick={onRetry}>
+            <RefreshCw size={14} strokeWidth={1.75} aria-hidden />
+            Retry
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="raw">
+          <pre className="mono">{raw}</pre>
+          <button
+            type="button"
+            className="chip h-7 bg-s4"
+            onClick={() => void navigator.clipboard?.writeText(raw)}
+          >
+            <Copy size={14} strokeWidth={1.75} aria-hidden />
+            Copy
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The run's progress: one piece per working node (done with its time, active with its bar, pending), the time
  * left and Stop. */
 function RunStrip({
@@ -2687,19 +3646,35 @@ function RunStrip({
   workflow,
   track,
   onCancel,
+  paused,
 }: {
   run: Run;
   workflow: S<"Workflow">;
   track?: RunTrack;
   onCancel: () => void;
+  /** live updates paused (ErrorStates d): the chip, a click tries the stream now; hidden while the banner shows */
+  paused?: (() => void) | null;
 }) {
   const p = run.progress;
+  const wait = waitText(run);
+  const down = useHealth().down;
   return (
     <div
       role="group"
       aria-label="Run progress"
       className="flex shrink-0 flex-wrap items-center gap-2 text-[13px]"
     >
+      {/* c1, e: the run waits (its runner stopped and it tries again, or others are ahead of it) */}
+      {wait && (
+        <span className="step wait" role="status">
+          {wait.retry ? (
+            <LoaderCircle size={14} className="spin" aria-hidden />
+          ) : (
+            <Clock3 size={14} aria-hidden />
+          )}
+          {wait.line}
+        </span>
+      )}
       {segments(workflow, run, track).map((s) =>
         s.state === "done" ? (
           <span key={s.key} className="step">
@@ -2752,6 +3727,18 @@ function RunStrip({
         ),
       )}
       <div className="grow" />
+      {paused && !down && isActive(run.status) && (
+        <button
+          type="button"
+          className="live"
+          role="status"
+          title="Progress may be behind. It catches up when the connection is back."
+          onClick={paused}
+        >
+          <WifiOff size={14} aria-hidden />
+          Live updates paused · retrying
+        </button>
+      )}
       {etaText(run) && <span className="mono text-t2">{etaText(run)}</span>}
       {isActive(run.status) && (
         <button
@@ -2798,10 +3785,22 @@ const seedLabel = (seed: number) => {
 };
 
 /** One take in the strip: its picture labelled by seed (or title), a star when starred. */
-function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onPick: () => void }) {
+function TakeTile({
+  take,
+  current,
+  onPick,
+  pair,
+}: {
+  take: Take;
+  current: boolean;
+  onPick: () => void;
+  /** a video made with its sound (docs/mock/CreateMusicSound.dc.html 5b): "▶ with sound" */
+  pair?: boolean;
+}) {
   const seed = take.made_with?.seed;
   const label = seed != null ? seedLabel(seed) : take.title;
-  // a sound tile: the wave over "seed 12 · 0:07" (docs/mock/CreateAudio.dc.html)
+  // music as a small album cover with its disc, sound and voice as an orb (frame 7, TakeTile in the Design System:
+  // components/media.tsx Thumb's look, no badge), "seed 31 · 2:10" over it
   if (take.kind === "audio")
     return (
       <button
@@ -2816,14 +3815,34 @@ function TakeTile({ take, current, onPick }: { take: Take; current: boolean; onP
         aria-pressed={current}
         title={label}
         onClick={onPick}
-        className={`bevel mono flex h-[72px] w-28 shrink-0 flex-col justify-between rounded-lg bg-s1 px-2 pt-2 pb-1.5 text-left text-[11px] text-t2 ${
+        className={`bevel mono relative grid h-[72px] w-28 shrink-0 overflow-hidden rounded-lg text-[11px] ${
           current ? "border-2 border-a2" : "border border-s5"
         }`}
       >
-        <span aria-hidden className="wave block h-[30px] w-full" />
-        <span className="truncate">
+        <Thumb take={take} badge={false} className="absolute inset-0 size-full" />
+        <span className="absolute bottom-1 left-1 max-w-[calc(100%-8px)] truncate rounded bg-s2/90 px-1 text-t1">
           {take.audio ? `${label} · ${clock(take.audio.duration_s)}` : label}
         </span>
+        {take.starred && (
+          <Star size={12} aria-hidden className="absolute top-1 right-1 fill-a1 text-a1" />
+        )}
+      </button>
+    );
+  if (pair)
+    return (
+      <button
+        type="button"
+        aria-label={`Take, ${label}, with sound${take.video ? `, ${secondsText(take.video.duration_s)}` : ""}`}
+        aria-pressed={current}
+        title={take.title}
+        onClick={onPick}
+        className={`bevel mono relative flex h-[72px] w-28 shrink-0 flex-col justify-end overflow-hidden rounded-lg px-2 py-1.5 text-left text-[11px] text-t1 ${
+          current ? "border-2 border-a2" : "border border-s5"
+        }`}
+        style={{ background: "linear-gradient(160deg, var(--s4), var(--s2))" }}
+      >
+        <Thumb take={take} badge={false} className="absolute inset-0 size-full opacity-60" />
+        <span className="relative">▶ with sound</span>
       </button>
     );
   return (
@@ -2877,6 +3896,7 @@ function RunTile({
   const asked = seedKey ? run.inputs[seedKey] : undefined;
   const seed = seedOf(run) ?? (typeof asked === "number" && asked >= 0 ? asked : undefined);
   const label = seed == null ? `take ${n}` : seedLabel(seed);
+  const wait = waitText(run);
   const state =
     run.status === "running"
       ? progressText(run)
@@ -2885,6 +3905,8 @@ function RunTile({
         : run.status === "cancelled"
           ? "stopped"
           : run.status;
+  // ErrorStates c1, c2, e: "Trying again · 2 of 2", "Waiting · 2 ahead", "Failed · seed 44"
+  const look = wait ? "rtile wait" : run.status === "failed" ? "rtile failed" : "";
   return (
     <button
       type="button"
@@ -2894,18 +3916,22 @@ function RunTile({
       aria-pressed={current}
       // a failed tile's title is its error; a going one has no ✕ (plan 21 25.3)
       title={
-        run.status === "failed" && run.error
-          ? run.error
-          : isActive(run.status)
-            ? "Stop it first"
-            : seed != null
-              ? `seed ${seed}`
-              : undefined
+        run.status === "failed"
+          ? failWords(run.error) === GENERIC_FAIL
+            ? `This run stopped: ${run.error ?? "no error text"}`
+            : `This run stopped. ${failWords(run.error)}`
+          : wait
+            ? wait.line
+            : isActive(run.status)
+              ? "Stop it first"
+              : seed != null
+                ? `seed ${seed}`
+                : undefined
       }
       onClick={onPick}
       className={`bevel mono relative grid h-[63px] w-28 shrink-0 place-items-center overflow-hidden rounded-lg bg-s1 text-[11px] ${
         current ? "border-2 border-a1" : "border border-s5"
-      } ${run.status === "failed" ? "text-bad" : "text-t2"}`}
+      } ${run.status === "failed" ? "text-bad" : "text-t2"} ${look}`}
     >
       {out ? (
         <>
@@ -2926,42 +3952,89 @@ function RunTile({
         </>
       ) : (
         <span className="flex flex-col items-center">
-          <span>{label}</span>
-          {state && <span>{state}</span>}
+          {wait ? (
+            <>
+              <span>{wait.tile[0]}</span>
+              {wait.tile[1] && <span className="mono font-normal">{wait.tile[1]}</span>}
+            </>
+          ) : run.status === "failed" ? (
+            <>
+              <span>Failed</span>
+              <span className="mono font-normal">{label}</span>
+            </>
+          ) : (
+            <>
+              <span>{label}</span>
+              {state && <span>{state}</span>}
+            </>
+          )}
         </span>
       )}
     </button>
   );
 }
 
-/** The Image / Video / Audio switch beside the composer (docs/mock/TextToVideo.dc.html "Output kind"): which media's
- * workflows the model chip offers. One fixed size (the owner, 2026-11-25: the Image composer's), so switching kinds
- * never resizes it. */
+/** A kind's glowing orb (docs/mock/Magic.dc.html Add dialog, CSS .ki in globals.css; KindTabs in the Design
+ * System): Voice a mic, Music a small black record, Sound wave bars (docs/mock/CreateMusicSound.dc.html). */
+const KIND_ORB: Record<Kind, [string, typeof Mic | null]> = {
+  image: ["k-image", ImageIcon],
+  video: ["k-video", Clapperboard],
+  voice: ["k-voice", Mic],
+  music: ["", null],
+  sound: ["", AudioLines],
+};
+// the classes' orbs are not in globals.css (P0 put only their tokens in tokens.css): their colours inline
+const ORB_STYLE: Partial<Record<Kind, React.CSSProperties>> = {
+  music: {
+    background:
+      "radial-gradient(circle, #e9e2f0 0 3px, #0d0b10 3px 4px, transparent 4px), repeating-radial-gradient(circle, #141018 0 1.5px, #2a2236 1.5px 2.5px)",
+    boxShadow:
+      "0 0 0 3px color-mix(in srgb, var(--kind-music) 20%, transparent), 0 0 14px 2px color-mix(in srgb, var(--kind-music) 40%, transparent)",
+  },
+  sound: { ["--k" as string]: "var(--kind-sound)" },
+};
+
+export function KindOrb({ kind }: { kind: Kind }) {
+  const [cls, Icon] = KIND_ORB[kind];
+  return (
+    <i className={`ki ${cls}`} aria-hidden="true" style={ORB_STYLE[kind]}>
+      {Icon && <Icon size={14} stroke="#14201a" strokeWidth={2} />}
+    </i>
+  );
+}
+
+/** The kind tabs beside the composer (docs/mock/TextToVideo.dc.html "Output kind", CreateMusicSound.dc.html: Image,
+ * Video, Voice, Music, Sound): which kind's workflows the model chip offers. At least the Image composer's height (the
+ * owner, 2026-11-25), so switching kinds never resizes a short composer; a taller one (a script, many tiles) stretches
+ * the tabs as the boards do, leaving no blank under them. The picked tab: a thin accent ring, its orb and label at full
+ * strength, the others' orbs dimmed until hover or focus (owner, 2026-11-27: "make selected one more differentiated";
+ * .ktab in globals.css). */
 function MediaSwitch({
   kinds,
-  media,
+  kind,
   onPick,
 }: {
-  kinds: MediaKind[];
-  media: MediaKind;
-  onPick: (m: MediaKind) => void;
+  kinds: Kind[];
+  kind: Kind;
+  onPick: (k: Kind) => void;
 }) {
   return (
     <div
       role="tablist"
       aria-label="Output kind"
-      className="panel flex shrink-0 flex-col gap-1.5 self-start p-1.5"
+      className="panel flex shrink-0 flex-col gap-1.5 p-1.5"
     >
       {kinds.map((m) => (
         <button
           key={m}
           type="button"
           role="tab"
-          aria-selected={m === media}
-          onClick={() => m !== media && onPick(m)}
-          className="bevel h-[63px] w-16 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:text-t1"
+          aria-selected={m === kind}
+          onClick={() => m !== kind && onPick(m)}
+          className="bevel ktab min-h-[63px] w-16 flex-1 rounded-xl text-[12px] font-semibold text-t2 aria-selected:bg-s5 aria-selected:font-bold aria-selected:text-t1"
         >
-          {{ image: "Image", video: "Video", audio: "Audio", text: "Text" }[m]}
+          <KindOrb kind={m} />
+          {KIND_LABEL[m]}
         </button>
       ))}
     </div>
@@ -3101,5 +4174,73 @@ function SpeechOutput({ take, text }: { take?: Take; text: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+/** Music's and Sound's last blocks in the drawer (docs/mock/CreateMusicSound.dc.html frames 1, 4, 5): the plan the
+ * run's planner wrote (`resolved.texts`, the line "90 BPM · A minor · 4/4 · 2:10 · en"), then Output: the sound
+ * ("44.1 kHz · stereo · wav"), a video take when it is matched to one, the planned memory and the speed of the last
+ * take ("30 s of song in ≈ 2:30"). */
+function SoundOutput({
+  take,
+  run,
+  workflow,
+  gb,
+  video,
+}: {
+  take?: Take;
+  run?: Run;
+  workflow?: S<"Workflow">;
+  gb: number | null;
+  video: boolean;
+}) {
+  const texts = Object.entries(run?.resolved?.texts ?? {});
+  const a = take?.audio;
+  const song = take?.sound === "music";
+  const speed =
+    a && take.made_with?.render_s
+      ? song
+        ? `30 s of song in ≈ ${clock((take.made_with.render_s / a.duration_s) * 30)}`
+        : `${Math.round(a.duration_s)} s of sound in ≈ ${take.made_with.render_s < 60 ? `${take.made_with.render_s} s` : clock(take.made_with.render_s)}`
+      : "";
+  const row = (label: string, value: string) => (
+    <div className="flex justify-between gap-2.5 text-[13px]">
+      <span>{label}</span>
+      <span className="mono text-right text-[12px] text-t2">{value}</span>
+    </div>
+  );
+  return (
+    <>
+      {texts.length > 0 && workflow && (
+        <section aria-labelledby="sec-plan" className="flex flex-col gap-2">
+          <h2 id="sec-plan" className="heading">
+            Plan
+          </h2>
+          {texts.map(([path, text]) => (
+            <p
+              key={path}
+              className="m-0 rounded-xl bg-s1 px-3 py-2.5 text-[13px] whitespace-pre-wrap text-[var(--t1b)]"
+            >
+              {text}
+            </p>
+          ))}
+        </section>
+      )}
+      {(a || gb != null || video) && (
+        <section aria-labelledby="sec-output" className="flex flex-col gap-2">
+          <h2 id="sec-output" className="heading">
+            Output
+          </h2>
+          {a?.sample_rate &&
+            row(
+              "Sound",
+              `${soundText(a).replace(" kHz ", " kHz · ")} · ${audioFormat(take!.content_type)}`,
+            )}
+          {video && row("Video", "a new take")}
+          {gb != null && row("Memory", `≈ ${+gb.toFixed(1)} GB`)}
+          {speed && row("Speed", speed)}
+        </section>
+      )}
+    </>
   );
 }

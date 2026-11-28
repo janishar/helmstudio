@@ -1,6 +1,7 @@
 {
   "tool": "list_timelines",
   "result": {
-    "timelines": []
+    "timelines": [],
+    "next_cursor": null
   }
 }

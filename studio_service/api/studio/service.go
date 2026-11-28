@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -52,6 +53,7 @@ type Service struct {
 	providerKey      ProviderKeyAsk      // pipelines.providers.key (API 1.51); nil answers 503
 	providerKeyWrite ProviderKeyWriteAsk // pipelines.providers.key.write (API 1.52); nil answers 503
 	pluginKey        PluginKeyAsk        // runner.plugins.key.<host> (API 1.73); nil answers 503
+	foldersCheck     FoldersCheckAsk     // runner.folders.check.<host> (API 1.78); nil answers 503
 	judgeTest        JudgeTestAsk        // pipelines.judge.test (API 1.28); nil answers 503
 	remoteOn         bool                // the deployment's remote switch (STUDIO_REMOTE_MODELS, off by default; API 1.15)
 	// the dispatcher whose skip counts positions use; nil: none
@@ -84,19 +86,29 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, registry *registry.Regi
 
 // tx runs fn in a transaction scoped to the caller as a plain user: an admin sees only their own rows here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // collect runs query and scans every row into T by position.
 func collect[T any](ctx context.Context, tx pgx.Tx, query string, args ...any) ([]T, error) {
 	rows, _ := tx.Query(ctx, query, args...)
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[T])
+	return pgx.CollectRows(rows, rowTo[T]())
+}
+
+// rowTo scans a row into a struct by position, or a one-column row into a plain value (string, int, …):
+// RowToStructByPos panics on a value that is no struct.
+func rowTo[T any]() pgx.RowToFunc[T] {
+	var zero T
+	if reflect.TypeOf(&zero).Elem().Kind() == reflect.Struct {
+		return pgx.RowToStructByPos[T]
+	}
+	return pgx.RowTo[T]
 }
 
 // one runs query and scans its row into T; no row is errNotFound.
 func one[T any](ctx context.Context, tx pgx.Tx, query string, args ...any) (T, error) {
 	rows, _ := tx.Query(ctx, query, args...)
-	row, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByPos[T])
+	row, err := pgx.CollectExactlyOneRow(rows, rowTo[T]())
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errNotFound
 	}
@@ -117,12 +129,21 @@ func (s *Service) CreateSession(ctx context.Context, caller common.Caller, body 
 	return out, err
 }
 
-// ListSessions returns the caller's newest 100 sessions and how new ones are named (API 1.43).
-func (s *Service) ListSessions(ctx context.Context, caller common.Caller) (dto.SessionList, error) {
+// ListSessions returns a page of the caller's sessions, newest first, and how new ones are named (API 1.43); API 1.92:
+// q matches the title.
+func (s *Service) ListSessions(ctx context.Context, caller common.Caller, page Page) (dto.SessionList, error) {
 	out := dto.SessionList{Sessions: []dto.Session{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions
-			ORDER BY created_at DESC LIMIT 100`)
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `s.title`)
+	tail, err := keysetSQL(page, &args, `s.created_at`, `s.id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		// API 1.81: a Magic board's own session is not listed (it is the board's)
+		rows, err := collect[model.Session](ctx, tx, `SELECT `+model.SessionCols+` FROM sessions s
+			WHERE NOT EXISTS (SELECT 1 FROM magic_boards b WHERE b.session_id = s.id)`+match+tail, args...)
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r model.Session) (time.Time, string) { return r.CreatedAt, r.ID })
 		for _, row := range rows {
 			out.Sessions = append(out.Sessions, sessionDTO(row))
 		}
@@ -253,7 +274,7 @@ func (s *Service) Hosts(ctx context.Context, caller common.Caller) (dto.HostList
 	}
 	mine := map[string]bool{}
 	if len(ids) > 0 {
-		err := common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, func(tx pgx.Tx) (err error) {
+		err := common.WithUser(ctx, s.db, caller.ID, func(tx pgx.Tx) (err error) {
 			mine, err = lora.Owned(ctx, tx, ids)
 			return err
 		})

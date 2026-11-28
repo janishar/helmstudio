@@ -1,12 +1,9 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
 import array
-import importlib.util
 import json
 import math
 import re
-import subprocess
-import sys
 import tempfile
 import textwrap
 import time
@@ -18,12 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from core import ask as asks
 from core import media
 from core.graph import RunError, auto_frames
-from packs.echo import loader, mp4
-
-# the tiny model's components load with core.loaders_<runtime> (core/pack.py ModelRef.load, main.residency_for):
-# for runtime fake that is packs/echo/loader.py, unless core grows its own core/loaders_fake.py
-if importlib.util.find_spec("core.loaders_fake") is None:
-    sys.modules["core.loaders_fake"] = loader
+from packs.echo import mp4
 
 SIZE = 512
 
@@ -32,9 +24,9 @@ def draw(text: str, width: int = SIZE, height: int = SIZE) -> Image.Image:
     """`text` in white on a width x height gradient (36 px type at 512, scaled with the shorter side)."""
     ramp = Image.linear_gradient("L").resize((width, height))
     image = Image.merge(
-        "RGB", (ramp, ramp.transpose(Image.Transpose.ROTATE_90).resize((width, height)),
-                Image.new("L", (width, height), 150)),
-    )  # fmt: skip
+        "RGB",
+        (ramp, ramp.transpose(Image.Transpose.ROTATE_90).resize((width, height)), Image.new("L", (width, height), 150)),
+    )
     lines = textwrap.fill(textwrap.shorten(text, 200, placeholder=" …") or "(empty)", 22)
     ImageDraw.Draw(image).multiline_text(
         (width / 2, height / 2),
@@ -100,9 +92,7 @@ def keyframes(ctx, params: dict, inputs: dict) -> dict:
     for i, row in enumerate(params["images"], 1):
         frame, where = round(row.get("seconds", 0) * d["fps"]), f"{ctx.node}.images[{i}].seconds"
         if frame > d["frames"]:
-            raise RunError(
-                f"{where}: frame {frame} is past the clip's last frame {d['frames'] - 1}"
-            )
+            raise RunError(f"{where}: frame {frame} is past the clip's last frame {d['frames'] - 1}")
         frame = min(frame, d["frames"] - 1)
         if frame in seen:
             raise RunError(f"{where}: frame {frame} is already used by row {seen[frame]}")
@@ -184,9 +174,7 @@ def extend(ctx, params: dict, inputs: dict) -> dict:
     k = max(1, math.ceil(seconds * fps / 8 - 1e-9))
     total, add = n + 8 * k, 8 * k / fps
     if total > MAX_FRAMES:
-        raise RunError(
-            f"{ctx.node}.seconds: the clip would be {total} frames; at most {MAX_FRAMES}"
-        )
+        raise RunError(f"{ctx.node}.seconds: the clip would be {total} frames; at most {MAX_FRAMES}")
     _steps(ctx, params)
     poster = draw(
         f"{inputs['text']} [extend {params['direction']} {seconds:g} s]",
@@ -213,16 +201,13 @@ def a2v(ctx, params: dict, inputs: dict) -> dict:
         tmp = Path(tmp)
         (tmp / "still.mp4").write_bytes(mp4.mp4(poster, frames, A2V_FPS))
         (tmp / "source").write_bytes(src["data"])
-        r = subprocess.run([media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file",
-                            "-i", str(tmp / "still.mp4"), "-ss", f"{start}", "-t", f"{end - start}",
-                            "-protocol_whitelist", "file", "-i", str(tmp / "source"), "-map", "0:v:0", "-map",
-                            "1:a:0", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
-                            "-movflags", "+faststart", str(tmp / "out.mp4")],
-                           capture_output=True, text=True, check=False, timeout=120)  # fmt: skip
-        if r.returncode:
-            raise RunError(
-                f"{ctx.node}.source: the sound could not be read ({media.last_line(r.stderr)})"
-            )
+        try:
+            media.ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "still.mp4"), "-ss", f"{start}",
+                          "-t", f"{end - start}", "-protocol_whitelist", "file", "-i", str(tmp / "source"),
+                          "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
+                          "-movflags", "+faststart", str(tmp / "out.mp4")], timeout=120)  # fmt: skip
+        except media.MediaError as e:
+            raise RunError(f"{ctx.node}.source: the sound could not be read ({e})") from None
         data = (tmp / "out.mp4").read_bytes()
     return _clip(poster, frames, A2V_FPS, data, take_id=src["take_id"], offset_s=-start, new_in_s=0,
                  new_out_s=end - start)  # fmt: skip
@@ -265,9 +250,7 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
                 tones[c] = _tone(110 + (ord(c) * 37 + voice) % 770, phase)
         ctx.progress(step, steps, "speaking")
     pcm = b"".join(tones[c] for c in text)
-    return {
-        "audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(text) / CHARS_PER_STEP}
-    }
+    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(text) / CHARS_PER_STEP}}
 
 
 def dialogue(ctx, params: dict, inputs: dict) -> dict:
@@ -289,8 +272,98 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
         spoken.append(b"".join(tones[c] for c in text))
         ctx.progress(i, len(lines), "speaking")
     pcm, cues = media.stitch(lines, spoken, SPEECH_RATE)
-    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE,
-                      "cues": cues}}  # fmt: skip
+    return {"audio": {"wav": pcm, "sample_rate": SPEECH_RATE, "duration_s": len(pcm) / 2 / SPEECH_RATE, "cues": cues}}
+
+
+MUSIC_RATE, SOUND_RATE = 48000, 44100  # ACE-Step's rate; Stable Audio 3's and MMAudio's
+AUTO_S, AUTO_BPM = 10.0, 90  # the fake planner's picks (Auto)
+TAG = re.compile(r"^\s*\[([A-Za-z][A-Za-z0-9 -]{0,39})\]\s*$", re.MULTILINE)
+
+
+def _stereo(seconds: float, rate: int, hz: float, phase: float = 0.0) -> bytes:
+    """`seconds` of a sine at `hz` on the left and 1.5 hz on the right, PCM 16-bit interleaved stereo."""
+    n = round(seconds * rate)
+    return array.array("h", (round(9000 * math.sin(phase + 2 * math.pi * f * i / rate))
+                             for i in range(n) for f in (hz, 1.5 * hz))).tobytes()  # fmt: skip
+
+
+def _pitch(text: str, seed: int) -> float:
+    return 110 + (zlib.crc32(text.encode()) + seed) % 440
+
+
+def _audio(pcm: bytes, rate: int, **extra) -> dict:
+    return {"audio": {"wav": pcm, "sample_rate": rate, "channels": 2, "duration_s": len(pcm) / 4 / rate} | extra}
+
+
+def sections(lyrics: str, seconds: float) -> list[dict]:
+    """One section per `[tag]` line of the lyrics, in order, evenly spread over the song (the fake lyric timestamps;
+    none without a tag)."""
+    tags = [t.strip().lower() for t in TAG.findall(lyrics)][:40]
+    step = seconds / len(tags) if tags else 0
+    return [{"label": t, "start_s": round(i * step, 3), "end_s": round((i + 1) * step, 3)} for i, t in enumerate(tags)]
+
+
+def music(ctx, params: dict, inputs: dict) -> dict:
+    """echo/music: Length (Auto: AUTO_S) of two tones, the sections of the lyrics' tags (none when instrumental), and
+    the plan line `<bpm> BPM · A minor · 4/4 · m:ss · en` as its report."""
+    seconds, bpm = params["seconds"] or AUTO_S, params["bpm"] or AUTO_BPM
+    _steps(ctx, params)
+    pcm = _stereo(seconds, MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    parts = [] if params["instrumental"] else sections(params["lyrics"], seconds)
+    plan = f"{bpm} BPM · A minor · 4/4 · {int(seconds) // 60}:{int(seconds) % 60:02d} · en"
+    return _audio(pcm, MUSIC_RATE, **({"sections": parts} if parts else {})) | {"plan": plan}
+
+
+def sound(ctx, params: dict, inputs: dict) -> dict:
+    """echo/sound: Length seconds of two tones at 44.1 kHz stereo."""
+    _steps(ctx, params)
+    return _audio(_stereo(params["seconds"], SOUND_RATE, _pitch(inputs["text"], params["seed"])), SOUND_RATE)
+
+
+def foley(ctx, params: dict, inputs: dict) -> dict:
+    """echo/foley: a sound as long as the source video, and the source with that sound (core.media.mux)."""
+    src = params["source"]
+    _steps(ctx, params)
+    pcm = _stereo(src["duration_s"], SOUND_RATE, _pitch(inputs["text"], params["seed"]))
+    out = _audio(pcm, SOUND_RATE)
+    poster = draw(f"{inputs['text']} [sound]", src["width"], src["height"])
+    clip = _clip(poster, src["frames"], round(src["fps"]), media.mux(src["data"], media.wav(pcm, SOUND_RATE, 2)))
+    clip["video"].pop("source_map")
+    return out | clip
+
+
+def _source(params: dict, rate: int) -> bytes:
+    return media.pcm(params["source"]["data"], rate, 2)
+
+
+def repaint(ctx, params: dict, inputs: dict) -> dict:
+    """echo/repaint: the source at 48 kHz stereo with [span.start, span.end) replaced by a tone of the text."""
+    span = params["span"]
+    _steps(ctx, params)
+    pcm = _source(params, MUSIC_RATE)
+    a, b = (min(len(pcm), round(t * MUSIC_RATE) * 4) for t in (span["start"], span["end"]))
+    tone = _stereo((b - a) / 4 / MUSIC_RATE, MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    return _audio(pcm[:a] + tone[: b - a] + pcm[b:], MUSIC_RATE)
+
+
+def vary(ctx, params: dict, inputs: dict) -> dict:
+    """echo/vary: the source at 44.1 kHz stereo, each sample moved toward a tone of the text by Change."""
+    _steps(ctx, params)
+    src = array.array("h", _source(params, SOUND_RATE))
+    tone = array.array("h", _stereo(len(src) / 2 / SOUND_RATE, SOUND_RATE, _pitch(inputs["text"], params["seed"])))
+    c = params["change"]
+    return _audio(array.array("h", (round((1 - c) * x + c * y) for x, y in zip(src, tone, strict=False))).tobytes(),
+                  SOUND_RATE)  # fmt: skip
+
+
+def lengthen(ctx, params: dict, inputs: dict) -> dict:
+    """echo/lengthen: the source at 48 kHz stereo with Add seconds of a tone before (start) or after (end) it."""
+    _steps(ctx, params)
+    pcm = _source(params, MUSIC_RATE)
+    tone = _stereo(params["seconds"], MUSIC_RATE, _pitch(inputs["text"], params["seed"]))
+    if len(pcm) + len(tone) > media.MAX_TAKE_S * MUSIC_RATE * 4:
+        raise RunError(f"{ctx.node}.seconds: the song would last over {media.MAX_TAKE_S} s")
+    return _audio(pcm + tone if params["where"] == "end" else tone + pcm, MUSIC_RATE)
 
 
 def lora_stack(ctx, params: dict, inputs: dict) -> dict:
@@ -355,3 +428,18 @@ def ask(ctx, params: dict, inputs: dict) -> dict:
 
 
 globals()["lora-stack"] = lora_stack  # the stage is named lora-stack (kind echo/lora-stack)
+
+
+def listen(ctx, params: dict, inputs: dict) -> dict:
+    """The fake listen (contracts/README.md, The listen tool): `ECHO-LISTEN: <question>` and, with `transcript`,
+    `ECHO-TRANSCRIPT`; the take is read (the core's checks) but not heard."""
+    text = f"ECHO-LISTEN: {params['question'].strip()}"
+    answer = asks.Answer(text)
+    answer.record = {
+        "tries": [{"text": text, "error": None}],
+        "seen": [],
+        "tokens_in": 0,
+        "tokens_out": 0,
+        "seconds": 0,
+    }
+    return {"answer": answer, "transcript": "ECHO-TRANSCRIPT" if params["transcript"] else ""}

@@ -217,6 +217,9 @@ func TestAssistantChat(t *testing.T) {
 			t.Fatalf("offered %s: %v", never, turn.Tools)
 		}
 	}
+	if !slices.Contains(turn.Tools, "listen") { // API 1.108: offered while a listen workflow (the fake's) can run
+		t.Fatalf("listen not offered: %v", turn.Tools)
+	}
 	// a message from another tab while it works is 409 (from its own tab it steers: TestAssistantSteer)
 	if c := e.call(userA, "POST", msgs, map[string]any{"kind": "message", "client_id": tabB, "text": "again", "screen": screen("/")},
 		409); c["detail"] != "this chat is working in another tab" {
@@ -237,9 +240,22 @@ func TestAssistantChat(t *testing.T) {
 	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "working" {
 		t.Fatal(got)
 	}
+	// API 1.97: a progress step (the next step's seq, nothing pending) stores its running line, the state stays
+	running := json.RawMessage(fmt.Sprintf(`{"id": %q, "status": "running", "text": "Remembering…", "undo": false}`, call(3)))
+	progress := message.AssistantStep{ThreadID: id, Turn: 1, Seq: 1, Lines: []json.RawMessage{running}}
+	e.step(userA, progress)
+	if got := e.call(userA, "GET", threads+"/"+id, nil, 200); got["state"] != "working" || len(got["entries"].([]any)) != 2 {
+		t.Fatal(got)
+	}
 	e.step(userA, parked)
-	e.step(userA, parked) // a republish: nothing twice
+	e.step(userA, parked)   // a republish: nothing twice
+	e.step(userA, progress) // a late progress step: dropped, its line stays done
 	got := e.call(userA, "GET", threads+"/"+id, nil, 200)
+	for _, x := range got["entries"].([]any) {
+		if l, ok := x.(map[string]any)["line"].(map[string]any); ok && l["status"] != "done" {
+			t.Fatal(got)
+		}
+	}
 	pending := got["pending"].(map[string]any)
 	if got["state"] != "waiting" || pending["turn"] != float64(1) || len(pending["actions"].([]any)) != 2 ||
 		pending["cards"].([]any)[0] != call(2) || len(got["entries"].([]any)) != 4 {
@@ -526,6 +542,7 @@ func TestAssistantOffered(t *testing.T) {
 			LookAt      bool     `json:"look_at"`
 			Skills      bool     `json:"skills"`
 			Guides      bool     `json:"guides"` // API 1.71
+			Listen      *bool    `json:"listen"` // API 1.108; absent = a listen workflow can run
 			Expect      []string `json:"expect"`
 		} `json:"cases"`
 	}
@@ -538,7 +555,7 @@ func TestAssistantOffered(t *testing.T) {
 			continue // screen_actions: web_service's
 		}
 		ran++
-		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt, c.Skills, c.Guides); !slices.Equal(got, c.Expect) {
+		if got := studio.OfferedTools(c.Roles, c.WebSearch, c.LookAt, c.Listen == nil || *c.Listen, c.Skills, c.Guides); !slices.Equal(got, c.Expect) {
 			t.Errorf("%s: %v, want %v", c.Description, got, c.Expect)
 		}
 	}

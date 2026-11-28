@@ -1,6 +1,7 @@
 // Takes: the gallery's filters, labels and the upload flow (contracts/README.md "Takes, the gallery and uploads").
+import { stored } from "@/lib/hydrated";
 import { api, ApiError, errorText, ok, type S } from "@/lib/api";
-import { safeUrl } from "@/lib/format";
+import { clock, safeUrl } from "@/lib/format";
 import { audioFormat, secondsText } from "@/lib/media";
 import { optimise, type Limits, type Optimised, type Step } from "@/lib/optimise";
 import { prettyModel } from "@/lib/workflow";
@@ -11,7 +12,8 @@ type Run = S<"Run">;
 /** The gallery's chips: a kind, starred, a source, the project (a session) and a batch combine (the API ANDs them);
  * none set is "All". */
 export type Filter = {
-  kind?: S<"TakeKind">;
+  /** a take kind, or from API 1.79 a sound class (the audio takes of that class) */
+  kind?: S<"TakeKind"> | S<"SoundClass">;
   starred?: boolean;
   source?: S<"TakeSource">;
   session_id?: string;
@@ -24,20 +26,8 @@ const PROJECT = "helm.project";
 
 /** The session last opened in Create in this browser: the Gallery's "This project only" (a convenience: gone when
  * the store is cleared). */
-export function lastProject(): string | null {
-  try {
-    return localStorage.getItem(PROJECT);
-  } catch {
-    return null;
-  }
-}
-export function rememberProject(id: string) {
-  try {
-    localStorage.setItem(PROJECT, id);
-  } catch {
-    /* private window */
-  }
-}
+export const lastProject = () => stored.get(PROJECT);
+export const rememberProject = (id: string) => stored.set(PROJECT, id);
 
 /** The list query for a filter, a search text and a page cursor: only what is set (a blank search is none). */
 export function takeQuery(f: Filter, q: string, cursor?: string | null) {
@@ -54,9 +44,14 @@ export function takeQuery(f: Filter, q: string, cursor?: string | null) {
   };
 }
 
+/** An audio take's sound class (API 1.79; voice when it names none, as studio reads takes made before 1.79); undefined
+ * for an image, a video or a run output (which carries no class). */
+export const soundOf = (t: Take | S<"RunOutput">): S<"SoundClass"> | undefined =>
+  t.kind === "audio" && "source" in t ? (t.sound ?? "voice") : undefined;
+
 /** Whether a take belongs in the list for this filter (search aside): a new upload joins only a list it fits. */
 export const fits = (t: Take, f: Filter) =>
-  (!f.kind || t.kind === f.kind) &&
+  (!f.kind || t.kind === f.kind || soundOf(t) === f.kind) &&
   (!f.starred || t.starred) &&
   (!f.source || t.source === f.source) &&
   (!f.session_id || t.session_id === f.session_id) &&
@@ -68,17 +63,20 @@ export function appendPage(list: Take[], page: Take[]): Take[] {
   return [...list, ...page.filter((t) => !ids.has(t.id))];
 }
 
-/** The tile's mono line: what made it and where ("Qwen Image · Create", "Qwen Image · Pipeline", "Upload"). */
+/** The tile's mono line: what made it and where ("Qwen Image · Create", "Qwen Image · Pipeline", "Upload"); a run's
+ * audio take: what made it and its length ("ACE-Step 1.5 · 2:10", docs/mock/CreateMusicSound.dc.html frame 7). */
 export const subLine = (t: Take) =>
-  t.source === "upload"
-    ? t.audio
-      ? `Upload · ${audioFormat(t.content_type)} · ${secondsText(t.audio.duration_s)}`
-      : "Upload"
-    : t.source === "tool"
-      ? "Edited" // API 1.70: made by a plugin tool (Media tools)
-      : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
-          .filter(Boolean)
-          .join(" · ");
+  t.audio && t.made_with?.workflow_title && t.source !== "upload"
+    ? `${t.made_with.workflow_title} · ${clock(t.audio.duration_s)}`
+    : t.source === "upload"
+      ? t.audio
+        ? `Upload · ${audioFormat(t.content_type)} · ${secondsText(t.audio.duration_s)}`
+        : "Upload"
+      : t.source === "tool"
+        ? "Edited" // API 1.70: made by a plugin tool (Media tools)
+        : [t.made_with?.workflow_title, t.source === "pipeline" ? "Pipeline" : "Create"]
+            .filter(Boolean)
+            .join(" · ");
 
 /** "Qwen Image · Base · int8": the workflow and the weights it used. */
 export const templateLine = (m: S<"MadeWith">) =>
@@ -92,6 +90,82 @@ export function sizeSeed(t: Take): string {
   const seed = t.made_with?.seed;
   return [size, seed == null ? "" : String(seed)].filter(Boolean).join(" · ");
 }
+
+/** The value of the first input named `.<name>` ("music.bpm"), if any. */
+const inputOf = (m: S<"MadeWith">, name: string) =>
+  Object.entries(m.inputs).find(([k]) => k.endsWith(`.${name}`))?.[1];
+
+/** A music take's Song row: "2:10 · 90 BPM · A minor" (BPM and key only when set: Auto is 0 or "auto"). */
+export function songLine(t: Take): string {
+  const m = t.made_with;
+  const bpm = m && inputOf(m, "bpm");
+  const key = m && inputOf(m, "key");
+  return [
+    t.audio && clock(t.audio.duration_s),
+    typeof bpm === "number" && bpm > 0 && `${bpm} BPM`,
+    typeof key === "string" && key && key !== "auto" && key,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+/** A song's lyrics as typed, or "" (none, or Instrumental on). */
+export function lyricsOf(t: Take): string {
+  const m = t.made_with;
+  if (!m || inputOf(m, "instrumental") === true) return "";
+  const l = inputOf(m, "lyrics");
+  return typeof l === "string" ? l.trim() : "";
+}
+
+/** The album cover's gradients (docs/mock/CreateMusicSound.dc.html frame 7): three stops, light to dark. */
+const COVERS = [
+  ["#3b4f7a", "#6a4c93", "#1f2340"],
+  ["#e0a44a", "#a5582c", "#3d2414"],
+  ["#ff5f8f", "#7a2fb8", "#1a1240"],
+  ["#4fb7a0", "#2c6f7a", "#122630"],
+  ["#f07a5a", "#b03a5b", "#2a1030"],
+  ["#8fb86a", "#4c7a3a", "#16261a"],
+  ["#6ab0f0", "#3a5fb0", "#141c3a"],
+  ["#d0a0e0", "#8a4fa0", "#2a1436"],
+];
+
+/** A music take's cover gradient, picked in the client from a hash of its prompt (else its title): the same song
+ * always gets the same cover (plan 38 44.10.9). */
+export function coverOf(t: Take): string {
+  return coverFor(t.made_with?.prompt || t.title);
+}
+
+/** The album cover's gradient for a text (a music take's prompt or title; a Magic music block's style). */
+export function coverFor(text: string): string {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) | 0;
+  const [a, b, c] = COVERS[Math.abs(h) % COVERS.length];
+  return `linear-gradient(150deg, ${a}, ${b} 55%, ${c})`;
+}
+
+/** The edits an audio take's offers carry as their `action` (API 1.79, offers by class), in the menu's order. */
+const EDITS = ["Repaint", "Cover", "Vary", "Extend"];
+
+/** An audio take's offers split for its menu and panel (docs/mock/CreateMusicSound.dc.html frame 6): its edits
+ * (Repaint, Cover or Vary, Extend: one offer per action) and the rest, under Use in. Other kinds: all under Use in. */
+export function splitOffers(t: Take, offers: S<"TakeOffer">[]) {
+  if (t.kind !== "audio") return { edits: [], rest: offers };
+  const edits = EDITS.flatMap((a) => offers.find((o) => o.action === a) ?? []);
+  // every edit offer stays out of Use in (a second family's Repaint too), as on Create's menu
+  return { edits, rest: offers.filter((o) => !o.action || !EDITS.includes(o.action)) };
+}
+
+/** The sound take a video was made with (MMAudio: the other take of its run; Save with the video: its audio parent),
+ * among `takes`; Sound only opens it. */
+export const soundTakeOf = (t: Take, takes: Take[]) =>
+  t.kind !== "video"
+    ? undefined
+    : takes.find(
+        (x) =>
+          x.kind === "audio" &&
+          x.id !== t.id &&
+          ((!!t.run_id && x.run_id === t.run_id) || t.parents.includes(x.id)),
+      );
 
 /** What the strip under Create's stage shows, newest first: the session's takes and the runs that have none to show
  * (still working, failed or stopped). A finished run is shown by its takes; until they are loaded, by itself. */
@@ -252,6 +326,8 @@ export type UploadOptions = {
   asIs?: boolean;
   /** × on the pending tile: stops the optimising or the PUT (an AbortError) */
   signal?: AbortSignal;
+  /** API 1.79: an audio file's class (the Gallery filter it came from); absent = voice; never sent for an image */
+  sound?: S<"SoundClass">;
 };
 
 /** Uploads one image (or, with `audio`, a wav, mp3 or m4a with its length read here), the one way the browser
@@ -262,7 +338,7 @@ export async function uploadFile(
   file: File,
   onProgress: (p: UploadProgress) => void,
   io: UploadIO = defaultIO,
-  { audio = false, asIs = false, signal }: UploadOptions = {},
+  { audio = false, asIs = false, signal, sound }: UploadOptions = {},
 ): Promise<Take> {
   const bad = checkFile(file, audio);
   if (bad) throw new Error(bad);
@@ -287,6 +363,7 @@ export async function uploadFile(
     content_type: out.type as S<"UploadCreate">["content_type"],
     bytes: out.blob.size,
     ...(duration_s !== undefined && { duration_s }),
+    ...(sound && isAudio(type) && { sound }),
   });
   const url = safeUrl(up.upload_url);
   if (!url) throw new Error("The server gave an unusable upload link.");

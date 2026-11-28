@@ -172,7 +172,7 @@ const a2v: S<"TakeOffer"> = {
   inputs: { "source.source": { take_id: T, in: 0, out: 3 } },
 };
 
-function serve(actions: S<"TakeOffer">[]) {
+function serve(actions: S<"TakeOffer">[], hosts: object[] = []) {
   const asked: unknown[] = [];
   answer("GET", {
     "/v1/studio/timelines/{timeline_id}/clips/{clip_id}/actions": (init) => {
@@ -190,6 +190,7 @@ function serve(actions: S<"TakeOffer">[]) {
       },
     }),
     "/v1/studio/library": () => ({ data: { items: [] } }),
+    "/v1/studio/hosts": () => ({ data: { hosts } }),
   });
   const posted: { slot: S<"TimelineSlot">; run: S<"RunRequest"> }[] = [];
   answer("POST", {
@@ -372,5 +373,23 @@ describe("ClipActions", () => {
     expect((await screen.findByRole("alert")).textContent).toBe("the timeline changed");
     expect(done).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Generate" })).toBeTruthy();
+  });
+
+  // docs/mock/ErrorStates.dc.html b3: Make shot / the offers' Generate greys when no runner of the env is up
+  it("no runner for the workflow's env greys Generate, with the key and the line", async () => {
+    serve(
+      [retake],
+      [{ host: "mac", env: "mlx", state: "offline", updated_at: new Date().toISOString() }],
+    );
+    mount(null, false, [{ ...retakeWf, env: "mlx" } as S<"Workflow">]);
+    fireEvent.click(await screen.findByRole("button", { name: "Retake a section" }));
+    const key = await screen.findByRole("button", { name: /^Generate/ });
+    await waitFor(() => expect(key.textContent).toContain("No runner for mlx"));
+    expect((key as HTMLButtonElement).disabled).toBe(true);
+    expect(
+      screen.getByText(
+        "No runner for mlx is on. Start helmstudio on your Mac, or pick another model.",
+      ),
+    ).toBeTruthy();
   });
 });

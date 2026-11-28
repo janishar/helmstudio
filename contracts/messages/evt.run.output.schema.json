@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://helmstudio.local/contracts/messages/evt.run.output.schema.json",
   "title": "runner → studio: one output object written",
-  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event; from API 1.30 an audio output <output_prefix><index>.wav (RIFF WAVE, PCM 16-bit, mono, the model's own sample rate). From API 1.48 an image or video output may carry `thumb`: <output_prefix><index>.thumb.webp, written before the main object.",
+  "description": "Subject evt.run.<host>.<session_id>.output (stream EVT), Nats-Msg-Id <run_id>:<attempt>:<seq>. Sent after the object is fully written to the object store, before the terminal status. `key` is under the command's output_prefix: an image is <output_prefix><index>.png, a video <output_prefix><index>.mp4 (H.264 yuv420p + AAC, moov atom first: -movflags +faststart) with its poster <output_prefix><index>.poster.png (frame 0, the video's size), both written before this event; from API 1.30 an audio output <output_prefix><index>.wav (RIFF WAVE, PCM 16-bit, mono or from API 1.79 stereo, the model's own sample rate). From API 1.48 an image or video output may carry `thumb`: <output_prefix><index>.thumb.webp, written before the main object.",
   "allOf": [
     {
       "$ref": "envelope.schema.json"
@@ -224,7 +224,7 @@
               "type": "integer",
               "minimum": 8000,
               "maximum": 96000,
-              "description": "the model's own rate (Qwen3-TTS, echo: 24000; ZONOS3: 44100)"
+              "description": "the model's own rate (Qwen3-TTS, echo speech: 24000; ZONOS3, Stable Audio 3, MMAudio: 44100; ACE-Step: 48000)"
             },
             "cues": {
               "type": "array",
@@ -234,6 +234,23 @@
                 "$ref": "defs.schema.json#/$defs/cue"
               },
               "description": "API 1.32, a dialogue's take only (a stage with `lines`): one cue per line, in order, each [start_s, end_s) inside [0, duration_s] and after the previous one's end; absent for one voice"
+            },
+            "channels": {
+              "enum": [
+                1,
+                2
+              ],
+              "default": 1,
+              "description": "API 1.79: the WAV's channels, sent only for stereo (2: the music and sound models); absent = 1, mono"
+            },
+            "sections": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 40,
+              "items": {
+                "$ref": "defs.schema.json#/$defs/section"
+              },
+              "description": "API 1.79, a song with tagged lyrics only (ACE-Step's lyric timestamps): its parts in order, each inside [0, duration_s]; absent otherwise"
             }
           }
         },

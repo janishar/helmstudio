@@ -64,7 +64,6 @@ services:
     logging: *log
     mem_limit: 512m
     environment:
-      KONG_NGINX_WORKER_PROCESSES: "2"                # one per CPU core otherwise
       KONG_PORT_MAPS: "${HELMSTUDIO_PORT:-8300}:8000"   # X-Forwarded-Port = the host port (web's redirects)
       KONG_TRUSTED_IPS: ${HELM_NET:-172.30.97}.11       # only the web BFF may name the client (X-Forwarded-For)
       KONG_REAL_IP_HEADER: X-Forwarded-For

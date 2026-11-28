@@ -1,6 +1,7 @@
 package gallery
 
 import (
+	"cmp"
 	"context"
 	"path"
 	"strings"
@@ -30,6 +31,7 @@ type Output struct {
 	SourceMap                 *dto.SourceMap // API 1.19: a video made from a media take (one of Parents)
 	Audio                     *dto.AudioInfo // API 1.30: an audio output's length and sample rate
 	Thumb                     *dto.Poster    // API 1.48: an image's or a video's thumbnail
+	Sound                     string         // API 1.79, kind audio: its workflow's class ("" is voice)
 }
 
 // contentTypes maps a run output key's extension to its content type.
@@ -43,15 +45,20 @@ func Record(ctx context.Context, tx pgx.Tx, output Output) (string, error) {
 	if contentType == "" {
 		contentType = "application/octet-stream"
 	}
+	var sound *string // API 1.79: an audio take's class, voice when its workflow has none
+	if output.Kind == "audio" {
+		class := cmp.Or(output.Sound, "voice")
+		sound = &class
+	}
 	var id string
 	err := tx.QueryRow(ctx, `INSERT INTO takes (id, owner_id, kind, source, title, key, content_type, width, height, bytes,
-		session_id, run_id, output_idx, made_with, ready, created_at, batch_id, etag, video, source_map, audio, thumb)
+		session_id, run_id, output_idx, made_with, ready, created_at, batch_id, etag, video, source_map, audio, thumb, sound)
 		VALUES ($1, $2, $3, CASE WHEN $15::uuid IS NULL THEN 'create' ELSE 'pipeline' END, $4, $5, $6, $7, $8, $9, $10, $11,
-		$12, $13, true, coalesce($14, clock_timestamp()), $15, $16, $17, $18, $19, $20)
+		$12, $13, true, coalesce($14, clock_timestamp()), $15, $16, $17, $18, $19, $20, $21)
 		ON CONFLICT (run_id, output_idx) DO UPDATE SET run_id = EXCLUDED.run_id RETURNING id::text`,
 		utility.NewID(), output.OwnerID, output.Kind, Title(output.MadeWith), output.Key, contentType, output.Width,
 		output.Height, output.Bytes, output.SessionID, output.RunID, output.Index, output.MadeWith, output.CreatedAt,
-		output.BatchID, output.Etag, output.Video, output.SourceMap, output.Audio, output.Thumb).Scan(&id)
+		output.BatchID, output.Etag, output.Video, output.SourceMap, output.Audio, output.Thumb, sound).Scan(&id)
 	if err != nil || len(output.Parents) == 0 {
 		return id, err
 	}

@@ -35,6 +35,15 @@
             "media": "echo.image"
           }
         }
+      },
+      "standard": {
+        "kind": "image",
+        "model": "Echo",
+        "fields": {
+          "prompt": "prompt.text",
+          "refs": "echo.refs"
+        },
+        "seconds": 1
       }
     },
     {
@@ -93,6 +102,261 @@
             "media": "sample.video"
           }
         }
+      },
+      "standard": {
+        "kind": "video",
+        "model": "Echo keyframes",
+        "fields": {
+          "prompt": "prompt.text",
+          "first": "keyframes.images",
+          "last": "keyframes.images",
+          "length": "duration.frames",
+          "width": "canvas.width",
+          "height": "canvas.height"
+        },
+        "seconds": 0.5
+      }
+    },
+    {
+      "id": "echo-music",
+      "title": "Echo music",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "music": {
+          "kind": "echo/music",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "lyrics": "",
+            "instrumental": false,
+            "seconds": 0,
+            "bpm": 0,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "music.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "music.lyrics"
+        ],
+        "quick": [
+          "music.instrumental",
+          "music.seconds",
+          "music.bpm"
+        ],
+        "groups": [
+          {
+            "label": "Length · BPM",
+            "items": [
+              "music.seconds",
+              "music.bpm"
+            ]
+          }
+        ]
+      },
+      "standard": {
+        "kind": "music",
+        "model": "Echo music",
+        "fields": {
+          "prompt": "prompt.text",
+          "lyrics": "music.lyrics",
+          "instrumental": "music.instrumental",
+          "length": "music.seconds",
+          "bpm": "music.bpm",
+          "seed": "music.seed"
+        },
+        "seconds": 0.3
+      }
+    },
+    {
+      "id": "echo-music-extend",
+      "title": "Echo music extend",
+      "action": "Extend",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "lengthen": {
+          "kind": "echo/lengthen",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "seconds": 10,
+            "where": "end",
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "lengthen.audio"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-repaint",
+      "title": "Echo repaint",
+      "action": "Repaint",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "repaint": {
+          "kind": "echo/repaint",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "span": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "repaint.audio"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-sound",
+      "title": "Echo sound",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "sound": {
+          "kind": "echo/sound",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "avoid": "",
+            "seconds": 2,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "sound.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "sound.avoid"
+        ],
+        "quick": [
+          "sound.seconds"
+        ],
+        "count": {
+          "default": 4,
+          "max": 8
+        }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Echo sound",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "sound.seconds",
+          "seed": "sound.seed"
+        },
+        "seconds": 0.2
+      }
+    },
+    {
+      "id": "echo-sound-video",
+      "title": "Echo sound from a video",
+      "action": "Add sound",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "foley": {
+          "kind": "echo/foley",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "foley.audio"
+          }
+        },
+        "output_video": {
+          "kind": "output",
+          "in": {
+            "media": "foley.video"
+          }
+        }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Echo sound",
+        "fields": {
+          "from": "foley.source",
+          "prompt": "prompt.text",
+          "seed": "foley.seed"
+        },
+        "seconds": 0.2
       }
     },
     {
@@ -129,6 +393,40 @@
           "kind": "output",
           "in": {
             "media": "tiny.image"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-vary",
+      "title": "Echo vary",
+      "action": "Vary",
+      "family": "echo",
+      "env": "fake",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "vary": {
+          "kind": "echo/vary",
+          "in": {
+            "text": "prompt.text"
+          },
+          "params": {
+            "source": null,
+            "change": 0.5,
+            "seed": -1,
+            "delay_ms": 300
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "vary.audio"
           }
         }
       }
@@ -180,6 +478,17 @@
             "media": "video.video"
           }
         }
+      },
+      "standard": {
+        "kind": "video",
+        "model": "Echo video",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "duration.frames",
+          "width": "canvas.width",
+          "height": "canvas.height"
+        },
+        "seconds": 0.5
       }
     },
     {
@@ -311,6 +620,16 @@
             "media": "speak.audio"
           }
         }
+      },
+      "standard": {
+        "kind": "voice",
+        "model": "Echo voice",
+        "fields": {
+          "line": "prompt.text",
+          "voice": "speak.voice",
+          "seed": "speak.seed"
+        },
+        "seconds": 0.2
       }
     },
     {
@@ -355,6 +674,24 @@
           "kind": "answer",
           "in": {
             "text": "ask.answer"
+          }
+        }
+      }
+    },
+    {
+      "id": "echo-listen",
+      "title": "Listen (fake)",
+      "family": "echo",
+      "env": "fake",
+      "media": "text",
+      "nodes": {
+        "listen": {
+          "kind": "echo/listen"
+        },
+        "answer": {
+          "kind": "answer",
+          "in": {
+            "text": "listen.answer"
           }
         }
       }

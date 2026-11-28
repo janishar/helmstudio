@@ -97,6 +97,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/pipelines/:id/judge-tests", c.createJudgeTestHandler)
 	group.GET("/judge-tests/:id", c.getJudgeTestHandler)
 	group.POST("/takes/:id/pipeline", c.saveTakeAsPipelineHandler)
+	group.POST("/takes/:id/listen", c.listenHandler)
 	group.GET("/batches/:id/chat", c.getChatHandler)
 	group.POST("/batches/:id/chat", c.postChatHandler)
 	group.GET("/model-sources", c.modelSourcesHandler)
@@ -135,6 +136,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.POST("/admin/hosts/:host/unload", c.adminUnloadHandler)
 	group.PUT("/admin/hosts/:host/settings", c.putHostSettingsHandler)
 	group.PUT("/admin/hosts/:host/pins", c.putHostPinsHandler)
+	group.PUT("/admin/hosts/:host/folders", c.putHostFoldersHandler)
 	group.GET("/library", c.listLibraryHandler)
 	group.POST("/library", c.createLibraryItemHandler)
 	group.GET("/library/:id", c.getLibraryItemHandler)
@@ -144,6 +146,7 @@ func (c *controller) MountRoutes(group *gin.RouterGroup) {
 	group.PUT("/library/:id/:look_id", c.starterLookHandler)
 	group.DELETE("/library/:id/:look_id", c.starterLookHandler)
 	c.mountTimelines(group)
+	c.mountMagic(group) // API 1.80
 	c.mountAssistant(group)
 }
 
@@ -169,7 +172,7 @@ func (c *controller) seeHandler(request micro.NatsRequest) {
 		micro.RespondNatsMessage(request, &SeeReply{Error: "bad request: invalid JSON", Code: "invalid"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second) // API 1.108: it may measure the take's facts on demand
 	defer cancel()
 	out := c.service.See(ctx, body)
 	micro.RespondNatsMessage(request, &out)
@@ -195,7 +198,7 @@ func (c *controller) toolsHandler(request micro.NatsRequest) {
 		micro.RespondNatsMessage(request, &message.ToolsReply{Error: "bad request: invalid JSON", Code: "invalid"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second) // API 1.108: get_take and look_at may measure facts on demand
 	defer cancel()
 	out := c.service.Tool(ctx, body)
 	micro.RespondNatsMessage(request, &out)
@@ -218,10 +221,26 @@ func (c *controller) runsCreateHandler(request micro.NatsRequest) {
 	micro.RespondNatsMessage(request, &out)
 }
 
+// unprocessable is an error whose own {detail, …} body is its 422 (WorkflowError, TimelineError, TimelineEditError,
+// MagicEditError).
+type unprocessable interface {
+	error
+	unprocessable()
+}
+
+// sendError answers err: an unprocessable error as its 422 body, else as network sends it.
+func sendError(ctx *gin.Context, err error) {
+	if body, ok := errors.AsType[unprocessable](err); ok {
+		network.SendJSON(ctx, http.StatusUnprocessableEntity, body)
+		return
+	}
+	network.SendMixedError(ctx, err)
+}
+
 // reply sends out with status, or the error.
 func reply[T any](ctx *gin.Context, status int, out T, err error) {
 	if err != nil {
-		network.SendMixedError(ctx, err)
+		sendError(ctx, err)
 		return
 	}
 	network.SendJSON(ctx, status, out)
@@ -242,8 +261,19 @@ func withBody[B, T any](ctx *gin.Context, status int, fn func(caller common.Call
 
 // listSessionsHandler: GET /sessions.
 func (c *controller) listSessionsHandler(ctx *gin.Context) {
-	out, err := c.service.ListSessions(ctx.Request.Context(), common.MustCaller(ctx))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, 100); ok {
+		out, err := c.service.ListSessions(ctx.Request.Context(), common.MustCaller(ctx), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
+}
+
+// pageOr422 is ParsePage of the request's query (def: the list's default limit); false after a 422 (API 1.92).
+func pageOr422(ctx *gin.Context, def int) (Page, bool) {
+	page, detail := ParsePage(ctx.Request.URL.Query(), def)
+	if detail != "" {
+		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+	}
+	return page, detail == ""
 }
 
 // createSessionHandler: POST /sessions — the body is optional.
@@ -277,11 +307,7 @@ func (c *controller) renameSessionHandler(ctx *gin.Context) {
 
 // deleteSessionHandler: DELETE /sessions/{id}.
 func (c *controller) deleteSessionHandler(ctx *gin.Context) {
-	if err := c.service.DeleteSession(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.DeleteSession(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 }
 
 // ------------------------------------------------------------------ workflows and hosts
@@ -305,7 +331,7 @@ func (c *controller) createWorkflowHandler(ctx *gin.Context) {
 	if err == nil {
 		out, err = c.service.CreateWorkflow(ctx.Request.Context(), common.MustCaller(ctx), body)
 	}
-	replyWorkflow(ctx, http.StatusCreated, out, err)
+	reply(ctx, http.StatusCreated, out, err)
 }
 
 // validateWorkflowHandler: POST /workflows/validate — other top-level keys are ignored (a WorkflowUpdate validates).
@@ -325,7 +351,7 @@ func (c *controller) replaceWorkflowHandler(ctx *gin.Context) {
 	if err == nil {
 		out, err = c.service.ReplaceWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	}
-	replyWorkflow(ctx, http.StatusOK, out, err)
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // renameWorkflowHandler: PATCH /workflows/{id}.
@@ -340,11 +366,7 @@ func (c *controller) renameWorkflowHandler(ctx *gin.Context) {
 
 // deleteWorkflowHandler: DELETE /workflows/{id}.
 func (c *controller) deleteWorkflowHandler(ctx *gin.Context) {
-	if err := c.service.DeleteWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.DeleteWorkflow(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 }
 
 // nodesHandler: GET /nodes?env=.
@@ -408,16 +430,6 @@ func strictBodyKeeping[B any](ctx *gin.Context, keep ...string) (*B, error) {
 	return body, nil
 }
 
-// replyWorkflow answers like reply, with a WorkflowError's problems in its 422.
-func replyWorkflow[T any](ctx *gin.Context, status int, out T, err error) {
-	var problems *WorkflowError
-	if errors.As(err, &problems) {
-		network.SendJSON(ctx, http.StatusUnprocessableEntity, problems)
-		return
-	}
-	reply(ctx, status, out, err)
-}
-
 // queueHandler: GET /queue — the caller's open runs and, per host, a count of others' queued runs.
 func (c *controller) queueHandler(ctx *gin.Context) {
 	out, err := c.service.Queue(ctx.Request.Context(), common.MustCaller(ctx))
@@ -434,8 +446,10 @@ func (c *controller) listHostsHandler(ctx *gin.Context) {
 
 // listRunsHandler: GET /sessions/{id}/runs.
 func (c *controller) listRunsHandler(ctx *gin.Context) {
-	out, err := c.service.ListRuns(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, 100); ok {
+		out, err := c.service.ListRuns(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
 }
 
 // createRunHandler: POST /sessions/{id}/runs — 202 with the run, queued or already failed.
@@ -460,11 +474,7 @@ func (c *controller) getRunHandler(ctx *gin.Context) {
 
 // deleteRunHandler: DELETE /runs/{id} — 204 (API 1.43).
 func (c *controller) deleteRunHandler(ctx *gin.Context) {
-	if err := c.service.DeleteRun(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.DeleteRun(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 }
 
 // cancelRunHandler: POST /runs/{id}/cancel — 202 with the run as it is now.
@@ -571,14 +581,23 @@ func (c *controller) serveEvents(ctx *gin.Context, read func(ctx context.Context
 
 // listBatchesHandler: GET /batches.
 func (c *controller) listBatchesHandler(ctx *gin.Context) {
-	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
-	if detail != "" {
-		network.SendError(ctx, http.StatusUnprocessableEntity, detail)
+	page, ok := pageOr422(ctx, 60)
+	if !ok {
 		return
 	}
-	out, err := c.service.ListBatches(ctx.Request.Context(), common.MustCaller(ctx), page)
+	states := ctx.QueryArray("state") // API 1.92
+	for _, state := range states {
+		if !slices.Contains(batchStates, state) {
+			network.SendError(ctx, http.StatusUnprocessableEntity, "state must be one of "+strings.Join(batchStates, ", "))
+			return
+		}
+	}
+	out, err := c.service.ListBatches(ctx.Request.Context(), common.MustCaller(ctx), page, states)
 	reply(ctx, http.StatusOK, out, err)
 }
+
+// batchStates are BatchStatus's values (contracts/openapi.yaml), GET /batches's state filter.
+var batchStates = []string{"queued", "running", "waiting", "paused", "done", "failed", "stopped"}
 
 // createBatchHandler: POST /batches — 202 with the batch, queued.
 func (c *controller) createBatchHandler(ctx *gin.Context) {
@@ -595,7 +614,7 @@ func (c *controller) getBatchHandler(ctx *gin.Context) {
 
 // listBatchRowsHandler: GET /batches/{id}/rows — 404 before any 422.
 func (c *controller) listBatchRowsHandler(ctx *gin.Context) {
-	page, detail := ParsePage(ctx.Query("cursor"), ctx.Query("limit"))
+	page, detail := ParsePage(ctx.Request.URL.Query(), 60)
 	caller := common.MustCaller(ctx)
 	if detail != "" {
 		if _, err := c.service.GetBatch(ctx.Request.Context(), caller, ctx.Param("id")); err != nil {
@@ -734,8 +753,10 @@ func (c *controller) getJudgeTestHandler(ctx *gin.Context) {
 
 // listPipelinesHandler: GET /pipelines.
 func (c *controller) listPipelinesHandler(ctx *gin.Context) {
-	out, err := c.service.ListPipelines(ctx.Request.Context(), common.MustCaller(ctx))
-	reply(ctx, http.StatusOK, out, err)
+	if page, ok := pageOr422(ctx, MaxPipelines); ok {
+		out, err := c.service.ListPipelines(ctx.Request.Context(), common.MustCaller(ctx), page)
+		reply(ctx, http.StatusOK, out, err)
+	}
 }
 
 // getPipelineHandler: GET /pipelines/{id}.
@@ -751,7 +772,7 @@ func (c *controller) createPipelineHandler(ctx *gin.Context) {
 	if err == nil {
 		out, err = c.service.CreatePipeline(ctx.Request.Context(), common.MustCaller(ctx), body)
 	}
-	replyWorkflow(ctx, http.StatusCreated, out, err)
+	reply(ctx, http.StatusCreated, out, err)
 }
 
 // validatePipelineHandler: POST /pipelines/validate — other top-level keys are ignored.
@@ -771,7 +792,7 @@ func (c *controller) replacePipelineHandler(ctx *gin.Context) {
 	if err == nil {
 		out, err = c.service.ReplacePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	}
-	replyWorkflow(ctx, http.StatusOK, out, err)
+	reply(ctx, http.StatusOK, out, err)
 }
 
 // renamePipelineHandler: PATCH /pipelines/{id}.
@@ -786,11 +807,17 @@ func (c *controller) renamePipelineHandler(ctx *gin.Context) {
 
 // deletePipelineHandler: DELETE /pipelines/{id}.
 func (c *controller) deletePipelineHandler(ctx *gin.Context) {
-	if err := c.service.DeletePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
+	noContent(ctx, c.service.DeletePipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
+}
+
+// listenHandler: POST /takes/{id}/listen — 202 with the listen run (API 1.107).
+func (c *controller) listenHandler(ctx *gin.Context) {
+	body, err := strictBody[dto.ListenRequest](ctx, false)
+	var out dto.ListenRun
+	if err == nil { // strict: an unknown key is a 422; Validate ran
+		out, err = c.service.Listen(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	}
-	network.SendNoContent(ctx)
+	reply(ctx, http.StatusAccepted, out, err)
 }
 
 // saveTakeAsPipelineHandler: POST /takes/{id}/pipeline — 201 with the new pipeline; the body is optional.
@@ -803,7 +830,7 @@ func (c *controller) saveTakeAsPipelineHandler(ctx *gin.Context) {
 		}
 		out, err = c.service.SaveTakeAsPipeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	}
-	replyWorkflow(ctx, http.StatusCreated, out, err)
+	reply(ctx, http.StatusCreated, out, err)
 }
 
 // batchEventsHandler: GET /batches/{id}/events — like the session events, per-batch seq.
@@ -824,8 +851,14 @@ func (c *controller) batchEventsHandler(ctx *gin.Context) {
 func (c *controller) listLibraryHandler(ctx *gin.Context) {
 	query, detail := ParseLibraryQuery(ctx.Query("kind"), ctx.Query("group"), ctx.Query("q"), ctx.Query("limit"))
 	query.Source, query.Family, query.Workflow = ctx.Query("source"), ctx.Query("family"), ctx.Query("workflow")
+	words := ctx.Query("words") // API 1.92
+	for _, word := range strings.Fields(strings.ToLower(words)) {
+		query.Words = append(query.Words, cmp.Or(strings.TrimPrefix(word, "@"), word))
+	}
 	switch {
 	case detail != "":
+	case utf8.RuneCountInString(words) > 200:
+		detail = "words must be at most 200 characters"
 	case query.Source != "" && query.Source != "mine" && query.Source != "starter":
 		detail = "source must be mine or starter"
 	case query.Family != "" && !familySlug.MatchString(query.Family):
@@ -911,11 +944,7 @@ func (c *controller) replaceLibraryItemHandler(ctx *gin.Context) {
 
 // deleteLibraryItemHandler: DELETE /library/{id} — 204.
 func (c *controller) deleteLibraryItemHandler(ctx *gin.Context) {
-	if err := c.service.DeleteLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.DeleteLibraryItem(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 }
 
 // ------------------------------------------------------------------ API 1.15: the director's chat, model sources
@@ -1024,11 +1053,7 @@ func (c *controller) putProviderHandler(ctx *gin.Context) {
 
 // deleteProviderHandler: DELETE /admin/providers/{name} — 204.
 func (c *controller) deleteProviderHandler(ctx *gin.Context) {
-	if err := c.service.DeleteProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.DeleteProvider(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("name")))
 }
 
 // testProviderHandler: POST /admin/providers/{name}/test[?model=].
@@ -1146,11 +1171,7 @@ func (c *controller) putPluginHandler(ctx *gin.Context) {
 
 // removePluginHandler: DELETE /admin/plugins/{plugin} (API 1.61) — 204.
 func (c *controller) removePluginHandler(ctx *gin.Context) {
-	if err := c.service.RemovePlugin(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("plugin")); err != nil {
-		network.SendMixedError(ctx, err)
-		return
-	}
-	network.SendNoContent(ctx)
+	noContent(ctx, c.service.RemovePlugin(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("plugin")))
 }
 
 // addPluginProviderHandler: POST /admin/plugins/{plugin}/provider (API 1.61) — 201; 403 before the body is read.
@@ -1209,7 +1230,8 @@ func (c *controller) deleteModelHandler(ctx *gin.Context) {
 	if v, ok := ctx.GetQuery("addon"); ok {
 		addon = &v
 	}
-	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant, addon)
+	out, created, err := c.service.DeleteModel(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("model"), ctx.Query("host"), variant, addon,
+		ctx.QueryArray("folder"))
 	reply(ctx, accepted(created), out, err)
 }
 
@@ -1253,6 +1275,16 @@ func (c *controller) putHostSettingsHandler(ctx *gin.Context) {
 	var out dto.HostSettings
 	if err == nil {
 		out, err = c.service.PutHostSettings(ctx.Request.Context(), caller, ctx.Param("host"), body)
+	}
+	reply(ctx, http.StatusOK, out, err)
+}
+
+// putHostFoldersHandler: PUT /admin/hosts/{host}/folders (API 1.78).
+func (c *controller) putHostFoldersHandler(ctx *gin.Context) {
+	caller, body, err := adminBody[dto.ModelFoldersPut](ctx)
+	var out dto.HostSettings
+	if err == nil {
+		out, err = c.service.PutHostFolders(ctx.Request.Context(), caller, ctx.Param("host"), body)
 	}
 	reply(ctx, http.StatusOK, out, err)
 }

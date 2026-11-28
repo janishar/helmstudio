@@ -58,12 +58,22 @@ func workflowMedia(nodes map[string]registry.Node, schemas map[string]registry.N
 			}
 		}
 	}
+	if registry.WorkflowSound(nodes, schemas) != "" { // API 1.79: a classed sound wins over a second Video output
+		delete(got, "Video")
+	}
 	for _, t := range []string{"Video", "Image", "Audio"} {
 		if got[t] {
 			return strings.ToLower(t)
 		}
 	}
 	return "image"
+}
+
+// Spoken is whether the voice rules hold (contracts/README.md, Voices; check.py spoken): an audio graph of class voice
+// or (API 1.79) of no class: its text is spoken, never expanded.
+func Spoken(nodes map[string]registry.Node, schemas map[string]registry.NodeSchema) bool {
+	sound := registry.WorkflowSound(nodes, schemas)
+	return workflowMedia(nodes, schemas) == "audio" && (sound == "" || sound == "voice")
 }
 
 // wireable maps a value param's type to the port type a wire into it carries.

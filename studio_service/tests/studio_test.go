@@ -129,6 +129,9 @@ func setup(t *testing.T) *env {
 	e.service = studio.NewService(pool, signer, e.registry, cancel, e.store)
 	e.gallery = gallery.NewService(pool, signer, e.store, e.registry, e.service.FindWorkflow)
 	e.gallery.SetOffers(e.service.Offerable)
+	e.gallery.SetMeasure(func(ctx context.Context, owner string, ids []string) string {
+		return studio.MeasureFacts(ctx, pool, e.registry, owner, ids)
+	})
 	api := []network.Controller{studio.NewController(e.service, recheck, shutdown), gallery.NewController(e.gallery),
 		lora.NewController(lora.NewService(pool, signer, e.store, e.registry))}
 	router.LoadControllers(api...)

@@ -472,6 +472,25 @@ type ProviderKeyWriteRequest struct {
 // answers a plugin's key from its file in HELM_HOME. Core request/reply only; the reply is never printed or logged.
 const SubjectPluginKey = "runner.plugins.key."
 
+// SubjectFoldersCheck is a host's supervising runner's request/reply subject prefix (API 1.78):
+// runner.folders.check.<host> answers what each model folder path is there now.
+const SubjectFoldersCheck = "runner.folders.check."
+
+// FoldersCheckRequest is req.runner.folders.check's request.
+type FoldersCheckRequest struct {
+	Paths []string `json:"paths"`
+}
+
+// FoldersCheckReply is its reply, per path in the request's order.
+type FoldersCheckReply struct {
+	Folders []struct {
+		Path      string `json:"path"`
+		Connected bool   `json:"connected"`
+		Writable  bool   `json:"writable"`
+		Drive     bool   `json:"drive"`
+	} `json:"folders"`
+}
+
 // PluginKeyRequest is req.runner.plugins.key's request.
 type PluginKeyRequest struct {
 	Plugin string `json:"plugin"`
@@ -507,15 +526,21 @@ type ToolsRequest struct {
 	CallID   string          `json:"call_id"`
 	Tool     string          `json:"tool"`
 	Args     json.RawMessage `json:"args"`
+	// Confirmed (API 1.87) is the user's Yes on a Magic card tool's card: without it studio answers the preview
+	Confirmed bool `json:"confirmed,omitempty"`
+	// Ask (API 1.93) makes run_blocks and make_views answer the preview even within the limit (Auto past its caps)
+	Ask bool `json:"ask,omitempty"`
 }
 
 // ToolsReply is its reply: {result, row?} or {error, code: invalid | conflict | cap | not_found | internal}.
 type ToolsReply struct {
-	Tool   string    `json:"tool,omitempty"` // API 1.44: an assistant call's ok reply names its tool
-	Result any       `json:"result,omitempty"`
-	Row    *ToolsRow `json:"row,omitempty"`
-	Error  string    `json:"error,omitempty"`
-	Code   string    `json:"code,omitempty"`
+	Tool   string `json:"tool,omitempty"` // API 1.44: an assistant call's ok reply names its tool
+	Result any    `json:"result,omitempty"`
+	// Preview (API 1.87) is what a Magic card tool's card shows, asked without Confirmed; nothing else was done
+	Preview any       `json:"preview,omitempty"`
+	Row     *ToolsRow `json:"row,omitempty"`
+	Error   string    `json:"error,omitempty"`
+	Code    string    `json:"code,omitempty"`
 }
 
 // ToolsRow is the stored row of a rows.add / rows.edit reply, as cmd.pipeline.submit carries rows but with seeds
@@ -567,6 +592,8 @@ type ModelJob struct {
 	Addon   *string     `json:"addon,omitempty"` // API 1.36: an optional add-on instead of a variant
 	Licence *JobLicence `json:"licence,omitempty"`
 	LoraID  *string     `json:"lora_id,omitempty"`
+	Folder  *string     `json:"folder,omitempty"`  // API 1.78, download: the folder to download into
+	Folders []string    `json:"folders,omitempty"` // API 1.78, delete: the copies removed
 	Host    string      `json:"-"`
 	Env     string      `json:"-"`
 }

@@ -104,9 +104,7 @@ def judge_test_errors(part: str, value) -> list[str]:
 
 def plugin_reply_errors(value) -> list[str]:
     """Errors of a plugin tool's 200 answer against plugins/manifest.schema.json#/$defs/toolReply (API 1.61)."""
-    return errors(
-        "https://helmstudio.local/contracts/plugins/manifest.schema.json#/$defs/toolReply", value
-    )
+    return errors("https://helmstudio.local/contracts/plugins/manifest.schema.json#/$defs/toolReply", value)
 
 
 def tool_errors(name: str, value) -> list[str]:

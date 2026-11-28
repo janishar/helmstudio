@@ -9,6 +9,7 @@
 // step's fan-out, a custom node's fields, the pipeline's Remote calls, and Chat with director for the last batch. The
 // memory chip is Create's, for the host of the first step's env; steps show the last batch's progress. The
 // Studio | Graph switch (⌘\) opens the pipeline's Studio view (components/pipelines/studio, docs/mock/Pipeline.dc.html).
+import { plural } from "@/lib/format";
 import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -403,7 +404,6 @@ export function PipelineEditor({
 
   const ns = Object.values(doc.nodes);
   const count = (k: string) => ns.filter((n) => n.kind === k).length;
-  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
   // the models as studio resolves them (the client's own until it has answered for this document)
   const models =
     server?.doc === doc && server.models ? server.models : resolveModels(doc, wfDocs, env);

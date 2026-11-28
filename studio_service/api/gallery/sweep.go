@@ -35,7 +35,7 @@ func NewSweeper(pool *pgxpool.Pool, store storage.Store) *Sweeper {
 // Sweep removes one batch as System and returns how many takes it removed. It only ever deletes a key under its own
 // take's owner prefix u/<owner_id>/ (anything else is logged and left, row included) and never a key another live
 // take still points at, nor (API 1.31) a take one of its owner's voices keeps as its clip (deleting the voice frees it
-// for a later sweep; contracts/README.md, Voices: cloned voices). A video's poster goes with its MP4, its thumbnail (API 1.48) with it, and the LLM thumbnails a judge made of it
+// for a later sweep; contracts/README.md, Voices: cloned voices). A video's poster goes with its MP4, its thumbnail (API 1.48) and frame grid (1.104) with it, and the LLM thumbnails a judge made of it
 // (u/<owner_id>/llm/thumbs/, a copy of the take) unless a live take's decision shows the same one. The objects go
 // first: a failure keeps the rows for the next sweep. A frame take made before API 1.48 may share its key with its
 // video's last frame: neither is swept while the other is live (ponytail: scans video->'last'; an index if sweeps slow).
@@ -43,7 +43,7 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 	removed := 0
 	err := common.System(ctx, s.pool, func(tx pgx.Tx) error {
 		rows, _ := tx.Query(ctx, `SELECT t.id::text, t.owner_id::text, t.key, t.video->'poster'->>'key', t.video->'last'->>'key',
-			t.thumb->>'key' FROM takes t
+			t.thumb->>'key', t.facts->>'key' FROM takes t
 			WHERE (t.deleted_at < clock_timestamp() - make_interval(secs => $1)
 				OR (NOT t.ready AND t.created_at < clock_timestamp() - make_interval(secs =>
 					CASE WHEN t.source = 'import' THEN $4::float8 ELSE $2::float8 END)))
@@ -57,6 +57,7 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 		found, err := pgx.CollectRows(rows, pgx.RowToStructByPos[struct {
 			ID, Owner, Key      string
 			Poster, Last, Thumb *string
+			Grid                *string // API 1.104: a video's frame grid (Take facts)
 		}])
 		if err != nil {
 			return err
@@ -65,7 +66,7 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 		for _, row := range found {
 			bad := func(key string) bool { return !common.Owns(row.Owner, key) || strings.HasSuffix(key, "/") }
 			if bad(row.Key) || (row.Poster != nil && bad(*row.Poster)) || (row.Last != nil && bad(*row.Last)) ||
-				(row.Thumb != nil && bad(*row.Thumb)) {
+				(row.Thumb != nil && bad(*row.Thumb)) || (row.Grid != nil && bad(*row.Grid)) {
 				log.Printf("take sweep: take %s key outside u/%s/, left alone", row.ID, row.Owner)
 				continue
 			}
@@ -78,6 +79,9 @@ func (s *Sweeper) Sweep(ctx context.Context) (int, error) {
 			}
 			if row.Thumb != nil { // API 1.48: its thumbnail, never shared with another take
 				keys = append(keys, *row.Thumb)
+			}
+			if row.Grid != nil { // API 1.104: its frame grid, never shared either
+				keys = append(keys, *row.Grid)
 			}
 		}
 		if len(ids) == 0 {

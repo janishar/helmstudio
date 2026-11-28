@@ -22,6 +22,7 @@ import {
   scan,
   withInputs,
   workflowMedia,
+  workflowSound,
   type Resolvable,
 } from "@/lib/mentions";
 
@@ -222,5 +223,6 @@ describe("workflowMedia (fixtures/voices/media.json)", () => {
       mediaFixture.workflows as Record<string, { nodes: Parameters<typeof workflowMedia>[0] }>
     )[c.workflow];
     expect(workflowMedia(wf.nodes, schemas)).toBe(c.expect);
+    if ("sound" in c) expect(workflowSound(wf.nodes, schemas) ?? null).toBe(c.sound); // API 1.79
   });
 });

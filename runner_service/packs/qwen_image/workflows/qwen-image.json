@@ -28,7 +28,7 @@
     "model": {
       "kind": "qwen-image/model",
       "params": {
-        "variant": "base",
+        "variant": "turbo",
         "precision": "int8"
       }
     },
@@ -160,5 +160,20 @@
         "enhance.think": true
       }
     }
+  },
+  "standard": {
+    "kind": "image",
+    "model": "Qwen Image 2.1",
+    "fields": {
+      "prompt": "prompt.text",
+      "refs": "encode.refs",
+      "width": "canvas.width",
+      "height": "canvas.height",
+      "seed": "seed.seed"
+    },
+    "set": {
+      "canvas.mode": "fixed"
+    },
+    "seconds": 45
   }
 }

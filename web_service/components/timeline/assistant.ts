@@ -3,13 +3,13 @@
 // once more), each with Undo (the sequence's own undo); the playhead and range are lines; New shot, every take
 // action (extend, retake, insert, replace, redo), New line, Re-render and Export are cards whose Yes is the docked
 // form's own Generate (or the dialog's own button); Save as voice opens the clone dialog prefilled.
-import { ApiError, api, editTimeline, getTimeline, message, ok, type S } from "@/lib/api";
+import { api, editTimeline, editTimelineRetry, getTimeline, message, ok, type S } from "@/lib/api";
 import { done, failed, ordinal, placeInLine, type Asked, type Outcome } from "@/lib/assistant";
 import type { ScreenSpec } from "@/components/assistant/tools";
 import { hasSound, takeById, type LibraryAsk } from "@/components/assistant/library";
 import type { VoiceCtx } from "@/components/create/voices";
 import type { ShotSlot } from "@/components/timeline/shot";
-import { mb } from "@/lib/format";
+import { mb, plural } from "@/lib/format";
 import { withIds } from "@/lib/timeline-tools";
 import {
   Grid,
@@ -18,71 +18,16 @@ import {
   shortTime,
   shotBusy,
   timecode,
+  say,
   type Clip,
+  type Docked,
+  type FormSlot,
   type Norm,
   type Op,
+  type Want,
 } from "@/lib/timeline";
 
 type Timeline = S<"Timeline">;
-
-/** What a refused edit says (lib/timeline codes; studio's 422 carries its own messages). */
-const WORDS: Record<string, string> = {
-  split_none: "No clip is under the playhead.",
-  split_edge: "The playhead is on a cut: move it into a clip to split.",
-  split_shot: "A clip being generated cannot be split.",
-  too_many_tracks: "A sequence has at most 8 audio tracks.",
-  not_alternative: "That take was not made for this slot.",
-  dissolve_first: "The first clip cannot dissolve in.",
-  dissolve_gap: "A dissolve needs a clip on both sides of the cut.",
-  dissolve_handles: "Not enough footage past the cut for that dissolve: trim the clips first.",
-  dissolve_length: "The dissolve is longer than the clip.",
-  overlap: "Clips on an audio track cannot overlap.",
-  past_end: "Sound cannot run past the end of the picture.",
-  trim: "That trim is outside the take.",
-  hold: "A still lasts at least one frame.",
-  no_audio: "That take has no sound.",
-  // 1.50, the tools (plan 23)
-  roll_first: "The first clip has no cut before it to roll.",
-  roll_track: "Roll works on V1's cuts.",
-  slide_end: "Slide needs a clip on both sides.",
-  slide_track: "Slide works on V1.",
-  slip_still: "A still or an empty slot has nothing to slip.",
-  least: "That leaves a clip shorter than its dissolves.",
-  overwrite_shot: "A clip being generated cannot be overwritten.",
-  overwrite_track: "Overwrite keeps a clip on its kind of track.",
-  range_empty: "The range is empty.",
-  range_shot: "A clip being generated is inside the range.",
-  link_start: "A linked sound clip would start before 0.",
-  marker_past_end: "A marker would be past the end of the picture.",
-  too_many_markers: "A sequence has at most 200 markers.",
-};
-export const say = (code: string) =>
-  WORDS[code] ?? `The edit was refused (${code.replace(/_/g, " ")}).`;
-
-/** A docked form's Generate started: the sequence with the slot's placeholder, or why not. */
-export type Started = { error: string } | { timeline: Timeline; clip: string };
-
-/** A docked form (New shot, a take action's form, New line) as the assistant reads it for its card; Generate is
- * the form's own. */
-export type Docked = {
-  model: string;
-  size?: string;
-  /** "at 0:12 · 2.0 s · 1 seed" */
-  detail: string;
-  prompt: string;
-  /** the run for /runs/plan (time and memory); null when the form does not resolve yet */
-  run: S<"RunRequest"> | null;
-  generate: () => Promise<Started>;
-};
-/** What the assistant asks of a docked form: its prompt, length, where the result goes, the voice. */
-export type Want = {
-  kind?: "extend" | "retake" | "insert" | "replace";
-  prompt?: string;
-  seconds?: number;
-  voice?: string;
-};
-/** The form the assistant asked for, once it is open; "none" when the clip offers no such action. */
-export type FormSlot = Docked | "none" | null;
 
 /** What the Timeline already works out, read when an action runs. */
 export type TimelineCtx = {
@@ -140,8 +85,8 @@ const VERB: Record<Op["op"], [string, string]> = {
   lift_range: ["Lifted", "range"],
   marker: ["Set", "marker"],
   remove_marker: ["Removed", "marker"],
+  ducking: ["Set", "music ducking"],
 };
-const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
 
 /** The edits in words, like the board's "Placed shots 5, 6, 7 at 0:12": runs of one kind, joined by " · ". */
 export function editText(ops: Op[]): string {
@@ -178,46 +123,46 @@ export function editText(ops: Op[]): string {
  * new clip ids); a 409 reloads and tries once more. Returns how many revisions it made (what Undo takes back), or
  * why not. */
 async function save(c: TimelineCtx, ops: Op[]): Promise<{ revisions: number } | { error: string }> {
-  for (let attempt = 0; attempt < 2; attempt++) {
-    const cur = c.get();
-    if (!cur) return { error: "no sequence is open" };
-    let d: Norm | null = cur;
-    const list: Op[] = [];
-    for (const [i, raw] of ops.entries()) {
-      if (!d) {
-        list.push(raw);
-        continue;
-      }
-      const o = withIds(raw, d);
-      list.push(o);
-      if (o.op === "add") {
-        d = null;
-        continue;
-      }
-      let r: ReturnType<typeof apply>;
-      try {
-        r = apply(d, o, factsOf(cur.takes));
-      } catch {
-        return { error: `edit ${i + 1} is not a Timeline edit` };
-      }
-      if ("error" in r) return { error: say(r.error) };
-      if ("problems" in r) return { error: say(r.problems[0][0]) };
-      d = r.document;
-    }
-    try {
-      c.set(await editTimeline(cur, list, "assistant"));
-      return { revisions: 1 };
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 409 && !attempt) {
+  try {
+    return await editTimelineRetry(
+      async (): Promise<{ revisions: number } | { error: string }> => {
+        const cur = c.get();
+        if (!cur) return { error: "no sequence is open" };
+        let d: Norm | null = cur;
+        const list: Op[] = [];
+        for (const [i, raw] of ops.entries()) {
+          if (!d) {
+            list.push(raw);
+            continue;
+          }
+          const o = withIds(raw, d);
+          list.push(o);
+          if (o.op === "add") {
+            d = null;
+            continue;
+          }
+          let r: ReturnType<typeof apply>;
+          try {
+            r = apply(d, o, factsOf(cur.takes));
+          } catch {
+            return { error: `edit ${i + 1} is not a Timeline edit` };
+          }
+          if ("error" in r) return { error: say(r.error) };
+          if ("problems" in r) return { error: say(r.problems[0][0]) };
+          d = r.document;
+        }
+        c.set(await editTimeline(cur, list, "assistant"));
+        return { revisions: 1 };
+      },
+      async () => {
         const now = c.get();
         if (now) c.set(await getTimeline(now.id));
         c.notice("The sequence changed since you opened it: reloaded, and the edit applied to it.");
-        continue;
-      }
-      return { error: message(e) };
-    }
+      },
+    );
+  } catch (e) {
+    return { error: message(e) };
   }
-  return { error: "the sequence keeps changing" };
 }
 
 /** The sequence's own undo (or redo) `n` times, refused when it changed since (then it is the screen's Undo). */
@@ -572,10 +517,7 @@ export function timelineTools(c: TimelineCtx): ScreenSpec {
               rows: [
                 ["Mode", p.stream_copy ? "stream copy" : "re-encode"],
                 ["Size", `${t.width} × ${t.height} · ${t.fps} fps`],
-                [
-                  "Length",
-                  `${timecode(p.duration_s)} · about ${mb(p.estimated_bytes)} MB`,
-                ],
+                ["Length", `${timecode(p.duration_s)} · about ${mb(p.estimated_bytes)} MB`],
                 ["Runs on", p.host ?? "no host can run it now"],
               ],
               tags: ["uses the machine"],

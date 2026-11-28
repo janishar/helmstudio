@@ -62,6 +62,7 @@ This section owns version numbers; other sections name libraries without them.
 | torch + torchvision | 2.15.* with 0.29.* (an exact pair) |
 | diffusers, transformers, accelerate | ≥ 0.43.0; ≥ 5.23.0, < 6; ≥ 1.15.0 |
 | einops, torchaudio (torch extra: the ltx pack's vendored ltx-core) | ≥ 0.8.2; 2.11.1 (exact: pure Python, runs on torch 2.15) |
+| open-clip-torch, timm (torch extra: the mmaudio pack's DFN5B CLIP; plan 38) | ≥ 4.2.2; ≥ 1.0.31 (as the MMAudio samples ran them; numpy stays ≥ 2, MMAudio's < 2.1 pin is not needed) |
 | ltx-core (env torch, ltx's NVIDIA variants) | vendored 1.6.2 at commit daa6b16 in `runner_service/packs/ltx/vendor/ltx_core/` (Apache-2.0; two helmstudio patches, VENDORED.md) |
 | mlx | ≥ 0.32.4 (mlx-lm is not used: the llm pack runs text and images through mlx-vlm) |
 | mlx-vlm | ≥ 0.7.12 (Mac-only: the mlx env's extra `llm`, with llguidance for constrained JSON; `make runners` syncs it) |

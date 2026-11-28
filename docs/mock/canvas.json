@@ -524,9 +524,9 @@
     },
     "Desktop.dc.html": {
       "expand": "fill",
-      "h": 6325,
+      "h": 10917,
       "is_interactive": true,
-      "title": "Mac app \u00b7 first open, start screen, menu bar, studio window (plan 31)",
+      "title": "Mac app \u00b7 first open, start screen, menu bar, studio window (plan 31); error states (proposed)",
       "w": 1440,
       "x": 0,
       "y": 0,
@@ -559,6 +559,46 @@
       "title": "Right-click menus \u00b7 the rules, Timeline clip / gap / track / ruler / selection, Gallery, Create, Magic later",
       "w": 1440,
       "x": 1520,
+      "y": 7440,
+      "page": "timeline"
+    },
+    "ErrorStates.dc.html": {
+      "expand": "fill",
+      "h": 11921,
+      "is_interactive": true,
+      "title": "Error states (proposed) \u00b7 studio not answering, no runner, runner lost, live updates, queue, unplugged drive, status tile",
+      "w": 1440,
+      "x": 1520,
+      "y": 0,
+      "page": "mac-app"
+    },
+    "Search.dc.html": {
+      "expand": "fill",
+      "h": 9047,
+      "is_interactive": true,
+      "title": "Search (proposed) \u00b7 one search field for long lists: sessions, Magic boards, sequences, chats, pipelines and batches, pickers, admin tables, the 8-row rule",
+      "w": 1440,
+      "x": 0,
+      "y": 7020,
+      "page": "create-image"
+    },
+    "Rail.dc.html": {
+      "expand": "fill",
+      "h": 5463,
+      "is_interactive": true,
+      "title": "Rail (proposed) \u00b7 tools at the top, setup at the bottom, Assistant out of the rail (two variants), short window, phone",
+      "w": 1440,
+      "x": 3040,
+      "y": 0,
+      "page": "brand"
+    },
+    "AudioFades.dc.html": {
+      "expand": "fill",
+      "h": 6800,
+      "is_interactive": true,
+      "title": "Timeline and Magic \u00b7 audio fades: fade handles, crossfade between music blocks (a dip for older takes), ducking music under voice, the right-click rows (plan 41)",
+      "w": 1440,
+      "x": 3040,
       "y": 7440,
       "page": "timeline"
     }
@@ -650,7 +690,7 @@
       "text": "Mac app",
       "x": 0,
       "y": -300,
-      "maxW": 1440,
+      "maxW": 2960,
       "page": "mac-app"
     }
   },
@@ -664,6 +704,7 @@
     "Looks.dc.html",
     "LoraPicker.dc.html",
     "GalleryPicker.dc.html",
+    "Search.dc.html",
     "TextToVideo.dc.html",
     "ImageToVideo.dc.html",
     "VideoSource.dc.html",
@@ -682,6 +723,7 @@
     "TimelineTools.dc.html",
     "Magic.dc.html",
     "ContextMenus.dc.html",
+    "AudioFades.dc.html",
     "Pipelines.dc.html",
     "Pipeline.dc.html",
     "PipelineGraph.dc.html",
@@ -710,7 +752,9 @@
     "Logo.dc.html",
     "CatsEasterEgg.dc.html",
     "Desktop.dc.html",
-    "Plugins.dc.html"
+    "ErrorStates.dc.html",
+    "Plugins.dc.html",
+    "Rail.dc.html"
   ],
   "pages": [
     {

@@ -46,9 +46,7 @@ BAR = 30.0  # dB, image modes (below the 36.9-39.8 dB spread of repeated runs)
 # first + last frame spreads wider too (robust pass: the pack 25.8-27.0 dB, the raw binary 30.0, with pixel-equal inputs)
 BARS = {"ref2va-silent-video": 27.0, "fl2va-first-last": 25.0}
 # the old speed enum's flags as API 1.37 params (the templates open on Default: 45 layers, reuse 2)
-SPEED = {
-    "exact": {"layers": 50, "reuse": 1, "core_reuse": 1, "token_reduction": False, "render": "Full"}
-}
+SPEED = {"exact": {"layers": 50, "reuse": 1, "core_reuse": 1, "token_reduction": False, "render": "Full"}}
 
 
 def image_value(n: int, rel: str) -> dict:
@@ -118,16 +116,12 @@ class Bench:
         nodes["canvas"]["params"] |= {"width": s["width"], "height": s["height"]}
         nodes["duration"]["params"]["frames"] = s["frames"]
         # the goldens name their speed (exact, before API 1.37) or, from 1.37, the generate params they set
-        nodes["generate"]["params"] |= {"steps": s["steps"]} | (
-            s.get("params") or SPEED[s["speed"]]
-        )
+        nodes["generate"]["params"] |= {"steps": s["steps"]} | (s.get("params") or SPEED[s["speed"]])
         if "first" in files:
             nodes["first"]["params"]["image"] = image_value(1, files["first"])
         if "last" in files:
             nodes["last"]["params"]["image"] = image_value(2, files["last"])
-        for nid in [
-            n for n, x in nodes.items() if x.pop("optional", False) and x["params"]["image"] is None
-        ]:
+        for nid in [n for n, x in nodes.items() if x.pop("optional", False) and x["params"]["image"] is None]:
             del nodes[nid]  # as studio drops an empty optional node with its wires (API 1.22)
             for x in nodes.values():
                 x["in"] = {k: r for k, r in x.get("in", {}).items() if r.partition(".")[0] != nid}
@@ -136,9 +130,7 @@ class Bench:
         if "audio" in files:
             nodes["generate"]["params"]["audios"] = [{"audio": media_value(4, files["audio"])}]
         if "video" in files:
-            nodes["generate"]["params"]["videos"] = [
-                {"video": media_value(5, files["video"]), "sound": "silent"}
-            ]
+            nodes["generate"]["params"]["videos"] = [{"video": media_value(5, files["video"]), "sound": "silent"}]
         return nodes
 
     def run(self, nodes: dict) -> dict:
@@ -177,9 +169,7 @@ class Bench:
 
 
 def sha(mp4: Path, *args: str) -> str:
-    r = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", str(mp4), *args, "-"], capture_output=True, check=True
-    )
+    r = subprocess.run(["ffmpeg", "-v", "error", "-i", str(mp4), *args, "-"], capture_output=True, check=True)
     return hashlib.sha256(r.stdout).hexdigest()
 
 
@@ -225,10 +215,7 @@ def bench():
 def test_matches_the_golden(bench, name):
     from core import pack
 
-    turbo = (
-        pack.models_root()
-        / "MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors"
-    )
+    turbo = pack.models_root() / "MiniMax-H3-Turbo/minimax_h3_fl2v_turbo_8step_v1.2_768p_bf16.safetensors"
     if settings(name).get("params", {}).get("lora") == "turbo" and not turbo.is_file():
         pytest.skip("Turbo LoRA is not downloaded")
     r = case(bench, name)

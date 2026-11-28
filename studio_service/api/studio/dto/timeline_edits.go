@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -28,7 +29,7 @@ var opFields = map[string][2][]string{
 	"remove":       {{"clip", "ripple"}, {"clip"}},
 	"lift":         {{"clip"}, {"clip"}},
 	"replace":      {{"clip", "take_id"}, {"clip", "take_id"}},
-	"set":          {{"clip", "gain_db", "mute", "hold", "transition_in", "link"}, {"clip"}},
+	"set":          {{"clip", "gain_db", "mute", "hold", "transition_in", "link", "fade_in", "fade_out", "crossfade"}, {"clip"}},
 	"add":          {{"take_ids", "track", "ids"}, {"take_ids"}},
 	"insert":       {{"at", "hold", "id"}, {"at", "hold"}},
 	"place":        {{"at", "hold", "id", "gap_id"}, {"at", "hold"}},
@@ -45,6 +46,7 @@ var opFields = map[string][2][]string{
 	"lift_range":    {{"from", "to", "ids"}, {"from", "to"}},
 	"marker":        {{"id", "at", "name", "color"}, {"at"}},
 	"remove_marker": {{"id"}, {"id"}},
+	"ducking":       {{"on", "db"}, {}}, // 1.106
 }
 
 // IDsOps take ids for the clips they make in `ids` (not one per take, as add's).
@@ -131,6 +133,19 @@ func checkOp(op timeline.Op) string {
 	case op.Color != nil && !slices.Contains(MarkerColors, *op.Color):
 		return "color must be one of " + strings.Join(MarkerColors, ", ")
 	}
+	if op.Op == "ducking" { // 1.106
+		var k struct {
+			On *bool    `json:"on"`
+			DB *float64 `json:"db"`
+		}
+		raw, _ := json.Marshal(op.Set)
+		if err := json.Unmarshal(raw, &k); err != nil || string(op.Set["on"]) == "null" || string(op.Set["db"]) == "null" {
+			return "on and db have the wrong type"
+		}
+		if d := CheckDucking(&timeline.Ducking{DB: cmp.Or(k.DB, new(float64(timeline.DuckDB)))}); d != "" { // absent: kept
+			return d[1:]
+		}
+	}
 	for _, key := range []string{"name", "color", "ripple"} { // a null is not a value here
 		if raw, ok := op.Set[key]; ok && string(raw) == "null" {
 			return key + " has the wrong type"
@@ -168,6 +183,15 @@ func checkOp(op timeline.Op) string {
 				err = json.Unmarshal(raw, &c.Hold)
 			case "transition_in":
 				err = json.Unmarshal(raw, &c.TransitionIn)
+			case "fade_in": // 1.106
+				err = json.Unmarshal(raw, &c.FadeIn)
+			case "fade_out":
+				err = json.Unmarshal(raw, &c.FadeOut)
+			case "crossfade": // 0 removes, as null does
+				var v *float64
+				if err = json.Unmarshal(raw, &v); err == nil && v != nil && (*v < 0 || *v > 10) {
+					return "crossfade must be seconds from 0 to 10"
+				}
 			case "link":
 				if err = json.Unmarshal(raw, &c.Link); err == nil && !ClipID.MatchString(*c.Link) {
 					return "link must be 1-16 lowercase letters or digits"
@@ -180,7 +204,7 @@ func checkOp(op timeline.Op) string {
 		if c.Hold != nil && !hold(*c.Hold) {
 			return "hold must be more than 0 and at most 3600"
 		}
-		if detail := checkClip(timeline.Clip{ID: "x", GainDB: c.GainDB, TransitionIn: c.TransitionIn}); detail != "" {
+		if detail := checkClip(timeline.Clip{ID: "x", GainDB: c.GainDB, TransitionIn: c.TransitionIn, FadeIn: c.FadeIn, FadeOut: c.FadeOut}); detail != "" {
 			return detail[1:]
 		}
 	}
@@ -263,8 +287,9 @@ type TimelineAgentView struct {
 	Frames    int                    `json:"frames"`
 	Tracks    []timeline.AgentTrack  `json:"tracks"`
 	Clips     []TimelineAgentClip    `json:"clips"`
-	Links     map[string][]string    `json:"links"`   // 1.50
-	Markers   []timeline.AgentMarker `json:"markers"` // 1.50
+	Links     map[string][]string    `json:"links"`             // 1.50
+	Markers   []timeline.AgentMarker `json:"markers"`           // 1.50
+	Ducking   *timeline.Ducking      `json:"ducking,omitempty"` // 1.106
 }
 
 // TimelineFrame is POST /timelines/{id}/frame.

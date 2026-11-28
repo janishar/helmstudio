@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.1.0-alpha.6 (2026-11-28)
+
+Magic, a board for making a short film; music and sound in Create; audio fades; and an Assistant that watches and
+listens.
+
+### What's new
+
+- **Magic, the film-making board.** Its own page in the rail, after Create: lanes in time for the assets
+  (characters, props and places with their views), the storyboard, the shots, and voice, music and sound tied to the
+  shots. Every block shows a preview and can be run, rerun, stopped, compared, looped or pinned. New board asks the
+  size and frame rate (presets or Custom); Add takes a length (5 s, 10 s, Custom) or a take From Gallery. Play
+  plays the board from the playhead as a rough cut (storyboard frames where no shot is yet), with full screen.
+  **Export** makes the MP4 in one step; Send to Timeline makes a new sequence to cut further. Voice, music and sound
+  blocks get a loudness level (Louder, Quieter, a dB slider). Make views uses a real image model (Qwen Image Turbo)
+  and says what it makes. Runs say the variant they ran on; Stop runs stops what is going. Magic asks before runs
+  only above 10 GPU minutes by default. Failed and out-of-date blocks sit behind one warning icon.
+- **Magic's Assistant, with the Magic director skill.** On a board the Assistant plans the film (style, characters
+  with views first, props, settings, beats with lengths) and waits for your OK before any GPU time, then makes the
+  frames, shots from the frames you like, and the sound. It gives each speaking character a designed voice
+  (design_voice, save_voice). The skill is built in and always on. It shows each step live as it works, then its
+  answer, then the choices.
+- **Music and sound in Create.** Two new kinds: Music (ACE-Step 1.5 and 1.5 XL, MiniMax Music 3 by default) with
+  lyrics and sections, and Sound effects (Stable Audio 3 Small-SFX, MMAudio from text or for a video). The kind
+  tabs show their orbs; every text box keeps its height, scrolls inside and has Expand.
+- **Audio fades, crossfades and ducking.** Fade handles on the waveform of Timeline audio clips and Magic voice,
+  music and sound blocks; two touching clips crossfade (a true blend, or a dip with a warning); Duck music dips the
+  music under voice (on in Magic). The fades carry to the player, Send and Export; the Assistant and helm mcp set
+  them too.
+- **The Assistant judges sound and video.** It sees a video as one picture of 12 frames with their times, and reads
+  exact facts from ffmpeg (real length, loudness, true peak, silence at each end, an abrupt end, scene cuts),
+  measured the first time it asks and then kept. A new **listen** tool asks Qwen3-Omni 30B (on llama.cpp) a
+  question about a video or audio take, with the speech written down by Qwen3-ASR; when Qwen3-Omni cannot run (its
+  drive unplugged, not downloaded, no room) Qwen2.5-Omni-3B answers and the reply says so. Listen says plainly why
+  when it cannot run.
+- **Drag the playhead by its line** in Magic and on the Timeline.
+- **One-panel rail.** The six tools and the Assistant at the top, Hub, System and Settings at the foot (one Setup
+  gear on a short window). The status tile is gone: the logo gets a red dot while a runner or the studio is down,
+  and a click opens each part's state. The Assistant's item shows a dot when it has a card or an unread answer.
+- **Error states.** A studio-down banner, no runner for a model, a runner lost mid-run with Retry, an unplugged
+  drive; the Mac app shows a stopped stack, a port in use, a missing models drive, low disk. While the app
+  restarts, the browser shows a "helmstudio is starting" page that retries.
+- **Search in long lists.** One search field (/ to search) on sessions, boards, sequences, chats, pipelines, the
+  pickers, users and keys; the long lists search on the server.
+- **Model folders, several per host.** A Mac folder and an external drive, in priority order; the Models page shows
+  each model's disk, each disk's free space, which copy is used, and "not connected" for an unplugged drive.
+- **Turbo by default** for image and video (Qwen Image Turbo, MiniMax H3 on the Turbo LoRA at 8 steps).
+- **One slider design** across all 19 sliders, and **overlay scrollbars** that show only while an area scrolls.
+- **helm mcp additions:** the 12 Magic board tools, design_voice and save_voice, listen, and take facts and frame
+  grids in get_take.
+- **The code-review refactor:** one message envelope per service, shared helpers, long functions split; about
+  2,700 lines fewer.
+- Fixes: take cards' text no longer runs into the card edge; the Gallery picker keeps one height while you search;
+  the playhead no longer draws over the lane and track names when scrolled sideways; Export with ducking under many
+  voice clips; listen hears only the part asked for (up to 120 s).
+
+### Known limits
+
+- Windows is untested (moved to 0.1.0-alpha.7).
+- NVIDIA: the runners run from a source checkout on the machine; MiniMax H3 video needs SGLang you install by hand;
+  ZONOS3 on NVIDIA is not ready yet; the Turbo LoRA does not run on MiniMax H3 Base fp8 (all moved to
+  0.1.0-alpha.7).
+- The listen tool runs on the Mac only, and needs llama.cpp (`brew install llama.cpp`) and its models downloaded on
+  the Models screen (Qwen3-Omni or Qwen2.5-Omni-3B, and Qwen3-ASR).
+- The 3B listen fallback's answers are right but short.
+- A take's facts are measured the first time they are asked for: the first ask can wait up to 20 s, or answer
+  "being measured; ask again".
+- Create's "Use in ›" menu on a take has no "Last / First frame in…" yet.
+- The Mac app needs Apple Silicon and is ad-hoc signed (no Developer ID): open it the first time with right-click ›
+  Open. Its new error states are not yet seen in a real app run.
+- No uninstall tool for the app; delete its folders by hand (docs/guides/mac-app.md).
+- A separate NVIDIA machine joining a Mac's stack is set up by hand (deploy/gpu-host/README.md).
+- Your Claude subscription runs on the Mac only, and needs Claude Code installed and signed in by you.
+- Web search uses unofficial search pages: it can be rate-limited or break.
+- An Assistant steer is kept only in memory: if pipelines restarts mid-answer, it becomes the next message.
+- Models are downloaded separately (on the Models screen) and keep their own licences; no weights ship with
+  helmstudio.
+
 ## 0.1.0-alpha.5 (2026-11-26)
 
 A move-anywhere Assistant, Create settings in popups, Timeline clones and our own right-click menus.

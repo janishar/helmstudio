@@ -121,9 +121,7 @@ def retake_nodes(source, span) -> dict:
 def test_a_run_needs_its_take_and_its_range():
     errs = graph.validate(retake_nodes(None, None), SCHEMAS)
     assert errs == ["retake.source: a take is required", "retake.span: a range is required"]
-    assert (
-        graph.validate(retake_nodes(None, None), SCHEMAS, run=False) == []
-    )  # the registry workflow
+    assert graph.validate(retake_nodes(None, None), SCHEMAS, run=False) == []  # the registry workflow
 
 
 def run_command(nodes: dict) -> dict:
@@ -219,9 +217,7 @@ def wav(seconds: float = 1.0, rate: int = 48000) -> bytes:
     return buf.getvalue()
 
 
-@pytest.mark.skipif(
-    shutil.which("ffmpeg") is None, reason="echo/a2v muxes with ffmpeg (in the fake image)"
-)
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="echo/a2v muxes with ffmpeg (in the fake image)")
 async def test_echo_a2v_clips_the_part_with_its_sound_and_maps_it_from_in():
     data = wav()
     src = audio_value(data, **{"in": 0.25, "out": 0.75})
@@ -254,9 +250,7 @@ def codecs(clip: bytes) -> list[str]:
 
 def test_the_canonical_media_commands_fit_the_message_schema():
     for n in (8, 9):
-        cmd = json.loads(
-            (CONTRACTS / f"fixtures/messages/cmd.run.execute.valid.{n}.json").read_text()
-        )
+        cmd = json.loads((CONTRACTS / f"fixtures/messages/cmd.run.execute.valid.{n}.json").read_text())
         assert schemas.message_errors(cmd) == []
 
 
@@ -288,15 +282,103 @@ async def test_rows_media_values_are_read_with_the_claim_check():
         return store.get(key) if etag == "e1" else None
 
     params = {"videos": [{"video": v, "sound": "keep"}], "steps": 2}
-    assert (
-        images.media([H3_VIDEOS], params) == ["videos"]
-        and images.media([H3_VIDEOS], {"videos": []}) == []
-    )
+    assert images.media([H3_VIDEOS], params) == ["videos"] and images.media([H3_VIDEOS], {"videos": []}) == []
     got = await images.load([H3_VIDEOS], params, OWNER, fetch)
     assert got["videos"] == [{"video": v | {"data": data}, "sound": "keep"}] and got["steps"] == 2
     with pytest.raises(graph.RunError, match="is not the run owner's"):
-        await images.load(
-            [H3_VIDEOS], {"videos": [{"video": v | {"key": "u/other/x.mp4"}}]}, OWNER, fetch
-        )
+        await images.load([H3_VIDEOS], {"videos": [{"video": v | {"key": "u/other/x.mp4"}}]}, OWNER, fetch)
     with pytest.raises(graph.RunError, match="is gone"):
         await images.load([H3_VIDEOS], {"videos": [{"video": v | {"etag": "e2"}}]}, OWNER, fetch)
+
+
+# API 1.79 (contracts/README.md "Music and sound"): the echo music and sound fakes on the consumer
+
+
+def one(kind: str, out: str, source=None, **params) -> dict:
+    node = {
+        "kind": kind,
+        "in": {"text": "prompt.text"},
+        "params": {"delay_ms": 0, "seed": 7} | params,
+    }
+    if source is not None:
+        node["params"]["source"] = source
+    return {"prompt": {"kind": "prompt", "params": {"text": "hi"}}, "n": node,
+            "output": {"kind": "output", "params": {}, "in": {"media": f"n.{out}"}}}  # fmt: skip
+
+
+async def run_nodes(nodes: dict, store: FakeStore | None = None) -> tuple[list[dict], FakeStore, list[dict]]:
+    js, store = FakeJS(), store or FakeStore()
+    c = consumer(js)
+    c.store = store
+    cmd = run_command(nodes)
+    assert schemas.message_errors(cmd) == []
+    await c.handle(FakeMsg(cmd, js))
+    evts = events_of(js)
+    assert evts[-1]["data"]["status"] == "succeeded", evts[-1]
+    return [e["data"] for e in evts if e["type"] == "evt.run.output"], store, evts
+
+
+def wav_facts(data: bytes) -> tuple:
+    with wave.open(io.BytesIO(data)) as w:
+        return w.getnchannels(), w.getframerate(), w.getnframes()
+
+
+async def test_echo_music_is_stereo_with_sections_and_reports_its_plan():
+    lyrics = "[verse]\nla la\n[chorus]\noh"
+    outs, store, evts = await run_nodes(one("echo/music", "audio", lyrics=lyrics, instrumental=False, seconds=0, bpm=0))
+    audio = outs[0]["audio"]
+    assert audio == {"duration_s": 10.0, "sample_rate": 48000, "channels": 2,
+                     "sections": [{"label": "verse", "start_s": 0, "end_s": 5.0},
+                                  {"label": "chorus", "start_s": 5.0, "end_s": 10.0}]}  # fmt: skip
+    assert wav_facts(store.objects[outs[0]["key"]][0]) == (2, 48000, 480000)
+    assert evts[-1]["data"]["resolved"]["texts"] == {"n.plan": "90 BPM · A minor · 4/4 · 0:10 · en"}
+
+
+async def test_echo_sound_takes_its_length_and_an_instrumental_song_has_no_sections():
+    outs, _, _ = await run_nodes(one("echo/sound", "audio", avoid="", seconds=1.5))
+    assert outs[0]["audio"] == {"duration_s": 1.5, "sample_rate": 44100, "channels": 2}
+    outs, _, _ = await run_nodes(one("echo/music", "audio", lyrics="[verse]", instrumental=True, seconds=2, bpm=120))
+    assert "sections" not in outs[0]["audio"] and outs[0]["audio"]["duration_s"] == 2
+
+
+def test_auto_takes_zero_below_min_only_where_declared():
+    music = SCHEMAS["echo/music"]
+    seconds = next(p for p in music["params"] if p["name"] == "seconds")
+    assert graph._check_param(seconds, 0) is None
+    assert graph._check_param(seconds | {"auto": None}, 0) == "is below the minimum 1"
+    assert graph._check_param(seconds, 0.5) == "is below the minimum 1"
+
+
+async def test_echo_repaint_and_extend_read_an_audio_source():
+    src = audio_value(b"", duration_s=1.0)
+    del src["in"], src["out"]
+    import array
+    import math
+
+    pcm = array.array("h", (round(8000 * math.sin(i / 10)) for i in range(48000))).tobytes()
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(1), w.setsampwidth(2), w.setframerate(48000), w.writeframes(pcm)
+    data = buf.getvalue()
+    src |= {"bytes": len(data)}
+    store = FakeStore()
+    store.objects[src["key"]] = (data, "audio/wav")
+    outs, _, _ = await run_nodes(one("echo/repaint", "audio", src, span={"start": 0.25, "end": 0.5}), store)
+    assert outs[0]["audio"] == {"duration_s": 1.0, "sample_rate": 48000, "channels": 2}
+    outs, _, _ = await run_nodes(one("echo/lengthen", "audio", src, seconds=2, where="start"), store)
+    assert outs[0]["audio"] == {"duration_s": 3.0, "sample_rate": 48000, "channels": 2}
+
+
+async def test_echo_foley_gives_a_sound_and_the_video_with_it():
+    clip = mp4.mp4(Image.new("RGB", (64, 32), "red"), 24, 24)
+    src = value(clip, width=64, height=32, frames=24, duration_s=1.0)
+    store = FakeStore()
+    store.objects[src["key"]] = (clip, "video/mp4")
+    nodes = one("echo/foley", "audio", src)
+    nodes["output_video"] = {"kind": "output", "params": {}, "in": {"media": "n.video"}}
+    outs, _, _ = await run_nodes(nodes, store)
+    assert sorted(o["kind"] for o in outs) == ["audio", "video"]
+    audio = next(o for o in outs if o["kind"] == "audio")["audio"]
+    video = next(o for o in outs if o["kind"] == "video")
+    assert audio == {"duration_s": 1.0, "sample_rate": 44100, "channels": 2}
+    assert video["video"]["has_audio"] and "source_map" not in video

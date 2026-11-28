@@ -1,0 +1,9 @@
+{
+ "id": "7d1e0000-0000-4000-8000-000000000001",
+ "name": "The Last Tide",
+ "revision": 3,
+ "can_undo": true,
+ "can_redo": false,
+ "created_at": "2026-11-27T05:00:00Z",
+ "updated_at": "2026-11-27T05:00:00Z"
+}

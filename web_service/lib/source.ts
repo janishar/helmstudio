@@ -397,3 +397,66 @@ export function soundCount(
   }
   return { s, n };
 }
+
+// ---------------------------------------------------------------- music and sound (plan 38, API 1.79)
+
+/** The take actions of a music or sound take, in the strip's order (docs/mock/CreateMusicSound.dc.html frames 1, 4):
+ * Repaint, Cover on music or Vary on sound, Extend. */
+export const soundActions = (cls: "music" | "sound") =>
+  cls === "music" ? ["Repaint", "Cover", "Extend"] : ["Repaint", "Vary", "Extend"];
+
+/** The offer for each action among a take's offers (by `action`): the take's own family's first, else the first. */
+export function actionOffers(
+  offers: S<"TakeOffer">[],
+  actions: string[],
+  family?: string,
+): Record<string, S<"TakeOffer"> | undefined> {
+  return Object.fromEntries(
+    actions.map((a) => [
+      a,
+      offers
+        .filter((o) => o.action === a)
+        .sort((x, y) => +(y.family === family) - +(x.family === family))[0],
+    ]),
+  );
+}
+
+/** "0:48" from seconds. */
+const mmss = (s: number) => {
+  const n = Math.round(s);
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+};
+/** A range's readout on the Repaint stage: "0:48 – 1:05 · 17 s" (RangeBar in the Design System). */
+export const rangeText = (a: number, b: number) =>
+  `${mmss(a)} – ${mmss(b)} · ${Math.round(b - a)} s`;
+
+/** A span on an audio take: the edge set to `t`, kept in the take and at least 0.5 s long, to the millisecond (studio
+ * snaps a span on audio to whole ms). */
+export function audioSpanEdge(
+  v: S<"SpanValue">,
+  edge: "start" | "end",
+  t: number,
+  duration: number,
+): S<"SpanValue"> {
+  const ms = (x: number) => Math.round(Math.max(0, Math.min(duration, x)) * 1000) / 1000;
+  const min = Math.min(0.5, duration);
+  return edge === "start"
+    ? { start: ms(Math.min(t, v.end - min)), end: v.end }
+    : { start: v.start, end: ms(Math.max(t, v.start + min)) };
+}
+
+/** The video take a sound was made from (MMAudio from a video, frame 5): the take its workflow's media param that
+ * takes video held when it was made; undefined for a sound from words. */
+export function videoOf(
+  t: Pick<Take, "made_with">,
+  w?: Pick<S<"Workflow">, "nodes" | "node_schemas">,
+): string | undefined {
+  if (!w || !t.made_with) return undefined;
+  for (const [id, n] of Object.entries(w.nodes))
+    for (const p of w.node_schemas[n.kind]?.params ?? [])
+      if (p.type === "media" && p.accepts?.includes("video")) {
+        const v = t.made_with.inputs[`${id}.${p.name}`];
+        if (v && typeof v === "object" && "take_id" in v) return (v as S<"MediaRef">).take_id;
+      }
+  return undefined;
+}

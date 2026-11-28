@@ -32,6 +32,7 @@ import {
   type Tile as TileName,
 } from "@/lib/looks";
 import { TextArea } from "@/components/expand-text";
+import { Range } from "@/components/range";
 
 type Item = S<"LibraryItem">;
 type Group = S<"LibraryGroup">;
@@ -314,10 +315,10 @@ function Picker({
           ? undefined
           : {
               id: "look-q",
-              label: "Search names",
-              placeholder: "Search names",
+              label: "Search looks",
               value: q,
               onChange: setQ,
+              count: shown.length,
               className: "flex-[1_1_200px]",
             }
       }
@@ -635,7 +636,7 @@ function Editor({
           value={text}
           placeholder="Words added after the prompt when the look is chosen"
           onChange={(e) => setText(e.target.value)}
-          className="resize-y rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
+          className="resize-none rounded-[10px] bg-s4 px-3 py-2 text-[13px] text-t1"
         />
       </label>
       <div className="label flex flex-col gap-1.5">
@@ -707,8 +708,7 @@ function Editor({
                 </button>
               </span>
             </div>
-            <input
-              type="range"
+            <Range
               min={0}
               max={2}
               step={0.05}

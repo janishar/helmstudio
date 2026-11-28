@@ -1,0 +1,261 @@
+{
+  "schema_version": 1,
+  "host": "mac",
+  "env": "torch",
+  "published_at": "2026-11-27T10:00:00Z",
+  "published_by": "runner torch 0.3.0",
+  "workflows": [
+    {
+      "id": "sa3-sound",
+      "title": "Stable Audio 3 Sound",
+      "family": "stable-audio-3",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "stable-audio-3/model",
+          "params": {
+            "variant": "small-sfx",
+            "precision": "bf16"
+          }
+        },
+        "sound": {
+          "kind": "stable-audio-3/sound",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "seconds": 4,
+            "from_sound": [],
+            "change": 0.7
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "sound.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text"
+        ],
+        "quick": [
+          "sound.seconds",
+          "sound.from_sound",
+          "seed.seed"
+        ],
+        "inspector": [
+          {
+            "title": "From a sound",
+            "items": [
+              "sound.change"
+            ]
+          }
+        ],
+        "count": {
+          "default": 4,
+          "max": 8
+        }
+      },
+      "standard": {
+        "kind": "sound",
+        "model": "Stable Audio 3 Small-SFX",
+        "fields": {
+          "prompt": "prompt.text",
+          "length": "sound.seconds",
+          "seed": "seed.seed"
+        },
+        "seconds": 0.1
+      }
+    },
+    {
+      "id": "sa3-repaint",
+      "title": "Stable Audio 3 Repaint",
+      "action": "Repaint",
+      "family": "stable-audio-3",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "stable-audio-3/model",
+          "params": {
+            "variant": "small-sfx",
+            "precision": "bf16"
+          }
+        },
+        "repaint": {
+          "kind": "stable-audio-3/repaint",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "source": null,
+            "span": null
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "repaint.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "repaint.source",
+          "repaint.span"
+        ],
+        "quick": [
+          "seed.seed"
+        ]
+      }
+    },
+    {
+      "id": "sa3-vary",
+      "title": "Stable Audio 3 Vary",
+      "action": "Vary",
+      "family": "stable-audio-3",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "stable-audio-3/model",
+          "params": {
+            "variant": "small-sfx",
+            "precision": "bf16"
+          }
+        },
+        "vary": {
+          "kind": "stable-audio-3/vary",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "source": null,
+            "change": 0.7
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "vary.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "vary.source"
+        ],
+        "quick": [
+          "vary.change",
+          "seed.seed"
+        ]
+      }
+    },
+    {
+      "id": "sa3-extend",
+      "title": "Stable Audio 3 Extend",
+      "action": "Extend",
+      "family": "stable-audio-3",
+      "env": "torch",
+      "media": "audio",
+      "nodes": {
+        "prompt": {
+          "kind": "prompt",
+          "params": {
+            "text": ""
+          }
+        },
+        "seed": {
+          "kind": "seed",
+          "params": {
+            "seed": -1
+          }
+        },
+        "model": {
+          "kind": "stable-audio-3/model",
+          "params": {
+            "variant": "small-sfx",
+            "precision": "bf16"
+          }
+        },
+        "extend": {
+          "kind": "stable-audio-3/extend",
+          "in": {
+            "model": "model.model",
+            "text": "prompt.text",
+            "seed": "seed.seed"
+          },
+          "params": {
+            "source": null,
+            "seconds": 4,
+            "where": "end"
+          }
+        },
+        "output": {
+          "kind": "output",
+          "in": {
+            "media": "extend.audio"
+          }
+        }
+      },
+      "studio": {
+        "composer": [
+          "prompt.text",
+          "extend.source"
+        ],
+        "quick": [
+          "extend.seconds",
+          "extend.where",
+          "seed.seed"
+        ]
+      }
+    }
+  ]
+}

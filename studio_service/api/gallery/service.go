@@ -57,6 +57,7 @@ type Service struct {
 	registry *registry.Registry
 	find     Find
 	offers   Offerable
+	measure  Measure
 }
 
 // Offerable lists the workflows "Use in…" may offer, in offer order (studio's Offerable; API 1.19).
@@ -65,6 +66,13 @@ type Offerable func(ctx context.Context, caller common.Caller) ([]registry.Workf
 // SetOffers sets where GET /takes/{id}/uses reads its workflows.
 func (s *Service) SetOffers(offers Offerable) { s.offers = offers }
 
+// Measure measures the owner's takes of ids without facts on demand and answers a plain note when they are not made
+// ("" when none: studio's MeasureFacts; API 1.108).
+type Measure func(ctx context.Context, owner string, ids []string) string
+
+// SetMeasure sets how GET /takes/{id} measures a take's facts on demand for the Assistant and helm mcp.
+func (s *Service) SetMeasure(measure Measure) { s.measure = measure }
+
 // NewService returns the service.
 func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, registry *registry.Registry, find Find) *Service {
 	return &Service{db: db, signer: signer, store: store, registry: registry, find: find}
@@ -72,7 +80,7 @@ func NewService(db *pgxpool.Pool, signer *common.Signer, store storage.Store, re
 
 // tx runs fn scoped to the caller as a plain user: an admin sees only their own takes here too.
 func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.Tx) error) error {
-	return common.WithUser(ctx, s.db, common.Caller{ID: caller.ID}, fn)
+	return common.WithUser(ctx, s.db, caller.ID, fn)
 }
 
 // takes runs query and scans every row.
@@ -141,6 +149,9 @@ func decodeCursor(text string) (*cursor, bool) {
 // takeOrders are GET /takes's `order` values (API 1.44), the default first.
 var takeOrders = []string{"newest", "oldest", "starred", "name"}
 
+// takeKinds are GET /takes's `kind` values: a take kind, or (API 1.79) a sound class (audio takes of that class).
+var takeKinds = []string{"", "image", "video", "audio", "music", "sound", "voice"}
+
 // takeSources are TakeSource's values (contracts/openapi.yaml): import from 1.16, export and frame from 1.17.
 var takeSources = []string{"create", "upload", "pipeline", "import", "export", "frame"}
 
@@ -148,8 +159,8 @@ var takeSources = []string{"create", "upload", "pipeline", "import", "export", "
 // detail. sessionParam false ignores session_id and batch_id (GET /sessions/{id}/takes sets the session from the path).
 func ParseFilter(query url.Values, sessionParam bool) (Filter, string) {
 	filter := Filter{Limit: 60, Kind: query.Get("kind"), Source: query.Get("source")}
-	if filter.Kind != "" && filter.Kind != "image" && filter.Kind != "video" && filter.Kind != "audio" {
-		return filter, "kind must be image, video or audio"
+	if !slices.Contains(takeKinds, filter.Kind) {
+		return filter, "kind must be image, video, audio, music, sound or voice"
 	}
 	if filter.Source != "" && !slices.Contains(takeSources, filter.Source) {
 		return filter, "source must be " + strings.Join(takeSources[:len(takeSources)-1], ", ") + " or " + takeSources[len(takeSources)-1]
@@ -216,7 +227,11 @@ func (s *Service) List(ctx context.Context, caller common.Caller, filter Filter)
 		}
 		conds = append(conds, cond)
 	}
-	if filter.Kind != "" {
+	switch filter.Kind {
+	case "":
+	case "music", "sound", "voice": // API 1.79: audio takes of that class
+		where(`t.kind = 'audio' AND coalesce(t.sound, 'voice') = $?`, filter.Kind) // null: an audio take written without one
+	default:
 		where(`t.kind = $?`, filter.Kind)
 	}
 	if filter.Source != "" {
@@ -331,8 +346,30 @@ func (s *Service) Get(ctx context.Context, caller common.Caller, id string) (dto
 		}
 		decisions, err := takeDecisions(ctx, tx, id)
 		out.Decisions = &decisions
-		return err
+		if err != nil || (out.Kind != "video" && out.Kind != "audio") {
+			return err
+		}
+		var raw json.RawMessage // API 1.104: Take facts
+		if err := tx.QueryRow(ctx, `SELECT facts FROM takes WHERE id = $1`, id).Scan(&raw); err != nil {
+			return err
+		}
+		facts := FactsOut(raw, s.signer.Sign)
+		out.Facts = &facts
+		return nil
 	})
+	// API 1.108: the Assistant and helm mcp wait for facts measured on demand
+	if err == nil && out.Facts != nil && *out.Facts == nil && s.measure != nil && (caller.Via == "assistant" || caller.Via == "mcp") {
+		note := s.measure(ctx, caller.ID, []string{id})
+		err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+			var raw json.RawMessage
+			err := tx.QueryRow(ctx, `SELECT facts FROM takes WHERE id = $1`, id).Scan(&raw)
+			facts := FactsOut(raw, s.signer.Sign)
+			if out.Facts = &facts; facts == nil {
+				out.FactsNote = note
+			}
+			return err
+		})
+	}
 	return out, err
 }
 
@@ -684,12 +721,18 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 		return dto.TakeReuse{}, err
 	}
 	take := FactsOf(row)
+	class := registry.WorkflowSound(workflow.Nodes, workflow.NodeSchemas)
 	var keys []string
 	params := map[string]registry.Param{}
+	unclassed := map[string]bool{} // API 1.79: media params it would fit but for its class (offers by class)
 	for _, nodeID := range slices.Sorted(maps.Keys(workflow.Nodes)) {
 		for _, p := range workflow.NodeSchemas[workflow.Nodes[nodeID].Kind].Params {
 			if Counts(workflow, nodeID, p) && p.Type == "media" && (slices.Contains(p.Accepts, take.Kind) ||
 				(take.Kind == "video" && slices.Contains(p.Accepts, "audio"))) {
+				if !ByClass(class, take, p) {
+					unclassed[nodeID+"."+p.Name] = true
+					continue
+				}
 				keys = append(keys, nodeID+"."+p.Name)
 				params[nodeID+"."+p.Name] = p
 			}
@@ -708,6 +751,9 @@ func (s *Service) useMedia(ctx context.Context, caller common.Caller, row model.
 		return dto.TakeReuse{}, network.NewUnprocessableError(detail, nil)
 	}
 	switch _, ok := params[deref(body.Param)]; {
+	case !ok && len(unclassed) > 0 && (body.Param == nil && len(keys) == 0 || unclassed[deref(body.Param)]):
+		return unprocessable(fmt.Sprintf("take %s is %s; workflow %s takes %s only", take.ID,
+			cmp.Or(take.Sound, "a video"), workflow.ID, class))
 	case body.Param != nil && !ok:
 		return unprocessable(*body.Param + ": not a " + take.Kind + " input of workflow " + workflow.ID)
 	case body.Param != nil:
@@ -790,6 +836,12 @@ func TakeDTO(signer *common.Signer, row model.Take) dto.Take {
 	}
 	_ = json.Unmarshal(row.MadeWith, &out.MadeWith)
 	_ = json.Unmarshal(row.Audio, &out.Audio) // null leaves them nil
+	if row.Kind == "audio" {                  // API 1.79: always sent on an audio take
+		out.Sound = "voice"
+		if row.Sound != nil {
+			out.Sound = *row.Sound
+		}
+	}
 	_ = json.Unmarshal(row.SourceMap, &out.SourceMap)
 	if out.Parents == nil {
 		out.Parents = []string{}

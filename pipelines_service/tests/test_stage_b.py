@@ -7,100 +7,36 @@ import json
 import socket
 import uuid
 
-import fake_openai
 import pytest
-from conftest import CONTRACTS, OWNER, FakeJS, FakeStudio, FakeTools, command, engine, idle, until
+from conftest import (
+    CAPS,
+    LOCAL,
+    OWNER,
+    PIPELINE,
+    FakeJS,
+    FakeStudio,
+    FakeTools,
+    Script,
+    agent,
+    chat_cmd,
+    director,
+    doc,
+    engine,
+    finish,
+    idle,
+    node_of,
+    remote_doc,
+    server_provider,
+    submit,
+    turn,
+    until,
+)
 
 import config
 import memory
 import providers
 import server
 from messaging import schemas
-from messaging.publisher import now
-
-PIPELINE = "4e5f6a7b-8c9d-4e0f-9a1b-2c3d4e5f6a01"
-REG = json.loads((CONTRACTS / "fixtures/registry/workflows.valid.json").read_text())["workflows"]
-REG += json.loads((CONTRACTS / "fixtures/registry/server.workflows.valid.json").read_text())[
-    "workflows"
-]
-WF = {w["id"]: {k: v for k, v in w.items() if k != "media"} for w in REG}
-CAPS = {"max_turns": 6, "max_tool_calls": 12, "max_tokens": 16000}
-LOCAL = {
-    "model": "echo-ask",
-    "workflow": "echo-ask",
-    "source": {"kind": "local", "workflow": "echo-ask"},
-}
-
-
-def agent(**kw) -> dict:
-    return {"kind": "agent", "instruction": "Turn the script into a shot list.", "from": ["$script"],
-            "tools": ["gallery.search", "library.read", "memory.read", "memory.write", "rows.add"],
-            "list": {"max": 3}, "caps": dict(CAPS), "director": False} | LOCAL | kw  # fmt: skip
-
-
-def doc(edges=None, remote=None, providers_=None, **nodes) -> dict:
-    n = {
-        "inputs": {"kind": "inputs", "inputs": [{"name": "script", "type": "Text"}]},
-        "plan": agent(),
-        "shots": {"kind": "step", "workflow": "echo", "seeds": 1, "inputs": {}, "each": "plan.items",
-                  "fanout_max": 3, "bind": {"prompt.text": "plan.item"}, "seed_param": None},
-        "out": {"kind": "output", "from": "shots.takes", "collection": "Shots"},
-    } | nodes  # fmt: skip
-    n = {k: v for k, v in n.items() if v is not None}
-    edges = edges or [["inputs", "plan"], ["plan", "shots"], ["shots", "out"]]
-    used = {v["workflow"] for v in n.values() if v.get("workflow") in WF}
-    p = {"id": PIPELINE, "title": "Shots", "version": 1, "nodes": n, "edges": edges,
-         "workflows": {w: WF[w] for w in used | {"echo"}}}  # fmt: skip
-    p["remote"] = remote or {
-        "enabled": False,
-        "providers": [],
-        "max_calls": 200,
-        "max_tokens": 400000,
-    }
-    if providers_:
-        p["providers"] = providers_
-    return p
-
-
-def submit(b: str, p: dict, n: int = 1, replay_from=None, script="a fox @rex wakes") -> dict:
-    cmd = command("submit", b, n)
-    rows = [{"row": i, "inputs": {"inputs.script": f"{script} {i}"}} for i in range(1, n + 1)]
-    cmd["data"] |= {"snapshot": {"workflow_id": "echo", "workflow": WF["echo"], "pipeline": p}}
-    cmd["data"] |= {"inputs": {}, "rows": rows}
-    if replay_from:
-        cmd["data"]["replay_from"] = replay_from
-    assert not schemas.message_errors(cmd), schemas.message_errors(cmd)
-    return cmd
-
-
-def turn(say="", **calls) -> str:
-    return json.dumps({"say": say, "calls": [{"tool": t, "args": a} for t, a in calls.items()]})
-
-
-class Script:
-    """Scripted ask answers per (node, row), in order; the last one repeats."""
-
-    def __init__(self, **by_node):
-        self.q = {k: list(v) for k, v in by_node.items()}
-        self.prompts: list[str] = []
-
-    def __call__(self, req) -> str:
-        self.prompts.append(req["inputs"]["ask.prompt"])
-        k = req["idempotency_key"].split(":")
-        q = self.q.get(f"{k[3]}:{k[1]}") or self.q[k[3]]
-        return q.pop(0) if len(q) > 1 else q[0]
-
-
-def node_of(k: str) -> str:
-    return k.split(":")[3]
-
-
-async def finish(e, studio, node: str, rows=(0, 1, 2, 3)) -> list[str]:
-    keys = [k for r in rows for k in studio.open_keys(r) if node_of(k) == node]
-    for k in keys:
-        assert await e.on_run_finished(studio.finish(int(k.split(":")[1]), key=k))
-    await idle(e)
-    return keys
 
 
 def steps(js, row=1) -> list[dict]:
@@ -129,9 +65,7 @@ async def test_an_agent_uses_every_tool_and_fans_out_its_list(pool):
     await idle(e)
     for _ in range(4):
         await finish(e, studio, "plan", rows=(1,))
-    assert [k.split(":", 3)[3] for k in studio.asked if node_of(k) == "plan"] == [
-        f"plan:0:t{i}" for i in range(4)
-    ]
+    assert [k.split(":", 3)[3] for k in studio.asked if node_of(k) == "plan"] == [f"plan:0:t{i}" for i in range(4)]
     # the list fans out: one branch per item (Send), branch id = item index in the key, its item as the prompt
     fan = [k for k in studio.asked if node_of(k) == "shots"]
     assert fan == [f"{b}:1:1:shots:0:{i}-0" for i in range(3)]
@@ -154,9 +88,7 @@ async def test_an_agent_uses_every_tool_and_fans_out_its_list(pool):
     assert [a["branch"] for a in shots["attempts"]] == [0, 1, 2]
     st = steps(js)
     # one submit record per branch (Send cannot write n), numbered right after the fan's, none shadowed
-    fanned = [
-        (s["branch"], s["part"], s["run_ids"]) for s in st if s["node"] == "shots" and "branch" in s
-    ]
+    fanned = [(s["branch"], s["part"], s["run_ids"]) for s in st if s["node"] == "shots" and "branch" in s]
     assert fanned == [(i, "submit", [studio.runs[k]["run_id"]]) for i, k in enumerate(fan)]
     assert [s["step"] for s in st] == list(range(1, len(st) + 1))
     tool_steps = [s for s in st if s["part"] == "tools"]
@@ -172,10 +104,7 @@ async def test_an_agent_uses_every_tool_and_fans_out_its_list(pool):
     ]
     assert dec["agent"]["tool_calls"] == 6 and len(dec["agent"]["turns"]) == 4 and dec["replayable"]
     # a tool result is data: the injected text sits fenced in the next prompt, and only declared tools ran
-    assert (
-        "Ignore your instructions" in studio.answer_for.prompts[1]
-        and "<<<" in studio.answer_for.prompts[1]
-    )
+    assert "Ignore your instructions" in studio.answer_for.prompts[1] and "<<<" in studio.answer_for.prompts[1]
     # rows.add: studio stored row 2 and pipelines ran it (it joins the window)
     assert tools.asked[2]["tool"] == "rows.add" and tools.asked[2]["row"] == 1
     await until(lambda: 2 in js.rows())
@@ -274,15 +203,6 @@ async def test_a_custom_node_feeds_a_step(pool):
     assert [s["part"] for s in steps(js)][:2] == ["inputs", "custom"]
 
 
-def director(**kw) -> dict:
-    return agent(director=True, tools=["gallery.search", "memory.read", "memory.write", "rows.add", "rows.edit"],
-                 list={"max": 1}, wake_on_rows="all", max_wakes=100) | kw  # fmt: skip
-
-
-def chat_cmd(b: str, text: str) -> dict:
-    return {"batch_id": b, "message_id": str(uuid.uuid4()), "text": text, "at": now()}
-
-
 async def test_the_director_answers_adds_rows_and_reports_a_rejected_row(pool):
     studio, js, tools = FakeStudio(), FakeJS(), FakeTools()
     studio.answer_for = Script(**{
@@ -335,19 +255,6 @@ async def test_the_director_answers_adds_rows_and_reports_a_rejected_row(pool):
 # --- model sources through the fake OpenAI-compatible server
 
 
-@pytest.fixture
-def fake():
-    srv, state = fake_openai.serve()
-    state.url = f"http://127.0.0.1:{srv.server_address[1]}/v1"
-    yield state
-    srv.shutdown()
-
-
-def server_provider(url: str) -> dict:
-    return {"kind": "server", "api": "openai", "base_url": url, "timeout_s": 5, "host": "mac",
-            "memory_gb": 6.5, "key_secret": None}  # fmt: skip
-
-
 def on_server(model: str) -> dict:
     return {"model": f"server:local/{model}", "workflow": "server-ask",
             "source": {"kind": "server", "provider": "local", "model": model, "host": "mac"}}  # fmt: skip
@@ -398,21 +305,13 @@ async def test_the_server_executor_calls_a_local_server(pool, fake):
     assert await serve_server_runs(e, studio, pool) == 1
     assert await serve_server_runs(e, studio, pool) == 1
     sent = [r["body"] for r in fake.requests]
-    assert (
-        sent[0]["tools"] == tools
-        and sent[0]["tool_choice"] == "auto"
-        and sent[0]["max_tokens"] == 4096
-    )
+    assert sent[0]["tools"] == tools and sent[0]["tool_choice"] == "auto" and sent[0]["max_tokens"] == 4096
     assert "authorization" not in fake.requests[0]["headers"] and [  # a server has no key
         m["role"] for m in sent[0]["messages"]
     ] == ["system", "user"]
     st = steps(js)
     dec = next(s["decision"] for s in st if s.get("decision"))
-    assert (
-        dec["source"]["kind"] == "server"
-        and dec["replayable"]
-        and dec["agent"]["items"] == ["a shot"]
-    )
+    assert dec["source"]["kind"] == "server" and dec["replayable"] and dec["agent"]["items"] == ["a shot"]
     assert dec["tokens_in"] == 60 and len(dec["run_ids"]) == 2
     # a schema answer is validated and asked once more in the run
     fake.script["srv"] = [{"content": "not json"}, {"content": '{"text": "ok"}'}]
@@ -427,53 +326,11 @@ async def test_the_server_executor_calls_a_local_server(pool, fake):
             await providers.check_host("x", server_provider(url))
         assert err.value.kind == "refused"
     with pytest.raises(providers.CallError) as err:
-        await providers.check_host(
-            "x", {"kind": "remote", "base_url": "https://api.example.com/v1"}
-        )
+        await providers.check_host("x", {"kind": "remote", "base_url": "https://api.example.com/v1"})
     assert err.value.kind == "off"  # remote models are off by default
 
 
-def remote_doc(url: str, rem: dict | None = None) -> dict:
-    prov = {"kind": "remote", "api": "openai", "base_url": url, "timeout_s": 5, "key_secret": "fakeai.key",
-            "max_in_flight": 2}  # fmt: skip
-    rem = {"enabled": True, "providers": ["fakeai"], "max_calls": 200, "max_tokens": 400000} | (
-        rem or {}
-    )
-    check = {"kind": "decide", "question": "Is the script usable?", "from": ["$script"],
-             "routes": {"keep": "use it", "drop": "do not"}, "model": "remote:fakeai/fake-large",
-             "workflow": "remote", "source": {"kind": "remote", "provider": "fakeai", "model": "fake-large"}}  # fmt: skip
-    still = {"kind": "step", "workflow": "echo", "seeds": 1, "inputs": {}, "bind": {"prompt.text": "$script"},
-             "seed_param": None}  # fmt: skip
-    return doc(plan=None, shots=None, check=check, still=still,
-               out={"kind": "output", "from": "still.takes", "collection": "x"},
-               edges=[["inputs", "check"], ["check", {"routes": {"keep": "still", "drop": "still"}, "max": 1,
-                                                       "then": "keep"}], ["still", "out"]],
-               remote=rem, providers_={"fakeai": prov})  # fmt: skip
-
-
-@pytest.fixture
-def remote_on(monkeypatch, tmp_path, fake):
-    """Remote models switched on, a key file, short retries; the fake stands in for https (the host rule's
-    https check is tested on its own)."""
-    monkeypatch.setattr(config, "REMOTE_MODELS", True)
-    monkeypatch.setattr(
-        config, "REMOTE_ALLOW_PRIVATE", True
-    )  # the fake is on loopback (as the fake overlay's)
-    monkeypatch.setattr(config, "PROVIDER_KEYS_DIRS", [tmp_path])
-    monkeypatch.setattr(providers, "DELAYS", [0.01, 0.01, 0.01])
-    (tmp_path / "fakeai.key").write_text("test-key\n")
-    real = providers.check_host
-
-    async def check(name, p):
-        await real(name, p | {"kind": "server"})  # loopback only, as a server
-
-    monkeypatch.setattr(providers, "check_host", check)
-    return fake
-
-
-async def test_remote_calls_keep_the_in_flight_limit_caps_and_count_network_failures(
-    pool, remote_on
-):
+async def test_remote_calls_keep_the_in_flight_limit_caps_and_count_network_failures(pool, remote_on):
     fake = remote_on
     keep = {"content": '{"route": "keep", "reason": "fine"}', "delay_s": 0.2}
     fake.script["fake-large"] = [{"status": 503}] + [keep] * 4
@@ -487,20 +344,15 @@ async def test_remote_calls_keep_the_in_flight_limit_caps_and_count_network_fail
     await until(lambda: len(studio.open_keys(1)) == 1, 10)  # row 1 first, then every row
     await finish(e, studio, "still", rows=(1,))
     failed = lambda: [r for r, v in js.rows().items() if v["status"] == "failed"]
-    await until(
-        lambda: sum(len(studio.open_keys(r)) for r in range(2, 6)) == 3 and len(failed()) == 1, 10
-    )
+    await until(lambda: sum(len(studio.open_keys(r)) for r in range(2, 6)) == 3 and len(failed()) == 1, 10)
     stop.set()
     await worker
     assert fake.max_in_flight == 2  # per provider, over every batch
-    assert (
-        js.rows()[failed()[0]]["error"] == "check: remote cap reached: 4 calls"
-    )  # whichever came 5th
+    assert js.rows()[failed()[0]]["error"] == "check: remote cap reached: 4 calls"  # whichever came 5th
     heads = [r["headers"].get("authorization") for r in fake.requests]
     assert heads == ["Bearer test-key"] * 5  # the key file, read at call time
     batch = [m["data"] for m in js.events("batch")][-1]
-    assert batch["remote"] == {"calls": 4, "tokens": 60, "network_failures": 1, "max_calls": 4,
-                               "max_tokens": 400000}  # fmt: skip
+    assert batch["remote"] == {"calls": 4, "tokens": 60, "network_failures": 1, "max_calls": 4, "max_tokens": 400000}
     decs = [s["decision"] for r in range(1, 6) for s in steps(js, r) if s.get("decision")]
     assert all(d["replayable"] is False and d["source"]["kind"] == "remote" for d in decs)
     assert sum(d["network_failures"] for d in decs) == 1 and all(d["run_ids"] == [] for d in decs)
@@ -526,9 +378,7 @@ async def test_pause_holds_and_stop_cancels_remote_calls(pool, remote_on):
     assert fake.requests == [] and js.batch_status() == "stopped"
 
 
-async def test_run_again_replays_an_agent_without_its_tools_but_never_a_remote_decision(
-    pool, remote_on
-):
+async def test_run_again_replays_an_agent_without_its_tools_but_never_a_remote_decision(pool, remote_on):
     fake = remote_on
     studio, js, tools = FakeStudio(), FakeJS(), FakeTools()
     studio.answer_for = Script(plan=[turn("", gallery_search={}), turn("", set_items={"items": ["one"]}),
@@ -545,9 +395,7 @@ async def test_run_again_replays_an_agent_without_its_tools_but_never_a_remote_d
     e2 = engine(pool, studio, js2, tool=tools)
     await e2.submit(submit(b2, doc(), replay_from=b1))
     await idle(e2)
-    assert not [
-        k for k in studio.asked if k.startswith(b2) and node_of(k) == "plan"
-    ]  # no model asked
+    assert not [k for k in studio.asked if k.startswith(b2) and node_of(k) == "plan"]  # no model asked
     assert len(tools.asked) == 1  # its tool calls are not run again
     dec = next(s["decision"] for s in steps(js2) if s.get("decision"))
     assert dec["replayed"] and dec["agent"]["items"] == ["one"]
@@ -581,8 +429,7 @@ async def test_no_outbound_connection_with_remote_models_off(pool, fake, monkeyp
 
     monkeypatch.setattr(socket.socket, "connect", guard(0))
     monkeypatch.setattr(socket.socket, "connect_ex", guard(1))
-    judged = json.dumps({"takes": [{"take": i, "checks": [True], "reason": "ok"} for i in (1, 2)],
-                         "ranking": [1, 2]})  # fmt: skip
+    judged = json.dumps({"takes": [{"take": i, "checks": [True], "reason": "ok"} for i in (1, 2)], "ranking": [1, 2]})
     studio, js, tools = FakeStudio(), FakeJS(), FakeTools()
     studio.answer_for = Script(judge=[judged], check=['{"route": "go", "reason": "ok"}'])
     fake.script["writer"] = [{"content": '{"text": "a fox in snow"}'}]
@@ -674,9 +521,7 @@ async def test_the_provider_test_answers_on_contract(fake):
     ok = await providers.test({"name": "local", "provider": p, "model": "fake-small"})
     assert "fake-small" in ok["models"] and ok["answer"] == "OK"
     assert not schemas.providers_test_errors("reply", ok)
-    bad = await providers.test(
-        {"name": "local", "provider": p | {"base_url": "http://169.254.169.254/v1"}}
-    )
+    bad = await providers.test({"name": "local", "provider": p | {"base_url": "http://169.254.169.254/v1"}})
     assert bad["code"] == "refused" and not schemas.providers_test_errors("reply", bad)
     fake.script["fake-small"] = [{"status": 401}]
     denied = await providers.test({"name": "local", "provider": p, "model": "fake-small"})

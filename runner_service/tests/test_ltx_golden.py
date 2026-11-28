@@ -52,9 +52,7 @@ DISTILLED_CASES = ["retake-distilled-448x256-49f-s42", "extend-distilled-448x256
 DETAIL_CASES = ["detail-448x256-49f-s42", "detail-512x320-57f-s7", "a2v-detail-448x256-49f-s42",
                 "a2v-detail-448x256-57f-s42"]  # fmt: skip
 DEV = ("retake", "extend", "a2v")
-INPUTS = (
-    Path(__file__).resolve().parents[2] / "tests" / "golden"
-)  # ltx_inputs.py: the synthetic LoRA
+INPUTS = GOLDENS  # ltx_inputs.py: the synthetic LoRA
 
 
 def golden_dir(name: str) -> Path:
@@ -75,10 +73,7 @@ def unbypassed(nodes: dict, schemas: dict) -> dict:
         x = nodes.pop(nid)
         schema = schemas[x["kind"]]
         types = {i["name"]: i["type"] for i in schema["inputs"]}
-        through = {
-            o["name"]: x["in"][next(i for i, t in types.items() if t == o["type"])]
-            for o in schema["outputs"]
-        }
+        through = {o["name"]: x["in"][next(i for i, t in types.items() if t == o["type"])] for o in schema["outputs"]}
         for n in nodes.values():
             n["in"] = {p: through.get(r.partition(".")[2], r) if r.partition(".")[0] == nid else r
                        for p, r in n.get("in", {}).items()}  # fmt: skip
@@ -171,18 +166,14 @@ class Bench:
             if self.wav:
                 shutil.copy(path, self.wav)
 
-        def loop(
-            ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask=None, audio_mask=None
-        ):
+        def loop(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask=None, audio_mask=None):
             row = {"video_in": stats(video.latent), "audio_in": stats(audio.latent),
                    "video_clean_in": stats(video.clean_latent), "video_denoise_mask": stats(video.denoise_mask),
                    "video_keyframes_mask": opt(video.keyframes_mask), "video_positions_stats": stats(video.positions),
                    "video_cross_attention_mask": opt(cross_mask), "audio_cross_attention_mask": opt(audio_mask),
                    "video_tokens_total": video.latent.shape[1]}  # fmt: skip
             self.reset_peak()  # the loop's own peak (the image encode before it is in the node's)
-            vx, ax = denoise(
-                ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask, audio_mask
-            )
+            vx, ax = denoise(ctx, x0, video, audio, cond, sigmas, phase, noise_seed, cross_mask, audio_mask)
             row |= {"video_out_tokens": stats(vx), "audio_out_tokens": stats(ax),
                     "loop_peak_gib": round(mx.get_peak_memory() / 2**30, 2)}  # fmt: skip
             self.stages.append(row)
@@ -251,9 +242,7 @@ class Bench:
                     row["video"], row["audio"] = opt(v.video), stats(v.audio)
                     if getattr(v, "neg_video", None) is not None:  # encode-guided
                         row["neg_video"], row["neg_audio"] = stats(v.neg_video), stats(v.neg_audio)
-                    if (
-                        getattr(v, "nag_video", None) is not None
-                    ):  # encode with a negative prompt (NAG)
+                    if getattr(v, "nag_video", None) is not None:  # encode with a negative prompt (NAG)
                         row["nag_video"], row["nag_audio"] = stats(v.nag_video), stats(v.nag_audio)
             self.rows[ctx.node] = row
             return outs
@@ -291,9 +280,7 @@ class Bench:
         nodes["seed"]["params"]["seed"] = case["seed"]
         nodes["model"]["params"]["precision"] = f"int{case['quantize_on_load']}"
         # the templates default to Distilled from API 1.39: a dev golden asks for Dev
-        nodes["model"]["params"]["variant"] = (
-            "distilled" if "-distilled-" in case["name"] or case.get("dfr") else "dev"
-        )
+        nodes["model"]["params"]["variant"] = "distilled" if "-distilled-" in case["name"] or case.get("dfr") else "dev"
         if case.get("dfr"):
             detailed(nodes)
         if kind == "a2v":
@@ -305,10 +292,7 @@ class Bench:
             nodes["canvas"]["params"] |= {"width": case["width"], "height": case["height"]}
             del nodes["keyframes"]  # bypassed: studio splices it out, its consumers take its input
             for n in nodes.values():
-                n["in"] = {
-                    p: "encode.cond" if r == "keyframes.cond" else r
-                    for p, r in n.get("in", {}).items()
-                }
+                n["in"] = {p: "encode.cond" if r == "keyframes.cond" else r for p, r in n.get("in", {}).items()}
             return nodes
         src = GOLDENS.parent.parent.parent / case["inputs"]["video"]["file"]
         meta = (case.get("source") or {}).get("meta") or {
@@ -372,22 +356,16 @@ class Bench:
         nodes["canvas"]["params"] |= {"width": case["width"], "height": case["height"]}
         nodes["duration"]["params"] |= {"frames": case["frames"], "fps": round(case["fps"])}
         nodes["model"]["params"]["precision"] = f"int{case['quantize_on_load']}"
-        for im in (
-            case.get("images") or []
-        ):  # frame f is at f / fps seconds: round(s * fps) gives f back
+        for im in case.get("images") or []:  # frame f is at f / fps seconds: round(s * fps) gives f back
             nodes["keyframes"]["params"]["images"].append({"image": self.image(golden_dir(case["name"]) / im["file"]),
                                                            "seconds": im["frame_idx"] / case["fps"],
                                                            "strength": im["strength"]})  # fmt: skip
-        for sg in (
-            case.get("segments") or []
-        ):  # beats in latent frames → seconds (round(s * fps / 8) gives them)
+        for sg in case.get("segments") or []:  # beats in latent frames → seconds (round(s * fps / 8) gives them)
             nodes["encode"]["params"]["beats"].append({"text": sg["text"],
                                                        "seconds": sg["length"] * 8 / case["fps"] if sg["length"] else 0})  # fmt: skip
         if case.get("lora"):
             nodes["lora"]["params"]["rows"] = [self.lora(case)]
-        if case.get(
-            "negative_prompt"
-        ):  # plan 19 phase 2: NAG, at the Fast preset's float16 compute
+        if case.get("negative_prompt"):  # plan 19 phase 2: NAG, at the Fast preset's float16 compute
             nodes["encode"]["params"]["negative"] = case["negative_prompt"]
         if case.get("compute"):
             nodes["model"]["params"]["compute"] = case["compute"]
@@ -421,9 +399,7 @@ class Bench:
     def run(self, nodes: dict, wav: Path | None = None) -> dict:
         g = self.graph
         nodes = unbypassed(nodes, self.schemas)
-        for n in (
-            nodes.values()
-        ):  # studio merges the schema's defaults in (a template may leave one out: compute)
+        for n in nodes.values():  # studio merges the schema's defaults in (a template may leave one out: compute)
             n["params"] = {p["name"]: p["default"] for p in self.schemas[n["kind"]]["params"] if "default" in p} | n.get("params", {})  # fmt: skip
         assert not g.validate(nodes, self.schemas), g.validate(nodes, self.schemas)
         nodes, _ = g.resolve(nodes, self.schemas)
@@ -493,15 +469,11 @@ class Bench:
                    "seconds": [seconds, row["predictions"][0]["raw_seconds"]], "frames": []}  # fmt: skip
             for pr in row["predictions"]:
                 spec = ltx.FRAMES | {"auto": {"min_s": pr["min_s"], "max_s": pr["max_s"]}}
-                got["frames"].append(
-                    [self.graph.auto_frames(seconds, pr["fps"], spec), pr["frames"]]
-                )
+                got["frames"].append([self.graph.auto_frames(seconds, pr["fps"], spec), pr["frames"]])
             # on the golden's mlx exact; on another the seconds move by a bf16 step or so (0.32.4: 2.92 vs 2.89 s),
             # which may cross a grid point: one step (8 frames) of slack
             exact = g["versions"]["mlx"] == self.mx.__version__
-            got["frames_ok"] = all(
-                abs(a - min(b, 321)) <= (0 if exact else 8) for a, b in got["frames"]
-            )
+            got["frames_ok"] = all(abs(a - min(b, 321)) <= (0 if exact else 8) for a, b in got["frames"])
             ok &= got["frames_ok"] and abs(seconds / row["predictions"][0]["raw_seconds"] - 1) <= (
                 1e-6 if exact else 0.02
             )
@@ -530,25 +502,15 @@ def psnr(a: np.ndarray, b: np.ndarray) -> float:
 
 def read_wav(path: Path) -> np.ndarray:
     with wave.open(str(path)) as w:
-        return (
-            np.frombuffer(w.readframes(w.getnframes()), np.int16).reshape(-1, w.getnchannels())
-            / 32768.0
-        )
+        return np.frombuffer(w.readframes(w.getnframes()), np.int16).reshape(-1, w.getnchannels()) / 32768.0
 
 
-def logmel(
-    x: np.ndarray, sr: int = 48000, n_fft: int = 2048, hop: int = 480, mels: int = 128
-) -> np.ndarray:
+def logmel(x: np.ndarray, sr: int = 48000, n_fft: int = 2048, hop: int = 480, mels: int = 128) -> np.ndarray:
     """Log-mel power spectrogram in dB of a mono signal (Hann window, HTK mel scale)."""
     win = np.hanning(n_fft)
     pad = np.pad(x, n_fft // 2, mode="reflect")
     n = 1 + (len(pad) - n_fft) // hop
-    spec = (
-        np.abs(
-            np.fft.rfft(np.stack([pad[i * hop : i * hop + n_fft] * win for i in range(n)]), axis=1)
-        )
-        ** 2
-    )
+    spec = np.abs(np.fft.rfft(np.stack([pad[i * hop : i * hop + n_fft] * win for i in range(n)]), axis=1)) ** 2
     mel = lambda f: 2595 * np.log10(1 + f / 700)
     pts = 700 * (10 ** (np.linspace(mel(0), mel(sr / 2), mels + 2) / 2595) - 1)
     bins = np.fft.rfftfreq(n_fft, 1 / sr)
@@ -578,9 +540,7 @@ def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
         audio["logmel_db"] = round(float(np.mean([np.abs(logmel(a[:, c]) - logmel(b[:, c])).mean()
                                                    for c in range(a.shape[1])])), 3)  # fmt: skip
         noise = float(np.sum((a - b) ** 2))
-        audio["snr_db"] = (
-            round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
-        )
+        audio["snr_db"] = round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
     stages = g["stages"]
     points = {  # the golden's recorded points vs this run's handles (a node that was a cache hit has none)
         "embeds": (g["prompt_embeds"]["video"], "encode", "video"),
@@ -595,16 +555,12 @@ def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
     if g.get("nag"):  # the negative prompt's embeddings
         points["nag_embeds"] = (g["nag"]["embeds"]["video"], "encode", "nag_video")
     latents = {k: (w, r["nodes"][n][x]) for k, (w, n, x) in points.items() if n in r["nodes"]}
-    for i, (wrow, hrow) in enumerate(
-        zip(stages, bench.stages, strict=True), 1
-    ):  # each loop's state
+    for i, (wrow, hrow) in enumerate(zip(stages, bench.stages, strict=True), 1):  # each loop's state
         for k in ("video_in", "audio_in", "video_clean_in", "video_denoise_mask", "video_keyframes_mask",
                   "video_positions_stats", "video_cross_attention_mask", "audio_cross_attention_mask"):  # fmt: skip
             if k in wrow:
                 latents[f"loop{i}.{k}"] = (wrow[k], hrow[k])
-    for i, row in enumerate(
-        g.get("image_conditionings") or [], 1
-    ):  # the keyframe image latents per stage
+    for i, row in enumerate(g.get("image_conditionings") or [], 1):  # the keyframe image latents per stage
         for j, (it, have) in enumerate(zip(row["items"], bench.images[i - 1], strict=True), 1):
             latents[f"images{i}.{j}"] = (it["latent"], have)
     for m, w in ((g.get("lora") or {}).get("weights") or {}).items():  # the fused weights
@@ -628,9 +584,7 @@ def compare(name: str, r: dict, out: Path, bench: Bench) -> dict:
         "latents": lat,
     }
     if g["versions"]["mlx"] == r["mlx"]:  # the golden's own stack: bit-exact or fail
-        res["pass"] = (
-            bool(per) and all(v["exact"] for v in lat.values()) and min(per) == float("inf")
-        )
+        res["pass"] = bool(per) and all(v["exact"] for v in lat.values()) and min(per) == float("inf")
         return res
     if name not in BARS:  # not measured on this mlx yet: report only
         res["pass"] = False
@@ -677,9 +631,7 @@ def compare_dev(name: str, r: dict, out: Path, bench: Bench) -> dict:
         audio["logmel_db"] = round(float(np.mean([np.abs(logmel(a[:, c]) - logmel(b[:, c])).mean()
                                                    for c in range(a.shape[1])])), 3)  # fmt: skip
         noise = float(np.sum((a - b) ** 2))
-        audio["snr_db"] = (
-            round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
-        )
+        audio["snr_db"] = round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
     points = {}
     if "encode" in nodes:
         for k in ("video", "audio", "neg_video", "neg_audio"):
@@ -779,9 +731,7 @@ def compare_distilled(name: str, r: dict, out: Path) -> dict:
         audio["logmel_db"] = round(float(np.mean([np.abs(logmel(a[:, c]) - logmel(b[:, c])).mean()
                                                    for c in range(a.shape[1])])), 3)  # fmt: skip
         noise = float(np.sum((a - b) ** 2))
-        audio["snr_db"] = (
-            round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
-        )
+        audio["snr_db"] = round(10 * np.log10(float(np.sum(b**2)) / noise), 2) if noise else float("inf")
     worst = float(np.min(per)) if per else None
     return {"video": {"frames": [len(got), len(want)], "mean_db": round(float(np.mean(per)), 2) if per else None,
                       "worst_db": round(worst, 2) if per else None,
@@ -852,9 +802,7 @@ def main(argv=None) -> int:
     bench.residency.unload()
     report["after_unload_gib"] = round(bench.lm.measure_gb(), 2)
     (out / "report.json").write_text(json.dumps(report, indent=2, default=str) + "\n")
-    print(
-        "report", out / "report.json", "after unload", report["after_unload_gib"], "GiB", flush=True
-    )
+    print("report", out / "report.json", "after unload", report["after_unload_gib"], "GiB", flush=True)
     return 0 if ok else 1
 
 
@@ -886,7 +834,5 @@ def test_ltx_dev_goldens():
 
 
 if __name__ == "__main__":
-    sys.path.insert(
-        0, str(Path(__file__).resolve().parents[1])
-    )  # runner_service/, as pytest's pythonpath
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # runner_service/, as pytest's pythonpath
     sys.exit(main())

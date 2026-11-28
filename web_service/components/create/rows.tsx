@@ -14,6 +14,7 @@ import { useTakes } from "@/lib/take-cache";
 import { choosable, frameAt, itemSpecs, itemValue, positionOf, type Clip } from "@/lib/video";
 import { pretty, type Field, type Raw, type Update } from "@/lib/workflow";
 import type { S } from "@/lib/api";
+import { Range } from "@/components/range";
 
 type Row = S<"RowItem">;
 type Spec = ReturnType<typeof itemSpecs>[number][1];
@@ -40,81 +41,85 @@ export function ItemFields({
   onRow: (patch: Row) => void;
 }) {
   const pos = positionOf(p);
-  return itemSpecs(p)
-    .filter(([k, s]) => !skip.includes(k) && (s.type !== "enum" || choosable(s)))
-    // a choice goes under the sliders (docs/mock/LtxFeatures.dc.html frame 4): the item's keys reach the page sorted
-    .sort(([, a], [, b]) => Number(a.type === "enum") - Number(b.type === "enum"))
-    .map(([k, s]) => {
-      const fid = `${id}-${k}`;
-      const label = (
-        <span className="flex items-center">
-          {s.label ?? k}
-          {s.help && <Info>{s.help}</Info>}
-        </span>
-      );
-      const v = itemValue(row, [k, s]);
-      // an enum: its label, then a segmented choice on the same line (docs/mock/LtxFeatures.dc.html frame 4)
-      if (s.type === "enum")
-        return (
-          <div key={k} className="flex items-center justify-between gap-2">
-            <span className="text-[12px] text-t2">{label}</span>
-            <div className="seg" role="group" aria-label={s.label ?? k}>
-              {s.enum?.map((o) => (
-                <button
-                  key={o}
-                  type="button"
-                  aria-pressed={v === o}
-                  onClick={() => onRow({ [k]: o })}
-                >
-                  {pretty(o)}
-                </button>
-              ))}
-            </div>
-          </div>
+  return (
+    itemSpecs(p)
+      .filter(([k, s]) => !skip.includes(k) && (s.type !== "enum" || choosable(s)))
+      // a choice goes under the sliders (docs/mock/LtxFeatures.dc.html frame 4): the item's keys reach the page sorted
+      .sort(([, a], [, b]) => Number(a.type === "enum") - Number(b.type === "enum"))
+      .map(([k, s]) => {
+        const fid = `${id}-${k}`;
+        const label = (
+          <span className="flex items-center">
+            {s.label ?? k}
+            {s.help && <Info>{s.help}</Info>}
+          </span>
         );
-      if (s.type === "string" || s.type === "text")
+        const v = itemValue(row, [k, s]);
+        // an enum: its label, then a segmented choice on the same line (docs/mock/LtxFeatures.dc.html frame 4)
+        if (s.type === "enum")
+          return (
+            <div key={k} className="flex items-center justify-between gap-2">
+              <span className="text-[12px] text-t2">{label}</span>
+              <div className="seg" role="group" aria-label={s.label ?? k}>
+                {s.enum?.map((o) => (
+                  <button
+                    key={o}
+                    type="button"
+                    aria-pressed={v === o}
+                    onClick={() => onRow({ [k]: o })}
+                  >
+                    {pretty(o)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        if (s.type === "string" || s.type === "text")
+          return (
+            <div key={k} className="flex flex-col gap-1.5">
+              <label htmlFor={fid} className="text-[12px] text-t2">
+                {label}
+              </label>
+              <input
+                id={fid}
+                className="in"
+                maxLength={s.max}
+                value={String(v ?? "")}
+                onChange={(e) => onRow({ [k]: e.target.value })}
+              />
+            </div>
+          );
+        // a time on the clip: a notch per frame, read as the frame and its time
+        const n = Number(v);
+        const onClip = pos?.[0] === k && clip;
+        const frame = onClip ? frameAt(n, clip) : 0;
+        const text = onClip
+          ? `frame ${frame} · ${secondsText(frame / clip.fps)}`
+          : numText(k, s, n);
         return (
-          <div key={k} className="flex flex-col gap-1.5">
-            <label htmlFor={fid} className="text-[12px] text-t2">
+          <div key={k} className="flex flex-col gap-1">
+            <label htmlFor={fid} className="flex justify-between gap-2 text-[12px] text-t2">
               {label}
+              <span className="mono">{text}</span>
             </label>
-            <input
+            <Range
               id={fid}
-              className="in"
-              maxLength={s.max}
-              value={String(v ?? "")}
-              onChange={(e) => onRow({ [k]: e.target.value })}
+
+              min={onClip ? 0 : s.min}
+              max={onClip ? clip.last : s.max}
+              step={onClip ? 1 : (s.step ?? "any")}
+              value={onClip ? frame : n}
+              aria-valuetext={text}
+              onChange={(e) => {
+                const x = Number(e.target.value);
+                onRow({ [k]: onClip ? x / clip.fps : clampStrength(x, s) });
+              }}
+              className={`w-full ${onClip ? "accent-a2" : "accent-a1"}`}
             />
           </div>
         );
-      // a time on the clip: a notch per frame, read as the frame and its time
-      const n = Number(v);
-      const onClip = pos?.[0] === k && clip;
-      const frame = onClip ? frameAt(n, clip) : 0;
-      const text = onClip ? `frame ${frame} · ${secondsText(frame / clip.fps)}` : numText(k, s, n);
-      return (
-        <div key={k} className="flex flex-col gap-1">
-          <label htmlFor={fid} className="flex justify-between gap-2 text-[12px] text-t2">
-            {label}
-            <span className="mono">{text}</span>
-          </label>
-          <input
-            id={fid}
-            type="range"
-            min={onClip ? 0 : s.min}
-            max={onClip ? clip.last : s.max}
-            step={onClip ? 1 : (s.step ?? "any")}
-            value={onClip ? frame : n}
-            aria-valuetext={text}
-            onChange={(e) => {
-              const x = Number(e.target.value);
-              onRow({ [k]: onClip ? x / clip.fps : clampStrength(x, s) });
-            }}
-            className={`w-full ${onClip ? "accent-a2" : "accent-a1"}`}
-          />
-        </div>
-      );
-    });
+      })
+  );
 }
 
 /** Where the keyframes sit on the clip: a marker per row with its picture, at its frame. */
@@ -151,7 +156,13 @@ export function ClipTrack({
             }}
           >
             {src && (
-              <img loading="lazy" decoding="async" src={src} alt="" className="size-full object-cover" />
+              <img
+                loading="lazy"
+                decoding="async"
+                src={src}
+                alt=""
+                className="size-full object-cover"
+              />
             )}
           </span>
         );

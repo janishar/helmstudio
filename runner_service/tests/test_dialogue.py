@@ -18,7 +18,7 @@ from packs.zonos3 import native
 FIXTURES = CONTRACTS / "fixtures"
 PALETTE = {n["kind"]: n for g in json.loads((FIXTURES / "graphs/palette.json").read_text())["groups"]
            for n in g["nodes"]}  # fmt: skip
-ADA = {"item_id": "echo/ada", "version": 1, "source": "preset", "family": "echo", "speaker": "ada", "language": "en"}  # fmt: skip
+ADA = {"item_id": "echo/ada", "version": 1, "source": "preset", "family": "echo", "speaker": "ada", "language": "en"}
 
 
 def command() -> dict:
@@ -44,9 +44,7 @@ async def test_echo_dialogue_reads_the_clip_and_reports_the_contracts_cues():
     assert evts[-1]["data"]["status"] == "succeeded", evts[-1]
     out = next(e for e in evts if e["type"] == "evt.run.output")["data"]
     want = json.loads((FIXTURES / "messages/evt.run.output.valid.9.json").read_text())["data"]
-    assert (
-        out["audio"] == want["audio"] and out["bytes"] == want["bytes"]
-    )  # the fixture is this take
+    assert out["audio"] == want["audio"] and out["bytes"] == want["bytes"]  # the fixture is this take
     assert store.reads == [clip["key"]]
     steps = [e["data"] for e in evts if e["type"] == "evt.run.progress"]
     assert [(s["step"], s["of"]) for s in steps if s.get("node") == "dialogue"] == [(1, 2), (2, 2)]
@@ -59,18 +57,11 @@ def test_echo_dialogue_equals_check_py_echo_dialogue_on_the_script_fixtures():
     ctx = types.SimpleNamespace(node="dialogue", check=lambda: None, progress=lambda *a: None)
     for case in (c for c in fx["cases"] if "take" in c):
         rows = next(v for k, v in case["expect"]["inputs"].items() if k.endswith(".lines"))
-        resolved = [
-            r | {"voice": {"item_id": r["voice"]["voice_id"], "version": 1, "source": "preset"}}
-            for r in rows
-        ]
+        resolved = [r | {"voice": {"item_id": r["voice"]["voice_id"], "version": 1, "source": "preset"}} for r in rows]
         audio = fake.dialogue(ctx, {"lines": resolved, "seed": 7, "delay_ms": 0}, {})["audio"]
-        assert {"duration_s": audio["duration_s"], "cues": audio["cues"]} == case["take"], case[
-            "description"
-        ]
+        assert {"duration_s": audio["duration_s"], "cues": audio["cues"]} == case["take"], case["description"]
         a, b = audio["cues"][0]["end_s"], audio["cues"][1]["start_s"]
-        assert audio["wav"][round(a * 24000) * 2 : round(b * 24000) * 2] == bytes(
-            2 * round((b - a) * 24000)
-        )
+        assert audio["wav"][round(a * 24000) * 2 : round(b * 24000) * 2] == bytes(2 * round((b - a) * 24000))
 
 
 def test_stitch_puts_the_rounded_pause_after_each_line_but_the_last():
@@ -114,12 +105,7 @@ def test_speech_seconds_of_a_dialogue_is_its_lines_and_pauses_capped():
     }
     assert graph.speech_seconds(n, PALETTE, "d") == 3.5  # the last line's pause is not used
     assert graph.speech_seconds(n, PALETTE, "d", 3) == 3
-    assert (
-        graph.speech_seconds(
-            {"d": {"kind": "echo/dialogue", "params": {"lines": []}}}, PALETTE, "d"
-        )
-        == 0
-    )
+    assert graph.speech_seconds({"d": {"kind": "echo/dialogue", "params": {"lines": []}}}, PALETTE, "d") == 0
 
 
 def dialogue(lines: list) -> dict:
@@ -147,10 +133,7 @@ def test_the_dialogue_check_texts():
     with pytest.raises(RunError, match="^dialogue: nothing to say$"):
         fake.dialogue(ctx, {"lines": [], "seed": 1, "delay_ms": 0}, {})
     assert media.lines_problem([line("x" * 9000, 0)]) is None  # 600 s exactly
-    assert (
-        media.lines_problem([line("x" * 9000, 1), line("y")])
-        == ": about 601 s of speech; a take is at most 600 s"
-    )
+    assert media.lines_problem([line("x" * 9000, 1), line("y")]) == ": about 601 s of speech; a take is at most 600 s"
     qwen = pytest.importorskip("packs.qwen3_tts.torch")
     model = lambda variant: {"model": types.SimpleNamespace(variant=variant)}
     assert qwen.check_dialogue({"lines": []}, set(), model("voice_design")) == (

@@ -3,7 +3,7 @@
 // registers its actions and its summary once it has loaded (useScreenTools), always calling its own entry points; the
 // shell adds navigate and await. The drawer runs a turn's actions through it, in the tab that sent the message.
 import { createContext, use, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, message, ok, okOr } from "@/lib/api";
+import { api, message, ok, okOr, type S } from "@/lib/api";
 import {
   SCREENS,
   argsError,
@@ -21,7 +21,7 @@ import {
   type Outcome,
   type Screen,
 } from "@/lib/assistant";
-import { clock } from "@/lib/runs";
+import { clock, sleep } from "@/lib/format";
 
 /** What a screen registers: its actions (names from tools/actions.json), the "Sees" chips, the open ids, the
  * summary's fields (§22.4, built from values the screen already works out) and the empty drawer's examples. */
@@ -32,9 +32,18 @@ export type ScreenSpec = {
   summary: () => Record<string, unknown>;
   actions: Record<string, Handler>;
   examples?: { text: string; sub: string }[];
+  /** the Assistant's runs still going on this screen (Magic: its runs on the board) and how to stop them: its Stop
+   * offers "Stop its runs too" */
+  runs?: () => Promise<{ going: number; stop: () => void }>;
 };
 
 type Entry = { key: number; get: () => ScreenSpec };
+type AssistantCard = S<"AssistantCard">;
+export type ServerCards = {
+  cards: AssistantCard[];
+  key: string;
+  answer: (cardId: string, yes: boolean) => void;
+};
 
 /** The registry: screens in mount order (the newest is the screen now), the path, and listeners. */
 export class Registry {
@@ -44,6 +53,9 @@ export class Registry {
   path = "";
   roles: string[] = [];
   shell: Record<string, Handler> = {};
+  /** API 1.87: the chat's server cards that wait (the Magic page draws a board_edit card on its board), a key that
+   * moves with every change of the chat (a screen reads its data again) and how to answer a card */
+  server: ServerCards = { cards: [], key: "", answer: () => undefined };
 
   register(get: () => ScreenSpec) {
     const key = ++this.seq;
@@ -65,6 +77,14 @@ export class Registry {
   configure(roles: string[], shell: Record<string, Handler>) {
     this.roles = roles;
     this.shell = shell;
+  }
+  /** The drawer's chat (API 1.87): its waiting server cards and its key; listeners hear only a change. */
+  setServer(cards: AssistantCard[], key: string, answer: ServerCards["answer"]) {
+    const same =
+      key === this.server.key &&
+      cards.map((c) => c.id).join() === this.server.cards.map((c) => c.id).join();
+    this.server = { cards, key, answer };
+    if (!same) this.notify();
   }
   setPath(p: string) {
     this.path = p;
@@ -254,7 +274,6 @@ export function useDialogWait<T>() {
   );
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 /** Resolves once `cond` holds (checked every 100 ms), false after `ms`. */
 export async function until(cond: () => boolean, ms: number) {
   for (const end = Date.now() + ms; Date.now() < end; await sleep(100)) if (cond()) return true;
@@ -285,13 +304,21 @@ const what = {
     async () => {
       const r = await ok(api.GET("/v1/studio/runs/{run_id}", { params: { path: { run_id: id } } }));
       const n = r.outputs.length;
-      // an ask run (look_at) answers in text, never a take: the answer comes back for the model to read
+      // an ask run (look_at, listen) answers in text, never a take: the answer comes back for the model to read,
+      // with a listen run's transcript (API 1.107: resolved.texts["listen.transcript"])
       if (r.status === "succeeded" && r.answer) {
         const a = r.answer.text.trim();
+        const transcript = Object.entries(r.resolved?.texts ?? {}).find(([k]) =>
+          k.endsWith(".transcript"),
+        )?.[1];
         return {
           end: "done",
           text: `Answered · ${a.length > 120 ? `${a.slice(0, 120)}…` : a}`,
-          result: { status: r.status, answer: a.slice(0, 4000) },
+          result: {
+            status: r.status,
+            answer: a.slice(0, 4000),
+            ...(transcript ? { transcript: transcript.slice(0, 4000) } : {}),
+          },
         };
       }
       if (r.status === "succeeded")

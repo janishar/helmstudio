@@ -85,9 +85,7 @@ def start(argv: list[str], timeout: float = native.READY_S) -> tuple[subprocess.
     proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
                             start_new_session=True)  # fmt: skip
     until = time.monotonic() + timeout
-    for raw in (
-        proc.stderr
-    ):  # ponytail: the deadline is checked per line; the server prints ~240 while loading
+    for raw in proc.stderr:  # ponytail: the deadline is checked per line; the server prints ~240 while loading
         if m := native.READY.search(raw.decode(errors="replace")):
             # keep draining stderr so a full pipe never blocks the server
             threading.Thread(target=lambda: all(proc.stderr), daemon=True).start()
@@ -142,9 +140,7 @@ def main() -> None:
             stop(proc)
         wav, cues = spoken[0], None
         if "lines" in case:
-            pcm, cues = media.stitch(
-                lines, [native.pcm(name, w) for w in spoken], native.SAMPLE_RATE
-            )
+            pcm, cues = media.stitch(lines, [native.pcm(name, w) for w in spoken], native.SAMPLE_RATE)
             buf = io.BytesIO()
             with wave.open(buf, "wb") as w:
                 w.setnchannels(1)

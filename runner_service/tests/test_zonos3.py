@@ -37,13 +37,9 @@ def values():
 def test_nodes_workflows_voices_and_models_match_the_fixtures(values):
     kinds = {n["kind"] for n in fixture("nodes")["nodes"]}
     assert [n for n in values["nodes"]["nodes"] if n["kind"] in kinds] == fixture("nodes")["nodes"]
-    assert [w for w in values["workflows"]["workflows"] if w["family"] == "zonos3"] == fixture(
-        "workflows"
-    )["workflows"]
+    assert [w for w in values["workflows"]["workflows"] if w["family"] == "zonos3"] == fixture("workflows")["workflows"]
     # the previews' keys carry their sha256: equal values pin the 27 converted WAVs byte for byte
-    assert [v for v in values["voices"]["voices"] if v["family"] == "zonos3"] == fixture("voices")[
-        "voices"
-    ]
+    assert [v for v in values["voices"]["voices"] if v["family"] == "zonos3"] == fixture("voices")["voices"]
     (got,) = [m for m in values["models"]["models"] if m["family"] == "zonos3"]
     (want,) = fixture("models")["models"]
     keys = ("id", "family", "title", "media", "runtimes")
@@ -51,9 +47,7 @@ def test_nodes_workflows_voices_and_models_match_the_fixtures(values):
     g, w = got["variants"][0], want["variants"][0]
     assert {k: g[k] for k in ("id", "title", "dir", "source", "precisions")} == {
         k: w[k] for k in ("id", "title", "dir", "source", "precisions")}  # fmt: skip
-    if (
-        g["presence"] == "present"
-    ):  # on a host with the weights: the same sizes and the flat 2 GB plan
+    if g["presence"] == "present":  # on a host with the weights: the same sizes and the flat 2 GB plan
         assert (g["components"], g["memory"]) == (w["components"], w["memory"])
 
 
@@ -62,11 +56,7 @@ def test_every_language_maps_to_a_server_code_in_the_registrys_order():
     tags = next(p["enum"] for p in speak["params"] if p["name"] == "language")
     codes = [x["code"] for x in json.loads(REGISTRIES.read_text())["server"]]
     assert [native.language(t) for t in tags] == codes
-    assert (
-        native.language("zh") == "cmn"
-        and native.language("pt-BR") == "pt_br"
-        and native.language("no") == "no"
-    )
+    assert native.language("zh") == "cmn" and native.language("pt-BR") == "pt_br" and native.language("no") == "no"
 
 
 PRESETS = fixture("workflows")["workflows"][0]["studio"]["presets"]
@@ -91,15 +81,11 @@ def test_delivery_maps_the_workflows_presets(preset, want):
 
 def test_delivery_at_its_neutral_values_sends_only_the_rate_and_the_ends_reach_the_safe_doses():
     flat = {"emotion": 0.5, "energy": 0.5, "whisper": 0, "speaking_rate": 1, "guidance": 1}
-    assert native.delivery(flat) == {
-        "condition_values": {"speaking_rate": 15}
-    }  # 1: the middle bucket, never unknown
+    assert native.delivery(flat) == {"condition_values": {"speaking_rate": 15}}  # 1: the middle bucket, never unknown
     ends = native.delivery(flat | {"emotion": 0, "energy": 1, "whisper": 1, "speaking_rate": 0.5})
     assert ends == {"controls": {"mood.valence": -4.0, "mood.arousal": 4.0, "delivery.whisper": 1.5},
                     "condition_values": {"speaking_rate": 7.5}}  # fmt: skip
-    body = native.body(
-        "Hi.", 2**32 + 7, flat | {"language": "en-GB"}, {"speaker_mode": "embedding"}
-    )
+    body = native.body("Hi.", 2**32 + 7, flat | {"language": "en-GB"}, {"speaker_mode": "embedding"})
     assert body == {"text": "Hi.", "stream": False, "format": "wav", "seed": 7, "language": "en_gb",
                     "condition_values": {"speaking_rate": 15}, "speaker_mode": "embedding"}  # fmt: skip
 
@@ -183,28 +169,18 @@ def test_voices_and_their_fields(tmp_path):
                                                                 "speaker_embedding_base64": "bnB5"}  # fmt: skip
     with pytest.raises(RunError, match=r"^speak.voice: ZONOS3 has no default voice zonos3/nobody$"):
         native.speaker("speak", preset | {"item_id": "zonos3/nobody"}, gguf, tmp_path)
-    with pytest.raises(
-        RunError, match=r"^speak.voice: ZONOS3 has no default voice qwen3-tts/ryan$"
-    ):
-        native.speaker(
-            "speak", preset | {"item_id": "qwen3-tts/ryan", "family": "qwen3-tts"}, gguf, tmp_path
-        )
-    with pytest.raises(
-        RunError, match=r"^speak.voice: ZONOS3 cannot speak a voice of source 'design'$"
-    ):
+    with pytest.raises(RunError, match=r"^speak.voice: ZONOS3 has no default voice qwen3-tts/ryan$"):
+        native.speaker("speak", preset | {"item_id": "qwen3-tts/ryan", "family": "qwen3-tts"}, gguf, tmp_path)
+    with pytest.raises(RunError, match=r"^speak.voice: ZONOS3 cannot speak a voice of source 'design'$"):
         native.speaker("speak", {"source": "design", "text": "low"}, gguf, tmp_path)
     got = native.speaker("speak", {"source": "clip", "clip": clip()}, gguf, tmp_path)
-    assert got["speaker_mode"] == "embedding" and got["speaker_audio_base64"].startswith(
-        "UklGR"
-    )  # RIFF
+    assert got["speaker_mode"] == "embedding" and got["speaker_audio_base64"].startswith("UklGR")  # RIFF
 
 
 class Refuse(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         self.rfile.read(int(self.headers["Content-Length"]))
-        body = json.dumps(
-            {"error": "steering: Unknown control 'nope' in /Users/me/x.gguf; see /v2/controls."}
-        )
+        body = json.dumps({"error": "steering: Unknown control 'nope' in /Users/me/x.gguf; see /v2/controls."})
         self.send_response(400)
         self.send_header("Content-Type", "application/json")
         self.end_headers()

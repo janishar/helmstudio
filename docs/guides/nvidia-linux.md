@@ -18,36 +18,38 @@ source, on the card's own driver (like the Mac's `make runners`). On Windows do 
   without it `make runners-nvidia` fails with "uvx: No such file or directory"). The runner's torch comes with its
   own CUDA libraries; no CUDA toolkit is needed. The first start downloads them (a few GB): the host appears in
   System › Hosts only after that.
-- **SGLang 0.5.23**, optional (MiniMax H3 Base fp8), in its own venv:
-
-  ```sh
-  uv venv --python 3.12 ~/sglang
-  VIRTUAL_ENV=~/sglang uv pip sync runner_service/sglang-requirements.txt
-  export SGLANG_BIN=~/sglang/bin/sglang
-  # SGLang's kernels link CUDA's runtime from <cu13>/lib64; the wheel ships lib/ and libcudart.so.13 only
-  (cd ~/sglang/lib/python3.12/site-packages/nvidia/cu13 && ln -s lib lib64 && ln -s libcudart.so.13 lib/libcudart.so)
-  ```
-
-  SGLang compiles GPU kernels on its first run, so it also needs a C compiler and Python's headers:
-  `sudo apt install build-essential python3.12-dev` (without them: "gcc: No such file or directory" or "Python.h:
-  No such file or directory"). The first video takes a few minutes longer while it compiles.
-  A machine whose hostname is long (a cloud VM's full internal name, e.g. 65 characters) breaks SGLang's start
-  ("File name too long" from torch.distributed): give it a short one, `sudo hostnamectl set-hostname gpu1`.
+- **SGLang 0.5.23**, optional (MiniMax H3 Base fp8), in its own venv: `make sglang` in the clone (step 2) puts it in
+  `~/sglang` on uv's own Python 3.12, and `make runners-nvidia` finds it there (`SGLANG_BIN` names another place).
+  SGLang compiles GPU kernels on its first run, so it needs a C compiler: `sudo apt install build-essential`. The
+  first video takes a few minutes longer while it compiles. The runner makes the two CUDA links SGLang's kernels
+  expect in its venv by itself, and refuses to start SGLang without gcc or with a long hostname (a cloud VM's full
+  internal name, e.g. 65 characters, breaks SGLang's start with "File name too long"): give the machine a short
+  one, `sudo hostnamectl set-hostname gpu1`. `make sglang` checks both and prints the fix. An SGLang venv of your
+  own on the system's Python also needs its headers: `sudo apt install python3.12-dev`.
 
 ## 2. Run
 
 ```sh
 git clone https://github.com/janishar/helmstudio && cd helmstudio
 make up GPU_HOSTS=gpu1                       # the stack, plus host gpu1's NATS user and S3 identity
+make sglang                                  # optional: SGLang for MiniMax H3 Base fp8
 GPU_HOST=gpu1 HELMSTUDIO_MODELS=/path/to/models make runners-nvidia
 ```
 
 Then open http://localhost:8300. From another computer, tunnel the same port (`ssh -N -L 8300:127.0.0.1:8300 <machine>`,
 then http://localhost:8300 there): the web app accepts sign-in only at its own address, so a different local port
 fails with a server error; to use another address set `PUBLIC_BASE_URL` (and `HELMSTUDIO_PORT`) in `.env`. `make runners-nvidia` starts env torch, and env native when SGLang is found
-(`SGLANG_BIN`, else `sglang` on PATH). The host name is `GPU_HOST` (default: the first of `GPU_HOSTS`, else the one
-host `make up` made, else the machine's short name); it must be one `make up GPU_HOSTS=…` made. Logs:
-`runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`, then `make down`.
+(`SGLANG_BIN`, else `~/sglang` from `make sglang`, else `sglang` on PATH). The host name is `GPU_HOST` (default:
+the first of `GPU_HOSTS`, else the one host `make up` made, else the machine's short name); it must be one
+`make up GPU_HOSTS=…` made. Logs: `runner_service/.run/runner-<host>-<env>.log`. Stop: `make runners-nvidia-stop`,
+then `make down`.
+
+**ZONOS3 comes ready.** When `runner_service/vendor/zonos3/build/zonos3-server` is missing, `make runners-nvidia`
+first downloads the release's prebuilt CUDA 13 server (Linux x86_64, with CUDA's cudart and cuBLAS inside), checks it
+against the release's SHA256SUMS, and then starts env native for it too. To fetch it alone:
+`make -C runner_service zonos3-get`. It needs glibc 2.39 or later (Ubuntu 24.04, also in WSL2). A checkout with no
+release file (a dev branch) prints how to build it instead: `make -C runner_service zonos3-cuda`, with nvcc 12.8 or
+later.
 
 **With the Docker release stack** (deploy/release/compose.yml, no build): start it as its README says, then in a
 clone run only the runners against it:
@@ -68,7 +70,7 @@ The same steps run inside WSL2 (Ubuntu 24.04). Differences:
   not install a Linux driver inside WSL2.
 - Install Docker Desktop with the WSL2 backend and turn on its integration for your Ubuntu distro (Settings ›
   Resources › WSL integration), so `docker` works inside WSL2 and the stack's ports on 127.0.0.1 reach the runners.
-- Do everything else (git, ffmpeg, uv, build-essential, python3.12-dev, SGLang, `make runners-nvidia`) inside WSL2.
+- Do everything else (git, ffmpeg, uv, build-essential, `make sglang`, `make runners-nvidia`) inside WSL2.
 - Keep the repo and the models inside WSL2's own disk (e.g. `~/helmstudio`, `~/models`), not under `/mnt/c`: the
   Windows drive is much slower from WSL2.
 - Open http://localhost:8300 in a Windows browser.

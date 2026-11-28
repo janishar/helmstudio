@@ -131,7 +131,7 @@
           "item": {
             "take": "Media"
           },
-          "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+          "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
         },
         {
           "name": "schema",
@@ -158,6 +158,60 @@
         }
       ],
       "help": "Fake ask: answers the JSON after the last ECHO-ANSWER: in the prompt (contracts/README.md, The llm pack: the fake)."
+    },
+    {
+      "kind": "echo/listen",
+      "title": "Listen (fake)",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Take",
+          "default": null,
+          "accepts": [
+            "video",
+            "audio"
+          ],
+          "max_s": 120,
+          "help": "The video or audio take to listen to."
+        },
+        {
+          "name": "question",
+          "type": "string",
+          "label": "Question",
+          "default": "",
+          "max": 500,
+          "help": "What to listen for."
+        },
+        {
+          "name": "transcript",
+          "type": "bool",
+          "label": "Transcript",
+          "default": true,
+          "help": "Also write down the speech; empty when the take has no sound."
+        },
+        {
+          "name": "max_tokens",
+          "type": "int",
+          "label": "Max tokens",
+          "default": 600,
+          "min": 16,
+          "max": 2048
+        }
+      ],
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "answer",
+          "type": "Text"
+        },
+        {
+          "name": "transcript",
+          "type": "Text"
+        }
+      ],
+      "help": "Fake listen (contracts/README.md, The listen tool): answers ECHO-LISTEN: and the question, and the transcript ECHO-TRANSCRIPT when asked for one."
     },
     {
       "kind": "echo/model",
@@ -246,7 +300,6 @@
       "kind": "echo/tiny",
       "title": "Echo tiny",
       "family": "echo",
-      "component": "transformer",
       "params": [
         {
           "name": "steps",
@@ -282,6 +335,7 @@
           "type": "Image"
         }
       ],
+      "component": "transformer",
       "help": "Fake model stage: loads the tiny model's transformer and vae, then draws its text and the variant."
     },
     {
@@ -725,7 +779,8 @@
           "type": "Audio"
         }
       ],
-      "help": "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`."
+      "help": "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`.",
+      "sound": "voice"
     },
     {
       "kind": "echo/dialogue",
@@ -819,7 +874,381 @@
           "type": "Audio"
         }
       ],
-      "help": "Fake dialogue: per line one sine tone per character (1/15 s each, 24 kHz mono), then its pause_s of silence; cues per line; one progress step per line. No line fails `<node>: nothing to say`."
+      "help": "Fake dialogue: per line one sine tone per character (1/15 s each, 24 kHz mono), then its pause_s of silence; cues per line; one progress step per line. No line fails `<node>: nothing to say`.",
+      "sound": "voice"
+    },
+    {
+      "kind": "echo/music",
+      "title": "Echo music",
+      "family": "echo",
+      "params": [
+        {
+          "name": "lyrics",
+          "type": "text",
+          "label": "Lyrics",
+          "default": "",
+          "min": 0,
+          "max": 4000,
+          "tags": [
+            "verse",
+            "chorus",
+            "bridge",
+            "intro",
+            "outro"
+          ],
+          "when": "instrumental == false",
+          "help": "Section tags in square brackets, one per line: [verse], [chorus]."
+        },
+        {
+          "name": "instrumental",
+          "type": "bool",
+          "label": "Instrumental",
+          "default": false
+        },
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Length",
+          "default": 0,
+          "auto": true,
+          "min": 1,
+          "max": 600,
+          "step": 0.5,
+          "help": "Auto: the fake planner picks 10 s."
+        },
+        {
+          "name": "bpm",
+          "type": "int",
+          "label": "BPM",
+          "default": 0,
+          "auto": true,
+          "min": 30,
+          "max": 300,
+          "help": "Auto: the fake planner picks 90."
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        },
+        {
+          "name": "plan",
+          "type": "Text"
+        }
+      ],
+      "help": "Fake song: a stereo WAV (48 kHz) of two sine tones, Length seconds long (Auto: 10 s), its pitch from the text and the seed; one section per [tag] line of the lyrics, evenly spread; reports its plan (BPM, key, time, length, language) as the planner would.",
+      "sound": "music"
+    },
+    {
+      "kind": "echo/sound",
+      "title": "Echo sound",
+      "family": "echo",
+      "params": [
+        {
+          "name": "avoid",
+          "type": "string",
+          "label": "Avoid",
+          "default": "",
+          "max": 400
+        },
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Length",
+          "default": 2,
+          "min": 0.5,
+          "max": 30,
+          "step": 0.5
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake sound effect: a stereo WAV (44.1 kHz) of a sine sweep, Length seconds long, its pitch from the text and the seed.",
+      "sound": "sound"
+    },
+    {
+      "kind": "echo/foley",
+      "title": "Echo sound from a video",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Video",
+          "default": null,
+          "accepts": [
+            "video"
+          ],
+          "max_s": 30,
+          "help": "The video the fake reads (and checks), then scores."
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        },
+        {
+          "name": "video",
+          "type": "Video"
+        }
+      ],
+      "help": "Fake sound for a video: a stereo WAV (44.1 kHz) as long as the source, and the source's picture with that sound (core.media.mux).",
+      "sound": "sound"
+    },
+    {
+      "kind": "echo/repaint",
+      "title": "Echo repaint",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Song",
+          "default": null,
+          "accepts": [
+            "audio"
+          ],
+          "max_s": 600,
+          "help": "The audio take the fake reads (and checks) before it repaints."
+        },
+        {
+          "name": "span",
+          "type": "span",
+          "label": "Repaint",
+          "default": null,
+          "help": "The part to make again, in the song's seconds."
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake repaint: the source song (stereo, 48 kHz) with the span replaced by a tone of the text.",
+      "sound": "music"
+    },
+    {
+      "kind": "echo/vary",
+      "title": "Echo vary",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Sound",
+          "default": null,
+          "accepts": [
+            "audio"
+          ],
+          "max_s": 30
+        },
+        {
+          "name": "change",
+          "type": "float",
+          "label": "Change",
+          "default": 0.5,
+          "min": 0,
+          "max": 1,
+          "step": 0.05
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake variation: the source sound (stereo, 44.1 kHz) mixed with a tone of the text, by Change.",
+      "sound": "sound"
+    },
+    {
+      "kind": "echo/lengthen",
+      "title": "Echo music extend",
+      "family": "echo",
+      "params": [
+        {
+          "name": "source",
+          "type": "media",
+          "label": "Song",
+          "default": null,
+          "accepts": [
+            "audio"
+          ],
+          "max_s": 600
+        },
+        {
+          "name": "seconds",
+          "type": "float",
+          "label": "Add",
+          "default": 10,
+          "min": 1,
+          "max": 120,
+          "step": 1
+        },
+        {
+          "name": "where",
+          "type": "enum",
+          "label": "Where",
+          "default": "end",
+          "enum": [
+            "end",
+            "start"
+          ]
+        },
+        {
+          "name": "seed",
+          "type": "seed",
+          "label": "Seed",
+          "default": -1,
+          "min": -1,
+          "max": 9007199254740991,
+          "step": 1
+        },
+        {
+          "name": "delay_ms",
+          "type": "int",
+          "label": "Delay per step (ms)",
+          "default": 300,
+          "min": 0,
+          "max": 10000
+        }
+      ],
+      "inputs": [
+        {
+          "name": "text",
+          "type": "Text"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "audio",
+          "type": "Audio"
+        }
+      ],
+      "help": "Fake music extend: the source song (stereo, 48 kHz) with Add seconds of a tone of the text after its end (End) or before its start (Start).",
+      "sound": "music"
     },
     {
       "kind": "output",

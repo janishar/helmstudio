@@ -81,9 +81,7 @@ def test_download_writes_plain_checked_files_and_the_variant_is_present(pack):
     }
     assert not (root / "README.md").exists()  # not in allow_patterns
     assert all(not p.is_symlink() for p in root.rglob("*"))
-    assert not (root / models.MARKER).exists() and not list(
-        (config.MODELS.parent / "cache").glob("hf-*")
-    )
+    assert not (root / models.MARKER).exists() and not list((config.MODELS.parent / "cache").glob("hf-*"))
     assert presence(pack) == {"base": "present", "turbo": "missing"}
     entry = models.entry(pack)
     base = entry["variants"][0]
@@ -98,9 +96,7 @@ def test_download_writes_plain_checked_files_and_the_variant_is_present(pack):
 def test_a_cut_connection_resumes_with_a_range_request(pack, monkeypatch):
     from huggingface_hub import constants
 
-    monkeypatch.setattr(
-        constants, "DOWNLOAD_CHUNK_SIZE", 1 << 14
-    )  # 10 MB: resumes count whole chunks
+    monkeypatch.setattr(constants, "DOWNLOAD_CHUNK_SIZE", 1 << 14)  # 10 MB: resumes count whole chunks
     with hub_of(t_tiny=Repo(files())) as hub:
         hub.cut = {"transformer/a.safetensors"}
         run(pack, hub=hub)
@@ -129,11 +125,7 @@ def test_a_stopped_download_resumes_from_the_files_on_disk(pack):
         assert presence(pack)["base"] == "partial"  # some files, the marker: unfinished
         hub.requests.clear()
         result = run(pack, hub=hub)
-    fetched = {
-        r[1].rsplit("/resolve/main/", 1)[-1]
-        for r in hub.requests
-        if r[0] == "GET" and "/resolve/" in r[1]
-    }
+    fetched = {r[1].rsplit("/resolve/main/", 1)[-1] for r in hub.requests if r[0] == "GET" and "/resolve/" in r[1]}
     assert "model_index.json" not in fetched and "transformer/a.safetensors" not in fetched
     assert result["files"] == 2 and presence(pack)["base"] == "present"
 
@@ -201,10 +193,7 @@ def test_unsafe_names_from_the_hub_write_nothing(pack, name):
     with hub, pytest.raises(JobError, match="lists an unsafe file name") as e:
         run(pack, hub=hub)
     assert e.value.cls == "internal"
-    assert (
-        not (config.MODELS / "Tiny").exists()
-        and not (config.MODELS.parent / "evil.safetensors").exists()
-    )
+    assert not (config.MODELS / "Tiny").exists() and not (config.MODELS.parent / "evil.safetensors").exists()
 
 
 def test_names_equal_but_for_case_are_refused(pack):
@@ -220,19 +209,22 @@ def test_a_symlinked_folder_in_the_variant_is_never_written_through(pack):
     with hub_of(t_tiny=Repo(files()), t_tiny_turbo=Repo(turbo)) as hub:
         run(pack, "base", hub=hub)
         (config.MODELS / "Tiny-Turbo").mkdir()
-        (config.MODELS / "Tiny-Turbo/vae").symlink_to(
-            config.MODELS / "Tiny/vae"
-        )  # a hand-made share
-        assert not packs.owns_copy(
-            pack, "turbo", "vae"
-        )  # files under a linked folder are not its own
+        (config.MODELS / "Tiny-Turbo/vae").symlink_to(config.MODELS / "Tiny/vae")  # a hand-made share
+        assert not packs.owns_copy(pack, "turbo", "vae")  # files under a linked folder are not its own
         # the owner's hashes differ from turbo's repo: the vae is planned into turbo's own (linked) folder
         with pytest.raises(JobError, match="under a symlinked folder") as e:
             run(pack, "turbo", hub=hub)
     assert e.value.cls == "internal"
-    assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[
-        :999
-    ]  # base's file untouched
+    assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[:999]  # base's file untouched
+
+
+def test_a_variant_folder_that_is_a_link_still_owns_its_copy(pack, tmp_path):
+    # the model moved to a drive and ~/GenAI/models/<dir> links there: its own vae is still its own copy
+    drive = tmp_path / "drive/Tiny-Turbo/vae"
+    drive.mkdir(parents=True)
+    (drive / "v.safetensors").write_bytes(b"t")
+    (config.MODELS / "Tiny-Turbo").symlink_to(drive.parent)
+    assert packs.owns_copy(pack, "turbo", "vae")
 
 
 def test_a_stream_longer_than_declared_or_a_filling_disk_fails(pack, monkeypatch):
@@ -308,9 +300,7 @@ def test_missing_repo_and_revision_are_not_found(pack):
 def test_turbo_fetches_the_shared_vae_into_the_owner_then_reuses_it(pack):
     with hub_of(t_tiny=Repo(files()), t_tiny_turbo=Repo(turbo_files())) as hub:
         result = run(pack, "turbo", hub=hub)
-        assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[
-            :999
-        ]  # base's source
+        assert (config.MODELS / "Tiny/vae/v.safetensors").read_bytes() == BLOB[:999]  # base's source
         assert presence(pack) == {"base": "partial", "turbo": "present"}
         run(pack, "base", hub=hub)
         assert run(pack, "turbo", hub=hub)["reused"] == ["vae"]
@@ -324,9 +314,7 @@ def test_a_shared_component_with_other_hashes_is_kept_separate(pack):
         run(pack, "base", hub=hub)
         result = run(pack, "turbo", hub=hub)
     assert result["separate"] == ["vae"]
-    assert (config.MODELS / "Tiny-Turbo/vae/v.safetensors").read_bytes() == turbo_files[
-        "vae/v.safetensors"
-    ]
+    assert (config.MODELS / "Tiny-Turbo/vae/v.safetensors").read_bytes() == turbo_files["vae/v.safetensors"]
     assert packs.ModelRef(pack, "turbo", "bf16").owner("vae") == "turbo"
     turbo = models.entry(pack)["variants"][1]
     assert {c["component"]: (c["from_variant"], c.get("separate")) for c in turbo["components"]} == {
@@ -345,9 +333,7 @@ def test_a_changed_file_is_rehashed_and_shows_mismatch(pack):
     assert presence(pack)["base"] == "present"  # not hashed yet: queued, never at scan time
     models.hashes.drain()
     variant = models.entry(pack)["variants"][0]
-    assert variant["presence"] == "mismatch" and variant["mismatch"] == [
-        "transformer/a.safetensors"
-    ]
+    assert variant["presence"] == "mismatch" and variant["mismatch"] == ["transformer/a.safetensors"]
 
 
 def test_delete_keeps_a_shared_component_another_variant_loads(pack):
@@ -376,9 +362,7 @@ def test_delete_keeps_files_another_model_links_to(pack):
         run(pack, hub=hub)
     other = config.MODELS / "Other/text_encoder"
     other.mkdir(parents=True)
-    (other / "a.safetensors").symlink_to(
-        config.MODELS / "Tiny/transformer/a.safetensors"
-    )  # a file link
+    (other / "a.safetensors").symlink_to(config.MODELS / "Tiny/transformer/a.safetensors")  # a file link
     (config.MODELS / "Other/vae").symlink_to(config.MODELS / "Tiny/vae")  # a folder link
     models.delete_variant(pack, "base")
     assert (config.MODELS / "Tiny/transformer/a.safetensors").is_file()
@@ -426,9 +410,7 @@ async def test_worker_reports_running_progress_and_succeeded_then_acks(pack, tmp
     licence = {"id": "tiny", "sha256": hashlib.sha256(LICENCE.encode()).hexdigest()}
     with hub_of(t_tiny=Repo(files())) as hub:
         jobs, scans = worker(pack, hub, tmp_path, js=js)
-        msg = FakeMsg(
-            job("download", model="tiny-1", variant="base", licence=licence), js, "cmd.model.t.fake"
-        )
+        msg = FakeMsg(job("download", model="tiny-1", variant="base", licence=licence), js, "cmd.model.t.fake")
         await jobs.handle(msg)
     events = js.events()
     statuses = [e["data"]["status"] for e in events if e["type"] == "evt.model.status"]
@@ -438,9 +420,7 @@ async def test_worker_reports_running_progress_and_succeeded_then_acks(pack, tmp
     assert [e["data"]["seq"] for e in events] == list(range(1, len(events) + 1))
     assert msg.log == [("ack", len(js.sent))]  # acked after the terminal status
     ids = [h["Nats-Msg-Id"] for _, _, h in js.sent]
-    assert ids[0] == f"{msg_job(msg)}:1:1" and all(
-        s.startswith("evt.model.fake.") for s, _, _ in js.sent
-    )
+    assert ids[0] == f"{msg_job(msg)}:1:1" and all(s.startswith("evt.model.fake.") for s, _, _ in js.sent)
 
 
 def msg_job(msg) -> str:
@@ -492,9 +472,7 @@ async def test_worker_delete_refuses_a_loaded_component_then_deletes(pack, tmp_p
     res.get(("tiny-1", "base", "vae", "bf16"), 1, 0, object)
     js = FakeJS()
     jobs, _ = worker(pack, None, tmp_path, residency=res, js=js)
-    await jobs.handle(
-        FakeMsg(job("delete", model="tiny-1", variant="base"), js, "cmd.model.t.fake")
-    )
+    await jobs.handle(FakeMsg(job("delete", model="tiny-1", variant="base"), js, "cmd.model.t.fake"))
     res.unload()
     await jobs.handle(FakeMsg(job("delete", model="tiny-1"), js, "cmd.model.t.fake"))
     ends = [e["data"] for e in js.events() if e["data"]["status"] in ("failed", "succeeded")]
@@ -510,14 +488,10 @@ async def test_worker_delete_keeps_a_resident_shared_component_it_keeps(pack, tm
         run(pack, "base", hub=hub)
         run(pack, "turbo", hub=hub)
     res = Residency(10)
-    res.get(
-        ("tiny-1", "base", "vae", "bf16"), 1, 0, object
-    )  # turbo's vae, named by its owner variant
+    res.get(("tiny-1", "base", "vae", "bf16"), 1, 0, object)  # turbo's vae, named by its owner variant
     js = FakeJS()
     jobs, _ = worker(pack, None, tmp_path, residency=res, js=js)
-    await jobs.handle(
-        FakeMsg(job("delete", model="tiny-1", variant="base"), js, "cmd.model.t.fake")
-    )
+    await jobs.handle(FakeMsg(job("delete", model="tiny-1", variant="base"), js, "cmd.model.t.fake"))
     end = next(e["data"] for e in js.events() if e["data"]["status"] in ("failed", "succeeded"))
     assert end["status"] == "succeeded" and end["result"]["kept"] == ["vae"]
     assert (config.MODELS / "Tiny/vae/v.safetensors").is_file()
@@ -531,9 +505,7 @@ async def test_worker_lora_delete_refuses_a_prefused_file_and_deletes_a_shared_o
         "lora_unet_a.lora_up.weight": ("BF16", [8, 4]),
     }
     safetensors_file(config.MODELS / "loras/ink.safetensors", shapes)
-    safetensors_file(
-        config.MODELS / "Tiny/loras/fused.safetensors", shapes | {"lora_unet_b.alpha": ("F32", [])}
-    )
+    safetensors_file(config.MODELS / "Tiny/loras/fused.safetensors", shapes | {"lora_unet_b.alpha": ("F32", [])})
     pack.spec["lora"] = {
         "component": "transformer",
         "prefused": [{"file": "loras/fused.safetensors", "variant": "base"}],
@@ -542,17 +514,11 @@ async def test_worker_lora_delete_refuses_a_prefused_file_and_deletes_a_shared_o
     jobs, _ = worker(pack, None, tmp_path, js=js)
     jobs.library.scan({})
     by_name = {p.name: s for p, s in jobs.library.files.items()}
-    await jobs.handle(
-        FakeMsg(job("lora_delete", lora_id=by_name["fused.safetensors"]), js, "cmd.model.t.fake")
-    )
-    await jobs.handle(
-        FakeMsg(job("lora_delete", lora_id=by_name["ink.safetensors"]), js, "cmd.model.t.fake")
-    )
+    await jobs.handle(FakeMsg(job("lora_delete", lora_id=by_name["fused.safetensors"]), js, "cmd.model.t.fake"))
+    await jobs.handle(FakeMsg(job("lora_delete", lora_id=by_name["ink.safetensors"]), js, "cmd.model.t.fake"))
     ends = [e["data"] for e in js.events() if e["data"]["status"] in ("failed", "succeeded")]
     assert ends[0]["failure"] == {"class": "in_use", "detail": "LoRA fused is pre-fused into Tiny"}
-    assert (
-        ends[1]["result"]["files"] == 1 and not (config.MODELS / "loras/ink.safetensors").exists()
-    )
+    assert ends[1]["result"]["files"] == 1 and not (config.MODELS / "loras/ink.safetensors").exists()
 
 
 async def test_an_off_contract_job_is_dead_lettered(pack, tmp_path):
@@ -588,16 +554,10 @@ def test_a_variant_downloads_from_two_repos_into_one_folder(pack):
         result = run(pack, "fp8", hub=hub)
     root = config.MODELS / "Tiny-FP8"
     assert result["files"] == 4 and (root / "transformer/a.safetensors").read_bytes() == BLOB[:777]
-    assert (root / "vae/config.json").read_bytes() == b"{}" and not (
-        root / "transformer/b.safetensors"
-    ).exists()
+    assert (root / "vae/config.json").read_bytes() == b"{}" and not (root / "transformer/b.safetensors").exists()
     entry = models.entry(pack)
     fp8 = next(v for v in entry["variants"] if v["id"] == "fp8")
-    assert (
-        fp8["presence"] == "present"
-        and fp8["precisions"] == ["fp8"]
-        and fp8["sources"][0]["repo"] == "t/tiny-fp8"
-    )
+    assert fp8["presence"] == "present" and fp8["precisions"] == ["fp8"] and fp8["sources"][0]["repo"] == "t/tiny-fp8"
     assert {c["component"]: c["precisions"] for c in fp8["components"]} == {
         "transformer": ["fp8"],
         "vae": ["bf16"],
@@ -619,13 +579,8 @@ def test_a_source_with_a_dir_fills_a_components_own_folder(pack):
     with hub_of(t_tiny=Repo(files()), t_tiny_fp8=Repo(community()), t_tiny_pe=Repo(pe)) as hub:
         assert run(pack, "fp8", hub=hub)["files"] == 6
     root = config.MODELS / "Tiny-PE"
-    assert (root / "pe-1.safetensors").read_bytes() == BLOB[:333] and not (
-        root / "README.md"
-    ).exists()
-    assert (
-        not (config.MODELS / "Tiny-FP8/config.json").exists()
-        and not (root / models.MARKER).exists()
-    )
+    assert (root / "pe-1.safetensors").read_bytes() == BLOB[:333] and not (root / "README.md").exists()
+    assert not (config.MODELS / "Tiny-FP8/config.json").exists() and not (root / models.MARKER).exists()
     assert presence(pack)["fp8"] == "present"
     entry = models.entry(pack)
     value = {"schema_version": 1, "host": "t", "env": "fake", "published_at": "2026-11-21T10:00:00Z",
@@ -637,9 +592,7 @@ def test_a_source_with_a_dir_fills_a_components_own_folder(pack):
 
 def test_a_second_source_is_refused_by_its_own_name_and_may_not_repeat_a_path(pack):
     v = fp8_variant(pack)
-    with hub_of(
-        t_tiny=Repo(files()), t_tiny_fp8=Repo(community() | {"vae/config.json": b"{}"})
-    ) as hub:
+    with hub_of(t_tiny=Repo(files()), t_tiny_fp8=Repo(community() | {"vae/config.json": b"{}"})) as hub:
         v["sources"][0]["revision"] = "v9"
         with pytest.raises(JobError, match="repo t/tiny-fp8 has no revision v9"):
             run(pack, "fp8", hub=hub)
@@ -665,9 +618,7 @@ def test_a_variants_own_precision_reaches_the_model_node_and_its_components(pack
     assert schema["enum"] == ["bf16", "fp8"]
     ref = packs.ModelRef(pack, "fp8", "fp8")
     assert (ref.precision_of("transformer"), ref.precision_of("vae")) == ("fp8", "bf16")
-    assert (
-        packs.ModelRef(pack, "base", "fp8").precision_of("transformer") == "bf16"
-    )  # not offered: its first
+    assert packs.ModelRef(pack, "base", "fp8").precision_of("transformer") == "bf16"  # not offered: its first
 
 
 def test_shares_from_names_the_lender_for_load_download_and_delete(pack):
@@ -714,9 +665,7 @@ def test_a_component_publishes_the_dtype_most_of_its_bytes_are_stored_in(tmp_pat
     (empty := tmp_path / "d.safetensors").write_bytes(b"")
     assert models.stored_dtype([bf16]) == "bf16" and models.stored_dtype([fp8, empty]) == "fp8"
     assert models.stored_dtype([gguf, empty]) is None
-    assert (
-        models.stored_dtype([st("e.safetensors", {"w": ("U8", 50)})]) is None
-    )  # NVFP4 says nothing
+    assert models.stored_dtype([st("e.safetensors", {"w": ("U8", 50)})]) is None  # NVFP4 says nothing
 
 
 def enhancer(pack, own_dir: bool = True) -> dict:
@@ -755,10 +704,7 @@ def test_an_addon_downloads_and_deletes_on_its_own_and_no_variant_needs_it(pack)
     assert schemas.registry_errors("models", value) == []
     models.delete_variant(pack, "base")
     assert (config.MODELS / "Tiny-PE/pe-1.safetensors").is_file()
-    assert (
-        models.delete_addon(pack, "enhancer") == (2, 335)
-        and not (config.MODELS / "Tiny-PE").exists()
-    )
+    assert models.delete_addon(pack, "enhancer") == (2, 335) and not (config.MODELS / "Tiny-PE").exists()
 
 
 def test_an_addon_in_the_first_variants_folder_is_never_that_variants(pack):
@@ -770,14 +716,12 @@ def test_an_addon_in_the_first_variants_folder_is_never_that_variants(pack):
         download.download(pack, None, endpoint=hub.url, token=None, cache=config.MODELS.parent / "cache",
                           host="t", progress=Progress(), addon="enhancer")  # fmt: skip
     base = models.entry(pack)["variants"][0]
-    assert base["presence"] == "present" and "pe/e.safetensors" not in {
-        f["path"] for f in base["files"]
-    }
+    assert base["presence"] == "present" and "pe/e.safetensors" not in {f["path"] for f in base["files"]}
     assert models.entry(pack)["addons"][0]["presence"] == "present"
     models.delete_variant(pack, "base")
-    assert [
-        p.relative_to(config.MODELS).as_posix() for p in config.MODELS.rglob("*.safetensors")
-    ] == ["Tiny/pe/e.safetensors"]
+    assert [p.relative_to(config.MODELS).as_posix() for p in config.MODELS.rglob("*.safetensors")] == [
+        "Tiny/pe/e.safetensors"
+    ]
     models.delete_addon(pack, "enhancer")
     assert not (config.MODELS / "Tiny").exists()
 
@@ -789,19 +733,11 @@ async def test_worker_addon_jobs_and_refusals(pack, tmp_path):
     res = types.SimpleNamespace(entries={("tiny-1", "base", "enhancer", "bf16"): None}, used=set())
     with hub_of(t_tiny_pe=Repo(pe)) as hub:
         jobs, _ = worker(pack, hub, tmp_path, residency=res, js=js)
-        await jobs.handle(
-            FakeMsg(job("download", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
-        )
-        await jobs.handle(
-            FakeMsg(job("download", model="tiny-1", addon="nope"), js, "cmd.model.t.fake")
-        )
-        await jobs.handle(
-            FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
-        )
+        await jobs.handle(FakeMsg(job("download", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake"))
+        await jobs.handle(FakeMsg(job("download", model="tiny-1", addon="nope"), js, "cmd.model.t.fake"))
+        await jobs.handle(FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake"))
         res.entries = {}
-        await jobs.handle(
-            FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake")
-        )
+        await jobs.handle(FakeMsg(job("delete", model="tiny-1", addon="enhancer"), js, "cmd.model.t.fake"))
     ends = [e["data"] for e in js.events() if e["data"].get("status") in ("succeeded", "failed")]
     assert ends[0]["status"] == "succeeded"
     assert ends[1]["failure"] == {"class": "not_found", "detail": "Tiny has no add-on nope"}

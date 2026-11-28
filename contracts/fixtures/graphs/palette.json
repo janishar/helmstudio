@@ -600,7 +600,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",
@@ -916,6 +916,7 @@
             }
           ],
           "help": "Fake speech: a WAV (24 kHz, PCM 16-bit, mono) of one sine tone per character, 1/15 s each (so it lasts exactly the planned seconds), its pitch from the character and the voice, its phase from the seed; one progress step per 15 characters. An empty text fails `<node>: nothing to say`.",
+          "sound": "voice",
           "envs": [
             "fake"
           ]
@@ -1013,6 +1014,455 @@
             }
           ],
           "help": "Fake dialogue: per line one sine tone per character (1/15 s each, 24 kHz mono), then its pause_s of silence; cues per line; one progress step per line. No line fails `<node>: nothing to say`.",
+          "sound": "voice",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/music",
+          "title": "Echo music",
+          "family": "echo",
+          "params": [
+            {
+              "name": "lyrics",
+              "type": "text",
+              "label": "Lyrics",
+              "default": "",
+              "min": 0,
+              "max": 4000,
+              "tags": [
+                "verse",
+                "chorus",
+                "bridge",
+                "intro",
+                "outro"
+              ],
+              "when": "instrumental == false",
+              "help": "Section tags in square brackets, one per line: [verse], [chorus]."
+            },
+            {
+              "name": "instrumental",
+              "type": "bool",
+              "label": "Instrumental",
+              "default": false
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 1,
+              "max": 600,
+              "step": 0.5,
+              "help": "Auto: the fake planner picks 10 s."
+            },
+            {
+              "name": "bpm",
+              "type": "int",
+              "label": "BPM",
+              "default": 0,
+              "auto": true,
+              "min": 30,
+              "max": 300,
+              "help": "Auto: the fake planner picks 90."
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            },
+            {
+              "name": "plan",
+              "type": "Text"
+            }
+          ],
+          "help": "Fake song: a stereo WAV (48 kHz) of two sine tones, Length seconds long (Auto: 10 s), its pitch from the text and the seed; one section per [tag] line of the lyrics, evenly spread; reports its plan (BPM, key, time, length, language) as the planner would.",
+          "sound": "music",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/sound",
+          "title": "Echo sound",
+          "family": "echo",
+          "params": [
+            {
+              "name": "avoid",
+              "type": "string",
+              "label": "Avoid",
+              "default": "",
+              "max": 400
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 2,
+              "min": 0.5,
+              "max": 30,
+              "step": 0.5
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "Fake sound effect: a stereo WAV (44.1 kHz) of a sine sweep, Length seconds long, its pitch from the text and the seed.",
+          "sound": "sound",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/foley",
+          "title": "Echo sound from a video",
+          "family": "echo",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Video",
+              "default": null,
+              "accepts": [
+                "video"
+              ],
+              "max_s": 30,
+              "help": "The video the fake reads (and checks), then scores."
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            },
+            {
+              "name": "video",
+              "type": "Video"
+            }
+          ],
+          "help": "Fake sound for a video: a stereo WAV (44.1 kHz) as long as the source, and the source's picture with that sound (core.media.mux).",
+          "sound": "sound",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/repaint",
+          "title": "Echo repaint",
+          "family": "echo",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600,
+              "help": "The audio take the fake reads (and checks) before it repaints."
+            },
+            {
+              "name": "span",
+              "type": "span",
+              "label": "Repaint",
+              "default": null,
+              "help": "The part to make again, in the song's seconds."
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "Fake repaint: the source song (stereo, 48 kHz) with the span replaced by a tone of the text.",
+          "sound": "music",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/vary",
+          "title": "Echo vary",
+          "family": "echo",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30
+            },
+            {
+              "name": "change",
+              "type": "float",
+              "label": "Change",
+              "default": 0.5,
+              "min": 0,
+              "max": 1,
+              "step": 0.05
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "Fake variation: the source sound (stereo, 44.1 kHz) mixed with a tone of the text, by Change.",
+          "sound": "sound",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/lengthen",
+          "title": "Echo music extend",
+          "family": "echo",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Add",
+              "default": 10,
+              "min": 1,
+              "max": 120,
+              "step": 1
+            },
+            {
+              "name": "where",
+              "type": "enum",
+              "label": "Where",
+              "default": "end",
+              "enum": [
+                "end",
+                "start"
+              ]
+            },
+            {
+              "name": "seed",
+              "type": "seed",
+              "label": "Seed",
+              "default": -1,
+              "min": -1,
+              "max": 9007199254740991,
+              "step": 1
+            },
+            {
+              "name": "delay_ms",
+              "type": "int",
+              "label": "Delay per step (ms)",
+              "default": 300,
+              "min": 0,
+              "max": 10000
+            }
+          ],
+          "inputs": [
+            {
+              "name": "text",
+              "type": "Text"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "help": "Fake music extend: the source song (stereo, 48 kHz) with Add seconds of a tone of the text after its end (End) or before its start (Start).",
+          "sound": "music",
+          "envs": [
+            "fake"
+          ]
+        },
+        {
+          "kind": "echo/listen",
+          "title": "Listen (fake)",
+          "family": "echo",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Take",
+              "default": null,
+              "accepts": [
+                "video",
+                "audio"
+              ],
+              "max_s": 120,
+              "help": "The video or audio take to listen to."
+            },
+            {
+              "name": "question",
+              "type": "string",
+              "label": "Question",
+              "default": "",
+              "max": 500,
+              "help": "What to listen for."
+            },
+            {
+              "name": "transcript",
+              "type": "bool",
+              "label": "Transcript",
+              "default": true,
+              "help": "Also write down the speech; empty when the take has no sound."
+            },
+            {
+              "name": "max_tokens",
+              "type": "int",
+              "label": "Max tokens",
+              "default": 600,
+              "min": 16,
+              "max": 2048
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "answer",
+              "type": "Text"
+            },
+            {
+              "name": "transcript",
+              "type": "Text"
+            }
+          ],
+          "help": "Fake listen (contracts/README.md, The listen tool): answers ECHO-LISTEN: and the question, and the transcript ECHO-TRANSCRIPT when asked for one.",
           "envs": [
             "fake"
           ]
@@ -1334,7 +1784,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",
@@ -2642,7 +3092,7 @@
               "item": {
                 "take": "Media"
               },
-              "help": "Image or video takes, in order; each is sent as a thumbnail (a video as 3 keyframes)."
+              "help": "Image or video takes, in order; each is sent as one picture (a video as a grid of 12 frames with their times)."
             },
             {
               "name": "schema",
@@ -3501,6 +3951,7 @@
           "kind": "qwen3-tts/speak",
           "title": "Speak",
           "family": "qwen3-tts",
+          "sound": "voice",
           "params": [
             {
               "name": "voice",
@@ -3583,6 +4034,7 @@
           "kind": "qwen3-tts/dialogue",
           "title": "Dialogue",
           "family": "qwen3-tts",
+          "sound": "voice",
           "params": [
             {
               "name": "script",
@@ -3744,6 +4196,7 @@
           "kind": "zonos3/speak",
           "title": "Speak",
           "family": "zonos3",
+          "sound": "voice",
           "params": [
             {
               "name": "voice",
@@ -3891,6 +4344,7 @@
           "kind": "zonos3/dialogue",
           "title": "Dialogue",
           "family": "zonos3",
+          "sound": "voice",
           "params": [
             {
               "name": "script",
@@ -4079,6 +4533,1298 @@
             "native"
           ],
           "peak_gb": "2.0"
+        }
+      ]
+    },
+    {
+      "family": "minimax-music3",
+      "title": "MiniMax Music 3",
+      "nodes": [
+        {
+          "kind": "minimax-music3/model",
+          "title": "MiniMax Music 3",
+          "family": "minimax-music3",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "base"
+              ],
+              "default": "base",
+              "label": "Variant"
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16"
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "The weights to load.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "minimax-music3/lm",
+          "title": "Compose",
+          "family": "minimax-music3",
+          "params": [
+            {
+              "name": "lyrics",
+              "type": "text",
+              "label": "Lyrics",
+              "default": "",
+              "min": 0,
+              "max": 4000,
+              "tags": [
+                "verse",
+                "chorus",
+                "bridge",
+                "intro",
+                "outro"
+              ],
+              "when": "instrumental == false",
+              "help": "Section tags in square brackets, each on its own line: [verse], [chorus]. Text after a tag on the same line is dropped."
+            },
+            {
+              "name": "instrumental",
+              "type": "bool",
+              "label": "Instrumental",
+              "default": false
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 10,
+              "max": 300,
+              "step": 1,
+              "help": "The longest the song may run; Auto: up to 5 minutes, the model ends it. About 5 s of work per second of song on a Mac."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "prompt",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "cond",
+              "type": "Conditioning"
+            }
+          ],
+          "component": "language model",
+          "help": "Writes the song as audio codes, 25 frames a second, with the 8B language model and the RVQ depth decoder (guidance 1.5, top-k 50, from the seed). Instrumental (or no lyrics) asks for no vocals in the style and sings only [instrumental]. The model may end the song before Length.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "minimax-music3/flow",
+          "title": "Flow",
+          "family": "minimax-music3",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "cond",
+              "type": "Conditioning"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Turns the codes into the Flow-VAE latent with the 2.4B flow-matching transformer: 30 Euler steps at guidance 1.7 per 200-frame window (8 s, a 4 s hop).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "minimax-music3/vocode",
+          "title": "Decode",
+          "family": "minimax-music3",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "vocoder",
+          "help": "Turns the latent into 44.1 kHz stereo audio with the vocoder, window by window, and stitches the windows.",
+          "sound": "music",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "stable-audio-3",
+      "title": "Stable Audio 3",
+      "nodes": [
+        {
+          "kind": "stable-audio-3/model",
+          "title": "Stable Audio 3",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "small-sfx"
+              ],
+              "default": "small-sfx",
+              "label": "Variant"
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16",
+              "label": "Precision",
+              "help": "The DiT and autoencoder run fp32 (as the maker's code on a Mac), the T5Gemma text encoder bf16 as stored."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "The weights to load.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/sound",
+          "title": "Sound",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 4,
+              "min": 0.5,
+              "max": 30,
+              "step": 0.5,
+              "help": "Seconds of sound."
+            },
+            {
+              "name": "from_sound",
+              "type": "rows",
+              "label": "From a sound",
+              "default": [],
+              "min": 0,
+              "max": 1,
+              "item": {
+                "audio": {
+                  "type": "media",
+                  "label": "Sound",
+                  "default": null,
+                  "accepts": [
+                    "audio"
+                  ],
+                  "max_s": 30,
+                  "help": "An audio take, or a video's sound, to start from; cut or padded to the Length."
+                }
+              },
+              "help": "A sound to start from instead of noise (optional)."
+            },
+            {
+              "name": "change",
+              "type": "float",
+              "label": "Change",
+              "default": 0.7,
+              "min": 0.05,
+              "max": 1,
+              "step": 0.05,
+              "help": "With From a sound: how far the result may move from it (1: a new sound)."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes a sound effect from the prompt, 8 steps, 44.1 kHz stereo, levels as the model gives them. From a sound: starts from that sound instead of noise, Change saying how far it may go.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/repaint",
+          "title": "Repaint",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to repaint."
+            },
+            {
+              "name": "span",
+              "type": "span",
+              "label": "Repaint",
+              "default": null,
+              "help": "The part to make again, in the sound's seconds."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the span of the source again from the prompt and keeps the rest, as long as the source.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/vary",
+          "title": "Vary",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to vary."
+            },
+            {
+              "name": "change",
+              "type": "float",
+              "label": "Change",
+              "default": 0.7,
+              "min": 0.05,
+              "max": 1,
+              "step": 0.05,
+              "help": "How far the variation may move from the source (1: a new sound)."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the source again from the prompt, starting from it: low Change stays close, 1 is a new sound. As long as the source.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "stable-audio-3/extend",
+          "title": "Extend",
+          "family": "stable-audio-3",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Sound",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 30,
+              "help": "The sound take to extend."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Add",
+              "default": 4,
+              "min": 0.5,
+              "max": 30,
+              "step": 0.5,
+              "help": "Seconds to add."
+            },
+            {
+              "name": "where",
+              "type": "enum",
+              "label": "Where",
+              "default": "end",
+              "enum": [
+                "end",
+                "start"
+              ]
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "transformer",
+          "help": "Adds seconds made from the prompt after the source's end (End) or before its start (Start), the source kept; at most 60 s in all.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "mmaudio",
+      "title": "MMAudio",
+      "nodes": [
+        {
+          "kind": "mmaudio/model",
+          "title": "MMAudio",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "large_44k_v2"
+              ],
+              "default": "large_44k_v2",
+              "label": "Variant",
+              "help": "Large 44k v2: 44.1 kHz mono, the best of MMAudio's checkpoints."
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16"
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "The weights to load.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "mmaudio/sound",
+          "title": "Sound",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "avoid",
+              "type": "string",
+              "label": "Avoid",
+              "default": "",
+              "max": 400,
+              "help": "What the sound should not have (the negative prompt)."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 8,
+              "min": 1,
+              "max": 30,
+              "step": 0.5,
+              "help": "The sound's length in seconds."
+            },
+            {
+              "name": "guidance",
+              "type": "float",
+              "label": "Guidance",
+              "default": 4.5,
+              "min": 1,
+              "max": 10,
+              "step": 0.5,
+              "help": "How closely the sound follows the text (cfg strength): higher is closer, less varied."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 25,
+              "min": 10,
+              "max": 50,
+              "step": 1,
+              "help": "Flow-matching steps: more is slower, rarely better past 25."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "net",
+          "help": "A sound effect from a description: 44.1 kHz mono, Length seconds long. MMAudio was trained on 8 s clips; longer ones work but hold less detail.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "mmaudio/foley",
+          "title": "Sound from a video",
+          "family": "mmaudio",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Video",
+              "default": null,
+              "accepts": [
+                "video"
+              ],
+              "min_s": 1,
+              "max_s": 30,
+              "help": "The video to give a sound; its own sound, if any, is replaced."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 1,
+              "max": 30,
+              "step": 0.5,
+              "help": "Auto: from the video (its length; the last 0.04 s may stay silent: the 25 fps sync). Else its first seconds, and the video is cut to them."
+            },
+            {
+              "name": "avoid",
+              "type": "string",
+              "label": "Avoid",
+              "default": "",
+              "max": 400,
+              "help": "What the sound should not have (the negative prompt)."
+            },
+            {
+              "name": "guidance",
+              "type": "float",
+              "label": "Guidance",
+              "default": 4.5,
+              "min": 1,
+              "max": 10,
+              "step": 0.5,
+              "help": "How closely the sound follows the text (cfg strength): higher is closer, less varied."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 25,
+              "min": 10,
+              "max": 50,
+              "step": 1,
+              "help": "Flow-matching steps: more is slower, rarely better past 25."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            },
+            {
+              "name": "video",
+              "type": "Video"
+            }
+          ],
+          "component": "net",
+          "help": "The sound of a video (its picture read at 8 and 25 fps, steered by the text), and the video with that sound: the picture copied as it is, the sound added as AAC.",
+          "sound": "sound",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "ace-step",
+      "title": "ACE-Step 1.5",
+      "nodes": [
+        {
+          "kind": "ace-step/song",
+          "title": "Song",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "lyrics",
+              "type": "text",
+              "label": "Lyrics",
+              "default": "",
+              "min": 0,
+              "max": 4096,
+              "tags": [
+                "verse",
+                "chorus",
+                "bridge",
+                "intro",
+                "outro"
+              ],
+              "when": "instrumental == false",
+              "help": "Section tags in square brackets, one per line: [verse], [chorus]. Empty: an instrumental."
+            },
+            {
+              "name": "instrumental",
+              "type": "bool",
+              "label": "Instrumental",
+              "default": false,
+              "help": "No vocals: the lyrics are not sung."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Length",
+              "default": 0,
+              "auto": true,
+              "min": 10,
+              "max": 600,
+              "step": 1,
+              "help": "Auto: the plan picks it from the lyrics (30 s without the plan). Repaint, Cover and Extend keep the song's length."
+            },
+            {
+              "name": "bpm",
+              "type": "int",
+              "label": "BPM",
+              "default": 0,
+              "auto": true,
+              "min": 30,
+              "max": 300,
+              "help": "Auto: the plan picks it."
+            },
+            {
+              "name": "key",
+              "type": "enum",
+              "label": "Key",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "C major",
+                "C minor",
+                "C# major",
+                "C# minor",
+                "D major",
+                "D minor",
+                "Eb major",
+                "Eb minor",
+                "E major",
+                "E minor",
+                "F major",
+                "F minor",
+                "F# major",
+                "F# minor",
+                "G major",
+                "G minor",
+                "Ab major",
+                "Ab minor",
+                "A major",
+                "A minor",
+                "Bb major",
+                "Bb minor",
+                "B major",
+                "B minor"
+              ],
+              "help": "Auto: the plan picks it."
+            },
+            {
+              "name": "time",
+              "type": "enum",
+              "label": "Time",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "2/4",
+                "3/4",
+                "4/4",
+                "6/8"
+              ],
+              "help": "Beats per bar. Auto: the plan picks it."
+            },
+            {
+              "name": "language",
+              "type": "enum",
+              "label": "Vocal language",
+              "default": "auto",
+              "enum": [
+                "auto",
+                "en",
+                "zh",
+                "ja",
+                "ko",
+                "es",
+                "fr",
+                "de",
+                "it",
+                "pt",
+                "ru",
+                "hi",
+                "ar",
+                "nl",
+                "pl",
+                "tr",
+                "sv",
+                "vi",
+                "th",
+                "id",
+                "yue"
+              ],
+              "when": "instrumental == false",
+              "option_help": {
+                "auto": "from the lyrics"
+              },
+              "help": "The language the lyrics are sung in. Auto: the plan tells it from the lyrics."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "song",
+              "type": "Conditioning"
+            }
+          ],
+          "help": "The song's lyrics and its settings: BPM, key, time, length and vocal language. Auto leaves a value to the plan (a plain 30 s and no value without it).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/model",
+          "title": "ACE-Step 1.5",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "turbo-2b",
+                "xl-turbo"
+              ],
+              "default": "turbo-2b",
+              "label": "Model",
+              "help": "2B turbo: fast drafts and edits. XL turbo (4B): better, bf16 on a Mac. Either about 24 GB for 30 s (26 GB for 2 min)."
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "bf16"
+              ],
+              "default": "bf16",
+              "label": "Precision",
+              "help": "Fixed: the 2B's DiT runs in float32, XL's in bf16; the planner and text encoder in float32, the VAE in float16."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "Which DiT makes the song; the planner, text encoder and VAE are shared.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/plan",
+          "title": "Plan",
+          "family": "ace-step",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "style",
+              "type": "Text"
+            },
+            {
+              "name": "plan",
+              "type": "Text"
+            }
+          ],
+          "component": "planner",
+          "help": "The planner (ACE-Step's 5 Hz LM, 1.7B) rewrites the style, fills BPM, key, time, length and language where they are Auto, then writes the song's 5 Hz audio codes for the DiT to follow; seeded, so a seed repeats. Bypassed (Let it rewrite off): the style and the song pass through.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/compose",
+          "title": "Compose",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "reference",
+              "type": "rows",
+              "label": "Reference",
+              "default": [],
+              "min": 0,
+              "max": 1,
+              "item": {
+                "audio": {
+                  "type": "media",
+                  "label": "Song",
+                  "default": null,
+                  "accepts": [
+                    "audio"
+                  ],
+                  "max_s": 600,
+                  "help": "A song, voice or sound whose sound the new song borrows; the first 30 s are read."
+                }
+              },
+              "help": "A song whose sound (timbre, mix) the new one borrows; the first 30 s are used."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes the song with the DiT in 8 steps from the style, the lyrics and the plan's audio codes (without them, from the text alone); a reference song lends its sound (the first 30 s).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/repaint",
+          "title": "Repaint",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600,
+              "help": "The song to repaint."
+            },
+            {
+              "name": "span",
+              "type": "span",
+              "label": "Repaint",
+              "default": null,
+              "help": "The part to make again, in the song's seconds."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Makes a range of a song again in the style and lyrics given, keeping the rest (spliced back sample for sample).",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/cover",
+          "title": "Cover",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 600,
+              "help": "The song to cover."
+            },
+            {
+              "name": "strength",
+              "type": "float",
+              "label": "Keep the song",
+              "default": 0.6,
+              "min": 0,
+              "max": 1,
+              "step": 0.05,
+              "help": "1 stays with the song's melody and words; lower lets the new style take over."
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "The same song in a new style: its melody and words through the DiT's audio tokenizer, the new style and lyrics from the text; Keep the song is how close to stay.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/extend",
+          "title": "Extend",
+          "family": "ace-step",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Song",
+              "default": null,
+              "accepts": [
+                "audio"
+              ],
+              "max_s": 590,
+              "help": "The song to extend."
+            },
+            {
+              "name": "seconds",
+              "type": "float",
+              "label": "Add",
+              "default": 30,
+              "min": 5,
+              "max": 300,
+              "step": 1,
+              "help": "Seconds to add; the song may last at most 600 s."
+            },
+            {
+              "name": "where",
+              "type": "enum",
+              "label": "Where",
+              "default": "end",
+              "enum": [
+                "end",
+                "start"
+              ]
+            },
+            {
+              "name": "steps",
+              "type": "int",
+              "label": "Steps",
+              "default": 8,
+              "min": 1,
+              "max": 20,
+              "step": 1,
+              "help": "The turbo DiT is distilled to 8 steps."
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "song",
+              "type": "Conditioning"
+            },
+            {
+              "name": "text",
+              "type": "Text"
+            },
+            {
+              "name": "seed",
+              "type": "Seed"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "component": "transformer",
+          "help": "Adds time at the end (or the start) of a song, carrying on in its style: a repaint of silence past its edge, the song itself kept.",
+          "envs": [
+            "torch"
+          ]
+        },
+        {
+          "kind": "ace-step/decode",
+          "title": "Decode",
+          "family": "ace-step",
+          "params": [],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            },
+            {
+              "name": "latent",
+              "type": "Latent"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "audio",
+              "type": "Audio"
+            }
+          ],
+          "component": "vae",
+          "help": "Turns the latent into 48 kHz stereo with the VAE (tiled past 20 s), levelled to -1 dBFS peak; a repaint's or extend's kept parts are the source's own samples. A song with tagged lyrics carries its sections.",
+          "sound": "music",
+          "envs": [
+            "torch"
+          ]
+        }
+      ]
+    },
+    {
+      "family": "omni",
+      "title": "Qwen Omni",
+      "nodes": [
+        {
+          "kind": "omni/model",
+          "title": "Qwen Omni",
+          "family": "omni",
+          "params": [
+            {
+              "name": "variant",
+              "type": "enum",
+              "enum": [
+                "q8",
+                "3b"
+              ],
+              "default": "q8",
+              "label": "Variant"
+            },
+            {
+              "name": "precision",
+              "type": "enum",
+              "enum": [
+                "int8"
+              ],
+              "default": "int8",
+              "label": "Precision",
+              "help": "Stored Q8_0; loaded as it is. Not a choice."
+            }
+          ],
+          "inputs": [],
+          "outputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "help": "Qwen3-Omni 30B (A3B, GGUF Q8_0), or the smaller Qwen2.5-Omni 3B, hears and watches a take; Qwen3-ASR 1.7B writes down its speech.",
+          "envs": [
+            "mlx"
+          ]
+        },
+        {
+          "kind": "omni/listen",
+          "title": "Listen",
+          "family": "omni",
+          "params": [
+            {
+              "name": "source",
+              "type": "media",
+              "label": "Take",
+              "default": null,
+              "accepts": [
+                "video",
+                "audio"
+              ],
+              "max_s": 120,
+              "help": "The video or audio take to listen to."
+            },
+            {
+              "name": "question",
+              "type": "string",
+              "label": "Question",
+              "default": "",
+              "max": 500,
+              "help": "What to listen for."
+            },
+            {
+              "name": "transcript",
+              "type": "bool",
+              "label": "Transcript",
+              "default": true,
+              "help": "Also write down the speech (Qwen3-ASR); empty when the take has no sound."
+            },
+            {
+              "name": "max_tokens",
+              "type": "int",
+              "label": "Max tokens",
+              "default": 600,
+              "min": 16,
+              "max": 2048
+            }
+          ],
+          "inputs": [
+            {
+              "name": "model",
+              "type": "Model"
+            }
+          ],
+          "outputs": [
+            {
+              "name": "answer",
+              "type": "Text"
+            },
+            {
+              "name": "transcript",
+              "type": "Text"
+            }
+          ],
+          "component": "whole model",
+          "help": "Answers one question about a video or audio take: it hears the sound and watches the picture (2 frames a second), and writes down the speech.",
+          "envs": [
+            "mlx"
+          ]
         }
       ]
     }

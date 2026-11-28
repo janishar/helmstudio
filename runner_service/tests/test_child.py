@@ -49,9 +49,7 @@ def gone(pid: int, within: float = 3.0) -> bool:
             os.kill(pid, 0)
         except ProcessLookupError:
             return True
-        r = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True, check=False
-        )
+        r = subprocess.run(["ps", "-p", str(pid), "-o", "stat="], capture_output=True, text=True, check=False)
         if r.stdout.strip().startswith("Z"):  # a zombie waiting for its parent: dead
             return True
         time.sleep(0.05)
@@ -105,9 +103,7 @@ sys.stderr.write("\rdenoise                      1/4   "); sys.stderr.flush(); t
                 raise Cancelled
 
     ctx = Stop()
-    with pytest.raises(
-        Cancelled
-    ):  # late: no line is ever parsed, so the idle limit fails it instead
+    with pytest.raises(Cancelled):  # late: no line is ever parsed, so the idle limit fails it instead
         child.run(ctx, py(code), cwd=tmp_path, name="h3", phases={"denoise": "sampling"}, idle_s=3)
     assert ctx.seen == [(1, 4, "sampling")]
 
@@ -124,9 +120,7 @@ while True:
     ctx = Ctx(cancel_after=20)
     with pytest.raises(Cancelled):
         child.run(ctx, py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)
-    assert grand.is_file() and gone(
-        int(grand.read_text())
-    )  # the child's own child (h3's ffmpeg) too
+    assert grand.is_file() and gone(int(grand.read_text()))  # the child's own child (h3's ffmpeg) too
     assert child.LIVE["pid"] is None
 
 
@@ -150,9 +144,7 @@ sys.exit(1)
         child.run(Ctx(), py(code), cwd=tmp_path, name="h3", phases={}, idle_s=10)
     assert str(e.value) == "gen: h3: cannot open <file>: No such file"
     with pytest.raises(RunError, match=r"^gen: exited with status 2$"):
-        child.run(
-            Ctx(), py("import sys; sys.exit(2)"), cwd=tmp_path, name="h3", phases={}, idle_s=10
-        )
+        child.run(Ctx(), py("import sys; sys.exit(2)"), cwd=tmp_path, name="h3", phases={}, idle_s=10)
     with pytest.raises(RunError, match=r"^gen: killed by signal 9$"):
         child.run(Ctx(), py("import os, signal; os.kill(os.getpid(), signal.SIGKILL)"), cwd=tmp_path, name="h3",
                   phases={}, idle_s=10)  # fmt: skip
@@ -173,9 +165,7 @@ def test_the_sweep_kills_only_the_same_binary(tmp_path):
     src = b"#include <unistd.h>\nint main(void) { sleep(60); return 0; }\n"
     subprocess.run(["cc", "-x", "c", "-", "-o", str(fake)], input=src, check=True)
     other = tmp_path / "other"
-    live = subprocess.Popen(
-        [str(fake), "60"], start_new_session=True
-    )  # a live runner's child (its parent: us)
+    live = subprocess.Popen([str(fake), "60"], start_new_session=True)  # a live runner's child (its parent: us)
     spawn = f"import subprocess as s; print(s.Popen([{str(fake)!r}], start_new_session=True, stdout=s.DEVNULL, stderr=s.DEVNULL).pid)"
     orphan = int(subprocess.run(py(spawn), capture_output=True, text=True, check=True).stdout)
     # its parent exited: parent pid 1, as when its runner was killed
@@ -184,9 +174,7 @@ def test_the_sweep_kills_only_the_same_binary(tmp_path):
         child.pid_file().write_text(f"{orphan} {other}")  # the pid now runs another binary: kept
         child.sweep()
         assert not gone(orphan, 0.3) and not child.pid_file().exists()
-        child.pid_file().write_text(
-            f"{live.pid} {fake}"
-        )  # same binary, its runner alive (another runner's): kept
+        child.pid_file().write_text(f"{live.pid} {fake}")  # same binary, its runner alive (another runner's): kept
         child.sweep()
         assert live.poll() is None and not child.pid_file().exists()
         child.pid_file().write_text(f"{orphan} {fake}")
@@ -216,11 +204,7 @@ READY = re.compile(r"zonos3-server: listening on http://127\.0\.0\.1:(\d+)")
 
 def server(tmp_path, ready: bool = True, then: str = "time.sleep(60)") -> list[str]:
     """A fake zonos3-server: Metal noise, the ready line (or not), then `then`; its pid in me.pid."""
-    line = (
-        'w("zonos3-server: listening on http://127.0.0.1:4321  (studio: not built)\\n")'
-        if ready
-        else "pass"
-    )
+    line = 'w("zonos3-server: listening on http://127.0.0.1:4321  (studio: not built)\\n")' if ready else "pass"
     return py(f"""
 import os, sys, time
 open({str(tmp_path / "me.pid")!r}, "w").write(str(os.getpid()))
@@ -232,8 +216,7 @@ w("ggml_metal_init: found device\\n"); w("zonos3: backend = MTL0\\n"); sys.stder
 
 
 def serve(tmp_path, ctx=None, ready_s: float = 10, **kw):
-    return child.serve(ctx or Ctx(), server(tmp_path, **kw), cwd=tmp_path, name="zonos3", ready=READY,
-                       ready_s=ready_s)  # fmt: skip
+    return child.serve(ctx or Ctx(), server(tmp_path, **kw), cwd=tmp_path, name="zonos3", ready=READY, ready_s=ready_s)
 
 
 def last_pid(tmp_path) -> int:

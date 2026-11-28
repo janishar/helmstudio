@@ -28,5 +28,14 @@
         "media": "echo.image"
       }
     }
+  },
+  "standard": {
+    "kind": "image",
+    "model": "Echo",
+    "fields": {
+      "prompt": "prompt.text",
+      "refs": "echo.refs"
+    },
+    "seconds": 1
   }
 }

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.76.0
+  version: 1.110.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -27,7 +27,7 @@ servers:
 security:
   - {ApiKey: [], BearerJWT: []}
 tags:
-  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch)'}
+  - {name: studio, description: 'studio_service: sessions, workflows, pipelines, the library (elements), LoRAs, runs, the queue, events, hosts, takes (the gallery), uploads, batches; from 1.16 models, model jobs, the hosts admin and import; from 1.17 timelines (sequences, shots, re-render, export) and media jobs; from 1.18 hosts with a discrete GPU and several GPU hosts (contracts/README.md, Hosts with a discrete GPU; Several hosts); from 1.19 media inputs (video and audio takes into a workflow), audio uploads, take actions ("Use in…" offers, a Timeline clip''s actions; contracts/README.md, Media inputs); from 1.21 the native runtime (a model run by a child process; contracts/README.md, the minimax-h3 family); from 1.22 video and audio takes in rows (MiniMax H3 references), rows that must stay empty while an input is wired (`not_with`), optional image nodes and offers only into placed inputs (contracts/README.md, Media inputs: rows of media); from 1.23 LoRA strengths 0..2 (looks saved before are clamped when read; contracts/README.md, Looks); from 1.24 the model component a node loads (NodeSchema.component); from 1.25 an inspector section''s help, the presets'' order (StudioLayout.preset_order) and a run''s planned peak before it is sent (POST /v1/studio/runs/plan); from 1.26 an inspector section''s choice tiles (LTX''s Recipe: two-stage or one-stage); from 1.28 a judge''s branch without `then` (Ask me) and a judge test on picked takes (POST /v1/studio/pipelines/{pipeline_id}/judge-tests); from 1.29 a V1 clip''s shot number (TimelineClip.number: "Shot 4"); from 1.30 voices: audio takes made by runs (the `Audio` port, `Workflow.media` audio), the `voice` param, saved voices in the library (designed voices and the packs'' starter voices; contracts/README.md, Voices); from 1.31 cloned voices (a 3–30 s clip of an audio take or a video''s sound, with consent), designed voices that keep a clip, Save as voice (`from_take` with `kind: voice`) and the zonos3 family (contracts/README.md, Voices: cloned voices); from 1.32 dialogue and Timeline audio: dialogue scripts (`script` text params expanded into `lines` rows whose items carry a voice), an element''s `voice_id`, cues on a dialogue''s take, audio takes on the audio tracks, New line (POST /v1/studio/timelines/{timeline_id}/lines), Make shot (a slot `exact` at an audio clip''s time), an export plan''s `sounds`, offers and pipeline binds into rows of one media field, `library.read` voices and the write node''s `form: script` (contracts/README.md, Dialogue and Timeline audio); from 1.44 the in-app assistant: chats, their events and memory, the admin''s assistant settings, search providers (kind `search`) and the Gallery''s `order` (contracts/README.md, Assistant); from 1.47 rules (refusals as data, ParamSchema.rules), option help (ParamSchema.option_help), a native node''s peak formula and sound limits (NodeSchema.peak_gb, sounds: the planned peak per run) and the Preset heading''s help (StudioLayout.preset_help); from 1.48 thumbnails: every list''s `thumb_url` is a small WebP of the image or the poster once made, `RunOutput.thumb_url` (contracts/README.md, Thumbnails); from 1.49 timeline edits by named ops (POST …/timelines/{timeline_id}/edits: a dry run, a diff, studio-made clip ids), the revision history and restore to any kept revision, the agent view (`view=agent`) and a stored frame at a sequence time (contracts/README.md, Timeline: edits by ops); from 1.50 the Timeline tools'' ops (roll, slip, slide, overwrite, split_all, remove_range, lift_range, an audio track''s ripple remove), linked sound clips (`TimelineClip.link`) and markers (`TimelineDoc.markers`, the marker ops; contracts/README.md, Timeline rules: tools, linked clips, markers); from 1.51 provider presets (GET /v1/studio/admin/provider-presets, a preset''s Fetch, a key file''s status, `Provider.compat` and `preset`; contracts/README.md, Model sources: presets); from 1.52 saving a provider key (PUT and DELETE /v1/studio/admin/provider-keys/{key_secret}, `ProviderKey.writable`; contracts/README.md, Model sources: Keys); from 1.53 thinking per model (`Provider.thinking`, `thinking_levels`, `ProviderPut.thinking`, `ProviderTest.thinking`, `ProviderPreset.thinking`, a model source''s `thinking`; contracts/README.md, Model sources: thinking); from 1.55 a provider''s fixed extra headers (`ProviderCompat.headers`: Anthropic''s anthropic-version; contracts/README.md, Model sources: compat); from 1.56 generous assistant defaults (AssistantLimits defaults 2000 model calls and 20000000 tokens a day, 200 look_at an hour, 30 messages a minute; AssistantCaps per message up to 40 model calls, 100 tool calls, 8 memory writes; a call''s n up to 99; contracts/README.md, Assistant); from 1.59 steering an answer (a message while a turn works joins it: `AssistantAccepted.steer`, `AssistantEntry.steer`; Stop: kind `stop`; contracts/README.md, Assistant: steer); from 1.59.1 steer fixes: waiting steers go first in a new turn, a stopped turn takes them as read, one message id per Stop (contracts/README.md, Assistant: steer); from 1.60 a take''s render time (`MadeWith.render_s`: the Create take, the Gallery''s Made with, the Timeline clip inspector and the sequence total); from 1.61 plugins: the admin''s Plugins page (GET /v1/studio/admin/plugins, Rescan, on and off, Remove, Add as provider), Only-you providers (`Provider.owner_id`, `plugin`; `AssistantSettings.personal`) and plugin tools in the assistant (a `plugin` card; contracts/README.md, Plugins); from 1.62 Stop cancels the model call in flight, and the assistant''s plain-words memory and voice-line checks (contracts/README.md, Assistant: steer; Assistant: tools); from 1.64 skills: plugins of kind `skill` (built in and from ~/.helm/plugins, folders and .zip files), GET /v1/studio/skills, a skill''s guide and files, the assistant''s use_skill and read_skill_file and its "Using skill" line (`AssistantLine.skill`; contracts/README.md, Skills); from 1.65 media in the assistant chat: a message''s attached images (`AssistantPost.takes`, `AssistantEntry.takes`), @-picked takes as [[take:<id>]] refs in your text, a model that sees images (`AssistantStatus.sees`, a preset''s `vision`) and takes shown as media in answers (contracts/README.md, Assistant: media and vision); from 1.66 the assistant''s context window per model (`AssistantSettings.window_tokens`) and its prompt cache hit rate per model (GET /v1/studio/admin/assistant/cache; contracts/README.md, Assistant: context and cache); from 1.67 plugins that start themselves: a manifest''s `run`, the host''s runner starts and keeps its service up while it is on (`Plugin.starts`, statuses starting and failed; contracts/README.md, Plugins: starts itself); from 1.70 plugins that read and make takes: a manifest''s `takes`, the call''s pass signed and checked by studio, /v1/studio/plugin/takes (read one of yours, make a new take from yours: source `tool`, `Take.tool`), a plugin line''s `take_ids` (Undo deletes them), the media-tools plugin and the Gallery''s Edit (GET /v1/studio/plugins/{plugin}, POST …/tools/{tool}: a takes plugin''s tool run for you; `Plugin.takes`, `needs`, a tool''s `title` and `summary`) (contracts/README.md, Plugins: takes); from 1.71 model guides: each model pack''s assistant guide and recipes (GET /v1/studio/model-guides/{family}), a card per downloaded family in the assistant''s prompt and its read_model_guide (contracts/README.md, Assistant: model guides); from 1.72 the Assistant as a first-class feature: `AssistantStatus.set_up`, `can_set_up`, `first_launch`, `tools` and `provider.model`, and POST /v1/studio/assistant/first-launch (contracts/README.md, Assistant: setup and first launch); from 1.78 model folders: several folders per host in priority order (PUT /v1/studio/admin/hosts/{host}/folders, `HostSettings.folders`, `ModelHost.folders`, a variant host''s `folder` and `copies`, state `unplugged`, a download''s `folder`, a delete''s `folder`; contracts/README.md, Model folders); from 1.79 music and sound: a sound class on audio takes and workflows (`SoundClass` music, sound or voice: `Take.sound`, `Workflow.sound`, `NodeSchema.sound`, the `kind` and `media` filters by class, an upload''s and a plugin take''s `sound`), offers by class, stereo audio and a song''s sections (`AudioInfo.channels`, `sections`), a `span` on an audio input, Auto int and float values (`auto: true`), lyrics tags (`ParamSchema.tags`), chip groups and a per-workflow count (`StudioLayout.groups`, `count`) and Save with the video (POST /v1/studio/takes/{take_id}/mux, media job kind `mux`; contracts/README.md, Music and sound); from 1.80 Magic boards (contracts/README.md, Magic); from 1.81 Magic''s standard request and runs: a workflow''s `standard` block (registry.schema.json), GET /v1/studio/magic/kinds, the Magic settings, a board''s run and plan, its runs, takes and statuses (contracts/README.md, Magic: the standard request; Magic: runs); from 1.82 Magic''s Send to Timeline: a board sent as a new sequence (POST …/boards/{board_id}/send, the sends list), fade, wipe and lane fades baked by a media job of kind `bake` (TakeSource `bake`), a morph''s own request and takes on its transition (contracts/README.md, Magic: Send to Timeline); from 1.83 Magic assets and the storyboard: an asset''s ops and named views, Make views (POST …/assets/{asset_id}/views), a block''s own picture (`take_add`), board frames that run on the image models with their style and framing, a shot made from a frame, the board''s `asset_runs` (contracts/README.md, Magic: assets and the storyboard); from 1.84 Make views refuses a view still being made (409); from 1.85 Magic''s Music and Sound kinds: the music and sound packs'' standard blocks, a request''s lyrics, key and BPM, a sound made from a shot''s video (`MagicModel.video`), a board take''s sound class (contracts/README.md, Magic: music and sound); from 1.86 that section''s take rule as built (only voice, music and sound blocks keep audio takes alone); from 1.87 the Magic Assistant: its server tools, the board_edit, magic_run and send cards (`AssistantCard.board`), an assistant edit''s summary as its revision''s `ops_summary` (contracts/README.md, Magic: the Assistant); from 1.88 the agent view''s block `request` and the ask rule''s total without board frames (contracts/README.md, Magic: the Assistant; Magic: runs); from 1.89 dialogue blocks that run (a run per turn, `MagicBlockRun.turn`, `MagicStatus.turns`), a request''s Run on host and Loop, a model''s `env`, a board take''s length and song sections (contracts/README.md, Magic: dialogue, Run on and Loop); from 1.90 a dialogue run''s turn follows its line (a line moved, or one before it removed, keeps its take) and Loop is off on a sound made from a shot''s video (the same section); from 1.91 a run holds the offers'' class rule (a take of another sound class into a classed workflow''s media param is 422; contracts/README.md, Music and sound: offers by class) and Magic boards are named as sequences are (`MagicBoard.title_source`, `named_by`; contracts/README.md, Magic: Names); from 1.92 search in lists: `q` and `cursor` / `limit` on sessions, Magic boards, sequences, chats, pipelines and a session''s runs, `q` and `state` on batches, `q` on a batch''s rows, the library''s `words` (contracts/README.md, Search in lists); from 1.93 the Assistant in Magic reads more of a board: a block''s `take_ids`, `pinned`, `error` and `turns`, an asset''s `sheet`, `voice_id` and `note`, a morph''s request and takes in the agent view, and an asset is in use as a dialogue speaker or a first or last frame too (contracts/README.md, Magic: the Assistant); from 1.94 Magic''s model variants: a run''s `variant` (its title), a model''s `family`, and the estimate follows the request''s variant (contracts/README.md, Magic: variants); from 1.95 stopping a board''s runs: the cancel_runs tool for the Assistant and helm mcp (contracts/README.md, Magic: the Assistant); from 1.97 the Assistant shows each step live: progress steps of a working turn, a line per tool call as it starts and ends (contracts/README.md, Assistant); from 1.98 Make views takes a size and the model''s own params for the batch (MagicViewsCreate `width`, `height`, `advanced`: model.variant, model.precision); from 1.99 a frame''s style `film`, the default: the film''s own style, no style sentence (contracts/README.md, Magic: assets and the storyboard); from 1.101 an audio block''s level (`MagicBlockNew.gain_db`, the block op''s `gain_db`, the agent view''s; sent as its Timeline clips'' gain; contracts/README.md, Magic: edits by ops); from 1.102 helm mcp''s design_voice and save_voice (POST …/assets/{asset_id}/voice/design and …/voice; contracts/README.md, Magic: the Assistant); from 1.103 a Magic edit at an older `base_revision` applies on top when every revision since only added a run''s take (contracts/README.md, Magic: edits by ops); from 1.106 audio fades, crossfades and ducking: a Timeline clip''s `fade_in` and `fade_out`, an audio clip''s `crossfade` into the clip touching it, a sequence''s and a board''s `ducking`, a voice, music or sound block''s fades, the transition kind `crossfade`, a run''s `tail` (contracts/README.md, Audio fades, crossfades and ducking); from 1.108 take facts measured on demand, the first time the Assistant or helm mcp asks for a take''s, then kept (no background loop) (`Take.facts_note`; contracts/README.md, Take facts); from 1.109 listen''s smaller model: Qwen2.5-Omni-3B answers when Qwen3-Omni cannot run, and the listen reply says so (`ListenRun.note`; contracts/README.md, The listen tool)'}
   - {name: files, description: signed file downloads and uploads}
   - name: auth
     description: 'auth_service: users, sessions (JWT access + rotating refresh tokens), roles, client API keys'
@@ -38,11 +38,19 @@ paths:
     get:
       tags: [studio]
       operationId: studioListSessions
-      summary: The caller's sessions, newest first (at most 100, not paginated)
-      description: 'From 1.43 `naming` says how new sessions get their title (contracts/README.md, Sessions: titles and naming), so Create can say so before a prompt leaves the machine.'
+      summary: The caller's sessions, newest first (`created_at`, then `id`), paginated from 1.92
+      description: |
+        From 1.43 `naming` says how new sessions get their title (contracts/README.md, Sessions: titles and naming), so Create can say so before a prompt leaves the machine.
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the title; `cursor` / `limit` page the list (default
+        100, so a caller with neither gets the newest 100 as before). `naming` is on every page.
+      parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/ListLimit'}
       responses:
         '200': {description: sessions, content: {application/json: {schema: {$ref: '#/components/schemas/SessionList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       tags: [studio]
@@ -110,7 +118,7 @@ paths:
         `updated_at` first. `problems` is never in a list (only `GET /v1/studio/workflows/{workflow_id}`).
       parameters:
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowSource'}, description: 'only templates or only the caller''s own; absent = both'}
-        - {name: media, in: query, required: false, schema: {$ref: '#/components/schemas/WorkflowMedia'}, description: 'only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); absent = all three. Another value is 422'}
+        - {name: media, in: query, required: false, schema: {type: string, enum: [image, video, audio, music, sound, voice]}, description: 'only workflows whose takes are images, videos or (1.30) audio (the Image / Video / Audio switch); from 1.79 `music`, `sound` or `voice`: audio workflows of that class (`Workflow.sound`; contracts/README.md, Music and sound); absent = every media. Another value is 422'}
       responses:
         '200': {description: workflows, content: {application/json: {schema: {$ref: '#/components/schemas/WorkflowList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -253,11 +261,19 @@ paths:
     get:
       tags: [studio]
       operationId: studioListPipelines
-      summary: The caller's pipelines, newest `updated_at` first (at most 100, not paginated)
-      description: 'Each with `workflow_titles` and `last_batch`; `problems` is never in a list (only `GET /v1/studio/pipelines/{pipeline_id}`).'
+      summary: The caller's pipelines, newest `updated_at` first (then `id`), paginated from 1.92
+      description: |
+        Each with `workflow_titles` and `last_batch`; `problems` is never in a list (only `GET /v1/studio/pipelines/{pipeline_id}`).
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the title; `cursor` / `limit` page the list
+        (default 100: a user has at most 100 pipelines, so the default page is all of them, as before).
+      parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/ListLimit'}
       responses:
         '200': {description: pipelines, content: {application/json: {schema: {$ref: '#/components/schemas/PipelineList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       tags: [studio]
@@ -417,6 +433,10 @@ paths:
         whose handle equals it first, then by `handle` (code points; null handles last), then `name`; without `q`, own
         items newest `updated_at` first, then starter looks by `name` (code points), then `id`. `limit` cuts the list
         (the `@` menu asks for 8). Images of deleted takes are left out of every item (contracts/README.md, Elements).
+        From 1.92 `words` is the pickers' search (contracts/README.md, Search in lists): every whitespace-separated word
+        must occur, case-insensitively, anywhere in the item's `name`, `handle`, `text` or, for a voice, its `voice`
+        line (`speaker`, `design`, `style`, `language`); a word's leading `@` is ignored, more than 200 characters is
+        422. It filters without changing the order and combines with `q`. No cursor: a user has at most 200 items, so the list is always whole.
         `workflow` (a template slug or one of the caller's workflow UUIDs; 422 `unknown workflow <id>`) filters nothing:
         it adds `fits` and `reason` to every item, against that workflow's graph and the caller's LoRAs now
         (contracts/README.md, Looks: fit); the picker greys the items that do not fit with the reason.
@@ -431,7 +451,8 @@ paths:
       parameters:
         - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryKind'}}
         - {name: group, in: query, required: false, schema: {$ref: '#/components/schemas/LibraryGroup'}}
-        - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}, description: 'prefix of a handle or a name'}
+        - {name: q, in: query, required: false, schema: {type: string, maxLength: 80}, description: 'prefix of a handle or a name (the `@` menu)'}
+        - {name: words, in: query, required: false, schema: {type: string, maxLength: 200}, description: 'from 1.92: every word must occur, case-insensitively, in the name, handle, text or voice line (contracts/README.md, Search in lists); keeps the order'}
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/LibrarySource'}}
         - {name: family, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}, description: 'items for this family: `family` null or equal'}
         - {name: workflow, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}, description: 'annotate every item with `fits` / `reason` for this workflow'}
@@ -725,12 +746,21 @@ paths:
     get:
       tags: [studio]
       operationId: studioListRuns
-      summary: The session's runs, newest first (at most 100, not paginated)
-      parameters: [{$ref: '#/components/parameters/SessionId'}]
+      summary: The session's runs, newest first (`created_at`, then `id`), paginated from 1.92
+      description: |
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the workflow id and title and every text value of
+        the run's inputs (the prompt among them); `cursor` / `limit` page the list (default 100, so a caller with
+        neither gets the newest 100 as before).
+      parameters:
+        - {$ref: '#/components/parameters/SessionId'}
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/ListLimit'}
       responses:
         '200': {description: runs, content: {application/json: {schema: {$ref: '#/components/schemas/RunList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
         '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       tags: [studio]
@@ -756,7 +786,10 @@ paths:
         voice fit's reason for that param), `speak.voice: voice <name> is for <family>`; from 1.31 a voice with a clip
         sends its clip, resolved like a media value even after its take was deleted (`speak.voice: the clip of voice
         <name> is gone` when its object is missing); in a workflow whose media is
-        audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. When no host is eligible (none live with the env and the workflow),
+        audio a mention in a prompt param is `prompt.text: mentions are not read aloud; use a dialogue script`. From
+        1.91 a media param of a workflow with a sound class takes only an audio take of that class, unless it accepts
+        video (the offers' rule, contracts/README.md, Music and sound: offers by class): `repaint.source: take <id> is
+        voice; this workflow takes music only` (`a video` for a video's sound); a rows item takes any class. When no host is eligible (none live with the env and the workflow),
         the run is created already `failed` with error `no live host for env <env>` (still 202) and nothing is sent.
         From 1.18 a host is eligible only with the run's model variant present at its precision and room for its
         planned peak; the other failure texts are in contracts/README.md, Several hosts: eligibility. From 1.35 a
@@ -998,7 +1031,7 @@ paths:
         first, each part newest first), `name` (the title, case-insensitively, then newest first). A cursor belongs to
         its order: one from another order is 422.
       parameters:
-        - {name: kind, in: query, required: false, schema: {$ref: '#/components/schemas/TakeKind'}}
+        - {name: kind, in: query, required: false, schema: {type: string, enum: [image, video, audio, music, sound, voice]}, description: 'a take kind, or from 1.79 a sound class: audio takes of that class (`Take.sound`; contracts/README.md, Music and sound)'}
         - {name: source, in: query, required: false, schema: {$ref: '#/components/schemas/TakeSource'}}
         - {name: starred, in: query, required: false, schema: {type: boolean}, description: 'true = only starred, false = only unstarred'}
         - {name: session_id, in: query, required: false, schema: {type: string, format: uuid}, description: only takes of this session}
@@ -1171,6 +1204,33 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/takes/{take_id}/listen:
+    post:
+      tags: [studio]
+      operationId: studioListen
+      summary: 'Listen: ask the local model that hears a question about one video or audio take'
+      description: |
+        From 1.107 (contracts/README.md, The listen tool): one interactive run of the listen workflow that can run now
+        (Qwen3-Omni's `omni-listen` first, from 1.109 then the smaller Qwen2.5-Omni-3B's `omni-listen-3b`, else the
+        fake `echo-listen`) in the take's session, else the caller's newest: its listen node gets `source` {take_id},
+        `question` and `transcript` (default true). The run's `answer` is the answer, `resolved.texts["listen.transcript"]`
+        the speech written down (absent without speech or when not asked); from 1.109 `note` says when the smaller
+        model answers and why. 404 for a take that is unknown, another user's, deleted or not ready. 409 in plain
+        words why no listen workflow can run now (contracts/README.md, The listen tool), `open Create once first:
+        listening needs a session`, or the open-runs cap. 422 `question must be 1-500 characters`, `take <id> is image; listen hears video and audio
+        takes (look_at sees images)`, or a take longer than 120 s (as any media input).
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ListenRequest'}}}
+      responses:
+        '202': {description: 'the listen run, queued', content: {application/json: {schema: {$ref: '#/components/schemas/ListenRun'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   /v1/studio/takes/{take_id}/decisions:
     get:
       tags: [studio]
@@ -1325,7 +1385,13 @@ paths:
       tags: [studio]
       operationId: studioListBatches
       summary: The caller's batches, newest first (`created_at`, then `id`), paginated
+      description: |
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the batch title, the pipeline title and the
+        workflow title; `state` (repeatable: `state=queued&state=running`) keeps the batches in one of those statuses.
+        They combine with AND and with the cursor, so every page and `next_cursor` count only the matches.
       parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {name: state, in: query, required: false, style: form, explode: true, schema: {type: array, items: {$ref: '#/components/schemas/BatchStatus'}}, description: 'from 1.92: only batches in one of these statuses (unknown = 422)'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -1410,8 +1476,10 @@ paths:
       tags: [studio]
       operationId: studioListBatchRows
       summary: The batch's rows by row number, paginated
+      description: 'From 1.92 (contracts/README.md, Search in lists): `q` matches every text value of the row''s inputs (the prompt among them) and its `status`; the cursor pages the matches.'
       parameters:
         - {$ref: '#/components/parameters/BatchId'}
+        - {$ref: '#/components/parameters/Q'}
         - {$ref: '#/components/parameters/Cursor'}
         - {$ref: '#/components/parameters/Limit'}
       responses:
@@ -1964,7 +2032,7 @@ paths:
       tags: [studio]
       operationId: studioAdminPutPlugin
       summary: 'From 1.61: turn a plugin on or off'
-      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on.'
+      description: 'Admin only (403). Off at once: its assistant tools leave the next input''s tools, its providers leave every list and pipeline rule (they come back when it is on again). 404 unknown. From 1.64 409 `<title> needs a newer helmstudio` (needs_newer) and `<name> can''t be read` (broken) for on. From 1.96 409 `Magic director is built in and always on for Magic` for off (contracts/README.md, Skills).'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       requestBody:
         required: true
@@ -1980,7 +2048,7 @@ paths:
       tags: [studio]
       operationId: studioAdminRemovePlugin
       summary: 'From 1.61: remove a plugin (its providers go too; the folder stays)'
-      description: 'Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`.'
+      description: 'Admin only (403). Drops the plugin and every provider made from it; the folder stays in plugins/, so a Rescan finds it again, Off. 404 unknown; 409 `<provider> is in use by an unfinished batch`; from 1.96 409 `Magic director is built in and always on for Magic`.'
       parameters: [{$ref: '#/components/parameters/PluginName'}]
       responses:
         '204': {description: removed}
@@ -2185,9 +2253,17 @@ paths:
         At most 200 chats (`updated_at`, then `id`, newest first). `status` says whether the assistant is on, where its
         model runs (a remote provider: the drawer shows the notice first), whether web search is on, your caps and what
         you used today. When the admin has it off, `status.enabled` is false and the list is still served.
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the chat's title (its first message, cut);
+        `cursor` / `limit` page the list (default 200: a user keeps at most 200 chats, so the default page is all of
+        them, as before). `status` is on every page.
+      parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 200}, description: 'from 1.92: the page size'}
       responses:
         '200': {description: the chats, content: {application/json: {schema: {$ref: '#/components/schemas/AssistantThreadList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       tags: [studio]
@@ -2455,7 +2531,9 @@ paths:
         runner's hosts key reports `models_disk.writable: false`). From 1.36 a body with `addon` downloads that optional
         add-on instead (contracts/README.md, Optional add-ons): 422 `<model> has no add-on <addon>`, `give a variant or
         an add-on, not both`, `<title> <add-on title> has no download source`; 409 `<title> <add-on title> is already
-        on <host>`.
+        on <host>`. From 1.78 `folder` (contracts/README.md, Model folders): the files go into that folder of the host;
+        absent = its downloads folder, else the next connected one. 422 `<folder> is not a folder of <host>`; 409
+        `<folder name> is not connected on <host>`, `<folder name> on <host> is read-only` (the folder's `writable`).
       parameters: [{$ref: '#/components/parameters/ModelId'}]
       requestBody:
         required: true
@@ -2489,12 +2567,17 @@ paths:
         runner deletes only inside `<models root>/<dir>/` (never through a symlink out of it). From 1.36 `addon`
         deletes only that optional add-on's files (a variant's delete keeps them): 409 `<title> <add-on title> is not on
         <host>`, `<addon> of <title> is loaded on <host>; unload it first`, and the in-use and unfinished-download texts
-        above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`.
+        above; 422 `<model> has no add-on <addon>`, `give a variant or an add-on, not both`. From 1.78 `folder`
+        (repeatable; contracts/README.md, Model folders) names the copies to delete: absent with one copy = that copy;
+        absent with two or more: 409 `<title> is in <n> folders on <host>; pick one`; 409 `<folder name> is not
+        connected on <host>`; 422 `<folder> is not a folder of <host>`. The loaded and in-use checks apply only when the
+        copy a run loads (the variant host's `folder`) is in the delete.
       parameters:
         - {$ref: '#/components/parameters/ModelId'}
         - {name: host, in: query, required: true, schema: {type: string, pattern: '^[a-z0-9]{1,32}$'}}
         - {name: variant, in: query, required: false, schema: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$'}}
         - {name: addon, in: query, required: false, schema: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$'}, description: 'from 1.36: an optional add-on of the model (Model.addons[].component) instead of a variant'}
+        - {name: folder, in: query, required: false, style: form, explode: true, schema: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/FolderId'}}, description: 'from 1.78: the copies to delete, by folder id (repeatable); absent = the only copy'}
       responses:
         '200': {description: 'the same delete, already queued or running', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
         '202': {description: 'the job, queued', content: {application/json: {schema: {$ref: '#/components/schemas/ModelJob'}}}}
@@ -2657,6 +2740,34 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/admin/hosts/{host}/folders:
+    put:
+      tags: [studio]
+      operationId: studioAdminPutHostFolders
+      summary: Replace the host's model folders (priority order) and the folder downloads go to
+      description: |
+        From 1.78 (contracts/README.md, Model folders). Admin only (403). Replaces the list, `version` + 1, published
+        like the settings (the KV value carries `folders` and `downloads`). A model folder is loaded from the first
+        connected folder of the list that has a complete copy. Paths are absolute or `~/…`, no `..`, no duplicates.
+        Studio first asks the host's supervising runner (`req.runner.folders.check`, 5 s): 422 `<path> is not a folder
+        on <host>` (not a directory now and not under /Volumes: a drive's folder may be listed while unplugged),
+        `<path> is not writable on <host>` (the downloads folder only; a read-only folder may be listed), `downloads
+        must be a connected folder`; 422 `paths must be absolute or start with ~/`, `<path> is listed twice`,
+        `downloads must be an index of folders`; 503 `<host> is offline` (no runner answered). A first PUT creates
+        the row with the other settings copied from the freshest key's `policy`. 404 for a host with no present hosts
+        key.
+      parameters: [{$ref: '#/components/parameters/HostName'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/ModelFoldersPut'}}}
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/HostSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/AdminRequired'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ studio: import (API 1.16, contracts/README.md, Import)
   /v1/studio/admin/imports/takes:
     post:
@@ -2710,10 +2821,18 @@ paths:
     get:
       tags: [studio]
       operationId: studioListTimelines
-      summary: The caller's sequences, newest `updated_at` first (at most 100, not paginated)
+      summary: The caller's sequences, newest `updated_at` first (then `id`), paginated from 1.92
+      description: |
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the name; `cursor` / `limit` page the list
+        (default 100: a user has at most 100 sequences, so the default page is all of them, as before).
+      parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/ListLimit'}
       responses:
         '200': {description: the sequences, content: {application/json: {schema: {$ref: '#/components/schemas/TimelineList'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
     post:
       tags: [studio]
@@ -3174,6 +3293,445 @@ paths:
         '422': {$ref: '#/components/responses/Unprocessable'}
         '503': {$ref: '#/components/responses/Unavailable'}
 
+  /v1/studio/takes/{take_id}/mux:
+    post:
+      tags: [studio]
+      operationId: studioTakeMux
+      summary: 'Save with the video (from 1.79): a new video take of a video take''s picture with this audio take as its sound'
+      description: |
+        contracts/README.md, Music and sound: Save with the video. `take_id` is the audio take (kind audio), the body
+        names the video take. 202 with a media job (kind `mux`): the runner copies the picture (H.264), encodes the
+        sound as AAC and cuts or pads it to the video's length; on success the job's `take_id` is a new video take
+        (source `create`, `parents` [video, audio], the video's `made_with`). Idempotent per pair: asking again while it
+        runs, or after it made a take that is not deleted, answers that job. 404 for either take unknown, another
+        user's or deleted; 422 `take <id> is not audio` or `take <id> is not a video`; 409 `no live host can export
+        (ffmpeg)` when no env can run it.
+      parameters: [{$ref: '#/components/parameters/TakeId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/TakeMuxRequest'}}}
+      responses:
+        '202': {description: the job that makes it, content: {application/json: {schema: {$ref: '#/components/schemas/TakeMux'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  # ------------------------------------------------------------------ studio: Magic boards (API 1.80; plan 39 phase C)
+  /v1/studio/magic/boards:
+    get:
+      tags: [studio]
+      operationId: studioListMagicBoards
+      summary: 'From 1.80: the caller''s Magic boards, newest `updated_at` first (then `id`), paginated from 1.92'
+      description: |
+        From 1.92 (contracts/README.md, Search in lists): `q` matches the name; `cursor` / `limit` page the list
+        (default 100: a user has at most 100 boards, so the default page is all of them, as before).
+      parameters:
+        - {$ref: '#/components/parameters/Q'}
+        - {$ref: '#/components/parameters/Cursor'}
+        - {$ref: '#/components/parameters/ListLimit'}
+      responses:
+        '200': {description: the boards, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateMagicBoard
+      summary: 'From 1.80: a new board (revision 1), empty or from a document'
+      description: |
+        contracts/README.md, Magic. An empty body is "Untitled board" with no lanes at 1280 × 720, 24 fps, 48000 Hz.
+        `doc` starts it from a whole document (the board rules must hold; every take it names must be the caller's);
+        `target` alone sets the size and rate. 409 at 100 boards (`You have 100 boards; delete some first.`). 422
+        `name must be 1-80 characters`, `doc and target are not allowed together`, a board rule
+        (`blocks[2]: it overlaps the block before it on its lane`) or `take <id> not found`.
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardCreate'}}}
+      responses:
+        '201': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}:
+    get:
+      tags: [studio]
+      operationId: studioGetMagicBoard
+      description: 'The board at its current revision. `view=agent` answers the agent view instead (`MagicAgentView`: lanes, blocks flat with their times in seconds and frames and their status, links, transitions, assets; contracts/README.md, Magic: the agent view).'
+      parameters:
+        - {$ref: '#/components/parameters/MagicBoardId'}
+        - {name: view, in: query, required: false, schema: {type: string, enum: [agent]}, description: '`agent` = MagicAgentView'}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {oneOf: [{$ref: '#/components/schemas/MagicBoard'}, {$ref: '#/components/schemas/MagicAgentView'}]}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    patch:
+      tags: [studio]
+      operationId: studioPatchMagicBoard
+      summary: 'Rename (no revision; not undone)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoardPatch'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMagicBoard
+      summary: 'Delete a board (soft): gone from every answer at once, with its revisions and snapshots'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/edits:
+    post:
+      tags: [studio]
+      operationId: studioEditMagicBoard
+      summary: 'Named ops applied in order, all or nothing (or tried: dry_run)'
+      description: |
+        contracts/README.md, Magic: edits by ops. Applies `ops` (at most 200) in order with the board rules to the
+        current document, which must be `base_revision`, and stores the result as one revision (one undo undoes the
+        call). `dry_run: true` answers the same and stores nothing (`revision` = the current one). An op that makes a
+        block, lane or transition and leaves out its id gets one from studio (answered in `diff`). `X-Helm-Client`
+        labels the revision's `via`. 409 `board changed since you opened it (now revision <n>)` when `base_revision`
+        is not the current one (a dry run too), unless (from 1.103) every revision since is studio's `take` (a run's
+        or morph's take added) and the ops keep those takes: then they apply on top of the current one. 422 `MagicEditError` when an op cannot apply (`op_index` and the
+        reason, `That lane is gone.`), `take <id> not found`, or `{detail}` for a body that does not fit (`ops[1]:
+        unknown field x`; `too_many_ops` past 200). Nothing is stored on any error.
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicEdits'}}}
+      responses:
+        '200': {description: the result, content: {application/json: {schema: {$ref: '#/components/schemas/MagicEditResult'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/MagicEditUnprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/revisions:
+    get:
+      tags: [studio]
+      operationId: studioListMagicRevisions
+      summary: 'The kept revisions (the last 100, and every snapshot''s), newest first'
+      parameters:
+        - {$ref: '#/components/parameters/MagicBoardId'}
+        - {name: before, in: query, required: false, schema: {type: integer, minimum: 1}, description: 'only revisions below this one (paging)'}
+        - {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 100, default: 20}}
+      responses:
+        '200': {description: the history, content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevisionList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/restore:
+    post:
+      tags: [studio]
+      operationId: studioRestoreMagicBoard
+      summary: 'Write a kept revision''s document forward as a new revision (a snapshot''s Restore)'
+      description: 'The document of `to` stored as revision + 1 (`undo` goes back to the current one, redo is cleared); history is never rewritten. 409 when `revision` is not the current one; 422 `revision <n> is not kept`.'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRestore'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/undo:
+    post:
+      tags: [studio]
+      operationId: studioUndoMagicBoard
+      summary: Undo the latest edit (written forward as a new revision)
+      description: '409 when `revision` is not the current one, or `nothing to undo` (none, or older than the kept revisions).'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevision'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/redo:
+    post:
+      tags: [studio]
+      operationId: studioRedoMagicBoard
+      summary: Redo the latest undo (written forward as a new revision)
+      description: '409 when `revision` is not the current one, or `nothing to redo` (any edit after an undo clears redo).'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRevision'}}}
+      responses:
+        '200': {description: the board, content: {application/json: {schema: {$ref: '#/components/schemas/MagicBoard'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/snapshots:
+    get:
+      tags: [studio]
+      operationId: studioListMagicSnapshots
+      summary: 'The board''s named snapshots, newest first (unlimited; not paginated)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      responses:
+        '200': {description: the snapshots, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      tags: [studio]
+      operationId: studioCreateMagicSnapshot
+      summary: 'A named pointer to a kept revision (absent: the current one); its revision is never pruned'
+      description: 'Restore it with `POST …/restore` `{revision, to: <its revision>}`. A missing name is `Snapshot <n>` (n = how many the board has, plus one). 422 `name must be 1-80 characters`, `revision <n> is not kept`.'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: false
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotCreate'}}}
+      responses:
+        '201': {description: the snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/snapshots/{snapshot_id}:
+    patch:
+      tags: [studio]
+      operationId: studioPatchMagicSnapshot
+      summary: Rename a snapshot
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {$ref: '#/components/parameters/MagicSnapshotId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshotPatch'}}}
+      responses:
+        '200': {description: the snapshot, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSnapshot'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMagicSnapshot
+      summary: 'Delete a snapshot (its revision is pruned with the others from then on)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {$ref: '#/components/parameters/MagicSnapshotId'}]
+      responses:
+        '204': {description: deleted}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/kinds:
+    get:
+      tags: [studio]
+      operationId: studioMagicKinds
+      summary: 'From 1.81: per kind, its shared fields and the models that serve it (what each fills, the greyed reasons, its Advanced)'
+      description: 'contracts/README.md, Magic: the standard request. Every kind is listed; Music and Sound carry `off` until their packs declare `standard` blocks. From 1.83 a board frame is served by the image models (its fields are the image ones; its style and framing are words of its prompt).'
+      responses:
+        '200': {description: the kinds, content: {application/json: {schema: {$ref: '#/components/schemas/MagicKinds'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/settings:
+    get:
+      tags: [studio]
+      operationId: studioGetMagicSettings
+      summary: 'From 1.81: the caller''s Magic settings (default ask_above_gpu_minutes 10; 5 before 1.110)'
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    put:
+      tags: [studio]
+      operationId: studioPutMagicSettings
+      summary: 'From 1.81: set the caller''s Magic settings'
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSettings'}}}
+      responses:
+        '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSettings'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/run:
+    post:
+      tags: [studio]
+      operationId: studioRunMagicBoard
+      summary: 'From 1.81: run blocks (their standard requests) in the board''s session'
+      description: |
+        contracts/README.md, Magic: runs. Each block's request becomes a normal run (`count` runs, seeds seed, seed + 1, …)
+        in the board's own session, made at the first run and hidden from GET /v1/studio/sessions; each run's takes join
+        its block as studio revisions (undo skips them). 202 with the board, the runs started and (a lane or `stale`)
+        the blocks skipped with why. Named `blocks` must all run: one that cannot is the 422 with why (`Shot 2: Music
+        comes with Create's Music and Sound`); one already running is the 409 `Shot 2 is already running`. 409 when
+        `revision` is not the current one; the run's own 409 at 100 runs queued or running. The Assistant asks first
+        above the user's limit (…/plan's `ask`); a run asked for here is the user's.
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicRunCreate'}}}
+      responses:
+        '202': {description: started, content: {application/json: {schema: {$ref: '#/components/schemas/MagicRunStarted'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/plan:
+    post:
+      tags: [studio]
+      operationId: studioPlanMagicBoard
+      summary: 'From 1.81: the GPU-time estimate of a pick (per block, per lane, the total), the run order and the ask rule'
+      description: 'contracts/README.md, Magic: the estimate. Nothing is stored. Each block: your recent render times of its workflow on the host it would run on (the median of the last 5, scaled by length and size), else the pack''s declared rate, else unknown; `ask` is the Assistant''s ask rule.'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicPick'}}}
+      responses:
+        '200': {description: the plan, content: {application/json: {schema: {$ref: '#/components/schemas/MagicPlan'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/assets/{asset_id}/views:
+    post:
+      tags: [studio]
+      operationId: studioMakeMagicViews
+      summary: 'From 1.83: Make views: one run of an image model per named view of an asset, in the board''s session'
+      description: |
+        contracts/README.md, Magic: assets and the storyboard. Each view ("Front", "Side") is a run of `model` (an image
+        model GET /v1/studio/magic/kinds lists; absent: the first) with the asset's name, note and the view in words,
+        its first sheet take as the reference when it has one; each take joins the asset's `sheet` named in `views` as a
+        studio revision (undo skips it). 202 with the board and the runs. 409 when `revision` is not the current one, or
+        (from 1.84) for a view of the asset still queued or running (`Front is already being made`);
+        422 for an asset not on the board (`unknown asset a1`), a sheet that would pass 50, a model on no host, or the
+        run's own refusal (`Front: …`).
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {name: asset_id, in: path, required: true, schema: {$ref: '#/components/schemas/MagicId'}, description: 'an asset of the board'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicViewsCreate'}}}
+      responses:
+        '202': {description: started, content: {application/json: {schema: {$ref: '#/components/schemas/MagicViewsStarted'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
+  /v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice/design:
+    post:
+      tags: [studio]
+      operationId: studioDesignMagicVoice
+      summary: 'From 1.102: design_voice for helm mcp: a designed voice named after the asset and one design run of the line'
+      description: |
+        contracts/README.md, Magic: the Assistant (design_voice). The Assistant's tool with no card (the MCP client's
+        own ask is the Yes): it starts at once whatever the estimate. 202 {revision, voice_id, started, seconds}. 409
+        when `revision` is not the current one or no voice design model is installed; 422 for an asset not on the board
+        or a design or line out of range.
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {name: asset_id, in: path, required: true, schema: {$ref: '#/components/schemas/MagicId'}, description: 'a character of the board'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicVoiceDesign'}}}
+      responses:
+        '202': {description: started, content: {application/json: {schema: {$ref: '#/components/schemas/MagicVoiceDesigned'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/assets/{asset_id}/voice:
+    post:
+      tags: [studio]
+      operationId: studioSaveMagicVoice
+      summary: 'From 1.102: save_voice for helm mcp: the picked take becomes its designed voice''s clip, set on the asset'
+      description: |
+        contracts/README.md, Magic: the Assistant (save_voice). `consent: true` is the voice-rights OK (the card's Yes in
+        the app); without it 422 `consent: say you have the right to use this voice (consent: true)`. 200 {voice_id,
+        revision, summary}, one board revision. 409 when `revision` is not the current one; 422 for a take not made by
+        design_voice or under 3 s.
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {name: asset_id, in: path, required: true, schema: {$ref: '#/components/schemas/MagicId'}, description: 'a character of the board'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicVoiceSave'}}}
+      responses:
+        '200': {description: kept, content: {application/json: {schema: {$ref: '#/components/schemas/MagicVoiceSaved'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+
+  /v1/studio/magic/boards/{board_id}/send:
+    post:
+      tags: [studio]
+      operationId: studioSendMagicBoard
+      summary: 'From 1.82: send the board to the Timeline as a new sequence (a dry run answers what goes)'
+      description: |
+        contracts/README.md, Magic: Send to Timeline. Always a new sequence, built from the board at `revision`: the
+        first Shots lane on V1, voice, music and sound on audio tracks linked to their shots, cut and dissolve as the
+        Timeline's, fade, wipe and lane fades baked (and effects into their shot's clip), a morph as its own clip.
+        `dry_run: true`: 200 with the plan only, nothing stored. Without bakes: 201 with the send and its sequence; with
+        bakes: 202 with the send `baking` and its media jobs (kind `bake`), the sequence made when the last one
+        succeeds. 409 `You have 100 sequences; delete some first.` (the Timeline's), 409 when `revision` is not the
+        current one, 409 `no live host can export (ffmpeg)` when bakes are needed and no env can run them, 409 `This
+        board is still sending; wait for it.`; 422 `Nothing to send: add a shot with a take first.`
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/MagicSendCreate'}}}
+      responses:
+        '200': {description: the dry run's plan, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSendResult'}}}}
+        '201': {description: sent, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSendResult'}}}}
+        '202': {description: baking, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSendResult'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/sends:
+    get:
+      tags: [studio]
+      operationId: studioListMagicSends
+      summary: 'From 1.82: the board''s sends, newest first'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}]
+      responses:
+        '200': {description: the sends, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSendList'}}}}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /v1/studio/magic/boards/{board_id}/sends/{send_id}:
+    delete:
+      tags: [studio]
+      operationId: studioDeleteMagicSend
+      summary: 'From 1.82: remove a send from the list (its sequence stays; one still baking is stopped)'
+      parameters: [{$ref: '#/components/parameters/MagicBoardId'}, {$ref: '#/components/parameters/MagicSendId'}]
+      responses:
+        '204': {description: removed}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+
   # ------------------------------------------------------------------ files
   /files/{path}:
     get:
@@ -3517,9 +4075,14 @@ components:
     ProviderName: {name: name, in: path, required: true, schema: {type: string}, description: 'a provider''s name (unknown = 404 on DELETE and test; malformed = 404)'}
     PluginName: {name: plugin, in: path, required: true, schema: {type: string}, description: 'from 1.61: a plugin''s name (its folder; unknown or malformed = 404)'}
     Limit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 60}}
+    ListLimit: {name: limit, in: query, required: false, schema: {type: integer, minimum: 1, maximum: 200, default: 100}, description: 'from 1.92: the page size; the default is the list''s old cap, so a caller without `limit` gets what it got before'}
+    Q: {name: q, in: query, required: false, schema: {type: string, maxLength: 200}, description: 'from 1.92: every whitespace-separated word must occur, case-insensitively, in the fields the list names (contracts/README.md, Search in lists); blank = no filter; longer = 422'}
     TimelineId: {name: timeline_id, in: path, required: true, schema: {type: string}, description: sequence UUID (malformed = 404)}
     MediaJobId: {name: job_id, in: path, required: true, schema: {type: string}, description: media job UUID (malformed = 404)}
     ThreadId: {name: thread_id, in: path, required: true, schema: {type: string}, description: 'from 1.44: an assistant chat''s UUID (another user''s or malformed = 404)'}
+    MagicBoardId: {name: board_id, in: path, required: true, schema: {type: string}, description: 'from 1.80: a Magic board''s UUID (another user''s or malformed = 404)'}
+    MagicSnapshotId: {name: snapshot_id, in: path, required: true, schema: {type: string}, description: 'from 1.80: a board snapshot''s UUID (malformed = 404)'}
+    MagicSendId: {name: send_id, in: path, required: true, schema: {type: string}, description: 'from 1.82: a send''s UUID (malformed = 404)'}
 
   responses:
     Unauthorized: {description: 'missing or invalid x-api-key (Kong), or missing/invalid/expired/revoked bearer token', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
@@ -3553,6 +4116,9 @@ components:
     TimelineEditUnprocessable:
       description: 'the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`, `code`, `problems`)'
       content: {application/json: {schema: {$ref: '#/components/schemas/TimelineEditError'}}}
+    MagicEditUnprocessable:
+      description: 'the body does not fit the schema (`{detail}` only), or an op cannot apply (`op_index`)'
+      content: {application/json: {schema: {$ref: '#/components/schemas/MagicEditError'}}}
 
   schemas:
     # ---------------------------------------------------------- errors
@@ -3580,9 +4146,10 @@ components:
       description: 'from 1.43, who wrote the title: default ("Untitled"), prompt (Generate''s slice of the prompt, `from_prompt`), user (typed or renamed), model (the namer). The namer replaces only default and prompt, once per session'
     SessionList:
       type: object
-      required: [sessions]
+      required: [sessions, next_cursor]
       properties:
         sessions: {type: array, items: {$ref: '#/components/schemas/StudioSession'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
         naming:
           type: object
           required: [mode, named_by, remote]
@@ -3667,7 +4234,7 @@ components:
         voice_id: {type: string, pattern: '^([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z0-9][a-z0-9_-]{0,63}/[a-z0-9][a-z0-9-]{0,63})$'}
     SpanValue:
       type: object
-      description: 'A `span` param''s value (API 1.19): a time range on the workflow''s one video media source, in that take''s own seconds (Retake: the stretch to regenerate)'
+      description: 'A `span` param''s value (API 1.19): a time range on the workflow''s one video media source (from 1.79 or audio source: Repaint), in that take''s own seconds (Retake: the stretch to regenerate)'
       required: [start, end]
       additionalProperties: false
       properties:
@@ -3711,7 +4278,10 @@ components:
         `accepts`; with `trim` the value may carry `in` / `out` (the UI draws the take's poster or waveform with a trim
         control and its duration); `grid` (a video's sides must be multiples of it), `max_s` (the longest it reads) and
         `max_frames` (the most frames of a video it reads) bound it. `span`: a time range `{start, end}` (`SpanValue`, default null; a run needs one) on the workflow's one
-        `media` param that accepts video; the UI draws it as a range control over that take's poster and duration.
+        `media` param that accepts video (from 1.79 or audio: a song's Repaint, snapped to whole milliseconds); the UI draws it as a range control over that take's poster or waveform and duration.
+        From 1.79 (contracts/README.md, Music and sound): an `int` or `float` may declare `auto: true` (the value 0 means Auto: the chip and
+        slider show "Auto" with a switch; the model picks it) and a `text` param `tags` (the lyrics tag chips Create
+        inserts at the caret as `[tag]`).
         From 1.22 (contracts/README.md, Media inputs: rows of media): a `rows` item field may be a `media` param (each
         item one video or audio take, `MediaRef`, required in every item; the rows editor draws the take's poster or a
         sound tile with its trim control); `min_s` (media) is the shortest it reads; `max_total_s` (rows with one media
@@ -3759,10 +4329,13 @@ components:
           description: 'from 1.47, enum or int with `values`: value (as text) → its line under the value in the param''s menu (MiniMax H3''s LoRA: `none` → `the model as it is`); absent = none'
         fps: {type: string, description: 'frames only: the name of the same node''s int or float param holding frames per second'}
         auto:
-          type: object
-          required: [min_s, max_s]
-          description: 'frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`)'
-          properties: {min_s: {type: number}, max_s: {type: number}}
+          oneOf:
+            - type: object
+              required: [min_s, max_s]
+              description: 'frames only: present = the value `"auto"` is allowed (the model predicts the length, clamped to min_s..max_s seconds and to min..max frames); absent = it is 422 (`<node>.<param>: auto length is not offered`)'
+              properties: {min_s: {type: number}, max_s: {type: number}}
+            - {const: true, description: 'from 1.79, int or float only: the value 0 means Auto (the model picks it; 0 is allowed below `min`)'}
+        tags: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, pattern: '^[a-z][a-z0-9 -]{0,23}$'}, description: 'from 1.79, text only: the tag chips over the field (lyrics: verse, chorus, bridge, intro, outro), each inserted at the caret as `[<tag>]`'}
         values: {type: array, items: {type: integer}, description: 'int only: the only allowed values, ascending (`<node>.<param>: must be one of 3, 8`)'}
         values_by:
           type: object
@@ -3792,6 +4365,7 @@ components:
         kind: {type: string, examples: [echo/echo]}
         title: {type: string}
         family: {type: [string, 'null'], description: null for a core node (prompt, output)}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, a node with an Audio output only: what its sound is (model.yaml `sound` of the stage, else of the pack); Workflow.sound is read from it'}
         component: {type: string, minLength: 1, maxLength: 40, description: 'from 1.24: the model component the node loads, in words (transformer, text encoder, vae); the Graph inspector reads "<family> · runs on <runtime> · uses the <component>". Absent = it loads none'}
         help: {type: string}
         addons: {type: array, items: {type: string}, description: 'from 1.36: the optional add-ons the node loads (a `component` of its family''s Model.addons); while one is not present the form greys the node''s controls (`<title> not downloaded`) and a run with the node not bypassed is refused on such a host (contracts/README.md, Optional add-ons). Absent = none'}
@@ -3853,7 +4427,8 @@ components:
         action: {type: string, description: 'from 1.19, templates only (registry `action`): the take action''s label when it is offered for a take ("Use in…", a clip''s actions): Animate, Edit, Extend, Retake a section; absent = the title'}
         family: {type: string}
         env: {type: string, description: the runner env that executes it}
-        media: {type: string, enum: [image, video, audio, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
+        media: {type: string, enum: [image, video, audio, text], description: 'always sent from API 1.11: a template''s as published (registry `media`, absent = image), a user workflow''s computed from its graph (contracts/README.md, Video); audio (API 1.30) when an output is wired from an Audio output (contracts/README.md, Voices), from 1.79 also when an Audio output of a node with a `sound` class is wired beside a Video one (the class wins: MMAudio''s video workflow); text (API 1.14) only for an ask workflow, served read-only by GET /v1/studio/workflows/{workflow_id}, never listed'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, an audio workflow only (absent otherwise): the `sound` of the node schema whose Audio output an output node takes, computed for templates and user workflows alike (contracts/README.md, Music and sound); absent when that node has none'}
         nodes: {type: object, additionalProperties: {$ref: '#/components/schemas/GraphNode'}, description: node id → node}
         node_schemas: {type: object, additionalProperties: {$ref: '#/components/schemas/NodeSchema'}, description: 'kind → schema, for every kind in nodes the registry has (a kind no runner publishes is left out)'}
         source: {$ref: '#/components/schemas/WorkflowSource'}
@@ -3867,7 +4442,7 @@ components:
     WorkflowMedia:
       type: string
       enum: [image, video, audio]
-      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image'
+      description: 'what a workflow''s takes are; video when an `output` node''s `media` is wired from a `Video` output, from 1.30 audio when from an `Audio` output, else image; from 1.79 a `Video` output does not count beside an `Audio` output of a node with a `sound` class (MMAudio''s video workflow makes audio)'
     WorkflowList:
       type: object
       required: [workflows]
@@ -3895,6 +4470,25 @@ components:
           maxItems: 12
           items: {anyOf: [{$ref: '#/components/schemas/StudioPath'}, {$ref: '#/components/schemas/StudioTile'}]}
           description: 'chips on the composer, in order: params, and library tiles (`elements`, `look:<group>`) that open the visual picker (contracts/README.md, Looks: composer tiles)'
+        groups:
+          type: array
+          maxItems: 4
+          description: 'from 1.79: quick chips shown as one chip with one popup (ACE-Step''s "BPM · Key · Time"), at the first item''s place; each item is a param path in `quick`, in at most one group (contracts/README.md, Music and sound)'
+          items:
+            type: object
+            required: [label, items]
+            additionalProperties: false
+            properties:
+              label: {type: string, minLength: 1, maxLength: 40, examples: [BPM · Key · Time]}
+              items: {type: array, minItems: 2, maxItems: 6, items: {$ref: '#/components/schemas/StudioPath'}}
+        count:
+          type: object
+          required: [default, max]
+          additionalProperties: false
+          description: 'from 1.79: how many takes one Generate makes (Stable Audio 3''s variations: 4, at most 8); absent = Create''s own count'
+          properties:
+            default: {type: integer, minimum: 1, maximum: 8}
+            max: {type: integer, minimum: 1, maximum: 8}
         inspector:
           type: array
           maxItems: 12
@@ -4439,8 +5033,10 @@ components:
         reserved: {type: array, items: {$ref: '#/components/schemas/PipelineReserved'}, description: 'from 1.15, with bounds'}
     PipelineList:
       type: object
-      required: [pipelines]
-      properties: {pipelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Pipeline'}}}
+      required: [pipelines, next_cursor]
+      properties:
+        pipelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/Pipeline'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
     PipelineCreate:
       description: 'a whole document (based_on optional), or `{based_on, title?}` to copy one of the caller''s pipelines'
       oneOf:
@@ -4530,6 +5126,22 @@ components:
       additionalProperties: false
       properties:
         title: {type: string, minLength: 1, maxLength: 80, description: 'absent = `<take title> pipeline`, cut to 80 characters'}
+
+    ListenRequest:
+      type: object
+      additionalProperties: false
+      required: [question]
+      description: 'from 1.107: POST /v1/studio/takes/{take_id}/listen (contracts/README.md, The listen tool)'
+      properties:
+        question: {type: string, minLength: 1, maxLength: 500, description: what to listen for}
+        transcript: {type: boolean, default: true, description: 'also write down the speech (Qwen3-ASR)'}
+    ListenRun:
+      allOf:
+        - {$ref: '#/components/schemas/Run'}
+      type: object
+      description: 'from 1.109: the listen run (POST /v1/studio/takes/{take_id}/listen) with `note`'
+      properties:
+        note: {type: string, minLength: 1, description: 'from 1.109, only when the smaller model answers (`omni-listen-3b`): which model and why, in plain words, e.g. `Answered by the smaller listen model (Qwen2.5-Omni-3B): the T9 with Qwen3-Omni is not connected.`; absent otherwise'}
 
     # ---------------------------------------------------------- studio: runs
     RunStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
@@ -4668,8 +5280,10 @@ components:
           examples: [{enhance.text: 'A ginger cat asleep on a green velvet sofa, soft window light'}]
     RunList:
       type: object
-      required: [runs]
-      properties: {runs: {type: array, items: {$ref: '#/components/schemas/Run'}}}
+      required: [runs, next_cursor]
+      properties:
+        runs: {type: array, items: {$ref: '#/components/schemas/Run'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
 
     # ---------------------------------------------------------- studio: the queue
     Queue:
@@ -4742,7 +5356,7 @@ components:
     TitleEvent:
       type: object
       required: [seq, type, run_id, ts, data]
-      description: 'from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from'
+      description: 'from 1.43: the namer gave the session its title; `run_id` is the run whose prompt it was named from (from 1.91 a Magic board''s session named from a block''s prompt: the board id)'
       properties:
         seq: {type: integer, minimum: 1}
         type: {type: string, const: session}
@@ -4888,10 +5502,14 @@ components:
 
     # ---------------------------------------------------------- studio: takes (the gallery) and uploads
     TakeKind: {type: string, enum: [image, video, audio]}
+    SoundClass:
+      type: string
+      enum: [music, sound, voice]
+      description: 'from 1.79 (contracts/README.md, Music and sound): what an audio take or workflow is: music (songs), sound (effects, ambience) or voice (speech); a class on kind audio, never a take kind of its own'
     TakeSource:
       type: string
-      enum: [create, upload, pipeline, import, export, frame, tool]
-      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence''s export (`export`); frame (from 1.17): a video take''s first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes)'
+      enum: [create, upload, pipeline, import, export, frame, tool, bake]
+      description: 'create: an output of a Create run; upload: a file the user uploaded; pipeline: an output of a batch run (every batch runs on the pipeline engine, plan 9.1); import (from 1.16): an item of the old helmstudio gallery, brought in by `helm import` (`legacy`); export (from 1.17): a sequence''s export (`export`); frame (from 1.17): a video take''s first or last frame (`frame_of`); tool (from 1.70): made by a plugin tool from takes of yours (`tool`, `parents` = those takes; contracts/README.md, Plugins: takes); bake (from 1.82): a short clip a Magic send baked (a fade, a wipe, a lane fade or a shot''s effects; `parents` = the takes it read; contracts/README.md, Magic: Send to Timeline)'
     Take:
       type: object
       description: |
@@ -4901,7 +5519,7 @@ components:
       required: [id, kind, source, title, url, thumb_url, content_type, width, height, bytes, created_at, starred, session_id, run_id, made_with, parents]
       allOf:
         - {if: {properties: {kind: {const: video}}, required: [kind]}, then: {required: [video]}}
-        - {if: {properties: {kind: {const: audio}}, required: [kind]}, then: {required: [audio]}}
+        - {if: {properties: {kind: {const: audio}}, required: [kind]}, then: {required: [audio, sound]}, else: {not: {required: [sound]}}}
       properties:
         id: {type: string, format: uuid}
         kind: {$ref: '#/components/schemas/TakeKind'}
@@ -4930,6 +5548,7 @@ components:
         batch_id: {type: [string, 'null'], format: uuid, description: 'with source pipeline: the batch that made it (its collection); absent or null otherwise'}
         video: {$ref: '#/components/schemas/VideoInfo', description: 'kind video only (absent for an image): length, frame rate, audio and the poster'}
         audio: {$ref: '#/components/schemas/AudioInfo', description: 'from 1.19, kind audio only: its length (from 1.30 a run''s audio take also its sample rate)'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, kind audio only (always sent then; absent otherwise): a run''s take its workflow''s `sound` (voice when the workflow has none), an upload''s or a plugin take''s as sent (default voice); audio takes made before 1.79 are voice'}
         source_map: {$ref: '#/components/schemas/SourceMap', description: 'from 1.19, a video made from a media take (retake, extend, audio to video; absent otherwise): how its time lines up with that take'}
         tool: {$ref: '#/components/schemas/TakeTool', description: 'from 1.70, source tool only (absent otherwise; `made_with` null): the plugin tool that made it'}
         decisions:
@@ -4937,6 +5556,26 @@ components:
           maxItems: 16
           items: {$ref: '#/components/schemas/TakeDecision'}
           description: 'from 1.14, only in `GET /v1/studio/takes/{take_id}`: the judge decisions that weighed it, newest first (full records: GET …/takes/{take_id}/decisions)'
+        facts: {oneOf: [{$ref: '#/components/schemas/TakeFacts'}, {type: 'null'}], description: 'from 1.104, only in `GET /v1/studio/takes/{take_id}`, a video or audio take: what ffmpeg measured on its file (contracts/README.md, Take facts); null until made (from 1.108 measured on demand: the first time the Assistant or helm mcp asks, then kept) or when its file cannot be read'}
+        facts_note: {type: string, minLength: 1, maxLength: 200, description: 'from 1.108, only in `GET /v1/studio/takes/{take_id}` asked by the Assistant or helm mcp (X-Helm-Client mcp): why a video or audio take has no facts yet, in plain words: being measured (asked on demand, not done within 20 s) or no runner is on to measure them; absent otherwise (contracts/README.md, Take facts)'}
+    TakeFacts:
+      type: object
+      description: |
+        From 1.104 (contracts/README.md, Take facts): a video or audio take's facts from ffmpeg, and a video's frame
+        grid. The sound facts are null when it has no sound.
+      required: [seconds, sound_seconds, lufs, peak_db, silence_start, silence_end, end_lufs, abrupt, grid_url, at]
+      properties:
+        seconds: {type: number, minimum: 0, description: the file's real length}
+        sound_seconds: {type: [number, 'null'], minimum: 0, description: its sound's length}
+        lufs: {type: [number, 'null'], description: 'integrated loudness (EBU R128), LUFS; -70 is silence'}
+        peak_db: {type: [number, 'null'], description: true peak, dBTP}
+        silence_start: {type: [number, 'null'], minimum: 0, description: seconds under -50 dB at the start}
+        silence_end: {type: [number, 'null'], minimum: 0, description: seconds under -50 dB at the end}
+        end_lufs: {type: [number, 'null'], description: 'the loudness of the last 0.5 s, LUFS'}
+        abrupt: {type: [boolean, 'null'], description: 'the sound stops within 10 LU of its loudness with no silence at the end (no fade out)'}
+        cuts: {type: array, maxItems: 32, items: {type: number, minimum: 0}, description: 'a video only: scene cuts (seconds), the first 32'}
+        grid_url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}], description: 'a video: one JPEG of its frames in time order (12, fewer for a shorter clip), each with its time printed at its top left, long side at most 1024; null for audio'}
+        at: {type: array, maxItems: 16, items: {type: number, minimum: 0}, description: 'the seconds of the grid''s frames, in order; empty for audio'}
     TakeDecision:
       type: object
       required: [decision_id, batch_id, row, node, outcome, first_failed]
@@ -4968,6 +5607,17 @@ components:
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'an upload: as the client declared it (contracts/README.md, Media inputs: audio uploads); from 1.30 a run''s audio take: from evt.run.output `audio` (samples / rate)'}
         sample_rate: {type: integer, minimum: 8000, maximum: 96000, description: 'from 1.30: the WAV''s rate (Hz), from evt.run.output `audio`; absent for an upload (studio does not decode it)'}
         cues: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/AudioCue'}, description: 'from 1.32, a dialogue''s take only (from evt.run.output `audio.cues`): one per line, in order; the stage draws them as line markers, the Timeline as ticks on the clip (sequence time = clip `at` + cue − clip `in`)'}
+        channels: {type: integer, enum: [1, 2], description: 'from 1.79, a run''s audio take (from evt.run.output `audio`): 2 stereo; absent = mono (and for an upload, which studio does not decode)'}
+        sections: {type: array, minItems: 1, maxItems: 40, items: {$ref: '#/components/schemas/AudioSection'}, description: 'from 1.79, a song with tagged lyrics only (from evt.run.output `audio.sections`): its parts in order; the stage draws them as section markers (a click seeks; Repaint takes a section''s range)'}
+    AudioSection:
+      type: object
+      description: 'from 1.79: one part of a song (defs `section`): its lyrics tag, [start_s, end_s) in the take''s own seconds'
+      required: [label, start_s, end_s]
+      additionalProperties: false
+      properties:
+        label: {type: string, minLength: 1, maxLength: 40, examples: [chorus]}
+        start_s: {type: number, minimum: 0, maximum: 600}
+        end_s: {type: number, exclusiveMinimum: 0, maximum: 600}
     AudioCue:
       type: object
       description: 'from 1.32: one dialogue line in its take (defs `cue`): line from 1, [start_s, end_s) in the take''s own seconds, the speaker''s voice id (a deleted voice''s id stays), the text as spoken'
@@ -5384,6 +6034,7 @@ components:
         content_type: {type: string, enum: [image/png, image/jpeg, image/webp, audio/wav, audio/mpeg, audio/mp4], description: 'from 1.19 also WAV and MP3 (an audio take), from 1.38 m4a (AAC in MP4)'}
         bytes: {type: integer, minimum: 1, maximum: 52428800}
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 600, description: 'audio only (required): its length as the browser decoded it; studio records it, the runner reads the file itself'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, audio only (with an image it is 422 `only audio has a sound class`): the class of the Create tab or Gallery filter it comes from; absent = voice'}
     UploadLimits:
       type: object
       description: 'API 1.38 (contracts/README.md, Optimised uploads): what the web optimises an upload to'
@@ -6696,7 +7347,7 @@ components:
       description: 'twin of assistant.schema.json card: a card the server asks (look_at, web_search, forget); Yes or Not now is a message of kind answer'
       properties:
         id: {$ref: '#/components/schemas/AssistantCallId'}
-        kind: {type: string, enum: [look, web_search, delete, plugin], description: 'from 1.61 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins)'}
+        kind: {type: string, enum: [look, web_search, delete, plugin, board_edit, magic_run, send], description: 'from 1.61 plugin: a plugin tool with a risk flag (contracts/README.md, Plugins); from 1.87 board_edit, magic_run and send (contracts/README.md, Magic: the Assistant)'}
         title: {type: string, minLength: 1, maxLength: 120}
         rows:
           type: array
@@ -6710,6 +7361,16 @@ components:
         tags: {type: array, minItems: 1, maxItems: 3, items: {type: string, maxLength: 40}}
         take_ids: {type: array, maxItems: 8, items: {type: string, format: uuid}}
         state: {type: string, enum: [waiting, 'yes', not_now, cancelled]}
+        board:
+          type: object
+          required: [board_id, base_revision]
+          additionalProperties: false
+          description: 'from 1.87, board_edit: the board the change is drawn on; the Magic page with it open applies `ops` to its document and draws them (Apply is Yes, Discard is Not now); a restore carries `to` and no ops'
+          properties:
+            board_id: {type: string, format: uuid}
+            base_revision: {type: integer, minimum: 1}
+            ops: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/MagicOp'}}
+            to: {type: integer, minimum: 1, description: 'a restore: the revision it brings back'}
     AssistantCaps:
       type: object
       required: [model_calls, tool_calls, memory_writes]
@@ -6801,10 +7462,11 @@ components:
         updated_at: {type: string, format: date-time, description: 'the chat''s last message, turn end or Continue here; a summary landing does not move it. The list is newest first by it'}
     AssistantThreadList:
       type: object
-      required: [status, threads]
+      required: [status, threads, next_cursor]
       properties:
         status: {$ref: '#/components/schemas/AssistantStatus'}
         threads: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/AssistantThread'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
     AssistantThreadPatch:
       type: object
       required: [auto]
@@ -7044,6 +7706,30 @@ components:
         free_bytes: {type: [integer, 'null'], minimum: 0, description: 'free space on the models root''s volume, from the same key'}
         total_bytes: {type: [integer, 'null'], minimum: 0}
         hub_token: {type: boolean, description: 'admins only: a Hub token file is present on the host (needed for a gated source); never the token'}
+        folders: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ModelFolder'}, description: 'from 1.78: its model folders in priority order, from the freshest key''s `models_disks` (absent from older runners: empty). `models_root`, `free_bytes` and `total_bytes` above are the downloads folder''s'}
+    FolderId: {type: string, pattern: '^[0-9a-f]{12}$', description: 'from 1.78: a model folder''s id, the first 12 hex of the SHA-256 of its path as stored (contracts/README.md, Model folders)'}
+    ModelFolder:
+      type: object
+      required: [id, name, root, connected, free_bytes, total_bytes, writable, downloads]
+      description: 'from 1.78: one model folder of a host (the Models page''s Folders strip)'
+      properties:
+        id: {$ref: '#/components/schemas/FolderId'}
+        name: {type: string, maxLength: 80, description: '`/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name', examples: [Mac, T9]}
+        root: {type: string, maxLength: 400, description: 'its path with the home directory written `~`'}
+        connected: {type: boolean, description: 'the path is a folder now; false = a drive unplugged (or a path not mounted)'}
+        free_bytes: {type: [integer, 'null'], minimum: 0, description: 'null when not connected'}
+        total_bytes: {type: [integer, 'null'], minimum: 0}
+        writable: {type: boolean}
+        downloads: {type: boolean, description: 'downloads go here (exactly one folder of the list)'}
+    ModelCopy:
+      type: object
+      required: [folder, state, bytes, freed_bytes]
+      description: 'from 1.78: the files of a variant (or add-on) in one folder of the host'
+      properties:
+        folder: {$ref: '#/components/schemas/FolderId'}
+        state: {type: string, enum: [present, partial, mismatch, unplugged], description: 'unplugged: in a folder not connected now (what it held when last seen)'}
+        bytes: {type: [integer, 'null'], minimum: 0, description: 'its own files there; null when unplugged'}
+        freed_bytes: {type: [integer, 'null'], minimum: 0, description: 'what deleting this copy gives back: shared parts another variant there loads are not counted; null when unplugged'}
     Licence:
       type: object
       required: [id, title, url, text]
@@ -7060,6 +7746,7 @@ components:
         family: {type: string, examples: [qwen-image]}
         title: {type: string, examples: [Qwen Image 2.1]}
         media: {type: array, items: {type: string, enum: [image, video, audio]}, description: 'the board''s `image`, `video + audio`'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79: an audio model''s class (registry models[].sound: music, sound or voice; the Models page''s cube colour); absent otherwise'}
         runtimes: {type: array, items: {type: object, required: [runtime, env], properties: {runtime: {type: string}, env: {type: string}, devices: {type: array, items: {type: string, enum: [cuda, mps, cpu]}, description: 'from 1.18: the devices it runs on (model.yaml `runtimes.<r>.devices`); absent = every device of that runtime'}}}, description: 'every runtime the pack has; only mlx or native (from 1.21: a pack whose stage runs a child process, the MiniMax H3 video model) = runs on Apple silicon only (the board''s `Mac only`)'}
         variants: {type: array, items: {$ref: '#/components/schemas/ModelVariant'}}
         addons: {type: array, items: {$ref: '#/components/schemas/ModelAddon'}, description: 'from 1.36: its optional add-ons (contracts/README.md, Optional add-ons), the freshest key''s order; empty for most models'}
@@ -7119,8 +7806,8 @@ components:
         hosts: {type: array, items: {$ref: '#/components/schemas/ModelVariantHost'}}
     ModelVariantState:
       type: string
-      enum: [present, partial, missing, downloading, mismatch]
-      description: 'present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again)'
+      enum: [present, partial, missing, downloading, mismatch, unplugged]
+      description: 'present: every file on disk, hashes as recorded; partial: some (resume with a download); missing: none of its own; downloading: a download job is queued or running (`job`); mismatch: files whose hash differs from the recorded one (`mismatch`; download again); from 1.78 unplugged: its only copies are in folders not connected now (not runnable; the board''s `T9 not connected`)'
     ModelVariantHost:
       type: object
       required: [host, state, bytes, job]
@@ -7130,6 +7817,8 @@ components:
         bytes: {type: [integer, 'null'], minimum: 0, description: 'its own files on that host''s disk (the board''s `On disk for this variant`); null when missing'}
         mismatch: {type: array, items: {type: string}, description: 'state mismatch: the files, relative to `dir`'}
         separate: {type: array, items: {type: string}, description: 'shared components this host keeps as the variant''s own copy because their hashes differ from the owner''s'}
+        folder: {oneOf: [{$ref: '#/components/schemas/FolderId'}, {type: 'null'}], description: 'from 1.78: the folder a run loads it from (the first connected one with a complete copy, else one with some files); null when missing or unplugged, and from older runners'}
+        copies: {type: array, maxItems: 8, items: {$ref: '#/components/schemas/ModelCopy'}, description: 'from 1.78: every folder of the host with files of it, in priority order (the Copies section; Delete''s which copy); absent from older runners'}
         job:
           oneOf:
             - type: object
@@ -7150,6 +7839,7 @@ components:
         variant: {type: string, pattern: '^[a-z0-9][a-z0-9_-]{0,63}$', description: 'absent = the model''s first variant'}
         addon: {type: string, pattern: '^[a-z][a-z0-9_]{0,63}$', description: 'from 1.36: download this optional add-on (Model.addons[].component) instead of a variant; never with `variant`'}
         accept_licence: {type: boolean, description: 'true: the admin accepted the variant''s licence text as GET /v1/studio/models showed it; required when its must_accept is true'}
+        folder: {$ref: '#/components/schemas/FolderId', description: 'from 1.78: the folder to download into; absent = the downloads folder, else the next connected one'}
     ModelJobKind: {type: string, enum: [download, delete, lora_delete]}
     ModelJobState: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     ModelJob:
@@ -7274,7 +7964,7 @@ components:
       properties: {pins: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/PinRef'}}}
     HostSettings:
       type: object
-      required: [host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, applied, updated_at]
+      required: [host, version, after_run, idle_unload_min, reserve_gb, reserve_mode, pins, folders, downloads, applied, updated_at]
       properties:
         host: {type: string}
         version: {type: integer, minimum: 1}
@@ -7283,8 +7973,34 @@ components:
         reserve_gb: {type: number, minimum: 0}
         reserve_mode: {$ref: '#/components/schemas/ReserveMode'}
         pins: {type: array, items: {$ref: '#/components/schemas/PinRef'}}
+        folders:
+          oneOf:
+            - type: array
+              minItems: 1
+              maxItems: 8
+              items: {type: object, required: [id, path], properties: {id: {$ref: '#/components/schemas/FolderId'}, path: {type: string}}}
+            - type: 'null'
+          description: 'from 1.78: the model folders in priority order as set; null = never set (each runner''s HELMSTUDIO_MODELS)'
+        downloads: {oneOf: [{$ref: '#/components/schemas/FolderId'}, {type: 'null'}], description: 'from 1.78: the folder downloads go to; null with `folders` null'}
         applied: {type: boolean, description: 'every fresh hosts key of the host (but a local server''s `server` env, which holds no weights) reports `policy.settings_version` = version'}
         updated_at: {type: string, format: date-time}
+    ModelFoldersPut:
+      type: object
+      required: [folders, downloads]
+      additionalProperties: false
+      description: 'from 1.78: the whole list, first = loaded first'
+      properties:
+        folders:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            required: [path]
+            additionalProperties: false
+            properties:
+              path: {type: string, minLength: 1, maxLength: 400, pattern: '^(/|~/)', examples: [~/GenAI/models, /Volumes/T9/models]}
+        downloads: {type: integer, minimum: 0, maximum: 7, description: 'the index in `folders` of the folder downloads go to'}
     HostUnload:
       type: object
       additionalProperties: false
@@ -7421,6 +8137,9 @@ components:
         number: {type: integer, minimum: 1, description: 'From 1.29, V1 only: the shot number ("Shot 4"), given by studio when the clip is added (the highest so far + 1) and kept when it moves; a write cannot change a stored clip''s. contracts/README.md, Timeline rules: shot numbers'}
         offline: {type: boolean, description: 'answers only, true when the take is deleted or gone: the clip keeps its place and length, plays as offline and blocks an export'}
         link: {$ref: '#/components/schemas/TimelineClipId', description: 'From 1.50, an audio-track clip only: the V1 clip it is linked to (its sound clip: it follows that clip''s ripples, goes when it goes and is cut with it; contracts/README.md, Timeline rules: linked clips)'}
+        fade_in: {type: number, minimum: 0, maximum: 10, description: 'From 1.106, a clip with sound (an audio-track clip with a take, a V1 video clip; another is `fade_clip`): seconds its sound rises from silence, snapped to frames; normalize clamps it to the clip''s length; 0 is stored as absent (contracts/README.md, Audio fades, crossfades and ducking)'}
+        fade_out: {type: number, minimum: 0, maximum: 10, description: 'From 1.106, as fade_in: seconds its sound falls to silence at its end, clamped to the length less fade_in; it does not play while the clip has a `crossfade`'}
+        crossfade: {type: number, exclusiveMinimum: 0, maximum: 10, description: 'From 1.106, an audio-track clip only (V1: `crossfade_track`): seconds of Crossfade into next, into the clip that starts on its end frame on its track (none touching: normalize drops it), snapped to frames and clamped to both clips'' lengths. A true blend when its take has that much sound past `out` (it plays on under the next clip''s head), else a dip (each side fades over half) with the warning `crossfade_dip`; this clip''s fade_out and the next one''s fade_in do not play while it is set'}
     TimelineMarkerColor: {type: string, enum: [red, orange, yellow, green, blue, purple], description: 'a marker''s colour, drawn with the theme''s own shade'}
     TimelineMarker:
       type: object
@@ -7433,6 +8152,14 @@ components:
         name: {type: string, minLength: 1, maxLength: 80}
         color: {$ref: '#/components/schemas/TimelineMarkerColor'}
     TimelineTrackKind: {type: string, enum: [video, audio]}
+    Ducking:
+      type: object
+      required: ['on', db]
+      additionalProperties: false
+      description: 'from 1.106: music dips by `db` wherever a voice plays, easing over 0.3 s each side, worked out from the voice clips'' (blocks'') times so the player and Export match (contracts/README.md, Audio fades, crossfades and ducking). A sequence without it: off; a board without it: on, -12'
+      properties:
+        'on': {type: boolean}
+        db: {type: number, minimum: -24, maximum: -3, default: -12, description: 'how far music dips; the picks -6, -9, -12 (default), -18 or typed'}
     TimelineTrack:
       type: object
       required: [kind, clips]
@@ -7451,6 +8178,7 @@ components:
         target: {$ref: '#/components/schemas/TimelineTarget'}
         tracks: {type: array, minItems: 1, maxItems: 9, items: {$ref: '#/components/schemas/TimelineTrack'}}
         markers: {type: array, items: {$ref: '#/components/schemas/TimelineMarker'}, description: 'From 1.50: at most 200 (`too_many_markers`); absent = none; answers sort them by time, then id, and leave the list out when empty'}
+        ducking: {$ref: '#/components/schemas/Ducking', description: 'From 1.106: the sequence''s Duck music (absent: off; set by the `ducking` op, or by Send from its board''s)'}
     TimelineNormalized:
       allOf: [{$ref: '#/components/schemas/TimelineDoc'}]
       type: object
@@ -7484,6 +8212,7 @@ components:
         target: {$ref: '#/components/schemas/TimelineTarget'}
         tracks: {$ref: '#/components/schemas/TimelineDoc/properties/tracks'}
         markers: {$ref: '#/components/schemas/TimelineDoc/properties/markers', description: 'From 1.50: the whole list (absent = none)'}
+        ducking: {$ref: '#/components/schemas/Ducking', description: 'From 1.106: the sequence''s Duck music (absent: off, as the whole document is written)'}
     TimelinePatch:
       type: object
       additionalProperties: false
@@ -7522,6 +8251,7 @@ components:
         workflow_id: {type: [string, 'null'], description: '`made_with.workflow_id`; null for an upload, import, frame or export (no "from this clip", no re-render)'}
         workflow_title: {type: [string, 'null']}
         render_s: {type: number, minimum: 0, description: 'from 1.60: `made_with.render_s` (the clip inspector''s "⏱ 3:12"; the sequence''s total sums its clips'' takes that have one); absent without one'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.106, kind audio only: its class (Take.sound): ducking dips music clips under voice clips'}
     TimelineProblem:
       type: object
       required: [code, track, clip, message]
@@ -7619,6 +8349,9 @@ components:
             hold: {type: [number, 'null'], exclusiveMinimum: 0, maximum: 3600}
             transition_in: {oneOf: [{$ref: '#/components/schemas/TimelineDissolve'}, {type: 'null'}]}
             link: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}], description: 'from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)'}
+            fade_in: {type: [number, 'null'], minimum: 0, maximum: 10, description: 'from 1.106: seconds (0 or null removes it)'}
+            fade_out: {type: [number, 'null'], minimum: 0, maximum: 10, description: 'from 1.106: seconds (0 or null removes it)'}
+            crossfade: {type: [number, 'null'], minimum: 0, maximum: 10, description: 'from 1.106, an audio-track clip: Crossfade into next, seconds (the menu''s is 2; 0 or null removes it)'}
         - title: add
           description: 'append takes in order to `track` (default V1); `ids` for the new clips, in order (absent ones: studio makes them)'
           type: object
@@ -7713,6 +8446,12 @@ components:
           required: [op, id]
           additionalProperties: false
           properties: {op: {const: remove_marker}, id: {$ref: '#/components/schemas/TimelineClipId'}}
+        - title: ducking
+          description: 'from 1.106: the sequence''s Duck music, on or off and how far (absent fields kept)'
+          type: object
+          required: [op]
+          additionalProperties: false
+          properties: {op: {const: ducking}, 'on': {type: boolean}, db: {type: number, minimum: -24, maximum: -3}}
     TimelineEdits:
       type: object
       required: [base_revision, ops]
@@ -7737,7 +8476,7 @@ components:
             additionalProperties: false
             properties:
               clip: {$ref: '#/components/schemas/TimelineClipId'}
-              fields: {type: object, description: 'field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track and (1.50) link (a V1 ripple shows as `at` changes)', additionalProperties: {type: array, minItems: 2, maxItems: 2}}
+              fields: {type: object, description: 'field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track, (1.50) link and (1.106) fade_in, fade_out, crossfade (a V1 ripple shows as `at` changes)', additionalProperties: {type: array, minItems: 2, maxItems: 2}}
         tracks:
           type: object
           required: [added, removed, changed]
@@ -7753,6 +8492,7 @@ components:
                 additionalProperties: false
                 properties: {track: {type: string}, fields: {type: object, additionalProperties: {type: array, minItems: 2, maxItems: 2}}}
         duration: {type: array, minItems: 2, maxItems: 2, items: {type: number, minimum: 0}, description: '[before, after] duration_s'}
+        ducking: {type: array, minItems: 2, maxItems: 2, description: 'from 1.106, only when it changed: [before, after] (null: absent)', items: {oneOf: [{$ref: '#/components/schemas/Ducking'}, {type: 'null'}]}}
         markers:
           type: object
           required: [added, removed, changed]
@@ -7776,7 +8516,7 @@ components:
         dry_run: {type: boolean}
         timeline: {$ref: '#/components/schemas/Timeline', description: 'as GET …/{timeline_id} answers it (a dry run: what it would be)'}
         diff: {$ref: '#/components/schemas/TimelineDiff'}
-        warnings: {type: array, items: {type: string}, description: 'what studio changed beyond the ops (a time snapped to the frame grid); never a refusal'}
+        warnings: {type: array, items: {type: string}, description: 'what studio changed beyond the ops (a time snapped to the frame grid); never a refusal. From 1.106 a crossfade that dips reads `crossfade_dip: <clip> has no sound past its cut: it dips` (code first)'}
     TimelineEditError:
       type: object
       required: [detail]
@@ -7784,7 +8524,7 @@ components:
       properties:
         detail: {type: string}
         op_index: {type: integer, minimum: 0}
-        code: {type: string, description: 'the edit''s error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem''s code'}
+        code: {type: string, description: 'the edit''s error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem''s code (from 1.106 fade_clip, crossfade_track)'}
         problems: {type: array, items: {$ref: '#/components/schemas/TimelineProblem'}}
     TimelineRevisionItem:
       type: object
@@ -7841,6 +8581,11 @@ components:
         number: {type: [integer, 'null'], description: 'V1: the shot number'}
         offline: {type: boolean}
         link: {oneOf: [{$ref: '#/components/schemas/TimelineClipId'}, {type: 'null'}], description: 'from 1.50, an audio-track clip: the V1 clip it is linked to'}
+        fade_in: {type: number, minimum: 0, description: 'from 1.106, a clip with a fade in only: seconds'}
+        fade_out: {type: number, minimum: 0, description: 'from 1.106, a clip with a fade out only: seconds'}
+        crossfade: {type: number, minimum: 0, description: 'from 1.106, a clip with Crossfade into next only: seconds'}
+        crossfade_mode: {type: string, enum: [blend, dip], description: 'from 1.106, with crossfade: blend (its take has sound past its cut) or dip'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.106, an audio take''s clip only: music, sound or voice (what ducking reads)'}
     TimelineAgentView:
       type: object
       required: [id, name, revision, target, duration_s, frames, tracks, clips, links, markers]
@@ -7862,6 +8607,7 @@ components:
             properties: {name: {type: string}, kind: {$ref: '#/components/schemas/TimelineTrackKind'}, gain_db: {type: number}, mute: {type: boolean}, clips: {type: integer, minimum: 0}}
         clips: {type: array, items: {$ref: '#/components/schemas/TimelineAgentClip'}, description: 'every clip, track by track, in order'}
         links: {type: object, additionalProperties: {type: array, items: {$ref: '#/components/schemas/TimelineClipId'}}, description: 'from 1.50: each V1 clip that has linked sound clips → their ids, in track order'}
+        ducking: {$ref: '#/components/schemas/Ducking', description: 'from 1.106, when the sequence has it'}
         markers:
           type: array
           description: 'from 1.50: the markers by time, `at_f` in frames'
@@ -7891,8 +8637,10 @@ components:
         url: {oneOf: [{$ref: '#/components/schemas/SignedUrl'}, {type: 'null'}]}
     TimelineList:
       type: object
-      required: [timelines]
-      properties: {timelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/TimelineSummary'}}}
+      required: [timelines, next_cursor]
+      properties:
+        timelines: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/TimelineSummary'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
     TimelineSlot:
       description: 'where a New shot goes: an existing V1 slot (an empty slot is filled; a take''s clip is redone: "from this clip"; a take action''s "replace"), a new empty slot at the V1 cut nearest `at` (the playhead; from 1.19 also an extend before''s insert, at the clip''s `at`) of `length` seconds, or (from 1.19, a take action''s "insert after") a new empty slot of `length` right after V1 clip `after`'
       oneOf:
@@ -7990,7 +8738,7 @@ components:
         host: {type: [string, 'null'], description: 'the env that would run it now (automatic choice, or the named host''s); null when none'}
         env: {type: [string, 'null']}
         hardware: {type: [boolean, 'null'], description: 'true: a hardware encoder (VideoToolbox or, from 1.18, NVENC); false: software (libx264); null without a host'}
-    MediaJobKind: {type: string, enum: [export, frame]}
+    MediaJobKind: {type: string, enum: [export, frame, mux, bake], description: 'from 1.79 mux: Save with the video (POST /v1/studio/takes/{take_id}/mux); from 1.82 bake: a Magic send''s baked join, lane fade or effects (contracts/README.md, Magic: Send to Timeline)'}
     MediaJobStatus: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
     MediaJob:
       type: object
@@ -8003,7 +8751,9 @@ components:
         env: {type: string}
         timeline_id: {type: [string, 'null'], format: uuid, description: 'export: the sequence'}
         revision: {type: [integer, 'null'], minimum: 1, description: 'export: the revision exported'}
-        source_take_id: {type: [string, 'null'], format: uuid, description: 'frame: the video take'}
+        source_take_id: {type: [string, 'null'], format: uuid, description: 'frame: the video take; from 1.79 mux: the audio take'}
+        video_take_id: {type: [string, 'null'], format: uuid, description: 'from 1.79, mux only (absent otherwise): the video take whose picture it keeps'}
+        send_id: {type: [string, 'null'], format: uuid, description: 'from 1.82, bake only (absent otherwise): the Magic send it bakes for'}
         mode: {type: [string, 'null'], enum: [copy, conform, null], description: 'export: what was planned (copy = picture stream copy); once it ended, what the runner did (copy can fall back to conform)'}
         reason: {type: [string, 'null'], description: 'export: why the runner fell back to conform (a probe disagreed with the plan); null otherwise'}
         progress:
@@ -8011,7 +8761,7 @@ components:
             - {type: object, required: [frames, total], properties: {frames: {type: integer, minimum: 0}, total: {type: integer, minimum: 1}}}
             - {type: 'null'}
           description: 'export: frames written of the sequence''s frames (a succeeded export: all of them); null before the first progress and for frame jobs'
-        take_id: {type: [string, 'null'], format: uuid, description: 'succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame)'}
+        take_id: {type: [string, 'null'], format: uuid, description: 'succeeded: the take it made (an export: a video take, source export; a frame: an image take, source frame; from 1.79 a mux: a video take, source create, `parents` the video and the audio take; from 1.82 a bake: a video take, source bake, `parents` the takes it read)'}
         failure:
           oneOf:
             - {type: object, required: [class, detail], properties: {class: {type: string, enum: [input, invalid, ffmpeg, verify, internal, host_lost], description: 'from 1.18 host_lost: its host stopped responding (contracts/README.md, Several hosts: host loss); export again: another live host is chosen'}, detail: {type: string}}}
@@ -8029,6 +8779,20 @@ components:
       additionalProperties: false
       properties:
         at: {type: string, enum: [first, last]}
+    TakeMuxRequest:
+      type: object
+      description: 'from 1.79: Save with the video: the video take whose picture keeps this audio take as its sound'
+      required: [video_take_id]
+      additionalProperties: false
+      properties:
+        video_take_id: {type: string, format: uuid}
+    TakeMux:
+      type: object
+      description: 'from 1.79: the mux job (kind mux); its `take_id` is the new video take once it succeeded'
+      required: [job]
+      additionalProperties: false
+      properties:
+        job: {$ref: '#/components/schemas/MediaJob'}
     TakeFrame:
       type: object
       description: 'exactly one: `take` (200), or `job` (202) whose `take_id` is the frame take once it succeeded'
@@ -8080,6 +8844,7 @@ components:
         width: {type: integer, minimum: 1, maximum: 16384, description: 'an image''s or a video''s'}
         height: {type: integer, minimum: 1, maximum: 16384}
         duration_s: {type: number, exclusiveMinimum: 0, maximum: 21600, description: 'an audio take''s'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.79, an audio take''s class (422 `only audio has a sound class` on another kind); absent = voice'}
         video:
           type: object
           description: 'a video''s length, frames, rate, sound and poster (as an import''s)'
@@ -8144,6 +8909,780 @@ components:
         first: {$ref: '#/components/schemas/StudioPath'}
         last: {oneOf: [{$ref: '#/components/schemas/StudioPath'}, {type: 'null'}]}
       examples: [{first: first.image, last: last.image}]
+
+    # ---------------------------------------------------------- studio: Magic boards (API 1.80; contracts/README.md, Magic)
+    MagicId: {type: string, pattern: '^[A-Za-z0-9_-]{1,40}$', description: 'a lane''s, block''s, transition''s or asset''s id, unique on the board (lanes, blocks and transitions share one namespace); studio makes `b<n>`, `l<n>`, `t<n>`'}
+    MagicFrames: {type: integer, minimum: 0, maximum: 10368000, description: 'a time or length in frames at the board''s fps'}
+    MagicKind: {type: string, enum: [frame, image, video, voice, music, sound]}
+    MagicRole: {type: string, enum: [storyboard, shots, voice, music, sound, free], description: 'what a lane is for; it only picks the kind Add offers first (any kind goes on any lane)'}
+    MagicTransitionKind: {type: string, enum: [cut, dissolve, fade, wipe, morph, crossfade], description: 'from 1.106 crossfade: between two music or sound blocks only; between sound blocks every kind plays and sends as a crossfade (contracts/README.md, Audio fades, crossfades and ducking)'}
+    MagicMode: {type: string, enum: [insert, overwrite], description: 'insert pushes what is after the point along (a move closes the gap it leaves); overwrite covers it'}
+    MagicTarget:
+      type: object
+      required: [width, height, fps, sample_rate]
+      additionalProperties: false
+      properties:
+        width: {type: integer, minimum: 16, maximum: 8192}
+        height: {type: integer, minimum: 16, maximum: 8192}
+        fps: {type: integer, minimum: 1, maximum: 120}
+        sample_rate: {type: integer, minimum: 8000, maximum: 192000}
+    MagicLane:
+      type: object
+      required: [id, name, role]
+      additionalProperties: false
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        role: {$ref: '#/components/schemas/MagicRole'}
+        hidden: {type: boolean}
+        kind: {$ref: '#/components/schemas/MagicKind', description: 'the kind Add picks first'}
+    MagicRef:
+      description: 'an @ pick inside a request: an asset, or another block''s first frame, last frame or take'
+      oneOf:
+        - {type: object, required: [asset], additionalProperties: false, properties: {asset: {$ref: '#/components/schemas/MagicId'}}}
+        - type: object
+          required: [block, part]
+          additionalProperties: false
+          properties: {block: {$ref: '#/components/schemas/MagicId'}, part: {type: string, enum: [first, last, take]}}
+    MagicRequest:
+      type: object
+      required: [kind]
+      additionalProperties: false
+      description: 'a block''s generation request as the board keeps it: from 1.81 the standard request (contracts/README.md, Magic: the standard request): the same shared fields for every model of a kind, the model''s own params in `advanced`'
+      properties:
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        model: {type: string, maxLength: 80, description: 'from 1.81: the workflow id of a model GET /v1/studio/magic/kinds lists for the kind; absent: the first one'}
+        prompt: {type: string, maxLength: 4000}
+        line: {type: string, maxLength: 4000, description: 'a voice block''s line'}
+        turns:
+          type: array
+          maxItems: 100
+          description: 'a dialogue''s turns (a Voice block with turns, owner 2026-11-27); from 1.89 each turn is its own run of the voice model, its line the text, its voice the speaker asset''s (contracts/README.md, Magic: dialogue, Run on and Loop)'
+          items:
+            type: object
+            required: [speaker, text]
+            additionalProperties: false
+            properties: {speaker: {$ref: '#/components/schemas/MagicId'}, text: {type: string, maxLength: 4000}}
+        voice: {$ref: '#/components/schemas/MagicId', description: 'a voice block''s voice: an asset id'}
+        style: {type: string, enum: [film, sketch, rough, full], description: 'a storyboard frame''s style; from 1.99 `film` (the film''s own style: no style sentence), absent: film'}
+        from: {$ref: '#/components/schemas/MagicId', description: 'a sound made from this shot''s video (from 1.85: its shown take runs the model''s `video` workflow, MMAudio''s video to sound)'}
+        refs: {type: array, maxItems: 50, items: {$ref: '#/components/schemas/MagicRef'}}
+        first: {$ref: '#/components/schemas/MagicRef', description: 'from 1.81: the shot''s first frame (a block''s last frame, an image block''s take, an asset''s picture)'}
+        last: {$ref: '#/components/schemas/MagicRef', description: 'from 1.81: the shot''s last frame'}
+        width: {type: integer, minimum: 16, maximum: 8192, description: 'from 1.81: absent: the board''s'}
+        height: {type: integer, minimum: 16, maximum: 8192}
+        seed: {type: integer, minimum: -1, maximum: 9007199254740991, description: 'from 1.81: -1 or absent: random'}
+        count: {type: integer, minimum: 1, maximum: 4, description: 'from 1.81: how many runs one Generate makes (seeds seed, seed + 1, …)'}
+        voice_id: {type: string, maxLength: 80, description: 'from 1.81: a saved voice (library item of kind voice) when `voice` names no asset with one'}
+        lyrics: {type: string, maxLength: 4000, description: 'from 1.85: a music block''s lyrics ([verse], [chorus] tags); empty or absent: an instrumental'}
+        key: {type: string, maxLength: 20, description: 'from 1.85: a music block''s key (`D minor`); absent: Auto. Sent only to a model whose key param has it as a value'}
+        bpm: {type: integer, minimum: 30, maximum: 300, description: 'from 1.85: a music block''s tempo; absent: Auto'}
+        advanced: {type: object, description: 'the model''s own params, `<node>.<param>` → value as a run''s inputs (the shared fields win)'}
+        framing:
+          type: object
+          additionalProperties: false
+          description: 'from 1.83: a storyboard frame''s shot size and angle (words of its prompt) and the move of the shot made from it'
+          properties:
+            size: {type: string, enum: [wide, medium, close, over_shoulder]}
+            angle: {type: string, enum: [eye, low, high]}
+            move: {type: string, enum: [still, push_in, pan, follow]}
+        shot_model: {type: string, maxLength: 80, description: 'from 1.83: a storyboard frame''s pick of the video model Generate from board makes its shot with'}
+        host: {type: string, pattern: '^[a-z0-9]{1,32}$', description: 'from 1.89: Run on: its runs go to this host only (RunRequest.host); absent: Auto. Not one of its inputs: a change leaves its takes current'}
+        loop: {type: boolean, description: 'from 1.89, a sound block: its take repeats to fill the block when played and sent (one clip after another); not one of its inputs; from 1.90 off while the sound is made from a shot''s video (`from`)'}
+    MagicEffect:
+      type: object
+      required: [name]
+      additionalProperties: false
+      description: 'an effect badge (baked when sent)'
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        params: {type: object, additionalProperties: {type: [number, string]}}
+        'off': {type: boolean, description: 'kept on the block but not applied'}
+    MagicBlockNew:
+      type: object
+      required: [lane, at, length, kind, name, request, takes, effects]
+      additionalProperties: false
+      description: 'a block as an add op gives it: `id` optional (studio makes `b<n>`)'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        at: {$ref: '#/components/schemas/MagicFrames'}
+        length: {type: integer, minimum: 1, maximum: 10368000}
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        name: {type: string, maxLength: 120}
+        request: {$ref: '#/components/schemas/MagicRequest'}
+        takes: {type: array, maxItems: 200, items: {type: string, format: uuid}, description: 'take ids from its runs, oldest first (the caller''s own)'}
+        pinned: {type: string, format: uuid, description: 'the take it shows (absent: its latest)'}
+        note: {type: string, maxLength: 4000}
+        effects: {type: array, maxItems: 20, items: {$ref: '#/components/schemas/MagicEffect'}}
+        from_frame: {$ref: '#/components/schemas/MagicId', description: 'a shot made from this storyboard frame'}
+        gain_db: {type: number, minimum: -60, maximum: 12, default: 0, description: 'from 1.101, a voice, music or sound block only (another kind is 422 by the board rules): its level in dB, the Timeline clip gain''s range; Play applies it and Send puts it on its clips'' `gain_db`; 0 is stored as absent'}
+        fade_in: {type: number, minimum: 0, maximum: 10, description: 'from 1.106, a voice, music or sound block only (another kind: 422 `blocks[<i>]: fade_in is for voice, music and sound blocks`): seconds its sound rises from silence; Play applies it, Send puts it on its clip''s `fade_in`; 0 is stored as absent'}
+        fade_out: {type: number, minimum: 0, maximum: 10, description: 'from 1.106, as fade_in, at its end (not played while a crossfade follows it)'}
+    MagicBlock:
+      allOf: [{$ref: '#/components/schemas/MagicBlockNew'}]
+      type: object
+      required: [id]
+      description: 'a block on a lane (MagicBlockNew with its id)'
+    MagicLink:
+      type: object
+      required: [block, to]
+      additionalProperties: false
+      description: 'a voice or music block tied to a shot, or to a run of shots; moving the shot moves the block (fitted to the run when it was)'
+      properties:
+        block: {$ref: '#/components/schemas/MagicId'}
+        to: {type: array, minItems: 1, maxItems: 50, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicTransition:
+      type: object
+      required: [id, kind, length]
+      additionalProperties: false
+      description: 'between two blocks that meet on a lane, or at a lane''s start or end (exactly one of between, start, end); a cut between blocks is no transition'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}
+        start: {$ref: '#/components/schemas/MagicId', description: 'a lane: the fade in at its first block'}
+        end: {$ref: '#/components/schemas/MagicId', description: 'a lane: the fade out at its last block'}
+        kind: {$ref: '#/components/schemas/MagicTransitionKind'}
+        length: {$ref: '#/components/schemas/MagicFrames'}
+        request: {$ref: '#/components/schemas/MagicRequest', description: 'from 1.82, a morph only: its own video request (kind video; `model` one that takes a first and a last frame; its frames are the blocks'' own: the first''s last frame and the second''s first frame)'}
+        takes: {type: array, maxItems: 200, items: {type: string, format: uuid}, description: 'from 1.82, a morph only: take ids from its runs, oldest first'}
+        pinned: {type: string, format: uuid, description: 'from 1.82, a morph only: the take it shows (absent: its latest)'}
+    MagicAsset:
+      type: object
+      required: [id, kind, handle, name, sheet]
+      additionalProperties: false
+      description: 'the board''s own character, prop or place (Import copies a take or an Element in; never a link)'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        kind: {type: string, enum: [character, prop, place]}
+        handle: {type: string, minLength: 1, maxLength: 40, description: 'its @ name'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}, description: 'take ids: views, expressions'}
+        voice_id: {type: string, maxLength: 80}
+        note: {type: string, maxLength: 4000}
+        imported_from: {type: string, maxLength: 80, description: 'the take or Element it was copied from, for the record only'}
+        views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}, description: 'from 1.83: names of sheet takes by take id ("Front", "Side"); only takes on its sheet'}
+    MagicAssetNew:
+      type: object
+      required: [kind, handle, name]
+      additionalProperties: false
+      description: 'from 1.83: an asset as asset_add gives it: `id` optional (studio makes `a<n>`), `sheet` absent = none'
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        kind: {type: string, enum: [character, prop, place]}
+        handle: {type: string, pattern: '^[a-z](?:[a-z0-9_-]{0,38}[a-z0-9])?$', description: 'its @ name (LibraryItem.handle''s rule), unique on the board'}
+        name: {type: string, minLength: 1, maxLength: 80}
+        sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+        views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}}
+        voice_id: {type: string, maxLength: 80}
+        note: {type: string, maxLength: 4000}
+        imported_from: {type: string, maxLength: 80}
+    MagicDoc:
+      type: object
+      required: [target, lanes, blocks, links, transitions, assets, notes]
+      additionalProperties: false
+      description: 'one board: lanes in order, blocks (in lane, then time order), links, transitions, assets and notes (contracts/README.md, Magic: the board rules)'
+      properties:
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        lanes: {type: array, maxItems: 64, items: {$ref: '#/components/schemas/MagicLane'}}
+        blocks: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicBlock'}}
+        links: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicLink'}}
+        transitions: {type: array, maxItems: 2000, items: {$ref: '#/components/schemas/MagicTransition'}}
+        assets: {type: array, maxItems: 200, items: {$ref: '#/components/schemas/MagicAsset'}}
+        notes: {type: array, maxItems: 100, items: {type: string, maxLength: 4000}}
+        ducking: {$ref: '#/components/schemas/Ducking', description: 'from 1.106: the board''s Duck music (absent: on, -12; a new board stores it on); Play applies it, Send puts it on the sequence'}
+    MagicBoard:
+      type: object
+      required: [id, name, revision, doc, can_undo, can_redo, created_at, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        doc: {$ref: '#/components/schemas/MagicDoc'}
+        can_undo: {type: boolean}
+        can_redo: {type: boolean}
+        session_id: {type: [string, 'null'], format: uuid, description: 'from 1.81: the board''s own session (made at its first run, hidden from GET /v1/studio/sessions): its events stream the board''s runs'}
+        runs: {type: array, items: {$ref: '#/components/schemas/MagicBlockRun'}, description: 'from 1.81: every block''s runs, oldest first (the last 20 of each block); from 1.82 a morph''s too (`block` its transition id)'}
+        takes: {type: object, additionalProperties: {$ref: '#/components/schemas/MagicTake'}, description: 'from 1.81: the takes the document names, by id (one deleted since is left out)'}
+        status: {type: object, additionalProperties: {$ref: '#/components/schemas/MagicStatus'}, description: 'from 1.81: every block''s status by id (derived, contracts/README.md, Magic: runs); from 1.82 every morph transition''s too'}
+        asset_runs: {type: array, items: {$ref: '#/components/schemas/MagicAssetRun'}, description: 'from 1.83: the Make views runs, oldest first (the last 20 of each asset)'}
+        created_at: {type: string, format: date-time}
+        updated_at: {type: string, format: date-time}
+        title_source: {$ref: '#/components/schemas/TitleSource', description: 'from 1.91: who wrote `name`, as a sequence''s (contracts/README.md, Magic: Names)'}
+        named_by: {type: [string, 'null'], maxLength: 60, description: 'from 1.91: the model that wrote the name while `title_source` is model; null otherwise'}
+    MagicBoardSummary:
+      type: object
+      required: [id, name, revision, lanes, blocks, frames, fps, updated_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        lanes: {type: integer, minimum: 0}
+        blocks: {type: integer, minimum: 0}
+        frames: {type: integer, minimum: 0, description: 'its length: the last block''s end'}
+        fps: {type: integer, minimum: 1}
+        updated_at: {type: string, format: date-time}
+    MagicBoardList:
+      type: object
+      required: [boards, next_cursor]
+      properties:
+        boards: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/MagicBoardSummary'}}
+        next_cursor: {type: [string, 'null'], description: 'from 1.92: pass as `cursor` for the next page; null on the last page'}
+    MagicBoardCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80, description: 'absent: Untitled board'}
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        doc: {$ref: '#/components/schemas/MagicDoc'}
+    MagicBoardPatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties: {name: {type: string, minLength: 1, maxLength: 80}}
+    MagicOp:
+      description: 'one named edit (contracts/README.md, Magic: edits by ops); every op''s fields are closed'
+      oneOf:
+        - {type: object, required: [op, block, mode], additionalProperties: false, properties: {op: {const: add}, block: {$ref: '#/components/schemas/MagicBlockNew'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, ids, dt, mode], additionalProperties: false, properties: {op: {const: move}, ids: {$ref: '#/components/schemas/MagicIds'}, dt: {type: integer, minimum: -10368000, maximum: 10368000}, lane: {$ref: '#/components/schemas/MagicId', description: 'to another lane (blocks from one lane)'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: trim}, id: {$ref: '#/components/schemas/MagicId'}, at: {$ref: '#/components/schemas/MagicFrames'}, length: {type: integer, minimum: 1, maximum: 10368000}}}
+        - {type: object, required: [op, ids, mode], additionalProperties: false, properties: {op: {const: delete}, ids: {$ref: '#/components/schemas/MagicIds'}, mode: {$ref: '#/components/schemas/MagicMode'}}}
+        - {type: object, required: [op, ids], additionalProperties: false, properties: {op: {const: duplicate}, ids: {$ref: '#/components/schemas/MagicIds'}}}
+        - {type: object, required: [op, id, at], additionalProperties: false, properties: {op: {const: split}, id: {$ref: '#/components/schemas/MagicId'}, at: {$ref: '#/components/schemas/MagicFrames'}}}
+        - {type: object, required: [op, block, to], additionalProperties: false, properties: {op: {const: link}, block: {$ref: '#/components/schemas/MagicId'}, to: {$ref: '#/components/schemas/MagicIds'}}}
+        - {type: object, required: [op, block], additionalProperties: false, properties: {op: {const: unlink}, block: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, kind], additionalProperties: false, description: 'exactly one of between, start, end; kind cut takes the transition away; from 1.106 kind crossfade (between two music or sound blocks; a new one is 2 s)', properties: {op: {const: transition}, between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}, start: {$ref: '#/components/schemas/MagicId'}, end: {$ref: '#/components/schemas/MagicId'}, kind: {$ref: '#/components/schemas/MagicTransitionKind'}, length: {$ref: '#/components/schemas/MagicFrames'}, request: {$ref: '#/components/schemas/MagicRequest', description: 'from 1.82, kind morph only: its request (absent: kept)'}, pinned: {oneOf: [{type: string, format: uuid}, {type: 'null'}], description: 'from 1.82, kind morph only: one of its takes; null unpins'}}}
+        - {type: object, required: [op, ids, effect], additionalProperties: false, properties: {op: {const: effect}, ids: {$ref: '#/components/schemas/MagicIds'}, effect: {$ref: '#/components/schemas/MagicEffect'}}}
+        - {type: object, required: [op, id, index, effect], additionalProperties: false, properties: {op: {const: effect_set}, id: {$ref: '#/components/schemas/MagicId'}, index: {type: integer, minimum: 0, maximum: 19}, effect: {oneOf: [{$ref: '#/components/schemas/MagicEffect'}, {type: 'null'}], description: 'null takes it off'}}}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          properties:
+            op: {const: block}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties:
+                name: {type: string, maxLength: 120}
+                note: {type: string, maxLength: 4000}
+                request: {$ref: '#/components/schemas/MagicRequest'}
+                pinned: {oneOf: [{type: string, format: uuid}, {type: 'null'}], description: 'null unpins'}
+                gain_db: {oneOf: [{type: number, minimum: -60, maximum: 12}, {type: 'null'}], description: 'from 1.101, an audio block only: its level in dB; 0 or null takes it off'}
+                fade_in: {oneOf: [{type: number, minimum: 0, maximum: 10}, {type: 'null'}], description: 'from 1.106, an audio block only: seconds; 0 or null takes it off'}
+                fade_out: {oneOf: [{type: number, minimum: 0, maximum: 10}, {type: 'null'}], description: 'from 1.106, an audio block only: seconds; 0 or null takes it off'}
+        - type: object
+          required: [op, lane]
+          additionalProperties: false
+          properties:
+            op: {const: lane_add}
+            lane:
+              type: object
+              required: [name, role]
+              additionalProperties: false
+              properties: {id: {$ref: '#/components/schemas/MagicId'}, name: {type: string, minLength: 1, maxLength: 80}, role: {$ref: '#/components/schemas/MagicRole'}, hidden: {type: boolean}, kind: {$ref: '#/components/schemas/MagicKind'}}
+            after: {$ref: '#/components/schemas/MagicId', description: 'absent: last'}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          properties:
+            op: {const: lane}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties: {name: {type: string, maxLength: 80}, role: {$ref: '#/components/schemas/MagicRole'}, hidden: {type: boolean}, kind: {$ref: '#/components/schemas/MagicKind'}}
+        - {type: object, required: [op, id, by], additionalProperties: false, properties: {op: {const: lane_move}, id: {$ref: '#/components/schemas/MagicId'}, by: {type: integer, enum: [-1, 1]}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: lane_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, id], additionalProperties: false, properties: {op: {const: asset_delete}, id: {$ref: '#/components/schemas/MagicId'}}}
+        - {type: object, required: [op, asset], additionalProperties: false, description: 'from 1.83', properties: {op: {const: asset_add}, asset: {$ref: '#/components/schemas/MagicAssetNew'}}}
+        - type: object
+          required: [op, id, set]
+          additionalProperties: false
+          description: 'from 1.83: an asset''s kind, name, note, voice (null takes it off), sheet (each take once) and views'
+          properties:
+            op: {const: asset}
+            id: {$ref: '#/components/schemas/MagicId'}
+            set:
+              type: object
+              additionalProperties: false
+              properties:
+                kind: {type: string, enum: [character, prop, place]}
+                name: {type: string, maxLength: 80}
+                note: {type: string, maxLength: 4000}
+                voice_id: {oneOf: [{type: string, maxLength: 80}, {type: 'null'}]}
+                sheet: {type: array, maxItems: 50, items: {type: string, format: uuid}}
+                views: {type: object, maxProperties: 50, additionalProperties: {type: string, minLength: 1, maxLength: 40}}
+        - {type: object, required: [op, id, take], additionalProperties: false, description: 'from 1.83: a picture of your own (an upload, a Gallery take) joins a block''s takes, pinned', properties: {op: {const: take_add}, id: {$ref: '#/components/schemas/MagicId'}, take: {type: string, format: uuid}}}
+        - {type: object, required: [op], additionalProperties: false, description: 'from 1.106: the board''s Duck music, on or off and how far (absent fields kept)', properties: {op: {const: ducking}, 'on': {type: boolean}, db: {type: number, minimum: -24, maximum: -3}}}
+    MagicIds: {type: array, minItems: 1, maxItems: 2000, uniqueItems: true, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicEdits:
+      type: object
+      required: [base_revision, ops]
+      additionalProperties: false
+      properties:
+        base_revision: {type: integer, minimum: 1, description: 'the revision the ops were planned on (409 when it is not the current one)'}
+        ops: {type: array, minItems: 1, maxItems: 200, items: {$ref: '#/components/schemas/MagicOp'}}
+        dry_run: {type: boolean, default: false, description: 'try it: the same answer, nothing stored'}
+    MagicIdDiff:
+      type: object
+      required: [added, removed, changed]
+      additionalProperties: false
+      properties:
+        added: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        removed: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        changed: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+    MagicDiff:
+      type: object
+      required: [blocks, lanes, transitions, assets, links]
+      additionalProperties: false
+      description: 'what changed, by id, in document order (studio-made ids in `added`); `links` by the tied block'
+      properties:
+        blocks: {$ref: '#/components/schemas/MagicIdDiff'}
+        lanes: {$ref: '#/components/schemas/MagicIdDiff'}
+        transitions: {$ref: '#/components/schemas/MagicIdDiff'}
+        assets: {$ref: '#/components/schemas/MagicIdDiff'}
+        links: {$ref: '#/components/schemas/MagicIdDiff'}
+    MagicEditResult:
+      type: object
+      required: [revision, dry_run, board, diff, warnings]
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the stored revision; a dry run: the current one it applied on (base_revision, or later from 1.103)'}
+        dry_run: {type: boolean}
+        board: {$ref: '#/components/schemas/MagicBoard', description: 'as GET answers it (a dry run: what it would be)'}
+        diff: {$ref: '#/components/schemas/MagicDiff'}
+        warnings: {type: array, items: {type: string}, description: 'what the board shows after it, never a refusal: `Line 1 runs 3 s past Shot 1`; from 1.106 a music or sound join that dips: `Soft rain theme was made before the crossfade: it dips instead.`'}
+    MagicEditError:
+      type: object
+      required: [detail]
+      description: 'the failing op: `detail` the reason as the board says it (`That lane is gone.`), `op_index` which; `{detail}` only when the body does not fit'
+      properties:
+        detail: {type: string}
+        op_index: {type: integer, minimum: 0}
+    MagicRevision:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties: {revision: {type: integer, minimum: 1, description: 'the current revision, as the caller has it'}}
+    MagicRestore:
+      type: object
+      required: [revision, to]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the current revision, as the caller has it'}
+        to: {type: integer, minimum: 1, description: 'the kept revision to bring back'}
+    MagicRevisionItem:
+      type: object
+      required: [revision, by, via, saved_at, ops_summary, blocks]
+      properties:
+        revision: {type: integer, minimum: 1}
+        by: {type: string, enum: [user, studio]}
+        via: {type: [string, 'null'], enum: [web, api, mcp, assistant, null], description: 'a user write: where it came from (X-Helm-Client); studio''s: null'}
+        saved_at: {type: string, format: date-time}
+        ops_summary: {type: string, description: 'the op names of an /edits call (`move, link`), else the write''s kind (create, undo, redo, restore); from 1.87 an assistant edit''s summary (`Added Shot 2 and Shot 3; moved Line 2`)'}
+        blocks: {type: integer, minimum: 0}
+    MagicRevisionList:
+      type: object
+      required: [revisions]
+      properties: {revisions: {type: array, maxItems: 100, items: {$ref: '#/components/schemas/MagicRevisionItem'}}}
+    MagicSnapshot:
+      type: object
+      required: [id, name, revision, made_at, blocks]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        made_at: {type: string, format: date-time}
+        blocks: {type: integer, minimum: 0}
+    MagicSnapshotList:
+      type: object
+      required: [snapshots]
+      properties: {snapshots: {type: array, items: {$ref: '#/components/schemas/MagicSnapshot'}}}
+    MagicSnapshotCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 80}
+        revision: {type: integer, minimum: 1, description: 'a kept revision; absent: the current one'}
+    MagicSnapshotPatch:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties: {name: {type: string, minLength: 1, maxLength: 80}}
+    # ---------------------------------------------------------- Magic: Send to Timeline (API 1.82)
+    MagicSendCreate:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the board''s current revision, as the caller has it (409 when stale)'}
+        name: {type: string, minLength: 1, maxLength: 80, description: 'the sequence''s name; absent: `<board> · send <n>`'}
+        dry_run: {type: boolean, description: 'true: the plan only (200), nothing stored'}
+    MagicSendGoes:
+      type: object
+      required: [lane, name, kind, blocks, track, linked]
+      description: 'one lane that goes: its blocks with a take and the Timeline track they land on'
+      properties:
+        lane: {$ref: '#/components/schemas/MagicId'}
+        name: {type: string}
+        kind: {type: string, enum: [video, voice, music, sound, audio], description: 'video: the Shots lane on V1; the rest by their lane''s role (audio: a free lane''s sound)'}
+        blocks: {type: integer, minimum: 0}
+        track: {type: string, description: 'the track as the Timeline names it: V1, A2, A3, …'}
+        linked: {type: integer, minimum: 0, description: 'blocks linked to their shot'}
+    MagicSendJoin:
+      type: object
+      required: [transition, kind, how]
+      properties:
+        transition: {$ref: '#/components/schemas/MagicId'}
+        kind: {type: string, enum: [dissolve, fade, wipe, morph, fade_in, fade_out, crossfade]}
+        how: {type: string, enum: [kept, baked, clip, cut, skipped, crossfade, fades], description: 'kept: the Timeline''s own dissolve; baked: a bake job''s clip; clip: a morph''s take as its own clip; cut: sent as a cut (why in the warnings); skipped: not sent; from 1.106 crossfade: a join of two sound blocks as the outgoing clip''s `crossfade`; fades: a sound lane''s fade in or out as its first or last block''s clip''s fade'}
+    MagicSendPlan:
+      type: object
+      required: [name, revision, goes, joins, effects, warnings, bakes, bake_seconds, host]
+      properties:
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        goes: {type: array, items: {$ref: '#/components/schemas/MagicSendGoes'}}
+        joins: {type: array, items: {$ref: '#/components/schemas/MagicSendJoin'}}
+        effects: {type: array, items: {type: object, required: [block, name, how], properties: {block: {$ref: '#/components/schemas/MagicId'}, name: {type: string}, how: {type: string, enum: [baked, skipped]}}}, description: 'each effect badge on a shot that goes (off ones are left out)'}
+        warnings: {type: array, items: {type: string}, description: 'what the sequence will lack or differ in (`Shot 3 has no take: a gap`, `Shot 3 is out of date: sends take 2 as it is`)'}
+        bakes: {type: integer, minimum: 0, description: 'how many bake jobs it needs'}
+        bake_seconds: {type: [number, 'null'], description: 'their estimate in seconds (null: no bakes)'}
+        host: {type: [string, 'null'], description: 'the host that would bake (null: no bakes, or no live host)'}
+    MagicSend:
+      type: object
+      required: [id, name, revision, status, timeline_id, bakes, baked, failure, made_at]
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1, description: 'the board revision it was sent from (kept while the send is listed)'}
+        status: {type: string, enum: [baking, done, failed]}
+        timeline_id: {type: [string, 'null'], format: uuid, description: 'done: the new sequence'}
+        timeline_gone: {type: boolean, description: 'the sequence was deleted since'}
+        bakes: {type: integer, minimum: 0}
+        baked: {type: integer, minimum: 0}
+        jobs: {type: array, items: {$ref: '#/components/schemas/MediaJob'}, description: 'its bake jobs (in the send''s own answer)'}
+        failure: {type: [string, 'null'], description: 'failed: why (a bake failed, or the 100 sequences were reached meanwhile)'}
+        made_at: {type: string, format: date-time}
+    MagicSendResult:
+      type: object
+      required: [plan]
+      properties:
+        plan: {$ref: '#/components/schemas/MagicSendPlan'}
+        send: {$ref: '#/components/schemas/MagicSend', description: 'absent on a dry run'}
+    MagicSendList:
+      type: object
+      required: [sends]
+      properties: {sends: {type: array, items: {$ref: '#/components/schemas/MagicSend'}}}
+    # ---------------------------------------------------------- Magic: the standard request and runs (API 1.81)
+    MagicField: {type: string, enum: [prompt, line, refs, first, last, length, size, seed, voice, lyrics, key, bpm, from], description: 'a shared field of the standard request (size = width and height; from 1.85 music''s lyrics, key and bpm, sound''s from: a shot''s video)'}
+    MagicStatusName: {type: string, enum: [draft, running, done, out_of_date, failed], description: 'derived (contracts/README.md, Magic: runs): draft (no take), running (a run queued or running), done (its shown take was made from its inputs as they are), out of date (they changed since), failed (its last run failed and it has no take)'}
+    MagicStatus:
+      type: object
+      required: [status]
+      additionalProperties: false
+      properties:
+        status: {$ref: '#/components/schemas/MagicStatusName'}
+        progress: {type: integer, minimum: 0, maximum: 100, description: 'running: its newest run''s'}
+        error: {type: string, description: 'failed: why'}
+        turns:
+          type: array
+          description: 'from 1.89, a dialogue only: each turn''s own status, in the turns'' order (the block''s is running when one is, failed when one failed with no take, draft when none has a take, out of date when one is out of date or has no take, else done)'
+          items:
+            type: object
+            required: [status]
+            additionalProperties: false
+            properties:
+              status: {$ref: '#/components/schemas/MagicStatusName'}
+              progress: {type: integer, minimum: 0, maximum: 100}
+              error: {type: string}
+              take: {type: string, format: uuid, description: 'the take it plays: its newest run''s'}
+    MagicTake:
+      type: object
+      required: [id, kind]
+      properties:
+        id: {type: string, format: uuid}
+        kind: {type: string, enum: [image, video, audio]}
+        url: {type: string, description: 'signed'}
+        thumb_url: {type: [string, 'null'], description: 'signed: a small WebP of the image or the poster once made'}
+        poster_url: {type: [string, 'null'], description: 'a video''s poster, signed'}
+        seed: {type: [integer, 'null']}
+        run_id: {type: [string, 'null'], format: uuid, description: 'the board''s run that made it'}
+        sound: {$ref: '#/components/schemas/SoundClass', description: 'from 1.85, kind audio only: its class (Take.sound): a music block shows an album cover, sound and voice an orb'}
+        duration_s: {type: [number, 'null'], description: 'from 1.89: a video''s or an audio take''s seconds (a dialogue''s turns play one after another, a Loop repeats)'}
+        sections: {type: array, items: {$ref: '#/components/schemas/AudioSection'}, description: 'from 1.89, a song with tagged lyrics (Take.audio.sections): its parts, the markers on its music block'}
+    MagicBlockRun:
+      type: object
+      required: [block, run_id, status, takes, current, by, created_at]
+      description: 'one run of a block (its run history)'
+      properties:
+        block: {$ref: '#/components/schemas/MagicId'}
+        run_id: {type: string, format: uuid}
+        workflow_id: {type: string}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        progress: {type: integer, minimum: 0, maximum: 100}
+        error: {type: [string, 'null']}
+        takes: {type: array, items: {type: string, format: uuid}, description: 'the takes it made'}
+        seed: {type: [integer, 'null'], description: 'the seed it asked for (-1: random)'}
+        current: {type: boolean, description: 'made from the block''s inputs as they are now (false: out of date)'}
+        by: {type: string, enum: [user, assistant], description: 'who ran it (X-Helm-Client assistant)'}
+        created_at: {type: string, format: date-time}
+        render_s: {type: [number, 'null'], description: 'its first take''s render time'}
+        style: {type: string, enum: [film, sketch, rough, full], description: 'from 1.83: a board frame''s style when it ran (from 1.99 `film`)'}
+        variant: {type: string, description: 'from 1.94: the model variant it ran on, its title as the registry names it (`Turbo`; the id when no runner publishes the model); absent: its workflow has no model node (contracts/README.md, Magic: variants)'}
+        tail: {type: number, minimum: 0, maximum: 10, description: 'from 1.106, a music or sound block with a crossfade after it: the seconds it ran past its block for the crossfade (absent: none)'}
+        turn: {type: integer, minimum: 0, description: 'from 1.89: a dialogue''s run of this turn (its index in `turns`); from 1.90 the turn it ran for while its inputs match that turn''s, else the turn whose inputs it matches now (a line moved, or one before it removed), else the turn it ran for; `current` is against that turn'}
+    MagicAssetRun:
+      type: object
+      required: [asset, view, run_id, status, error, takes, created_at]
+      description: 'from 1.83: one run of Make views'
+      properties:
+        asset: {$ref: '#/components/schemas/MagicId'}
+        view: {type: string, description: 'the view it makes ("Front")'}
+        run_id: {type: string, format: uuid}
+        status: {type: string, enum: [queued, running, succeeded, failed, cancelled]}
+        progress: {type: integer, minimum: 0, maximum: 100}
+        error: {type: [string, 'null']}
+        takes: {type: array, items: {type: string, format: uuid}}
+        created_at: {type: string, format: date-time}
+    MagicVoiceDesign:
+      type: object
+      required: [revision, design, line]
+      additionalProperties: false
+      description: 'from 1.102: design_voice''s input (contracts/tools/catalog.json) with the asset in the path'
+      properties:
+        revision: {type: integer, minimum: 1}
+        design: {type: string, minLength: 1, maxLength: 2000}
+        line: {type: string, minLength: 1, maxLength: 500}
+        language: {type: string, pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{2,8}){0,3}$'}
+        voice_id: {type: string, format: uuid, description: 'a voice made before: these words, no new voice'}
+    MagicVoiceDesigned:
+      type: object
+      required: [revision, voice_id, started, seconds]
+      properties:
+        revision: {type: integer, minimum: 1}
+        voice_id: {type: string, format: uuid}
+        started: {type: array, items: {type: object, required: [run_id], properties: {run_id: {type: string, format: uuid}}}}
+        seconds: {type: [number, 'null'], description: 'the estimate, GPU seconds (null: unknown)'}
+    MagicVoiceSave:
+      type: object
+      required: [revision, take_id, consent]
+      additionalProperties: false
+      description: 'from 1.102: save_voice''s input with the asset in the path and the voice-rights OK'
+      properties:
+        revision: {type: integer, minimum: 1}
+        take_id: {type: string, format: uuid}
+        consent: {type: boolean, description: 'true: you have the right to use this voice (the card''s Yes in the app)'}
+    MagicVoiceSaved:
+      type: object
+      required: [voice_id, revision, summary]
+      properties:
+        voice_id: {type: string, format: uuid}
+        revision: {type: integer, minimum: 1}
+        summary: {type: string}
+    MagicViewsCreate:
+      type: object
+      required: [revision, views]
+      additionalProperties: false
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the board''s current revision (409 when stale)'}
+        views: {type: array, minItems: 1, maxItems: 6, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 40}, description: 'the views to make, one run each ("Front", "Side", "Back")'}
+        model: {type: string, maxLength: 80, description: 'an image model''s workflow id; absent: the image kind''s first real one (Echo, env fake, only when nothing else is on a host); the size is studio''s: 1K, a character 3:4, a prop 1:1, a place the board''s shape'}
+        width: {type: integer, minimum: 16, maximum: 8192, description: 'from 1.98: every view''s width; absent: studio''s size above; snapped to the model''s grid and capped by its max, as a block''s'}
+        height: {type: integer, minimum: 16, maximum: 8192, description: 'from 1.98: every view''s height (as width)'}
+        advanced: {type: object, additionalProperties: true, description: 'from 1.98: the model''s own params for every view, as a block request''s `advanced` (`{"model.variant": "base", "model.precision": "bf16"}`); a key or enum value the model lacks is dropped'}
+    MagicViewsStarted:
+      type: object
+      required: [board, started]
+      properties:
+        board: {$ref: '#/components/schemas/MagicBoard'}
+        started: {type: array, items: {type: object, required: [view, run_id], properties: {view: {type: string}, run_id: {type: string, format: uuid}}}}
+    MagicParam:
+      type: object
+      required: [path, param]
+      description: 'one Advanced field: a param of the model''s workflow the standard fields do not fill'
+      properties:
+        path: {type: string, description: '<node>.<param>'}
+        param: {$ref: '#/components/schemas/ParamSchema', description: 'its schema; `default` is the workflow''s own value'}
+    MagicModel:
+      type: object
+      required: [workflow_id, name, title, fields, greyed, advanced]
+      properties:
+        workflow_id: {type: string}
+        name: {type: string, description: 'the model''s name (`standard.model`)'}
+        title: {type: string, description: 'the workflow''s title'}
+        env: {type: string, description: 'from 1.89: the workflow''s env (Run on greys a host without it)'}
+        family: {type: string, description: 'from 1.94: its `<family>/model` node''s family, the `Model.family` of GET /v1/studio/models whose variants its Variant offers; absent: no model node (contracts/README.md, Magic: variants)'}
+        fields: {type: array, items: {$ref: '#/components/schemas/MagicField'}, description: 'the kind''s shared fields it fills'}
+        greyed: {type: object, additionalProperties: {type: string}, description: 'the kind''s fields it cannot fill, each with the reason (`MiniMax H3 can''t take a last frame`)'}
+        seconds: {type: [number, 'null'], description: 'the pack''s declared GPU seconds per unit (`standard.seconds`)'}
+        advanced: {type: array, items: {$ref: '#/components/schemas/MagicParam'}}
+        video:
+          type: object
+          required: [workflow_id, advanced]
+          description: 'from 1.85: the same model''s workflow for a sound made from a shot''s video (a request with `from`; MMAudio Sound from a video), with its own Advanced; absent: the model takes no video'
+          properties:
+            workflow_id: {type: string}
+            title: {type: string}
+            advanced: {type: array, items: {$ref: '#/components/schemas/MagicParam'}}
+    MagicKindInfo:
+      type: object
+      required: [kind, fields, models]
+      properties:
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        fields: {type: array, items: {$ref: '#/components/schemas/MagicField'}, description: 'the kind''s shared fields in form order'}
+        models: {type: array, items: {$ref: '#/components/schemas/MagicModel'}, description: 'the workflows that serve it, the registry''s order; empty: none on any host'}
+        'off': {type: string, description: 'why the kind cannot run yet (before 1.83 a board frame: `Board frames come with the storyboard`; before 1.85 Music and Sound: `Comes with Create''s Music and Sound`; from 1.85 a kind no model serves has no models and no off)'}
+    MagicKinds:
+      type: object
+      required: [kinds]
+      properties: {kinds: {type: array, items: {$ref: '#/components/schemas/MagicKindInfo'}}}
+    MagicSettings:
+      type: object
+      required: [ask_above_gpu_minutes]
+      additionalProperties: false
+      properties:
+        ask_above_gpu_minutes: {type: number, minimum: 0, maximum: 600, description: 'runs whose estimate is above this ask first (default 10, from 1.110; was 5; 0: always ask)'}
+    MagicPick:
+      type: object
+      additionalProperties: false
+      description: 'which blocks: `blocks` (in this order), or a `lane`''s, or (`stale`) every block that is not done; exactly one. From 1.82 a morph transition is picked as a block is: by its id in `blocks`, with its lane, and by `stale`'
+      properties:
+        blocks: {type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: {$ref: '#/components/schemas/MagicId'}}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        stale: {type: boolean, const: true}
+    MagicRunCreate:
+      type: object
+      required: [revision]
+      additionalProperties: false
+      description: 'MagicPick with the revision it was made on'
+      properties:
+        revision: {type: integer, minimum: 1, description: 'the board''s current revision, as the caller has it (409 when stale)'}
+        blocks: {type: array, minItems: 1, maxItems: 200, uniqueItems: true, items: {$ref: '#/components/schemas/MagicId'}}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        stale: {type: boolean, const: true}
+    MagicRunStarted:
+      type: object
+      required: [board, started, skipped]
+      properties:
+        board: {$ref: '#/components/schemas/MagicBoard'}
+        started: {type: array, items: {type: object, required: [block, run_id], properties: {block: {$ref: '#/components/schemas/MagicId'}, run_id: {type: string, format: uuid}}}}
+        skipped: {type: array, items: {type: object, required: [block, reason], properties: {block: {$ref: '#/components/schemas/MagicId'}, reason: {type: string}}}, description: 'a lane''s or the stale pick''s blocks that cannot run, with why'}
+    MagicPlanBlock:
+      type: object
+      required: [block, seconds, source, host, peak_gb, reason]
+      properties:
+        block: {$ref: '#/components/schemas/MagicId'}
+        seconds: {type: [number, 'null'], description: 'the estimate in GPU seconds (every run of its count); null: unknown'}
+        source: {type: string, enum: [yours, pack, unknown], description: 'yours: your recent runs of that workflow on that host (from 1.94 at the request''s model variant); pack: the pack''s declared rate (from 1.94 only for the workflow''s own variant)'}
+        host: {type: [string, 'null'], description: 'the host it would run on'}
+        peak_gb: {type: [number, 'null']}
+        reason: {type: [string, 'null'], description: 'why it cannot run (then nothing else is planned for it)'}
+    MagicPlan:
+      type: object
+      required: [blocks, lanes, seconds, order, ask, ask_text, limit_minutes]
+      properties:
+        blocks: {type: array, items: {$ref: '#/components/schemas/MagicPlanBlock'}}
+        lanes: {type: array, items: {type: object, required: [lane, seconds, blocks], properties: {lane: {$ref: '#/components/schemas/MagicId'}, seconds: {type: [number, 'null']}, blocks: {type: integer, minimum: 0}}}}
+        seconds: {type: [number, 'null'], description: 'the whole pick; null when a block''s is unknown'}
+        order: {type: array, items: {$ref: '#/components/schemas/MagicId'}, description: 'the run order: storyboard frames first, then lane by lane, each in time'}
+        ask: {type: boolean, description: 'the ask rule: true when a run (not a board frame) has no estimate or the total of those runs is above ask_above_gpu_minutes (from 1.88 board frames are left out of that total; they never ask)'}
+        ask_text: {type: string, description: 'the ask card''s line: `3 shots, about 6 min`'}
+        limit_minutes: {type: number, minimum: 0}
+    MagicAgentBlock:
+      type: object
+      required: [id, lane, kind, name, at, length, at_s, end_s, status, take_id, takes, take_ids, pinned, tied_to, effects]
+      properties:
+        id: {$ref: '#/components/schemas/MagicId'}
+        lane: {$ref: '#/components/schemas/MagicId'}
+        kind: {$ref: '#/components/schemas/MagicKind'}
+        name: {type: string}
+        at: {$ref: '#/components/schemas/MagicFrames'}
+        length: {type: integer, minimum: 1}
+        at_s: {type: number, minimum: 0}
+        end_s: {type: number, minimum: 0}
+        status: {$ref: '#/components/schemas/MagicStatusName'}
+        take_id: {type: [string, 'null'], description: 'the take it shows: pinned, else its latest'}
+        takes: {type: integer, minimum: 0}
+        take_ids: {type: array, items: {type: string, format: uuid}, description: 'from 1.93: its takes, newest first (pin one with a block op''s `pinned`; look at them with look_at)'}
+        pinned: {type: boolean, description: 'from 1.93: take_id is the take the user (or a block op) pinned; false: its latest'}
+        error: {type: string, description: 'from 1.93, failed: why, in plain words (its newest run''s error)'}
+        turns: {$ref: '#/components/schemas/MagicStatus/properties/turns', description: 'from 1.93, a dialogue only: each turn''s status, in the turns'' order (MagicStatus.turns)'}
+        prompt: {type: string}
+        line: {type: string}
+        note: {type: string}
+        tied_to: {type: array, items: {$ref: '#/components/schemas/MagicId'}}
+        effects: {type: array, items: {type: string}, description: 'the badges'' names (off ones left out)'}
+        from_frame: {$ref: '#/components/schemas/MagicId'}
+        request: {$ref: '#/components/schemas/MagicRequest', description: 'from 1.88: its standard request as stored (a block op''s `request` replaces it whole: send this one back with your changes)'}
+        gain_db: {type: number, description: 'from 1.101, an audio block with a level only: its dB (a block op''s `gain_db` sets it)'}
+        fade_in: {type: number, description: 'from 1.106, an audio block with a fade in only: seconds (a block op''s `fade_in` sets it)'}
+        fade_out: {type: number, description: 'from 1.106, an audio block with a fade out only: seconds'}
+    MagicAgentView:
+      type: object
+      required: [id, name, revision, target, frames, duration_s, lanes, blocks, transitions, assets, notes]
+      description: 'GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links'
+      properties:
+        id: {type: string, format: uuid}
+        name: {type: string}
+        revision: {type: integer, minimum: 1}
+        target: {$ref: '#/components/schemas/MagicTarget'}
+        frames: {type: integer, minimum: 0}
+        duration_s: {type: number, minimum: 0}
+        lanes:
+          type: array
+          items:
+            type: object
+            required: [id, name, role, hidden, blocks]
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              name: {type: string}
+              role: {$ref: '#/components/schemas/MagicRole'}
+              hidden: {type: boolean}
+              blocks: {type: integer, minimum: 0}
+        blocks: {type: array, items: {$ref: '#/components/schemas/MagicAgentBlock'}}
+        transitions:
+          type: array
+          items:
+            type: object
+            required: [id, kind, length, at_s]
+            description: 'a MagicTransition and where its join is'
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              between: {type: array, minItems: 2, maxItems: 2, items: {$ref: '#/components/schemas/MagicId'}}
+              start: {$ref: '#/components/schemas/MagicId'}
+              end: {$ref: '#/components/schemas/MagicId'}
+              kind: {$ref: '#/components/schemas/MagicTransitionKind'}
+              length: {$ref: '#/components/schemas/MagicFrames'}
+              request: {$ref: '#/components/schemas/MagicTransition/properties/request'}
+              takes: {$ref: '#/components/schemas/MagicTransition/properties/takes'}
+              pinned: {$ref: '#/components/schemas/MagicTransition/properties/pinned'}
+              at_s: {type: number, minimum: 0}
+              mode: {type: string, enum: [blend, dip], description: 'from 1.106, a join of two sound blocks: blend (the outgoing take has sound past the cut) or dip'}
+        assets:
+          type: array
+          items:
+            type: object
+            required: [id, kind, handle, name, sheet, used_in]
+            properties:
+              id: {$ref: '#/components/schemas/MagicId'}
+              kind: {type: string, enum: [character, prop, place]}
+              handle: {type: string}
+              name: {type: string}
+              sheet:
+                type: array
+                description: 'from 1.93: its sheet takes in order, each with its view''s name when it has one (MagicAsset.sheet and views)'
+                items:
+                  type: object
+                  required: [take_id]
+                  properties:
+                    take_id: {type: string, format: uuid}
+                    view: {type: string, description: '"Front", "Side"'}
+              voice_id: {type: string, description: 'from 1.93: its voice (a speaker with none cannot run)'}
+              note: {type: string, description: 'from 1.93'}
+              used_in: {type: array, items: {$ref: '#/components/schemas/MagicId'}, description: 'the blocks that @-pick it, speak in its voice, from 1.93 also a dialogue''s speaker or a first or last frame of it (lib/magic.ts usedIn: what the asset dialog says before a delete)'}
+        ducking: {$ref: '#/components/schemas/Ducking', description: 'from 1.106: the board''s Duck music as it plays (absent in the doc: on, -12)'}
+        notes: {type: array, items: {type: string}}
 
     # ---------------------------------------------------------- auth_service
     SigninRequest:

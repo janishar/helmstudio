@@ -18,7 +18,15 @@ export const ORDERS: Record<Order, string> = {
   starred: "Starred first",
   name: "Name",
 };
-const KIND: Record<string, string> = { image: "Images", video: "Video", audio: "Audio" };
+/** The filter's kind in the chips' words (API 1.79: the sound classes; `audio` is every class). */
+const KIND: Record<string, string> = {
+  image: "Images",
+  video: "Video",
+  audio: "Audio",
+  voice: "Voice",
+  music: "Music",
+  sound: "Sound",
+};
 const SOURCE: Record<string, string> = {
   create: "From Create",
   pipeline: "From Pipelines",
@@ -91,6 +99,7 @@ export function galleryTools(c: GalleryCtx): ScreenSpec {
         id: t.id,
         title: t.title,
         kind: t.kind,
+        ...(t.sound && { sound: t.sound }),
         source: t.source,
         starred: t.starred,
         created_at: t.created_at,

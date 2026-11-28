@@ -1,9 +1,10 @@
 // Create and Gallery as people use them (QA, 2026-11-24): one fresh user on the test stack's fake runner (echo pack),
 // no assistant, journeys in order (each builds on the takes of the ones before). Boards: Main, Gallery, TakeActions,
-// ImageToVideo, UploadOptimise, Looks. Screenshots of each journey's key moment go to E2E_SHOTS.
+// ImageToVideo, UploadOptimise, Looks, CreateMusicSound (j15-j18, plan 38 P4: the echo music and sound fakes).
+// Screenshots of each journey's key moment go to E2E_SHOTS.
 import { mkdirSync } from "node:fs";
 import { expect, test, type Page } from "@playwright/test";
-import { newUser, signIn, type Creds } from "./users";
+import { ADMIN, newUser, signIn, type Creds } from "./users";
 
 test.describe.configure({ mode: "serial" });
 
@@ -388,4 +389,202 @@ test("j14 settings in popups: a chip's popup edits its setting, Esc closes it, A
   } finally {
     await page.setViewportSize(wide);
   }
+});
+
+// ---------------------------------------------------------------- music and sound (plan 38 P4, CreateMusicSound)
+
+/** The labels of the open right-click menu's first level (components/context-menu.tsx). */
+const menu = () => page.locator('.cm [data-lv="0"] .lb').allTextContents();
+const menuItem = (name: string) => page.locator(".cm [data-lv]").filter({ hasText: name }).first();
+const composer = () => page.getByRole("form", { name: "Composer" });
+/** Waits for the take of the newest run: the strip's first tile names it. */
+const newest = () =>
+  takes()
+    .getByRole("button", { name: /^Take, / })
+    .first();
+
+test("j15 make a song: Music, a style and tagged lyrics, Generate; its sections and cover; Extend it", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  // Create greys Generate for the echo family while no (tiny) variant of it is on the fake host, and the contract
+  // suite deletes them: the admin downloads tiny first, as the Models screen would (assistant-journeys' echoPresent)
+  const admin = await (await browser.newContext()).newPage();
+  await signIn(admin, ADMIN);
+  const tiny = async () => {
+    const r = await admin.request.get("/api/v1/studio/models");
+    const m = (await r.json()).models.find((x: { id: string }) => x.id === "echo");
+    return m.variants
+      .find((v: { id: string }) => v.id === "tiny")
+      .hosts.find((h: { host: string }) => h.host === "fake")?.state;
+  };
+  if ((await tiny()) !== "present") {
+    await admin.request.post("/api/v1/studio/admin/models/echo/download", {
+      data: { host: "fake", variant: "tiny", accept_licence: true },
+    });
+    await expect.poll(tiny, { timeout: 120_000, intervals: [1000] }).toBe("present");
+  }
+  await admin.context().close();
+
+  await page.goto("/");
+  await page.getByRole("tab", { name: "Music" }).click();
+  await composer()
+    .getByPlaceholder("Style: genre, instruments, voice, mood")
+    .fill("Warm lo-fi pop");
+  const lyrics = composer().getByRole("textbox", { name: "Lyrics" });
+  await lyrics.click();
+  await composer().getByRole("button", { name: "[verse]" }).click();
+  await page.keyboard.type("Streetlights blur on the glass");
+  await composer().getByRole("button", { name: "[chorus]" }).click();
+  await page.keyboard.type("Stay a little longer");
+  await expect(lyrics).toHaveValue(
+    "[verse]\nStreetlights blur on the glass\n[chorus]\nStay a little longer",
+  );
+  // Length and BPM are Auto: one chip, the fake plan picks 10 s and 90
+  await expect(composer().getByRole("button", { name: "Length · BPM" })).toBeVisible();
+  await page.getByRole("button", { name: /^Generate/ }).click();
+  await expect(newest()).toHaveAccessibleName(/^Take, seed \d+, 0:10/, { timeout: 60_000 });
+  await expect(page.getByText(/· 0:10 · 48 kHz stereo/).first()).toBeVisible();
+  const sections = page.getByRole("group", { name: "Sections" });
+  await expect(sections.getByRole("button")).toHaveCount(2);
+  // the drawer shows the plan the run wrote. j14 closed it and this browser remembers a closed drawer (alpha.5 item
+  // 11), as a person's would: open it with All settings, as they would
+  const sliders = composer().getByRole("button", { name: "All settings" });
+  if ((await sliders.getAttribute("aria-expanded")) === "false") await sliders.click();
+  await expect(
+    page.getByRole("complementary", { name: "Inspector" }).getByText(/90 BPM/),
+  ).toBeVisible();
+  await shot("j15-song");
+  // Extend from its popup: Add and Where, the new take beside the old one, 10 s longer
+  await takes().getByRole("button", { name: "Extend", exact: true }).click();
+  const ext = page.locator("#offer-extend");
+  await expect(ext).toBeVisible();
+  await ext.getByRole("button", { name: "End", exact: true }).click();
+  await ext.getByRole("button", { name: /^Extend/ }).click();
+  await expect(newest()).toHaveAccessibleName(/, 0:20/, { timeout: 60_000 });
+  await shot("j15-extended");
+});
+
+test("j16 repaint a part: Repaint on the strip, a section takes its range, the new take; the take's menu", async () => {
+  test.setTimeout(120_000);
+  await takes()
+    .getByRole("button", { name: /^Take, seed \d+, 0:10/ })
+    .first()
+    .click();
+  await takes().getByRole("button", { name: "Repaint", exact: true }).click();
+  await expect(page.getByRole("group", { name: /^Repaint range on the song/ })).toBeVisible();
+  await page.getByRole("group", { name: "Sections" }).getByRole("button").last().click();
+  await expect(page.getByText("0:05 – 0:10 · 5 s").first()).toBeVisible();
+  await shot("j16-range");
+  await page.locator("button.key", { hasText: "Repaint" }).click();
+  await expect(page.getByRole("group", { name: /^Repaint range/ })).toHaveCount(0);
+  await expect(newest()).toHaveAccessibleName(/, 0:10/, { timeout: 60_000 });
+  // back on the song's workflow
+  await expect(page.getByRole("button", { name: /^Workflow: Echo music/ })).toBeVisible();
+  // the take's right-click menu (3d)
+  await newest().click({ button: "right" });
+  await expect.poll(menu).toContain("Repaint…");
+  expect(await menu()).toEqual([
+    "Play",
+    "Use in",
+    "Repaint…",
+    "Cover…",
+    "Extend…",
+    "Download",
+    "Delete",
+  ]);
+  await shot("j16-menu");
+  await page.keyboard.press("Escape");
+});
+
+test("j17 make 4 sounds, keep one, vary it; the variation's menu", async () => {
+  test.setTimeout(120_000);
+  await page.getByRole("tab", { name: "Sound" }).click();
+  await expect(composer().getByRole("group", { name: "How many variations" })).toContainText(
+    "4 / 8",
+  );
+  await composer().getByPlaceholder("Describe the sound").fill("A heavy wooden door creaks open");
+  await composer().getByRole("textbox", { name: "Avoid" }).fill("music");
+  await page.getByRole("button", { name: /^Generate/ }).click();
+  const grid = page.getByRole("group", { name: "Variations" });
+  await expect(grid.getByRole("button", { name: /^Variation, / })).toHaveCount(4, {
+    timeout: 60_000,
+  });
+  await shot("j17-variations");
+  const first = grid.getByRole("button", { name: /^Variation, / }).first();
+  await first.click();
+  await expect(first).toHaveAttribute("aria-pressed", "true");
+  await expect(takes().getByRole("button", { name: /^Take, seed \d+, 0:02/ })).toHaveCount(1);
+  // its menu: Vary… in place of Cover… (4b)
+  await first.click({ button: "right" });
+  await expect.poll(menu).toContain("Vary…");
+  expect(await menu()).toEqual([
+    "Play",
+    "Use in",
+    "Repaint…",
+    "Vary…",
+    "Extend…",
+    "Download",
+    "Delete",
+  ]);
+  await page.keyboard.press("Escape");
+  // Vary from its popup: a new sound beside it
+  await takes().getByRole("button", { name: "Vary", exact: true }).click();
+  const vary = page.locator("#offer-vary");
+  await expect(vary).toBeVisible();
+  await vary.getByRole("button", { name: /^Vary/ }).click();
+  await expect(takes().getByRole("button", { name: /^Take, seed \d+, 0:02/ })).toHaveCount(2, {
+    timeout: 60_000,
+  });
+  await shot("j17-varied");
+});
+
+test("j18 sound from a video: Match a video, two takes, Sound only, Save with the video on the sound", async () => {
+  test.setTimeout(180_000);
+  // a clip to score
+  await page.getByRole("tab", { name: "Video" }).click();
+  await page.getByRole("button", { name: /^Workflow:/ }).click();
+  await page.getByRole("menuitemradio", { name: "Echo video", exact: true }).click();
+  await generate("a fox trots in snow");
+  await page.getByRole("tab", { name: "Sound" }).click();
+  await composer()
+    .getByRole("button", { name: /Match a video/ })
+    .click();
+  const picker = page.getByRole("dialog", { name: "Video" });
+  await expect(picker).toBeVisible();
+  await picker.getByRole("listitem").first().getByRole("button").first().click();
+  await picker.getByRole("button", { name: /^Add/ }).click();
+  await expect(
+    composer().getByRole("button", { name: /^Video: a fox trots in snow/ }),
+  ).toBeVisible();
+  // the words are optional with a video
+  await page.getByRole("button", { name: /^Generate/ }).click();
+  const show = page.getByRole("group", { name: "Show" });
+  await expect(show).toBeVisible({ timeout: 60_000 });
+  await expect(takes().getByRole("button", { name: /with sound/ })).toHaveText("▶ with sound");
+  await shot("j18-two-takes");
+  // the video's menu: Sound only opens the sound take of its run (5d)
+  await takes()
+    .getByRole("button", { name: /with sound/ })
+    .click({ button: "right" });
+  await expect.poll(menu).toContain("Sound only");
+  expect((await menu()).slice(0, 2)).toEqual(["Play", "Full screen"]);
+  await menuItem("Sound only").click();
+  await expect(show.getByRole("button", { name: "Sound", exact: true })).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.getByRole("group", { name: "Waveform of the take" })).toBeVisible();
+  // the sound's menu: Save with the video makes a new video take with it (5c, the mux job)
+  const before = await takes()
+    .getByRole("button", { name: /^Take, / })
+    .count();
+  await page.getByRole("group", { name: "Waveform of the take" }).click({ button: "right" });
+  await expect.poll(menu).toContain("Save with the video");
+  // (dispatched: the menu redraws once its offers are read, which a pointer click can race)
+  await menuItem("Save with the video").dispatchEvent("click");
+  await expect(takes().getByRole("button", { name: /^Take, / })).toHaveCount(before + 1, {
+    timeout: 60_000,
+  });
+  await shot("j18-saved-with-video");
 });

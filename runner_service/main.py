@@ -29,8 +29,6 @@ import ssl
 import time
 
 import nats
-import nats.errors
-from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
 import config
 import health
@@ -39,9 +37,9 @@ from consumer import ACK_WAIT, Consumer
 from core import child, download, looks, lora, media, models, registry, voices
 from core.graph import GPU
 from core.residency import POLICIES, Residency, host_device, ram_gb
+from messaging import delivery, plugin_runs, schemas
 from messaging import media as media_jobs
 from messaging import models as model_jobs
-from messaging import plugin_runs, schemas
 from messaging.hosts import Host
 from messaging.settings import Settings
 from storage import Store
@@ -99,12 +97,7 @@ async def idle_unload(consumer: Consumer, host: Host, stop: asyncio.Event) -> No
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(stop.wait(), IDLE_CHECK)
         idle, limit = time.monotonic() - consumer.idle_since, consumer.idle_unload_s
-        if (
-            consumer.ctx is None
-            and limit
-            and idle > limit
-            and any(not res.pinned(k) for k in list(res.entries))
-        ):
+        if consumer.ctx is None and limit and idle > limit and any(not res.pinned(k) for k in list(res.entries)):
             log.info("idle %.0f s: unloading", idle)
             await loop.run_in_executor(GPU, res.unload, True)
             await host.put()
@@ -151,23 +144,19 @@ async def unload_reply(consumer: Consumer, host: Host, request: dict) -> dict:
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     if why := config.plain_with_ca():
         raise SystemExit(why)
     download.environment(config.CACHE)  # before huggingface_hub is imported
     await asyncio.to_thread(child.sweep)  # a child (h3) a killed runner of this env left running
     models.hashes = models.Hashes(config.CACHE / f"model-hashes-{ENV}.json")
     models.hashes.start()  # hashes what no sidecar records, in the background
-    values, impls, packs = (
-        registry.build()
-    )  # an off-contract pack stops the runner before it connects
+    values, impls, packs = registry.build()  # an off-contract pack stops the runner before it connects
     residency, device, loader = residency_for(packs)
     machine = models.machine(device, ram_gb())
     store = Store()
-    library = lora.Library(
-        config.MODELS, config.CACHE, store=store, host=HOST, cache_gb=config.LORA_CACHE_GB
+    library = lora.Library(  # None: the loras/ of every connected model folder (API 1.78)
+        None, config.CACHE, store=store, host=HOST, cache_gb=config.LORA_CACHE_GB
     )
     blocks = registry.lora_blocks(packs)
     values["loras"] = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
@@ -209,18 +198,19 @@ async def main() -> None:
         out["device"] = loader.device_info() if loader else host_device("cpu")
         if device == "cuda":  # host RAM is the second limit
             out["host_ram"] = loader.host_ram()
-        return out | {"models_disk": models.disk(config.MODELS), "machine": machine | {"gpu_limit_gb": settings.gpu_limit_gb},
+        return out | {"models_disk": models.disk(models.packs.downloads_root()), "models_disks": models.disks(), "machine": machine | {"gpu_limit_gb": settings.gpu_limit_gb},
                       "hub_token": tok.is_file() and tok.stat().st_size > 0,
                       "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip
 
     host = Host(await js.key_value("hosts"), extra=extra)
+    node_schemas = registry.node_schemas(values)
     consumer = Consumer(
         js=js,
         store=store,
         cancels_kv=await js.key_value("cancels"),
         host=host,
         impls=impls,
-        node_schemas=registry.node_schemas(values),
+        node_schemas=node_schemas,
         residency=residency,
         device=device,
         after_run=config.AFTER_RUN,
@@ -228,20 +218,20 @@ async def main() -> None:
     )
     consumer.idle_unload_s = config.IDLE_UNLOAD_S
     settings = Settings(consumer, host)
-    node_schemas = registry.node_schemas(values)
     scan_lock = asyncio.Lock()
 
     async def rescan() -> None:
         """Rebuild the loras and models values from disk; publish those that changed; rewrite the hosts key."""
         async with scan_lock:
             loras = registry.scanned_value("loras", await asyncio.to_thread(library.scan, blocks))
-            new = {"loras": loras, "models": await asyncio.to_thread(
-                registry.models_value, packs, impls, node_schemas)}  # fmt: skip
+            new = {"loras": loras, "models": await asyncio.to_thread(registry.models_value, packs, impls, node_schemas)}
             registry.fill_prefused(new, packs, library.files)
             if changed := {k: v for k, v in new.items() if registry.changed(values[k], v)}:
                 values.update(changed)
                 await registry.publish(js, changed)
             await host.put()
+
+    settings.rescan = rescan  # API 1.78: a new folder list rescans at once
 
     async def rescans(stop: asyncio.Event) -> None:
         while not stop.is_set():
@@ -253,51 +243,23 @@ async def main() -> None:
                 except Exception:
                     log.exception("rescan failed")
 
-    # create or update: a changed config here replaces the old one on the server
-    await js.add_consumer(
-        "CMD",
-        ConsumerConfig(
-            name=DURABLE,
-            durable_name=DURABLE,
-            filter_subject=SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT,
-            ack_wait=ACK_WAIT,
-            max_deliver=1,  # a run is retried by studio's dispatcher, never by redelivery
-            max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL,
-        ),
-    )
-    sub = await js.pull_subscribe_bind(durable=DURABLE, stream="CMD")
-    await js.add_consumer(
-        "CMD",
-        ConsumerConfig(
-            name=model_jobs.DURABLE,
-            durable_name=model_jobs.DURABLE,
-            filter_subject=model_jobs.SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT,
-            ack_wait=model_jobs.ACK_WAIT,
-            max_deliver=10,  # a restart redelivers (the download resumes); a terminal status acks it
-            max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL,
-        ),
-    )
-    jobs_sub = await js.pull_subscribe_bind(durable=model_jobs.DURABLE, stream="CMD")
+    # a run is retried by studio's dispatcher, never by redelivery
+    sub = await delivery.durable(js, DURABLE, SUBJECT, ACK_WAIT, max_deliver=1)
+    # a restart redelivers (the download resumes); a terminal status acks it
+    jobs_sub = await delivery.durable(js, model_jobs.DURABLE, model_jobs.SUBJECT, model_jobs.ACK_WAIT, max_deliver=10)
     jobs = model_jobs.ModelJobs(
         js=js, cancels_kv=consumer.cancels_kv, packs_=packs, library=library, consumer=consumer,
         rescan=rescan, cache=config.CACHE, endpoint=config.HF_ENDPOINT, token_file=config.HF_TOKEN_FILE,
     )  # fmt: skip
 
     stop = asyncio.Event()
-    side_jobs = [model_jobs.pull(jobs_sub, jobs, stop)]
+    side_jobs = [delivery.pull(jobs_sub, jobs.handle, stop, "model jobs")]
     if can_media:  # exports and frames: ffmpeg, never the GPU loop
-        await js.add_consumer("CMD", ConsumerConfig(
-            name=media_jobs.DURABLE, durable_name=media_jobs.DURABLE, filter_subject=media_jobs.SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT, ack_wait=media_jobs.ACK_WAIT, max_deliver=3, max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL))  # fmt: skip
-        media_sub = await js.pull_subscribe_bind(durable=media_jobs.DURABLE, stream="CMD")
-        mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store,
-                                     encoders=can_media["encoders"])  # fmt: skip
-        side_jobs.append(model_jobs.pull(media_sub, mjobs, stop))
+        media_sub = await delivery.durable(
+            js, media_jobs.DURABLE, media_jobs.SUBJECT, media_jobs.ACK_WAIT, max_deliver=3
+        )
+        mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store, encoders=can_media["encoders"])
+        side_jobs.append(delivery.pull(media_sub, mjobs.handle, stop, "media jobs"))
         log.info("media jobs on %s (ffmpeg %s, %s)", media_jobs.SUBJECT, can_media["ffmpeg"],
                  ", ".join(can_media["encoders"]))  # fmt: skip
 
@@ -341,22 +303,25 @@ async def main() -> None:
             await msg.respond(json.dumps(reply).encode())
 
         await nc.subscribe(f"runner.plugins.key.{HOST}", cb=on_key)
+
+        # API 1.78: what each model folder path is here now (req.runner.folders.check), before studio stores a list
+        async def on_folders(msg) -> None:
+            try:
+                paths = json.loads(msg.data or b"{}").get("paths")
+            except ValueError, AttributeError:
+                paths = None
+            await msg.respond(json.dumps(await asyncio.to_thread(models.check_folders, paths)).encode())
+
+        await nc.subscribe(f"runner.folders.check.{HOST}", cb=on_folders)
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
+
+    async def run(m) -> None:
+        await consumer.handle(m)
+        await settings.run_ended()
+
     try:
-        while not stop.is_set():
-            try:
-                msgs = await sub.fetch(1, timeout=2)
-            except nats.errors.TimeoutError:
-                continue
-            except Exception:
-                log.exception("fetch failed; retrying")
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), 2)
-                continue
-            for m in msgs:
-                await consumer.handle(m)
-                await settings.run_ended()
+        await delivery.pull(sub, run, stop, "runs")
     finally:
         log.info("shutting down")
         server.close()

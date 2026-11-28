@@ -206,6 +206,18 @@ func Run() error {
 			}
 			return reply, err
 		},
+		// what each model folder path is on its host (API 1.78): 5 s
+		foldersCheck: func(ctx context.Context, host string, req message.FoldersCheckRequest) (message.FoldersCheckReply, error) {
+			var reply message.FoldersCheckReply
+			body, _ := json.Marshal(req)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			answer, err := natsConn.RequestWithContext(ctx, message.SubjectFoldersCheck+host, body)
+			if err == nil {
+				err = json.Unmarshal(answer.Data, &reply)
+			}
+			return reply, err
+		},
 	}
 	module.purge, module.putSettings = messaging.NatsPurge(client), messaging.NatsKVPut(client, "host_settings")
 	if module.store, err = objectStore(ctx, env); err != nil {
@@ -268,6 +280,7 @@ func Run() error {
 	workers.Go(func() { micro.NatsJetStreamConsume(ctx, client, messaging.MediaConsumer, mediaEvents) })
 	workers.Go(func() { studio.RunMediaJobs(ctx, pool, runners, module.purge, module.cancel, module.store) })
 	workers.Go(func() { studio.RunThumbs(ctx, pool, runners) }) // API 1.48: thumbnails of takes without one
+	// API 1.108: no facts loop: studio.MeasureFacts measures a take's facts on demand
 	workers.Go(func() {
 		// KV host_settings is a copy of studio's table: written at every start (API 1.16)
 		if err := module.settings.PublishSettings(ctx); err != nil && ctx.Err() == nil {

@@ -1,0 +1,57 @@
+{
+  "type": "evt.media.status",
+  "version": 1,
+  "id": "6f1c2d3e-4b5a-4c7d-8e9f-000000001709",
+  "job_id": "9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f",
+  "owner_id": "7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13",
+  "occurred_at": "2026-11-16T10:00:00Z",
+  "trace": {
+    "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"
+  },
+  "data": {
+    "seq": 3,
+    "delivery": 1,
+    "status": "succeeded",
+    "result": {
+      "facts": [
+        {
+          "index": 0,
+          "facts": {
+            "seconds": 5.0,
+            "sound_seconds": 5.0,
+            "lufs": -14.2,
+            "peak_db": -1.1,
+            "silence_start": 0.0,
+            "silence_end": 0.0,
+            "end_lufs": -15.0,
+            "abrupt": true,
+            "cuts": [
+              3.0
+            ]
+          },
+          "key": "u/7d1e5c2a-9b3f-4e8d-a1c6-2f4b8e9d0a13/facts/9e4d2c1b-3a5f-4e6d-8c7b-0a1b2c3d4e5f/0.jpg",
+          "width": 1023,
+          "height": 768,
+          "bytes": 82323
+        },
+        {
+          "index": 1,
+          "facts": {
+            "seconds": 20.0,
+            "sound_seconds": 20.0,
+            "lufs": -16.0,
+            "peak_db": -2.0,
+            "silence_start": 0.4,
+            "silence_end": 1.2,
+            "end_lufs": -70.0,
+            "abrupt": false
+          }
+        },
+        {
+          "index": 2,
+          "error": "input 2 is missing"
+        }
+      ]
+    }
+  }
+}

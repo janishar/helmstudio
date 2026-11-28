@@ -5,6 +5,7 @@ import { useTheme } from "next-themes";
 import { ChevronLeft, X } from "lucide-react";
 import { THEMES } from "@/lib/themes";
 import { progressText, type UploadProgress } from "@/lib/takes";
+import { OUTAGE_TEXT, useHealth } from "@/lib/health";
 
 /** Logo A's mark (docs/brand/logo/a-as-drawn), 24 grid: `arch`, then `stem` for the stem and the playhead flag. */
 export function MarkPaths({
@@ -117,6 +118,9 @@ export function Info({
 
 /** An error message with an optional retry. */
 export function ErrorNote({ children, onRetry }: { children: ReactNode; onRetry?: () => void }) {
+  // the banner says it once (docs/mock/ErrorStates.dc.html a1): a note for the same cause is held back meanwhile
+  const down = useHealth().down;
+  if (down && children === OUTAGE_TEXT) return null;
   return (
     <p
       role="alert"
@@ -139,6 +143,8 @@ export function Modal({
   title,
   width = "w-[min(92vw,380px)]",
   back,
+  aside,
+  heading,
   children,
 }: {
   open: boolean;
@@ -148,6 +154,10 @@ export function Modal({
   width?: string;
   /** a "Back" button before the title (a dialog's second view, docs/mock/VoicePicker.dc.html) */
   back?: () => void;
+  /** a small note on the title's line, after it ("2 of 2") */
+  aside?: ReactNode;
+  /** what the title's line shows instead of `title` (a kind's badge and a name); `title` stays its name */
+  heading?: ReactNode;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -199,7 +209,10 @@ export function Modal({
             <ChevronLeft size={16} aria-hidden />
           </button>
         )}
-        <h2 className="m-0 mr-auto font-display text-base font-bold">{title}</h2>
+        <div className="mr-auto flex items-baseline gap-2">
+          <h2 className="m-0 font-display text-base font-bold">{heading ?? title}</h2>
+          {aside && <span className="text-[11px] text-t2">{aside}</span>}
+        </div>
         <button
           type="button"
           aria-label="Close"

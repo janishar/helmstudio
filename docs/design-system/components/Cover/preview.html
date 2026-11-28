@@ -1,0 +1,54 @@
+<!-- @dsCard height=288 -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>helmstudio</title>
+<style>
+  html, body { margin:0; height:100%; }
+  body { background:var(--g); color:var(--t1); font-family:var(--font-sans); overflow:hidden; }
+  .cover { position:relative; height:288px; overflow:hidden; }
+  .art { position:absolute; top:0; left:480px; width:480px; height:288px; overflow:hidden; }
+  .art svg { display:block; width:480px; height:288px; }
+  .a1 { fill:var(--a1); }
+  .a2 { fill:var(--a2); }
+  .ln { fill:var(--ln); }
+  .t1 { fill:var(--t1); }
+  .words { position:absolute; left:28px; bottom:28px; max-width:440px; }
+  .name { margin:0; font-family:var(--font-display); font-size:72px; line-height:.92; font-weight:700; letter-spacing:-0.02em; color:var(--t1); }
+  .tagline { margin:10px 0 0 3px; font-size:14px; line-height:20px; color:var(--t2); }
+</style>
+</head>
+<body>
+<div class="cover">
+<div class="art" aria-hidden="true">
+<svg viewBox="0 0 480 288" width="480" height="288">
+<!--
+  blocks      a1 144x252 slab bled off the top (image work, the Generate key) · a2 186x184 bled off the right (video and audio) · ln 150x128 surface tint · t1 150x42 ink bar · about a third of 960x288
+  arrangement one tall a1 slab with satellites, bottoms on one line at 224, gutters space-rail (14)
+  pattern     a row of ten dock tiles, from "dock icons are 3D gradient tiles" and the organic radius: size-tile (36) squares at a 50 pitch (36 + space-rail), a1 / a2 / ln
+  scales      blocks radius-panel 28 with radius-panel-tail 12 bottom-left; ink bar radius-pop 18 / radius-pop-tail 8; tiles radius-tile 12 / radius-tile-tail 5
+-->
+<path class="a1" d="M28 -28H116A28 28 0 0 1 144 0V196A28 28 0 0 1 116 224H12A12 12 0 0 1 0 212V0A28 28 0 0 1 28 -28Z"/>
+<path class="t1" d="M176 40H290A18 18 0 0 1 308 58V64A18 18 0 0 1 290 82H166A8 8 0 0 1 158 74V58A18 18 0 0 1 176 40Z"/>
+<path class="ln" d="M186 96H280A28 28 0 0 1 308 124V196A28 28 0 0 1 280 224H170A12 12 0 0 1 158 212V124A28 28 0 0 1 186 96Z"/>
+<path class="a2" d="M350 40H480A28 28 0 0 1 508 68V196A28 28 0 0 1 480 224H334A12 12 0 0 1 322 212V68A28 28 0 0 1 350 40Z"/>
+<path class="a1" d="M12 238H24A12 12 0 0 1 36 250V262A12 12 0 0 1 24 274H5A5 5 0 0 1 0 269V250A12 12 0 0 1 12 238Z"/>
+<path class="a2" d="M62 238H74A12 12 0 0 1 86 250V262A12 12 0 0 1 74 274H55A5 5 0 0 1 50 269V250A12 12 0 0 1 62 238Z"/>
+<path class="ln" d="M112 238H124A12 12 0 0 1 136 250V262A12 12 0 0 1 124 274H105A5 5 0 0 1 100 269V250A12 12 0 0 1 112 238Z"/>
+<path class="a1" d="M162 238H174A12 12 0 0 1 186 250V262A12 12 0 0 1 174 274H155A5 5 0 0 1 150 269V250A12 12 0 0 1 162 238Z"/>
+<path class="a2" d="M212 238H224A12 12 0 0 1 236 250V262A12 12 0 0 1 224 274H205A5 5 0 0 1 200 269V250A12 12 0 0 1 212 238Z"/>
+<path class="ln" d="M262 238H274A12 12 0 0 1 286 250V262A12 12 0 0 1 274 274H255A5 5 0 0 1 250 269V250A12 12 0 0 1 262 238Z"/>
+<path class="a1" d="M312 238H324A12 12 0 0 1 336 250V262A12 12 0 0 1 324 274H305A5 5 0 0 1 300 269V250A12 12 0 0 1 312 238Z"/>
+<path class="a2" d="M362 238H374A12 12 0 0 1 386 250V262A12 12 0 0 1 374 274H355A5 5 0 0 1 350 269V250A12 12 0 0 1 362 238Z"/>
+<path class="ln" d="M412 238H424A12 12 0 0 1 436 250V262A12 12 0 0 1 424 274H405A5 5 0 0 1 400 269V250A12 12 0 0 1 412 238Z"/>
+<path class="a1" d="M462 238H474A12 12 0 0 1 486 250V262A12 12 0 0 1 474 274H455A5 5 0 0 1 450 269V250A12 12 0 0 1 462 238Z"/>
+</svg>
+</div>
+<div class="words">
+<h1 class="name">helmstudio</h1>
+<p class="tagline">A local-first AI media studio.</p>
+</div>
+</div>
+</body>
+</html>

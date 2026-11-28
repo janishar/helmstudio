@@ -78,6 +78,7 @@ type TimelineError struct {
 }
 
 func (e *TimelineError) Error() string { return e.Detail }
+func (*TimelineError) unprocessable()  {}
 
 var problemText = map[string]string{
 	"too_large":        fmt.Sprintf("the sequence is over %d bytes", timeline.MaxBytes),
@@ -107,6 +108,8 @@ var problemText = map[string]string{
 	"too_many_markers": fmt.Sprintf("a sequence has at most %d markers", timeline.MaxMarkers),
 	"duplicate_marker": "its id is used twice",
 	"marker_past_end":  "it is after the sequence's end",
+	"fade_clip":        "an image, an empty slot or a line placeholder has no sound to fade", // 1.106
+	"crossfade_track":  "a crossfade goes on an audio track; V1 dissolves",
 }
 
 // problemsError maps the rules' problems to the 422.
@@ -215,6 +218,9 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 		if json.Unmarshal(row.Audio, &audio) == nil {
 			out.SampleRate = audio.SampleRate // API 1.32: the export plan's sounds
 		}
+		if row.Sound != nil { // 1.106: what ducking reads
+			out.Sound = *row.Sound
+		}
 	}
 	return out
 }
@@ -223,7 +229,7 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 func (s *Service) timelineTake(row gallerymodel.Take) dto.TimelineTake {
 	t := gallery.TakeDTO(s.signer, row)
 	out := dto.TimelineTake{ID: t.ID, Kind: t.Kind, Source: t.Source, Title: t.Title, URL: t.URL, ThumbURL: t.ThumbURL,
-		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio}
+		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio, Sound: row.Sound}
 	if m := t.MadeWith; m != nil {
 		out.Seed, out.WorkflowID, out.WorkflowTitle, out.RenderS = m.Seed, &m.WorkflowID, &m.WorkflowTitle, m.RenderS
 	}
@@ -360,7 +366,7 @@ func (s *Service) timelineDTO(ctx context.Context, tx pgx.Tx, row timelineRow) (
 	}
 	out := dto.Timeline{ID: row.ID, Name: row.Name, SessionID: row.SessionID, Revision: row.Revision, Target: doc.Target,
 		TitleSource: row.TitleSource, NamedBy: row.NamedBy,
-		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Takes: map[string]dto.TimelineTake{},
+		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Ducking: doc.Ducking, Takes: map[string]dto.TimelineTake{},
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 	for id, take := range rows {
 		out.Takes[id] = s.timelineTake(take)
@@ -593,19 +599,8 @@ func (s *Service) CreateTimeline(ctx context.Context, caller common.Caller, body
 // insertTimeline stores a new sequence (revision 1) with its own session and answers it in out.
 func (s *Service) insertTimeline(ctx context.Context, tx pgx.Tx, caller common.Caller, name, source string, doc timeline.Doc,
 	defaults any, out *dto.Timeline) error {
-	sessionID := utility.NewID()
-	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, caller.ID, name); err != nil {
-		return err
-	}
-	data, _ := json.Marshal(clean(doc, nil))
-	row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id, title_source)
-		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+timelineCols, utility.NewID(), caller.ID, name, data,
-		defaults, sessionID, source)
+	row, err := insertTimelineRow(ctx, tx, caller.ID, common.ViaOf(caller.Via), name, source, doc, defaults)
 	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
-		VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, caller.ID, data, common.ViaOf(caller.Via)); err != nil {
 		return err
 	}
 	if err := askTimelineName(ctx, tx, s.registry, s.remoteOn, &row); err != nil {
@@ -613,6 +608,24 @@ func (s *Service) insertTimeline(ctx context.Context, tx pgx.Tx, caller common.C
 	}
 	*out, err = s.timelineDTO(ctx, tx, row)
 	return err
+}
+
+// insertTimelineRow stores a new sequence (revision 1, by the user through via) with its own session.
+func insertTimelineRow(ctx context.Context, tx pgx.Tx, ownerID, via, name, source string, doc timeline.Doc, defaults any) (timelineRow, error) {
+	sessionID := utility.NewID()
+	if _, err := tx.Exec(ctx, `INSERT INTO sessions (id, owner_id, title) VALUES ($1, $2, $3)`, sessionID, ownerID, name); err != nil {
+		return timelineRow{}, err
+	}
+	data, _ := json.Marshal(clean(doc, nil))
+	row, err := one[timelineRow](ctx, tx, `INSERT INTO timelines (id, owner_id, name, doc, defaults, session_id, title_source)
+		VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING `+timelineCols, utility.NewID(), ownerID, name, data,
+		defaults, sessionID, source)
+	if err != nil {
+		return row, err
+	}
+	_, err = tx.Exec(ctx, `INSERT INTO timeline_revisions (timeline_id, owner_id, revision, doc, by, via, ops_summary)
+		VALUES ($1, $2, 1, $3, 'user', $4, 'create')`, row.ID, ownerID, data, via)
+	return row, err
 }
 
 // cloneDoc is src with new clip ids (links follow) and no pending shots (a V1 slot stays empty, a New line's
@@ -674,15 +687,21 @@ func firstTarget(row gallerymodel.Take) timeline.Target {
 	return t
 }
 
-// ListTimelines is the caller's sequences, newest first.
-func (s *Service) ListTimelines(ctx context.Context, caller common.Caller) (dto.TimelineList, error) {
+// ListTimelines is a page of the caller's sequences, newest updated first; API 1.92: q matches the name.
+func (s *Service) ListTimelines(ctx context.Context, caller common.Caller, page Page) (dto.TimelineList, error) {
 	out := dto.TimelineList{Timelines: []dto.TimelineSummary{}}
-	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
-		rows, err := collect[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE deleted_at IS NULL
-			ORDER BY updated_at DESC, id LIMIT 100`)
+	args := sqlArgs{}
+	match := matchSQL(page.Words, &args, `name`)
+	tail, err := keysetSQL(page, &args, `updated_at`, `id`)
+	if err != nil {
+		return out, err
+	}
+	err = s.tx(ctx, caller, func(tx pgx.Tx) error {
+		rows, err := collect[timelineRow](ctx, tx, `SELECT `+timelineCols+` FROM timelines WHERE deleted_at IS NULL`+match+tail, args...)
 		if err != nil {
 			return err
 		}
+		rows, out.NextCursor = pageOf(rows, page.Limit, func(r timelineRow) (time.Time, string) { return r.UpdatedAt, r.ID })
 		var firsts []string
 		docs := make([]timeline.Doc, len(rows))
 		for i, row := range rows {
@@ -758,7 +777,7 @@ func (s *Service) UpdateTimeline(ctx context.Context, caller common.Caller, id s
 		if body.Revision != row.Revision {
 			return staleRevision(*row)
 		}
-		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks, Markers: body.Markers}, row.doc()
+		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks, Markers: body.Markers, Ducking: body.Ducking}, row.doc()
 		rules, _, err := loadTakes(ctx, tx, caller.ID, docTakeIDs(doc))
 		if err != nil {
 			return err
@@ -1394,6 +1413,9 @@ func (s *Service) ClipActions(ctx context.Context, caller common.Caller, id, cli
 		}
 	}
 	for _, o := range gallery.Offers(take, workflows, &rng) {
+		if o.Media == "audio" { // API 1.79: a video clip's actions make videos (Add sound waits: plan 38 44.10.13)
+			continue
+		}
 		out.Actions = append(out.Actions, timeline.Action{TakeOffer: o})
 	}
 	return out, nil

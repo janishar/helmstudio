@@ -1,0 +1,20 @@
+{
+  "blocks": [
+    {
+      "block": "b1",
+      "seconds": 110,
+      "source": "guess",
+      "host": null,
+      "peak_gb": null,
+      "reason": null
+    }
+  ],
+  "lanes": [],
+  "seconds": 110,
+  "order": [
+    "b1"
+  ],
+  "ask": false,
+  "ask_text": "",
+  "limit_minutes": 5
+}

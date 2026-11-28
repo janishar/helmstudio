@@ -200,7 +200,7 @@ describe("Create: deleting from the strip", () => {
   it("a failed tile's ✕ deletes that run alone", async () => {
     const { del } = start({ runs: [run("bad", "failed")] });
     const x = within(strip()).getByRole("button", { name: /^Remove failed run/ });
-    expect(within(strip()).getByTitle("out of memory on mac")).toBeTruthy();
+    expect(within(strip()).getByTitle("This run stopped: out of memory on mac")).toBeTruthy();
     fireEvent.click(x);
     await waitFor(() => expect(screen.queryByRole("group", { name: "Takes" })).toBeNull());
     expect(deleted(del, "/v1/studio/runs/{run_id}")).toHaveLength(1);

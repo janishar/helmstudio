@@ -4,6 +4,7 @@
 // from this clip" (the prompt, what the range or extension comes to, the same node's switches, Replace or Insert
 // after / before), run by POST …/shots: the slot holds the shot's placeholder until the take fills it.
 import Link from "next/link";
+import { TriangleAlert } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ErrorNote } from "@/components/kit";
 import { PromptArea } from "@/components/create/prompt";
@@ -22,7 +23,10 @@ import {
   type Placement,
 } from "@/lib/source";
 import { newId, shortTime, timecode, type Clip, type Norm } from "@/lib/timeline";
-import type { FormSlot, Started, Want } from "@/components/timeline/assistant";
+import { useHosts } from "@/components/create/memory-chip";
+import { DOWN_KEY, useHealth } from "@/lib/health";
+import { runnerWhy } from "@/lib/run-on";
+import type { FormSlot, Started, Want } from "@/lib/timeline";
 import {
   blockNotes,
   buildInputs,
@@ -39,6 +43,7 @@ import {
   type Field,
   type Raw,
 } from "@/lib/workflow";
+import { Range } from "@/components/range";
 
 type Timeline = S<"Timeline">;
 type Offer = S<"TakeOffer">;
@@ -206,6 +211,11 @@ function ActionForm({
   onForm?: (f: FormSlot) => void;
 }) {
   const fields = useMemo(() => fieldsOf(workflow), [workflow]);
+  // docs/mock/ErrorStates.dc.html b3: no runner for the workflow's env greys Generate, with the line under it; the
+  // studio down greys it too (the banner says why)
+  const hosts = useHosts();
+  const down = useHealth().down;
+  const why = down ? null : runnerWhy(hosts, workflow.env);
   const [raws, setRaws] = useState<Record<string, Raw>>(() => {
     const r = rawsFrom(fields, offer.inputs);
     // the assistant's prompt and seconds, as typed into the form
@@ -286,6 +296,7 @@ function ActionForm({
   const note = ext ? chosen.join(" ") : chosen[0];
 
   async function generate(): Promise<Started> {
+    if (down || why) return { error: why?.key ?? DOWN_KEY };
     setBusy(true);
     setError("");
     try {
@@ -408,9 +419,9 @@ function ActionForm({
               {` · ${before ? "before" : "after"}`}
             </span>
           </label>
-          <input
+          <Range
             id={`act-${ext.seconds.key}`}
-            type="range"
+
             min={ext.seconds.param.min}
             max={ext.seconds.param.max}
             step={ext.seconds.param.step ?? 0.1}
@@ -498,12 +509,27 @@ function ActionForm({
         <button
           type="button"
           className="key h-11 rounded-xl px-5 text-sm"
-          disabled={busy}
+          disabled={busy || !!why || down}
           onClick={() => void generate()}
         >
-          {busy ? "Starting…" : "Generate"}
+          {busy ? (
+            "Starting…"
+          ) : why || down ? (
+            <span className="flex flex-col items-center gap-px">
+              Generate
+              <span className="mono text-[11px] font-medium">{why?.key ?? DOWN_KEY}</span>
+            </span>
+          ) : (
+            "Generate"
+          )}
         </button>
       </div>
+      {why && (
+        <p className="why" role="status">
+          <TriangleAlert size={14} aria-hidden />
+          {why.line}
+        </p>
+      )}
       {error && <ErrorNote>{error}</ErrorNote>}
     </div>
   );

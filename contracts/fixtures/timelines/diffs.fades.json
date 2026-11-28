@@ -1,0 +1,232 @@
+{
+ "description": "API 1.106 (plan 41): audio fades, crossfades and ducking; check.py's diffs reference (kept apart from diffs.json until every implementation reads them)",
+ "cases": [
+  {
+   "description": "1.106 a fade removed and ducking changed",
+   "before": {
+    "target": {
+     "width": 704,
+     "height": 448,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "v",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+        "in": 0.0,
+        "out": 5.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_out": 1.0,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003"
+        ],
+        "at": 0.0
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m1",
+        "take_id": "dddddddd-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0,
+        "at": 0.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_in": 1.0,
+        "fade_out": 1.0,
+        "crossfade": 1.0,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000001"
+        ]
+       },
+       {
+        "id": "m2",
+        "take_id": "dddddddd-0000-4000-8000-000000000002",
+        "in": 0.0,
+        "out": 3.0,
+        "at": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_in": 2.0,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000002"
+        ]
+       }
+      ]
+     },
+     {
+      "name": "A3",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "vo",
+        "take_id": "dddddddd-0000-4000-8000-000000000003",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000003"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.0,
+    "frames": 120,
+    "ducking": {
+     "on": true,
+     "db": -12
+    }
+   },
+   "after": {
+    "target": {
+     "width": 704,
+     "height": 448,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "tracks": [
+     {
+      "name": "V1",
+      "kind": "video",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "v",
+        "take_id": "aaaaaaaa-0000-4000-8000-000000000003",
+        "in": 0.0,
+        "out": 5.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_out": 1.0,
+        "alternatives": [
+         "aaaaaaaa-0000-4000-8000-000000000003"
+        ],
+        "at": 0.0
+       }
+      ]
+     },
+     {
+      "name": "A2",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "m1",
+        "take_id": "dddddddd-0000-4000-8000-000000000001",
+        "in": 0.0,
+        "out": 2.0,
+        "at": 0.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_out": 1.0,
+        "crossfade": 1.0,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000001"
+        ]
+       },
+       {
+        "id": "m2",
+        "take_id": "dddddddd-0000-4000-8000-000000000002",
+        "in": 0.0,
+        "out": 3.0,
+        "at": 2.0,
+        "gain_db": 0,
+        "mute": false,
+        "fade_in": 2.0,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000002"
+        ]
+       }
+      ]
+     },
+     {
+      "name": "A3",
+      "kind": "audio",
+      "gain_db": 0,
+      "mute": false,
+      "clips": [
+       {
+        "id": "vo",
+        "take_id": "dddddddd-0000-4000-8000-000000000003",
+        "in": 0.0,
+        "out": 1.0,
+        "at": 1.0,
+        "gain_db": 0,
+        "mute": false,
+        "alternatives": [
+         "dddddddd-0000-4000-8000-000000000003"
+        ]
+       }
+      ]
+     }
+    ],
+    "duration_s": 5.0,
+    "frames": 120,
+    "ducking": {
+     "on": true,
+     "db": -6
+    }
+   },
+   "expect": {
+    "added": [],
+    "removed": [],
+    "changed": [
+     {
+      "clip": "m1",
+      "fields": {
+       "fade_in": [
+        1.0,
+        null
+       ]
+      }
+     }
+    ],
+    "tracks": {
+     "added": [],
+     "removed": [],
+     "changed": []
+    },
+    "duration": [
+     5.0,
+     5.0
+    ],
+    "markers": {
+     "added": [],
+     "removed": [],
+     "changed": []
+    },
+    "ducking": [
+     {
+      "on": true,
+      "db": -12
+     },
+     {
+      "on": true,
+      "db": -6
+     }
+    ]
+   }
+  }
+ ]
+}

@@ -5,6 +5,7 @@
 import { api, ok, type S } from "@/lib/api";
 import {
   about,
+  deleteCard,
   done,
   failed,
   ordinal,
@@ -102,7 +103,15 @@ export type CreateCtx = {
   voiceCtx?: VoiceCtx;
 };
 
-const MEDIA: Record<string, string> = { image: "Image", video: "Video", audio: "Audio" };
+// API 1.79 (plan 38): the Create kinds as the tabs name them; today's Audio is Voice, music and sound are classes
+const MEDIA: Record<string, string> = {
+  image: "Image",
+  video: "Video",
+  audio: "Voice",
+  voice: "Voice",
+  music: "Music",
+  sound: "Sound",
+};
 const label = (f: Field) => f.param.label ?? f.param.name;
 const takeName = (t?: Take) => t?.title || "the take";
 
@@ -267,28 +276,6 @@ async function generateCard(c: CreateCtx): Promise<Outcome | Asked> {
   };
 }
 
-const deleteCard = (
-  title: string,
-  goes: string,
-  stays: string,
-  fine: string,
-  yes: () => Promise<Outcome>,
-): Asked => ({
-  card: {
-    kind: "delete",
-    title,
-    rows: [
-      ["Goes", goes],
-      ["Stays", stays],
-    ],
-    tags: [],
-    go: "DELETE",
-    danger: true,
-    fine,
-  },
-  yes,
-});
-
 /** Create's registration: its actions, Sees chips, ids and summary. */
 export function createTools(c: CreateCtx): ScreenSpec {
   const w = c.workflow;
@@ -333,6 +320,7 @@ export function createTools(c: CreateCtx): ScreenSpec {
         id: x.id,
         title: x.title,
         media: x.media ?? "image",
+        ...(x.sound && { sound: x.sound }), // API 1.79: music and sound prompts are not spoken (pipelines)
         downloaded: downloaded(c.modelList, x.family),
       })),
       fields: c.fields.map((f) => ({
@@ -414,7 +402,7 @@ export function createTools(c: CreateCtx): ScreenSpec {
           return failed(`${to.title}: not downloaded · Models`);
         const from = w?.id;
         c.switchTo(to.id);
-        return done(`Switched to ${MEDIA[to.media ?? "image"] ?? ""} · ${to.title}`, {
+        return done(`Switched to ${MEDIA[to.sound ?? to.media ?? "image"] ?? ""} · ${to.title}`, {
           undo: { undo: () => from && c.switchTo(from), redo: () => c.switchTo(to.id) },
         });
       },

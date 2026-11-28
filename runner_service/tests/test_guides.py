@@ -29,13 +29,9 @@ def test_every_pack_has_a_guide_with_a_card_within_the_caps(d):
 @pytest.mark.parametrize("d", [d for d in PACKS if d.name != "echo"], ids=lambda d: d.name)
 def test_every_recipe_fits_its_workflow(d):
     s = spec(d)
-    nodes = json.loads(
-        (CONTRACTS / f"fixtures/registry/{s['family']}.nodes.valid.json").read_text()
-    )
+    nodes = json.loads((CONTRACTS / f"fixtures/registry/{s['family']}.nodes.valid.json").read_text())
     schemas = {n["kind"]: n for n in nodes["nodes"]}
-    workflows = {
-        w["id"]: w for w in (json.loads(f.read_text()) for f in d.glob("workflows/*.json"))
-    }
+    workflows = {w["id"]: w for w in (json.loads(f.read_text()) for f in d.glob("workflows/*.json"))}
     assert s["recipes"] and len({r["name"] for r in s["recipes"]}) == len(s["recipes"])
     for r in s["recipes"]:
         assert registry.recipe_errors(r, workflows[r["workflow"]], schemas) == [], r["name"]
@@ -44,11 +40,7 @@ def test_every_recipe_fits_its_workflow(d):
 def test_the_fake_runner_publishes_its_guide_and_recipes():
     values, _, _ = registry.build("fake")
     (g,) = values["guides"]["guides"]
-    assert (
-        g["family"] == "echo"
-        and g["title"] == "Echo (fake)"
-        and g["card"].startswith("Echo (fake) is")
-    )
+    assert g["family"] == "echo" and g["title"] == "Echo (fake)" and g["card"].startswith("Echo (fake) is")
     assert g["guide"] == (pack.PACKS / "echo/assistant.md").read_text()
     assert g["recipes"][0]["name"] == "quick"
 
@@ -63,9 +55,7 @@ def test_a_recipe_that_does_not_fit_stops_the_runner():
         echo.spec["recipes"] = [{"name": "bad", "title": "Bad", "workflow": "echo", "params": bad}]
         with pytest.raises(ValueError, match=why):
             registry.guides(loaded, workflows, schemas)
-    echo.spec["recipes"] = [
-        {"name": "bad", "title": "Bad", "workflow": "nowhere", "params": {"echo.steps": 1}}
-    ]
+    echo.spec["recipes"] = [{"name": "bad", "title": "Bad", "workflow": "nowhere", "params": {"echo.steps": 1}}]
     with pytest.raises(ValueError, match="no workflow nowhere"):
         registry.guides(loaded, workflows, schemas)
 

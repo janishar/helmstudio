@@ -1,183 +1,308 @@
 {
-  "description": "Which tools of tools/catalog.json a turn offers (offered_tools: roles, web_search on, an ask workflow runnable, from API 1.64 a skill on, from API 1.71 a model guide) and which actions a screen registers (screen_actions). check.py and studio_service run them.",
-  "cases": [
-    {
-      "description": "a user, web search off, no ask workflow",
-      "roles": [
-        "user"
-      ],
-      "expect": [
-        "batch_status",
-        "custom_nodes",
-        "forget",
-        "get_run",
-        "get_take",
-        "get_workflow",
-        "hosts",
-        "list_library",
-        "list_timelines",
-        "list_workflows",
-        "model_sources",
-        "models",
-        "pipelines",
-        "plan_run",
-        "recall",
-        "remember",
-        "save_shots",
-        "search_takes",
-        "sessions",
-        "shot_list",
-        "show_timeline",
-        "timeline_revisions"
-      ]
-    },
-    {
-      "description": "a user with a skill on (API 1.64)",
-      "roles": [
-        "user"
-      ],
-      "skills": true,
-      "expect": [
-        "batch_status",
-        "custom_nodes",
-        "forget",
-        "get_run",
-        "get_take",
-        "get_workflow",
-        "hosts",
-        "list_library",
-        "list_timelines",
-        "list_workflows",
-        "model_sources",
-        "models",
-        "pipelines",
-        "plan_run",
-        "read_skill_file",
-        "recall",
-        "remember",
-        "save_shots",
-        "search_takes",
-        "sessions",
-        "shot_list",
-        "show_timeline",
-        "timeline_revisions",
-        "use_skill"
-      ]
-    },
-    {
-      "description": "a user, some model guide published (API 1.71)",
-      "roles": [
-        "user"
-      ],
-      "guides": true,
-      "expect": [
-        "batch_status",
-        "custom_nodes",
-        "forget",
-        "get_run",
-        "get_take",
-        "get_workflow",
-        "hosts",
-        "list_library",
-        "list_timelines",
-        "list_workflows",
-        "model_sources",
-        "models",
-        "pipelines",
-        "plan_run",
-        "read_model_guide",
-        "recall",
-        "remember",
-        "save_shots",
-        "search_takes",
-        "sessions",
-        "shot_list",
-        "show_timeline",
-        "timeline_revisions"
-      ]
-    },
-    {
-      "description": "an admin with web search on and Qwen Image installed",
-      "roles": [
-        "admin",
-        "user"
-      ],
-      "web_search": true,
-      "look_at": true,
-      "expect": [
-        "batch_status",
-        "custom_nodes",
-        "forget",
-        "get_run",
-        "get_take",
-        "get_workflow",
-        "hosts",
-        "list_library",
-        "list_timelines",
-        "list_workflows",
-        "look_at",
-        "model_jobs",
-        "model_sources",
-        "models",
-        "pipelines",
-        "plan_run",
-        "recall",
-        "remember",
-        "save_shots",
-        "search_takes",
-        "sessions",
-        "shot_list",
-        "show_timeline",
-        "timeline_revisions",
-        "web_search"
-      ]
-    },
-    {
-      "description": "Gallery for a user",
-      "screen": "gallery",
-      "roles": [
-        "user"
-      ],
-      "expect": [
-        "await",
-        "delete",
-        "filter",
-        "navigate",
-        "rename",
-        "saveAsElement",
-        "saveAsLook",
-        "saveAsPipeline",
-        "search",
-        "select",
-        "sort",
-        "star"
-      ]
-    },
-    {
-      "description": "Models for a user: the shell only (ask an admin)",
-      "screen": "models",
-      "roles": [
-        "user"
-      ],
-      "expect": [
-        "await",
-        "navigate"
-      ]
-    },
-    {
-      "description": "Models for an admin",
-      "screen": "models",
-      "roles": [
-        "admin"
-      ],
-      "expect": [
-        "await",
-        "cancelJob",
-        "delete",
-        "download",
-        "navigate",
-        "openRow"
-      ]
-    }
-  ]
+ "description": "Which tools of tools/catalog.json a turn offers (offered_tools: roles, web_search on, an ask workflow runnable, from API 1.64 a skill on, from API 1.71 a model guide, from API 1.108 a listen workflow runnable: absent = true) and which actions a screen registers (screen_actions). check.py and studio_service run them.",
+ "cases": [
+  {
+   "description": "a user, web search off, no ask workflow",
+   "roles": [
+    "user"
+   ],
+   "expect": [
+    "batch_status",
+    "board_frame",
+    "cancel_runs",
+    "create_board",
+    "custom_nodes",
+    "design_voice",
+    "edit_board",
+    "forget",
+    "get_run",
+    "get_take",
+    "get_workflow",
+    "hosts",
+    "list_boards",
+    "list_library",
+    "list_timelines",
+    "list_workflows",
+    "listen",
+    "magic_kinds",
+    "make_views",
+    "model_sources",
+    "models",
+    "pipelines",
+    "plan_board",
+    "plan_run",
+    "recall",
+    "remember",
+    "restore_board",
+    "run_blocks",
+    "save_shots",
+    "save_voice",
+    "search_takes",
+    "send_to_timeline",
+    "sessions",
+    "shot_list",
+    "show_board",
+    "show_timeline",
+    "timeline_revisions",
+    "try_board_edit"
+   ]
+  },
+  {
+   "description": "a user, no listen workflow can run (API 1.108: no runner or no listen model)",
+   "roles": [
+    "user"
+   ],
+   "listen": false,
+   "expect": [
+    "batch_status",
+    "board_frame",
+    "cancel_runs",
+    "create_board",
+    "custom_nodes",
+    "design_voice",
+    "edit_board",
+    "forget",
+    "get_run",
+    "get_take",
+    "get_workflow",
+    "hosts",
+    "list_boards",
+    "list_library",
+    "list_timelines",
+    "list_workflows",
+    "magic_kinds",
+    "make_views",
+    "model_sources",
+    "models",
+    "pipelines",
+    "plan_board",
+    "plan_run",
+    "recall",
+    "remember",
+    "restore_board",
+    "run_blocks",
+    "save_shots",
+    "save_voice",
+    "search_takes",
+    "send_to_timeline",
+    "sessions",
+    "shot_list",
+    "show_board",
+    "show_timeline",
+    "timeline_revisions",
+    "try_board_edit"
+   ]
+  },
+  {
+   "description": "a user with a skill on (API 1.64)",
+   "roles": [
+    "user"
+   ],
+   "skills": true,
+   "expect": [
+    "batch_status",
+    "board_frame",
+    "cancel_runs",
+    "create_board",
+    "custom_nodes",
+    "design_voice",
+    "edit_board",
+    "forget",
+    "get_run",
+    "get_take",
+    "get_workflow",
+    "hosts",
+    "list_boards",
+    "list_library",
+    "list_timelines",
+    "list_workflows",
+    "listen",
+    "magic_kinds",
+    "make_views",
+    "model_sources",
+    "models",
+    "pipelines",
+    "plan_board",
+    "plan_run",
+    "read_skill_file",
+    "recall",
+    "remember",
+    "restore_board",
+    "run_blocks",
+    "save_shots",
+    "save_voice",
+    "search_takes",
+    "send_to_timeline",
+    "sessions",
+    "shot_list",
+    "show_board",
+    "show_timeline",
+    "timeline_revisions",
+    "try_board_edit",
+    "use_skill"
+   ]
+  },
+  {
+   "description": "a user, some model guide published (API 1.71)",
+   "roles": [
+    "user"
+   ],
+   "guides": true,
+   "expect": [
+    "batch_status",
+    "board_frame",
+    "cancel_runs",
+    "create_board",
+    "custom_nodes",
+    "design_voice",
+    "edit_board",
+    "forget",
+    "get_run",
+    "get_take",
+    "get_workflow",
+    "hosts",
+    "list_boards",
+    "list_library",
+    "list_timelines",
+    "list_workflows",
+    "listen",
+    "magic_kinds",
+    "make_views",
+    "model_sources",
+    "models",
+    "pipelines",
+    "plan_board",
+    "plan_run",
+    "read_model_guide",
+    "recall",
+    "remember",
+    "restore_board",
+    "run_blocks",
+    "save_shots",
+    "save_voice",
+    "search_takes",
+    "send_to_timeline",
+    "sessions",
+    "shot_list",
+    "show_board",
+    "show_timeline",
+    "timeline_revisions",
+    "try_board_edit"
+   ]
+  },
+  {
+   "description": "an admin with web search on and Qwen Image installed",
+   "roles": [
+    "admin",
+    "user"
+   ],
+   "web_search": true,
+   "look_at": true,
+   "expect": [
+    "batch_status",
+    "board_frame",
+    "cancel_runs",
+    "create_board",
+    "custom_nodes",
+    "design_voice",
+    "edit_board",
+    "forget",
+    "get_run",
+    "get_take",
+    "get_workflow",
+    "hosts",
+    "list_boards",
+    "list_library",
+    "list_timelines",
+    "list_workflows",
+    "listen",
+    "look_at",
+    "magic_kinds",
+    "make_views",
+    "model_jobs",
+    "model_sources",
+    "models",
+    "pipelines",
+    "plan_board",
+    "plan_run",
+    "recall",
+    "remember",
+    "restore_board",
+    "run_blocks",
+    "save_shots",
+    "save_voice",
+    "search_takes",
+    "send_to_timeline",
+    "sessions",
+    "shot_list",
+    "show_board",
+    "show_timeline",
+    "timeline_revisions",
+    "try_board_edit",
+    "web_search"
+   ]
+  },
+  {
+   "description": "Gallery for a user",
+   "screen": "gallery",
+   "roles": [
+    "user"
+   ],
+   "expect": [
+    "await",
+    "delete",
+    "filter",
+    "navigate",
+    "rename",
+    "saveAsElement",
+    "saveAsLook",
+    "saveAsPipeline",
+    "search",
+    "select",
+    "sort",
+    "star"
+   ]
+  },
+  {
+   "description": "Models for a user: the shell only (ask an admin)",
+   "screen": "models",
+   "roles": [
+    "user"
+   ],
+   "expect": [
+    "await",
+    "navigate"
+   ]
+  },
+  {
+   "description": "Models for an admin",
+   "screen": "models",
+   "roles": [
+    "admin"
+   ],
+   "expect": [
+    "await",
+    "cancelJob",
+    "delete",
+    "download",
+    "navigate",
+    "openRow"
+   ]
+  },
+  {
+   "description": "Magic for a user (API 1.87)",
+   "screen": "magic",
+   "roles": [
+    "user"
+   ],
+   "expect": [
+    "await",
+    "navigate",
+    "openBlock",
+    "play",
+    "scrub",
+    "select"
+   ]
+  }
+ ]
 }

@@ -39,6 +39,13 @@ type catalogTool struct {
 	Surfaces []string `json:"surfaces"`
 	ServedBy string   `json:"served_by"`
 	Roles    []string `json:"roles"`
+	Routes   []string `json:"routes"`
+	Input    struct {
+		Properties map[string]struct {
+			Format string `json:"format"`
+		} `json:"properties"`
+		Required []string `json:"required"`
+	} `json:"input"`
 }
 
 var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
@@ -52,13 +59,14 @@ var toolCatalog = sync.OnceValue(func() map[string]catalogTool {
 })
 
 // offeredTools are the tools a turn offers (contracts check.py offered_tools): surface assistant, every role it needs
-// held, web_search only when on, look_at only when an ask workflow can run now, use_skill and read_skill_file only while
-// a skill is on (API 1.64), read_model_guide only while a model guide is published (API 1.71); sorted.
-func offeredTools(roles []string, webSearch, lookAt, skillOn, guides bool) []string {
+// held, web_search only when on, look_at only when an ask workflow can run now, listen only when a listen workflow can
+// (API 1.108), use_skill and read_skill_file only while a skill is on (API 1.64), read_model_guide only while a model
+// guide is published (API 1.71); sorted.
+func offeredTools(roles []string, webSearch, lookAt, listen, skillOn, guides bool) []string {
 	out := []string{}
 	for name, t := range toolCatalog() {
 		if slices.Contains(t.Surfaces, "assistant") && !slices.ContainsFunc(t.Roles, func(r string) bool { return !slices.Contains(roles, r) }) &&
-			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) &&
+			(name != "web_search" || webSearch) && (name != "look_at" || lookAt) && (name != "listen" || listen) &&
 			(name != "use_skill" && name != "read_skill_file" || skillOn) && (name != "read_model_guide" || guides) {
 			out = append(out, name)
 		}
@@ -68,8 +76,8 @@ func offeredTools(roles []string, webSearch, lookAt, skillOn, guides bool) []str
 }
 
 // OfferedTools is offeredTools, for the contract's offer fixtures.
-func OfferedTools(roles []string, webSearch, lookAt, skills, guides bool) []string {
-	return offeredTools(roles, webSearch, lookAt, skills, guides)
+func OfferedTools(roles []string, webSearch, lookAt, listen, skills, guides bool) []string {
+	return offeredTools(roles, webSearch, lookAt, listen, skills, guides)
 }
 
 // turnGuides are a turn's model cards (API 1.71) and whether any guide is published (read_model_guide is offered).
@@ -140,11 +148,14 @@ func (s *Service) localCall(ctx context.Context, caller common.Caller, method, p
 		return recorder.Body.Bytes(), nil
 	}
 	var failure struct {
-		Detail string `json:"detail"`
+		Detail  string `json:"detail"`
+		OpIndex *int   `json:"op_index"` // an edit's refusal (MagicEditError, TimelineEditError): the op it names
 	}
 	_ = json.Unmarshal(recorder.Body.Bytes(), &failure)
-	code := map[int]string{http.StatusNotFound: "not_found", http.StatusUnprocessableEntity: "invalid", http.StatusForbidden: "forbidden",
-		http.StatusConflict: "conflict", http.StatusBadRequest: "invalid"}[recorder.Code]
+	if failure.OpIndex != nil {
+		failure.Detail = fmt.Sprintf("ops[%d]: %s", *failure.OpIndex, failure.Detail)
+	}
+	code := toolCodes[recorder.Code]
 	if code == "" {
 		code, failure.Detail = "internal", "internal error"
 	}
@@ -190,15 +201,28 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 		return toolErr("internal", "internal error")
 	}
 	var out message.ToolsReply
+	var asked *message.ToolsReply // API 1.87: the preview a card tool answered before the user's Yes
 	if first != nil && json.Unmarshal(first, &out) == nil {
-		return out // asked again: the first reply, nothing done twice
+		if out.Preview == nil || !req.Confirmed {
+			return out // asked again: the first reply, nothing done twice
+		}
+		asked = &out
 	}
-	caller := common.Caller{ID: owner, Roles: roles}
+	// the assistant's writes are labelled via assistant (a Magic revision's "by Assistant", a run's by)
+	caller := common.Caller{ID: owner, Roles: roles, Via: "assistant"}
 	switch {
 	case slices.ContainsFunc(tool.Roles, func(r string) bool { return !slices.Contains(roles, r) }):
 		out = toolErr("forbidden", "%s needs the %s role", req.Tool, strings.Join(tool.Roles, " and "))
 	case req.Tool == "look_at":
 		return s.lookAt(ctx, caller, req) // it keeps its reply with its run
+	case asked != nil:
+		return s.magicConfirmed(ctx, caller, req)
+	case req.Tool == "listen": // API 1.107: no card; it costs a model run, the director skill says when
+		out = s.listenTool(ctx, caller, req.Args)
+	case req.Tool == "cancel_runs": // no card: stopping needs no asking
+		out = s.cancelRunsTool(ctx, caller, req.Args)
+	case isMagicTool(req.Tool):
+		out = s.magicTool(ctx, caller, req, nil)
 	default:
 		out = s.readTool(ctx, caller, req.Tool, req.Args)
 	}
@@ -210,8 +234,10 @@ func (s *Service) assistantTool(ctx context.Context, req *message.ToolsRequest) 
 	}
 	{
 		if err := common.System(ctx, s.db, func(tx pgx.Tx) error {
+			// the reply as it came first (a preview's answer after the Yes is magicConfirmed's)
 			_, err := tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply)
-				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO NOTHING`, req.CallID, req.ThreadID, owner, req.Tool, toJSON(out))
+				VALUES ($1, $2, $3, $4, $5) ON CONFLICT (call_id) DO NOTHING`, req.CallID, req.ThreadID, owner, req.Tool,
+				toJSON(out))
 			return err
 		}); err != nil {
 			log.Printf("studio.tools %s: %v", req.CallID, err)
@@ -244,31 +270,6 @@ type toolArgs struct {
 	Family     *string `json:"family"` // read_model_guide (API 1.71)
 }
 
-// toolInputs are the args each read tool takes, and which it needs.
-var toolInputs = map[string][2][]string{
-	"sessions":           {{"session_id", "limit"}},
-	"list_workflows":     {},
-	"get_workflow":       {{"workflow_id"}, {"workflow_id"}},
-	"get_run":            {{"run_id"}, {"run_id"}},
-	"plan_run":           {{"workflow_id", "inputs", "host"}, {"workflow_id"}},
-	"models":             {},
-	"hosts":              {},
-	"search_takes":       {{"q", "kind", "starred", "session_id", "batch_id", "order", "limit"}},
-	"get_take":           {{"take_id"}, {"take_id"}},
-	"list_library":       {{"kind", "pipeline_id"}},
-	"pipelines":          {{"pipeline_id"}},
-	"batch_status":       {{"batch_id", "row", "limit"}},
-	"list_timelines":     {},
-	"show_timeline":      {{"timeline_id"}, {"timeline_id"}},
-	"timeline_revisions": {{"timeline_id", "revision", "before", "limit"}, {"timeline_id"}},
-	"custom_nodes":       {},
-	"model_sources":      {},
-	"model_jobs":         {},
-	"use_skill":          {{"skill"}, {"skill"}},                 // API 1.64
-	"read_skill_file":    {{"skill", "file"}, {"skill", "file"}}, // API 1.64
-	"read_model_guide":   {{"family"}, {"family"}},               // API 1.71
-}
-
 // readTool runs one read tool through its routes.
 func (s *Service) readTool(ctx context.Context, caller common.Caller, name string, raw json.RawMessage) message.ToolsReply {
 	var top map[string]json.RawMessage
@@ -279,23 +280,8 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	if err := json.Unmarshal(raw, &top); err != nil || top == nil || strictArgs(raw, &args) != nil {
 		return toolErr("invalid", "args must be an object of the tool's input")
 	}
-	takes := toolInputs[name]
-	for key := range top {
-		if !slices.Contains(takes[0], key) {
-			return toolErr("invalid", "args: %s does not take %s", name, key)
-		}
-	}
-	for _, key := range takes[1] {
-		if _, ok := top[key]; !ok {
-			return toolErr("invalid", "args: %s is required", key)
-		}
-	}
-	uuids := map[string]*string{"session_id": args.SessionID, "run_id": args.RunID, "batch_id": args.BatchID,
-		"take_id": args.TakeID, "pipeline_id": args.PipelineID, "timeline_id": args.TimelineID}
-	for key, value := range uuids {
-		if value != nil && !utility.IsUUID(*value) {
-			return toolErr("invalid", "args: %s must be a uuid", key)
-		}
+	if refused := checkArgs(name, top); refused != nil {
+		return *refused
 	}
 	limit := 10
 	switch {
@@ -325,15 +311,13 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	switch name {
 	case "sessions":
 		if args.SessionID == nil {
-			get("sessions", "/sessions")
-			cut(result, "sessions", "sessions", limit)
+			get("sessions", fmt.Sprintf("/sessions?limit=%d", limit)) // API 1.92: the list pages
 		} else {
-			get("runs", "/sessions/"+esc(args.SessionID)+"/runs")
-			cut(result, "runs", "runs", limit)
+			get("runs", fmt.Sprintf("/sessions/%s/runs?limit=%d", esc(args.SessionID), limit))
 			get("takes", fmt.Sprintf("/sessions/%s/takes?limit=%d", esc(args.SessionID), limit))
 		}
 	case "list_workflows":
-		return single(get("", "/workflows"), refused)
+		return orRefused(refused, get("", "/workflows"))
 	case "get_workflow":
 		body := get("workflow", "/workflows/"+esc(args.WorkflowID))
 		var wf struct {
@@ -364,13 +348,13 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			}
 		}
 	case "get_run":
-		return single(get("", "/runs/"+esc(args.RunID)), refused)
+		return orRefused(refused, get("", "/runs/"+esc(args.RunID)))
 	case "plan_run":
 		body, failed := s.localCall(ctx, caller, http.MethodPost, "/v1/studio/runs/plan",
-			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmpAny(args.Inputs, map[string]any{}), "host": args.Host})
-		return single(body, failed)
+			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmp.Or[any](args.Inputs, map[string]any{}), "host": args.Host})
+		return orRefused(failed, body)
 	case "models":
-		return single(get("", "/models"), refused)
+		return orRefused(refused, get("", "/models"))
 	case "hosts":
 		hosts := get("", "/hosts")
 		var list map[string][]map[string]any
@@ -392,7 +376,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		if args.Starred != nil {
 			query.Set("starred", fmt.Sprint(*args.Starred))
 		}
-		return single(get("", "/takes?"+query.Encode()), refused)
+		return orRefused(refused, get("", "/takes?"+query.Encode()))
 	case "get_take":
 		get("take", "/takes/"+esc(args.TakeID))
 		get("uses", "/takes/"+esc(args.TakeID)+"/uses")
@@ -431,7 +415,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("chat", "/batches/"+id+"/chat")
 		}
 	case "list_timelines":
-		return single(get("", "/timelines"), refused)
+		return orRefused(refused, get("", "/timelines"))
 	case "show_timeline": // API 1.49: the agent view
 		get("timeline", "/timelines/"+esc(args.TimelineID)+"?view=agent")
 		get("exports", "/timelines/"+esc(args.TimelineID)+"/exports")
@@ -449,17 +433,17 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("revisions", fmt.Sprintf("%s?limit=%d", base, limit))
 		}
 	case "use_skill": // API 1.64
-		return single(get("", "/skills/"+esc(args.Skill)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)))
 	case "read_skill_file":
-		return single(get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)))
 	case "read_model_guide": // API 1.71
-		return single(get("", "/model-guides/"+esc(args.Family)), refused)
+		return orRefused(refused, get("", "/model-guides/"+esc(args.Family)))
 	case "custom_nodes":
-		return single(get("", "/custom-nodes"), refused)
+		return orRefused(refused, get("", "/custom-nodes"))
 	case "model_sources":
-		return single(get("", "/model-sources"), refused)
+		return orRefused(refused, get("", "/model-sources"))
 	case "model_jobs":
-		return single(get("", "/admin/model-jobs"), refused)
+		return orRefused(refused, get("", "/admin/model-jobs"))
 	}
 	if refused != nil {
 		return *refused
@@ -467,32 +451,41 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 	return message.ToolsReply{Result: result}
 }
 
-// single is a tool whose output is one route's answer.
-func single(body json.RawMessage, refused *message.ToolsReply) message.ToolsReply {
-	if refused != nil {
-		return *refused
+// checkArgs checks a tool's args against its catalog input: no key it does not take, every key it needs, and each uuid
+// key a uuid (null only when the key is optional).
+func checkArgs(name string, top map[string]json.RawMessage) *message.ToolsReply {
+	input := toolCatalog()[name].Input
+	refuse := func(format string, a ...any) *message.ToolsReply { r := toolErr("invalid", format, a...); return &r }
+	for key := range top {
+		if _, ok := input.Properties[key]; !ok {
+			return refuse("args: %s does not take %s", name, key)
+		}
 	}
-	return message.ToolsReply{Result: body}
+	for _, key := range input.Required {
+		if _, ok := top[key]; !ok {
+			return refuse("args: %s is required", key)
+		}
+	}
+	for key, p := range input.Properties {
+		var id *string
+		if raw, ok := top[key]; ok && p.Format == "uuid" &&
+			(json.Unmarshal(raw, &id) != nil || (id == nil && slices.Contains(input.Required, key)) || (id != nil && !utility.IsUUID(*id))) {
+			return refuse("args: %s must be a uuid", key)
+		}
+	}
+	return nil
 }
 
-// cut keeps the first n items of result[key][field] (a list the route does not page).
-func cut(result map[string]any, key, field string, n int) {
-	raw, ok := result[key].(json.RawMessage)
-	var doc map[string]json.RawMessage
-	var items []json.RawMessage
-	if !ok || json.Unmarshal(raw, &doc) != nil || json.Unmarshal(doc[field], &items) != nil {
-		return
+// withFacts adds look_at's `facts` (API 1.104) when any of its takes has them, and (API 1.108) `facts_note`, why some
+// have none yet.
+func withFacts(result map[string]any, facts []any, note string) map[string]any {
+	if len(facts) > 0 {
+		result["facts"] = facts
 	}
-	doc[field] = toJSON(items[:min(n, len(items))])
-	result[key] = doc
-}
-
-// cmpAny is v, or fallback when v is nil.
-func cmpAny(v, fallback any) any {
-	if v == nil {
-		return fallback
+	if note != "" {
+		result["facts_note"] = note
 	}
-	return v
+	return result
 }
 
 // lookAt is look_at after the user's Yes: one interactive ask run of the takes (the owner's image and video takes, in
@@ -519,15 +512,19 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 	if !ok {
 		return toolErr("conflict", "no ask workflow can run now: install Qwen Image or start its machine")
 	}
+	// API 1.108: the takes without facts are measured on demand first; a note says why some have none
+	note := MeasureFacts(ctx, s.db, s.registry, caller.ID, args.TakeIDs)
 	var out message.ToolsReply
 	var run dto.Run
+	var facts []any // API 1.104: the facts of its takes that have them, in order
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		type takeRow struct {
 			ID        string
 			Kind      string
 			SessionID *string
+			Facts     json.RawMessage // API 1.104: takes.facts->'facts'
 		}
-		takes, err := collect[takeRow](ctx, tx, `SELECT id::text, kind, session_id::text FROM takes
+		takes, err := collect[takeRow](ctx, tx, `SELECT id::text, kind, session_id::text, facts->'facts' FROM takes
 			WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND deleted_at IS NULL AND ready`, args.TakeIDs, caller.ID)
 		if err != nil {
 			return err
@@ -539,13 +536,17 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 			return slices.Index(args.TakeIDs, a.ID) - slices.Index(args.TakeIDs, b.ID)
 		})
 		media, thumbs := make([]any, len(takes)), 0
+		facts = []any{}
 		for i, t := range takes {
 			if t.Kind != "image" && t.Kind != "video" {
-				out = toolErr("invalid", "take %s is %s; look_at looks at images and videos", t.ID, t.Kind)
+				out = toolErr("invalid", "take %s is %s; look_at looks at images and videos (get_take has a sound's facts)", t.ID, t.Kind)
 				return nil
 			}
 			media[i] = map[string]any{"take": map[string]any{"take_id": t.ID}}
-			thumbs += map[bool]int{true: 3, false: 1}[t.Kind == "video"]
+			if len(t.Facts) > 0 && string(t.Facts) != "null" {
+				facts = append(facts, map[string]any{"take_id": t.ID, "facts": t.Facts})
+			}
+			thumbs++ // a video is one grid
 		}
 		sessionID := takes[0].SessionID
 		if sessionID == nil {
@@ -566,8 +567,8 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 		if _, err := tx.Exec(ctx, `UPDATE runs SET thumbs = $2 WHERE id = $1`, run.ID, thumbs); err != nil {
 			return err
 		}
-		out = message.ToolsReply{Tool: "look_at", Result: map[string]any{"run_id": run.ID, "session_id": run.SessionID,
-			"workflow_id": run.WorkflowID, "host": nil, "position": nil}}
+		out = message.ToolsReply{Tool: "look_at", Result: withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID,
+			"workflow_id": run.WorkflowID, "host": nil, "position": nil}, facts, note)}
 		_, err = tx.Exec(ctx, `INSERT INTO assistant_tool_calls (call_id, thread_id, owner_id, tool, reply) VALUES ($1, $2, $3, $4, $5)`,
 			req.CallID, req.ThreadID, caller.ID, req.Tool, toJSON(out))
 		return err
@@ -583,8 +584,8 @@ func (s *Service) lookAt(ctx context.Context, caller common.Caller, req *message
 		return out
 	}
 	if err := s.placeQueued(ctx, &run); err == nil {
-		result := map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID, "host": run.Host,
-			"position": run.Position}
+		result := withFacts(map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID,
+			"host": run.Host, "position": run.Position}, facts, note)
 		out = message.ToolsReply{Tool: "look_at", Result: result}
 		_ = common.System(ctx, s.db, func(tx pgx.Tx) error {
 			_, err := tx.Exec(ctx, `UPDATE assistant_tool_calls SET reply = $2 WHERE call_id = $1`, req.CallID, toJSON(out))

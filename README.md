@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Wire the models. Direct the film.</strong><br>
-  A local-first AI studio for images, video and voice. It runs open-weight models on your own Mac and NVIDIA
+  A local-first AI studio for images, video, voice, music and sound. It runs open-weight models on your own Mac and NVIDIA
   machines, and keeps every take with how it was made.
 </p>
 
@@ -36,15 +36,26 @@
 
 ## What you can do
 
-- **Create images, video and voice.** Pick a model, write a prompt, make takes. Call characters and places by name
+- **Create images, video, voice, music and sound.** Pick a model, write a prompt, make takes. Music makes songs
+  with lyrics and sections; Sound makes effects from words or for a video. Call characters and places by name
   with `@`, and set a look (film, camera, colour, lighting) once. Each setting chip under the prompt opens a small
   popup; one button opens them all.
+- **Direct a film in Magic.** A board of lanes in time: the characters, props and places with their views, a
+  storyboard in the film's own style, the shots, and voice and music tied to them. Every block shows a preview and
+  can be rerun, stopped or set louder or quieter. Play plays the board as a rough cut; Export makes the MP4 in one
+  step, or Send to Timeline cuts it further. Ask the Assistant and its built-in Magic director plans the board, makes
+  the views, frames and shots, and gives each speaking character a voice.
+- **Fade, crossfade and duck the sound.** Drag fade handles on any audio clip on the Timeline or block in Magic;
+  two touching clips crossfade, and music dips under the voice. The fades carry to the player, Send and Export.
 - **Work with the Assistant.** An in-app assistant drives every screen: it fills the form, wires the graph, places
-  clips and asks before anything that costs GPU time. Each step it takes has its own Undo. It sees the images you
+  clips, builds Magic boards and asks before anything that costs GPU time. You see each step live as it works, and
+  each has its own Undo. It sees the images you
   attach or `@`-mention, shows takes right in its answers, keeps your film's shot list across chats, and reads each
-  model's guide (its good settings and pitfalls) before it uses it. Open it from the Assistant drawer, dock it or
+  model's guide (its good settings and pitfalls) before it uses it. It watches a video as a grid of frames with
+  their times, reads exact facts (length, loudness, silence, cuts), and listens to a take with Qwen3-Omni to judge
+  the sound. Open it from the Assistant drawer, dock it or
   drag it anywhere on the screen; the first launch opens it with a setup message.
-- **Set up AI in one place.** Admins get **Hub** (the Assistant, In pipelines with the default model for pipeline AI
+- **Set up AI in one place.** Setup sits at the foot of the rail. Admins get **Hub** (the Assistant, In pipelines with the default model for pipeline AI
   steps, Providers, Plugins) and **System** (Users, Hosts, API keys).
 - **Let it run in Auto mode.** Turn on Auto in a chat and the Assistant makes safe local takes and safe saves
   without asking, within caps an admin sets. It still asks before deletes, overwrites and anything that leaves your
@@ -53,7 +64,7 @@
   trim, level or join audio. Each edit is a new take with Undo, from the Gallery or by asking the Assistant.
 - **Extend it with plugins and skills.** Hub › Plugins turns on model providers and Assistant tools such as web
   search (no key needed), or, on the Mac, your own Claude plan through Claude Code you sign in to yourself (off
-  by default, only for you, no key to paste). Skills teach the Assistant a craft (Animator, Cinematic filmmaker); add your own by
+  by default, only for you, no key to paste). Skills teach the Assistant a craft (Animator, Cinematic filmmaker, and the always-on Magic director); add your own by
   dropping a folder into `~/.helm/plugins/`.
 - **See a workflow two ways.** Every workflow is a small graph of typed steps, shown as a **Studio** form or as a
   **Graph** on a node canvas. Editing one edits the other.
@@ -63,13 +74,16 @@
   Create, a pipeline or the timeline.
 - **Cut on the Timeline.** Put takes in a sequence, direct new shots and voice lines in place, trim, blade and
   ripple, and export an MP4. Clone a sequence to try another cut; an untitled one is named from its shots.
-- **Right-click anything.** Clips, takes, nodes, chat answers, models and list rows each have their own menu with
+- **Right-click anything.** Clips, takes, Magic blocks, nodes, chat answers, models and list rows each have their own menu with
   its shortcuts; text fields get Cut, Copy, Paste and Insert @….
 - **Manage models.** Download weights per machine, pick variants (Base, Turbo, Distilled, community fp8 / int8),
-  add optional add-ons, and upload LoRAs to a shared library. Each host's memory budget is Automatic (the Mac's GPU
+  add optional add-ons, and upload LoRAs to a shared library. Image and video start on the fast Turbo variants.
+  Keep weights in several folders per machine, such as an external drive; an unplugged one shows as not connected. Each host's memory budget is Automatic (the Mac's GPU
   limit) or your own number.
 - **Use it from Claude.** `helm mcp` gives Claude Code, Claude Desktop and other MCP clients the same tools as the
-  Assistant. Costly or destructive tools ask first.
+  Assistant, Magic boards and voice design included. Costly or destructive tools ask first.
+- **See what is down.** When a runner or the studio stops, the logo gets a red dot; click it for each part's state.
+  While the app restarts, the browser shows a "helmstudio is starting" page that retries by itself.
 - **Host it for a team.** Self-hosted and multi-user. An admin adds accounts; each person sees only their own work.
   Nothing you make leaves your machines.
 - **Install it your way.** On a Mac, `helmstudio.app` runs the whole studio with a menu-bar item and updates itself
@@ -77,6 +91,9 @@
   and ARM). [Releases](https://github.com/janishar/helmstudio/releases).
 
 ## A look inside
+
+<p><img src="docs/images/readme/magic.jpg" alt="Magic board The Last Tide: the assets row, storyboard frames, three shots with their joins, Mara's voice lines, the music and sound lanes, the floating player and Shot 2's side panel" width="100%"></p>
+<p><b>Magic.</b> Direct a short film on one board: characters and places, a storyboard, shots, voice, music and sound in lanes, played as a rough cut and exported in one step.</p>
 
 <table>
   <tr>
@@ -120,7 +137,14 @@ own licence.
 | [MiniMax H3](https://helmstudio.in/models/minimax-h3/) | Video with sound | Base (native `h3`) | Base fp8 (SGLang) |
 | [Qwen3-TTS](https://helmstudio.in/models/qwen3-tts/) | Voice-over, voice design, dialogue | Custom voice, Voice design | Custom voice, Voice design |
 | [ZONOS3](https://helmstudio.in/models/zonos3/) | Voice-over, dialogue | Mini | Mini |
+| ACE-Step 1.5 | Songs with lyrics | 2B turbo, XL turbo | 2B turbo, XL turbo |
+| MiniMax Music 3 | Songs with lyrics | Base | Base |
+| Stable Audio 3 | Sound effects | Small SFX | Small SFX |
+| MMAudio | Sound from text or a video | Large 44k v2 | Large 44k v2 |
 | [Ask](https://helmstudio.in/models/ask/) | Text answers about takes | Qwen3.8 27B, Qwen3-VL 8B | Qwen3-VL 8B |
+| Qwen3-Omni 30B | Listens to a take for the Assistant (llama.cpp) | GGUF Q8_0 | none |
+| Qwen2.5-Omni-3B | Listens when Qwen3-Omni cannot run (short answers) | GGUF Q8_0 | none |
+| Qwen3-ASR 1.7B | Writes down the speech for listening | Base | none |
 
 Variants, precision, add-ons, LoRAs and licences: [helmstudio.in/models](https://helmstudio.in/models/).
 

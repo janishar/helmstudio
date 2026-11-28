@@ -1,0 +1,79 @@
+{
+  "id": "sa3-sound",
+  "title": "Stable Audio 3 Sound",
+  "family": "stable-audio-3",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "stable-audio-3/model",
+      "params": {
+        "variant": "small-sfx",
+        "precision": "bf16"
+      }
+    },
+    "sound": {
+      "kind": "stable-audio-3/sound",
+      "in": {
+        "model": "model.model",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "seconds": 4,
+        "from_sound": [],
+        "change": 0.7
+      }
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "sound.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text"
+    ],
+    "quick": [
+      "sound.seconds",
+      "sound.from_sound",
+      "seed.seed"
+    ],
+    "inspector": [
+      {
+        "title": "From a sound",
+        "items": [
+          "sound.change"
+        ]
+      }
+    ],
+    "count": {
+      "default": 4,
+      "max": 8
+    }
+  },
+  "standard": {
+    "kind": "sound",
+    "model": "Stable Audio 3 Small-SFX",
+    "fields": {
+      "prompt": "prompt.text",
+      "length": "sound.seconds",
+      "seed": "seed.seed"
+    },
+    "seconds": 0.1
+  }
+}

@@ -190,6 +190,12 @@ func check(param registry.Param, value any) (any, string) {
 			return nil, map[string]string{"int": "must be a whole number", "seed": "must be null, -1 or a whole number from 0 to 9007199254740991",
 				"float": "must be a number"}[param.Type]
 		}
+		if param.Auto != nil && param.Auto.Zero && number == 0 { // API 1.79: 0 is Auto, below min too
+			if param.Type == "float" {
+				return number, ""
+			}
+			return int64(number), ""
+		}
 		if detail := bounds(param, number, ""); detail != "" {
 			return nil, detail
 		}
@@ -249,7 +255,7 @@ func check(param registry.Param, value any) (any, string) {
 // it (the runner predicts the length), or why it is neither.
 func checkFrames(param registry.Param, value any) (any, string) {
 	if value == "auto" {
-		if param.Auto == nil {
+		if param.Auto == nil || param.Auto.Zero {
 			return nil, "auto length is not offered"
 		}
 		return "auto", ""

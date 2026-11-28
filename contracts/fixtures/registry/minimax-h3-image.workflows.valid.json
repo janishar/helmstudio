@@ -142,6 +142,21 @@
           "Enhanced",
           "Enhanced, think"
         ]
+      },
+      "standard": {
+        "kind": "image",
+        "model": "MiniMax H3 Image",
+        "fields": {
+          "prompt": "prompt.text",
+          "refs": "encode.refs",
+          "width": "canvas.width",
+          "height": "canvas.height",
+          "seed": "seed.seed"
+        },
+        "set": {
+          "canvas.mode": "fixed"
+        },
+        "seconds": 60
       }
     }
   ]

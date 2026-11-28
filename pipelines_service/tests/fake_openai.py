@@ -78,9 +78,7 @@ def handler(fake: Fake):
         def do_GET(self) -> None:
             if self.path == "/__requests":
                 return self._send(200, fake.requests)
-            if self.path.split("?")[0].endswith(
-                "/web/search"
-            ):  # the Brave Search API's shape (API 1.44)
+            if self.path.split("?")[0].endswith("/web/search"):  # the Brave Search API's shape (API 1.44)
                 fake.requests.append({"path": self.path, "headers": {k.lower(): v for k, v in self.headers.items()},
                                       "body": None})  # fmt: skip
                 r = fake.next("__search")
@@ -95,23 +93,15 @@ def handler(fake: Fake):
                         "body": None,
                     }
                 )
-                with (
-                    fake.lock
-                ):  # API 1.52: the `__models` script's next {status, body} or {delay_s}
+                with fake.lock:  # API 1.52: the `__models` script's next {status, body} or {delay_s}
                     r = fake.script["__models"].pop(0) if fake.script.get("__models") else {}
                 time.sleep(r.get("delay_s", 0))
                 if "status" in r:
-                    return self._send(
-                        r["status"], r.get("body", {"error": {"message": "scripted"}})
-                    )
-                if (
-                    "data" in r
-                ):  # API 1.53: scripted entries as given (OpenRouter's `reasoning` objects)
+                    return self._send(r["status"], r.get("body", {"error": {"message": "scripted"}}))
+                if "data" in r:  # API 1.53: scripted entries as given (OpenRouter's `reasoning` objects)
                     return self._send(200, {"object": "list", "data": r["data"]})
                 ids = sorted(m for m in set(MODELS) | set(fake.script) if not m.startswith("__"))
-                return self._send(
-                    200, {"object": "list", "data": [{"id": m, "object": "model"} for m in ids]}
-                )
+                return self._send(200, {"object": "list", "data": [{"id": m, "object": "model"} for m in ids]})
             self._send(404, {"error": {"message": "not found"}})
 
         def do_POST(self) -> None:

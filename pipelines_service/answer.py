@@ -63,9 +63,7 @@ def tidy(text: str, read: str) -> str:
         if opts is None:
             return _plain(m.group(1))
         kept = True
-        return (
-            "```options\n" + json.dumps(opts, ensure_ascii=False, separators=(",", ":")) + "\n```"
-        )
+        return "```options\n" + json.dumps(opts, ensure_ascii=False, separators=(",", ":")) + "\n```"
 
     text = OPTIONS.sub(block, text)
     # a whole id only: a prefix or fragment of one the model read is still unknown

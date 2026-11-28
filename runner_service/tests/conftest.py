@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from nats.js.errors import KeyNotFoundError
 
 from consumer import Consumer
@@ -162,7 +163,7 @@ def consumer(js: FakeJS, **kw) -> Consumer:
     )
 
 
-README = Path(__file__).resolve().parents[2] / "packs" / "README.md"
+README = Path(__file__).resolve().parents[1] / "packs" / "README.md"
 
 
 def readme_model_yaml() -> dict:
@@ -210,9 +211,7 @@ class FakeQwen:
                     safetensors_file(path, {name: ("BF16", shape)})
         self.calls: list[tuple[str, dict]] = []
         self.loads: list[tuple] = []
-        self.active: list[
-            tuple
-        ] = []  # (component, ((sha256, strength), ...)) per ctx.component activation
+        self.active: list[tuple] = []  # (component, ((sha256, strength), ...)) per ctx.component activation
 
         def stage(name: str, out: str):
             def fn(ctx, params, inputs):
@@ -241,9 +240,7 @@ class FakeQwen:
         )
         self.pack = pack.Pack("qwen_image", models, spec, "torch", module, "c0de")
         monkeypatch.setattr(pack.ModelRef, "load", lambda ref, c, ctx: self._load(ref, c, ctx))
-        monkeypatch.setattr(
-            pack.ModelRef, "activate", lambda ref, c, m, ctx: self._activate(ref, c)
-        )
+        monkeypatch.setattr(pack.ModelRef, "activate", lambda ref, c, m, ctx: self._activate(ref, c))
         core = pack.core_nodes()
         model = pack.model_schema(self.pack)
         stages = pack._nodes(spec["stages"], self.pack.family, "c0de", self.pack, module)
@@ -274,3 +271,32 @@ class FakeQwen:
     def ran(self) -> list[str]:
         out, self.calls = [c for c, _ in self.calls], []
         return out
+
+
+# --- the torch tests' shared helpers
+
+
+@pytest.fixture(scope="session")
+def torch_values():
+    """The torch runner's registry values, built once (read only)."""
+    return registry.build("torch")[0]
+
+
+def snr(want, got) -> float:
+    """The golden tests' signal-to-noise ratio in dB of numpy arrays: -inf when the shapes differ, inf when equal."""
+    import numpy as np
+
+    if want.shape != got.shape:
+        return float("-inf")
+    noise = np.sum((want - got) ** 2)
+    return float("inf") if noise == 0 else float(10 * np.log10(np.sum(want**2) / noise))
+
+
+def e4m3(w):
+    """Per-row FP8 as the community files store it: qweight e4m3 [out, in], scale fp32 [out, 1]."""
+    import torch
+
+    from core import loaders_torch as lt
+
+    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
+    return (w.float() / scale).to(torch.float8_e4m3fn), scale

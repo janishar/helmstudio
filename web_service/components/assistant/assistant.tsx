@@ -58,6 +58,7 @@ import {
 import { api, message, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
 import { FullScreen } from "@/components/media";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { forget, useTakes } from "@/lib/take-cache";
 import {
   ASSISTANT_CHANGED,
@@ -184,6 +185,8 @@ export function useAssistant(me: S<"User"> | null) {
   const [running, setRunning] = useState<{ n: number; of: number; text: string } | null>(null);
   // Stop pressed while a turn works: "Stopping…" until the chat is idle (board frame 15; item 27)
   const [stopFor, setStopFor] = useState<string | null>(null); // the thread it stops
+  // the runs it started on this screen still going when Stop was pressed (Magic): "Stop its runs too"
+  const [runsLeft, setRunsLeft] = useState<{ going: number; stop: () => void } | null>(null);
   const [error, setError] = useState("");
   const undoFns = useRef<Record<string, NonNullable<Outcome["undo"]>>>({});
   const answerRef = useRef<((a: "yes" | "no" | "gone") => void) | null>(null);
@@ -453,6 +456,7 @@ export function useAssistant(me: S<"User"> | null) {
     async (text: string, takes: string[] = []) => {
       const t = text.trim();
       if (!t) return false;
+      setRunsLeft(null); // a new message: the offer goes
       let id = view?.thread.id;
       if (!id) {
         try {
@@ -553,6 +557,24 @@ export function useAssistant(me: S<"User"> | null) {
       card_id: cardId,
       answer: yes ? "yes" : "not_now",
     });
+  // API 1.87: the waiting server cards go to the screens (the Magic page draws a board_edit card on its board, its
+  // Apply and Discard answer it) with a key that moves as the chat does (the page reads its board again)
+  const cardAnswer = useRef(answerCard);
+  useEffect(() => {
+    cardAnswer.current = answerCard;
+  });
+  const entries = view?.entries;
+  const chatState = view?.thread.state;
+  useEffect(() => {
+    const cards = (entries ?? []).flatMap((e) =>
+      e.kind === "card" && e.card?.state === "waiting" ? [e.card] : [],
+    );
+    reg.setServer(
+      cards,
+      `${threadId ?? ""}:${entries?.length ?? 0}:${chatState ?? ""}`,
+      (id, yes) => cardAnswer.current(id, yes),
+    );
+  }, [reg, entries, chatState, threadId]);
   const continueHere = () => threadId && void post(threadId, { kind: "continue", client_id: cid });
   // the running turn takes a message as a steer (board frame 8): while it works, or runs this tab's actions
   const t = view?.thread;
@@ -563,6 +585,13 @@ export function useAssistant(me: S<"User"> | null) {
   /** Stop: this tab's actions stop, a screen card is cancelled, and the turn ends at its next step. */
   const stopAll = () => {
     stop.current = true;
+    reg
+      .current()
+      ?.spec.runs?.()
+      .then(
+        (r) => setRunsLeft(r.going ? r : null),
+        () => undefined,
+      );
     answerRef.current?.("no");
     if (threadId && steering) {
       setStopFor(threadId);
@@ -705,6 +734,12 @@ export function useAssistant(me: S<"User"> | null) {
     continueHere,
     stopAll,
     stopping: !!stopFor,
+    runsLeft,
+    /** Stop its runs too, or leave them going */
+    stopRuns: (yes: boolean) => {
+      if (yes) runsLeft?.stop();
+      setRunsLeft(null);
+    },
     steering,
     toggleUndo,
     readOnly,
@@ -1138,6 +1173,10 @@ const GO: Record<S<"AssistantCard">["kind"], string> = {
   web_search: "SEARCH",
   delete: "DELETE",
   plugin: "PLUGIN",
+  // API 1.87: Magic (board MagicBoard frame 8)
+  board_edit: "Apply",
+  magic_run: "Yes, run",
+  send: "Send",
 };
 const CARD_STATE: Record<S<"AssistantCard">["state"], string> = {
   waiting: "",
@@ -1241,7 +1280,11 @@ const serverCard = (c: S<"AssistantCard">): ScreenCard => ({
         ? "This can't be undone."
         : c.kind === "plugin"
           ? "Runs a plugin's tool."
-          : "Runs on your machines.",
+          : c.kind === "board_edit"
+            ? "It's drawn on the board; Undo there takes it back."
+            : c.kind === "send"
+              ? "A new sequence; the board stays as it is."
+              : "Runs on your machines.",
   danger: c.kind === "delete",
 });
 
@@ -1334,8 +1377,15 @@ function ChatsList({
 }) {
   const [older, setOlder] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  // the whole list is loaded (at most 200 chats a user): the browser searches it
+  const search = useSearch({
+    items: a.chats,
+    text: (t) => [t.title],
+    id: (t) => t.id,
+    onPick: (t) => pick(t.id),
+  });
   useEffect(() => {
-    ref.current?.querySelector("button")?.focus();
+    ref.current?.querySelector<HTMLElement>("input[type=search], button")?.focus();
     const out = (e: PointerEvent) => {
       const t = e.target as Node;
       if (!ref.current?.contains(t) && !btn.current?.contains(t)) close();
@@ -1343,7 +1393,7 @@ function ChatsList({
     document.addEventListener("pointerdown", out);
     return () => document.removeEventListener("pointerdown", out);
   }, [btn, close]);
-  const list = a.chats ?? [];
+  const list = search.shown;
   const cur = a.view?.thread.id;
   return (
     <div
@@ -1352,6 +1402,7 @@ function ChatsList({
       aria-label="Chats"
       className="chats"
       onKeyDown={(e) => {
+        if (e.target instanceof HTMLInputElement && e.key !== "Escape") return; // the field's own keys (Home, End)
         const all = [...(ref.current?.querySelectorAll<HTMLElement>("[role^=menuitem]") ?? [])];
         const at = all.indexOf(document.activeElement as HTMLElement);
         const to = { ArrowDown: at + 1, ArrowUp: at - 1, Home: 0, End: all.length - 1 }[e.key];
@@ -1369,20 +1420,32 @@ function ChatsList({
         <span>Chats</span>
         <span className="mono">newest first</span>
       </div>
+      {search.show && (
+        <SearchField
+          {...search.field}
+          label="Search chats"
+          onClose={() => (close(), btn.current?.focus())}
+        />
+      )}
       <button type="button" role="menuitem" className="new" onClick={() => pick(null)}>
         <Plus size={14} strokeWidth={2} aria-hidden />
         New chat
       </button>
-      {(older ? list : list.slice(0, SHOWN)).map((t) => (
+      {search.q && !list.length && <NoMatch what="chats" onClear={() => search.setQ("")} />}
+      {(older || search.q ? list : list.slice(0, SHOWN)).map((t) => (
         <button
           key={t.id}
           type="button"
           role="menuitemradio"
+          id={search.rowId(t)}
           aria-checked={t.id === cur}
+          className={search.rows[search.active] === t ? "sf-on" : undefined}
           onClick={() => pick(t.id)}
         >
           <span className="cht">
-            <span>{t.title}</span>
+            <span>
+              <Marked text={t.title} q={search.q} />
+            </span>
             <small>{chatTime(t.updated_at)}</small>
           </span>
           {t.id === cur ? (
@@ -1395,7 +1458,7 @@ function ChatsList({
           )}
         </button>
       ))}
-      {!older && list.length > SHOWN && (
+      {!older && !search.q && list.length > SHOWN && (
         <button type="button" role="menuitem" className="un" onClick={() => setOlder(true)}>
           Show older
         </button>
@@ -1491,6 +1554,10 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
         {used.map((u) => (
           <SkillLine key={u.line.id} line={u.line} reads={u.reads} />
         ))}
+        {/* the steps it took, then its answer, then the choices (owner, 2026-11-28: "why the action comes before the
+            steps") */}
+        {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
+        {rest.length > 0 && <Lines lines={rest} a={a} />}
         {parts.some((x) => x.text) && (
           // one clamp for the whole reply (board frame 17): every note of the turn and the answer, never per paragraph
           <Clamp
@@ -1523,8 +1590,6 @@ function Thread({ a, entries }: { a: AssistantApi; entries: Entry[] }) {
             )
           );
         })()}
-        {fold !== null && <Folded key={`f${fold}`} lines={older.get(fold) ?? []} a={a} />}
-        {rest.length > 0 && <Lines lines={rest} a={a} />}
         {lines
           .filter((l) => l.sources?.length)
           .map((l) => (
@@ -1906,7 +1971,13 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
       );
       setItems((l) => l?.filter((y) => y.id !== id) ?? null);
     });
-  const shown = (items ?? []).filter((x) => x.kind === kind);
+  // past 8 items of a kind, the browser searches their text (all loaded)
+  const search = useSearch({
+    items: items?.filter((x) => x.kind === kind),
+    text: (x) => [x.text],
+    id: (x) => x.id,
+  });
+  const shown = search.shown;
   return (
     <div className="thr justify-start! overflow-y-auto [mask-image:none]!">
       <div role="tablist" aria-label="Memory" className="flex gap-1 rounded-xl bg-s3 p-[3px]">
@@ -1923,8 +1994,11 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
           </button>
         ))}
       </div>
+      {search.show && <SearchField {...search.field} label="Search memory" />}
       {items === null && !error ? (
         <p className="note">Reading what it remembers…</p>
+      ) : search.q && !shown.length ? (
+        <NoMatch what="items" onClear={() => search.setQ("")} />
       ) : shown.length === 0 ? (
         <p className="note">Nothing here yet.</p>
       ) : (
@@ -1976,7 +2050,9 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
               // the text takes the full width, 3 lines then More; Edit and Delete in ⋯ (item 5, board frame 14a)
               <li key={x.id} className="mrow">
                 <div>
-                  <Clamp k={x.text}>{x.text}</Clamp>
+                  <Clamp k={x.text}>
+                    <Marked text={x.text} q={search.q} />
+                  </Clamp>
                   <small>
                     chat · {x.thread?.title || "deleted"} · {ago(x.updated_at)}
                   </small>
@@ -2040,10 +2116,10 @@ export function MemoryList({ onItems }: { onItems?: (items: MemoryItem[]) => voi
   );
 }
 
-const mac = () =>
+const onApple = () =>
   typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform ?? "");
-export const shortcut = () => (mac() ? "⌘J" : "Ctrl J");
-const fullKey = () => (mac() ? "⇧⌘J" : "Ctrl Shift J");
+export const shortcut = () => (onApple() ? "⌘J" : "Ctrl J");
+const fullKey = () => (onApple() ? "⇧⌘J" : "Ctrl Shift J");
 
 /** A dialog or menu is open (Esc is its own then): a screen's closed popover (Run on, Memory) does not count. */
 const overlayOpen = () =>
@@ -2387,8 +2463,13 @@ function Drawer({ a }: { a: AssistantApi }) {
   const entries = a.view?.entries ?? [];
   const count = entries.length + Object.keys(a.local).length + (a.asking ? 1 : 0);
   // the Thinking start, kept here (above the closed-drawer return) so closing and reopening keeps the count; a new
-  // thread, actions running or the state leaving working start it again
-  const thinkId = a.view?.thread.state === "working" && !a.running ? a.view.thread.id : null;
+  // thread, actions running, the state leaving working or a new step (API 1.97: a line starting or ending) start it
+  // again; under a running line it hides (the line's own spinner shows the step)
+  const lastLine = entries.at(-1)?.line;
+  const thinkId =
+    a.view?.thread.state === "working" && !a.running && lastLine?.status !== "running"
+      ? `${a.view.thread.id}:${entries.length}:${lastLine?.status ?? ""}`
+      : null;
   const [since, setSince] = useState<{ id: string; at: number } | null>(null);
   if ((since?.id ?? null) !== thinkId)
     setSince(() => (thinkId ? { id: thinkId, at: Date.now() } : null));
@@ -2840,6 +2921,17 @@ function Drawer({ a }: { a: AssistantApi }) {
                 </div>
               ) : (
                 since && thinking && <Thinking since={since.at} thinks={!!a.status?.thinks} />
+              )}
+              {a.runsLeft && (
+                <div className="msg think flex-wrap" role="status">
+                  Its {a.runsLeft.going} run{a.runsLeft.going > 1 ? "s are" : " is"} still going.
+                  <button type="button" className="chip" onClick={() => a.stopRuns(true)}>
+                    Stop its runs too
+                  </button>
+                  <button type="button" className="chip" onClick={() => a.stopRuns(false)}>
+                    Leave them
+                  </button>
+                </div>
               )}
               <div ref={end} />
             </div>

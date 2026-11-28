@@ -173,6 +173,19 @@ describe("the menu", () => {
     expect(screen.queryByRole("menu")).toBeNull();
   });
 
+  it("a scroll queued before it opened (the strip scrolled to the tile) leaves it open; a later scroll closes it", () => {
+    let frame: FrameRequestCallback | undefined;
+    vi.spyOn(window, "requestAnimationFrame").mockImplementation((f) => ((frame = f), 1));
+    render(<Box menu={{ title: "Take", items: [{ label: "Sound only", onPick: () => {} }] }} />);
+    rightClick(screen.getByText("target"));
+    // the scroll that was queued lands before the next frame's callbacks
+    fireEvent.scroll(document.body);
+    expect(screen.getByRole("menu", { name: "Take" })).toBeTruthy();
+    act(() => frame!(0));
+    fireEvent.scroll(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("an update redraws the open menu (items read after it opened)", () => {
     let h: ReturnType<typeof openMenu> = null;
     render(

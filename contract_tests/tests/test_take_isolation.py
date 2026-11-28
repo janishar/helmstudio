@@ -19,6 +19,7 @@ import uuid
 import pytest
 from helpers import QUICK, STUDIO, all_takes, new_session, ok, png_bytes, ref, upload
 from test_batches import BATCHES, finish, lines
+from test_music_sound import upload_audio
 from test_pipelines import PIPES, gated, parked
 from test_pipelines import create as create_pipeline
 from test_pipelines import submit as submit_pipeline
@@ -596,6 +597,30 @@ def test_element_and_look_images(api_b, a, b, kind):
         assert ok(api_b.get(f"{LIB}/{mine['id']}"))["version"] == mine["version"]
     finally:
         api_b.delete(f"{LIB}/{mine['id']}")
+
+
+# ---------------------------------------------------------------- music and sound (API 1.79)
+
+
+def test_mux_with_another_users_take_is_404(api_b, a, b):
+    """Save with the video: A's take as the audio (B's video in the body) or as the video (B's audio) is 404, the same
+    as a take nobody has; A's takes get no child (test_nothing_changed_or_leaked)."""
+    for t in a["ids"].values():
+        sound = lambda x: api_b.post(f"{STUDIO}/takes/{x}/mux", json={"video_take_id": b["video"]})
+        blind(sound, t, 404)
+        picture = lambda x: api_b.post(
+            f"{STUDIO}/takes/{b['audio']}/mux", json={"video_take_id": x}
+        )
+        blind(picture, t, 404)
+
+
+@pytest.mark.parametrize("kind", ["music", "sound", "voice", "audio"])
+def test_the_class_filter_never_shows_another_users_takes(api, api_b, anon, a, kind):
+    """A's audio takes of each class (an upload with `sound`; the WAV of `a` is voice) never in B's ?kind=<class>."""
+    mine = upload_audio(api, anon, sound=None if kind in ("voice", "audio") else kind)
+    assert {mine["id"], a["ids"]["audio"]} & {t["id"] for t in all_takes(api, kind=kind)}
+    seen = {t["id"] for t in all_takes(api_b, kind=kind)}
+    assert not seen & {mine["id"], *a["ids"].values()}
 
 
 # ---------------------------------------------------------------- the reverse, and what A sees afterwards

@@ -1,0 +1,25 @@
+<!-- @dsCard group="Create" height=420 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>SettingsDrawer · preview</title></head>
+<body>
+<div style="padding:14px">
+<aside class="aside" aria-label="Inspector" style="width:320px;display:flex;flex-direction:column;gap:22px;padding:16px 18px 24px">
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h3 class="heading">Model</h3>
+    <button class="set" type="button"><span class="label">Model</span><div>FLUX.2 dev</div></button>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h3 class="heading">Canvas</h3>
+    <div style="display:flex;gap:6px"><button class="opt" aria-pressed="true" type="button">16:9</button><button class="opt" aria-pressed="false" type="button">1:1</button><button class="opt" aria-pressed="false" type="button">9:16</button></div>
+    <label class="label" for="st">Steps</label>
+    <input id="st" class="hs-range" type="range" value="28" min="1" max="50">
+  </div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h3 class="heading">Seed</h3>
+    <input class="in" value="42" aria-label="Seed">
+  </div>
+</aside>
+</div>
+</body>
+</html>

@@ -10,8 +10,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { until, useDialogWait, useScreenTools } from "@/components/assistant/tools";
 import { modelsTools, type Row } from "@/components/models/assistant";
 import { ErrorNote, Info, Modal } from "@/components/kit";
-import { openMenu } from "@/components/context-menu";
-import { Download, FileText, PanelRight, Trash2, X } from "lucide-react";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
+import { openMenu, type Item } from "@/components/context-menu";
+import {
+  Check,
+  Download,
+  FileText,
+  FolderOpen,
+  HardDrive,
+  PanelRight,
+  Trash2,
+  X,
+} from "lucide-react";
+import { DownloadsTag, FolderStrip, reveal, revealOff } from "@/components/models/folders";
 import { LorasTab } from "@/components/models/loras";
 import { useUser } from "@/components/shell";
 import { api, message, ok, type S } from "@/lib/api";
@@ -20,9 +31,16 @@ import {
   anyDownloading,
   bytesText,
   canDelete,
+  copyNote,
+  deleteCopies,
+  diskText,
+  downloadFolders,
   downloadPlan,
+  folderById,
   folderOf,
+  foldersOf,
   forHost,
+  hostText,
   jobOpen,
   deviceNote,
   mediaText,
@@ -96,7 +114,15 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   const bind = useCallback((r: Row | null) => {
     row.current = r;
   }, []);
-  const models = forHost(list?.models ?? [], host);
+  const all = forHost(list?.models ?? [], host);
+  // past 8 models, the browser searches them (all loaded): name, family, variants
+  const search = useSearch({
+    items: all,
+    text: (m) => [m.title, m.family, ...m.variants.map((v) => v.title)],
+    id: (m) => m.id,
+    onPick: (m) => setSel({ model: m.id, variant: m.variants[0]?.id ?? "" }),
+  });
+  const models = search.shown;
   const model = models.find((m) => m.id === sel?.model) ?? models[0];
   const variant = model?.variants.find((v) => v.id === sel?.variant) ?? model?.variants[0];
   useScreenTools(
@@ -141,6 +167,13 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
           off: plan.licence ? undefined : "No licence named",
           onPick: run("licence"),
         },
+        {
+          label: "Show in Finder", // greyed outside the Mac app, saying why (ModelFolders 5c)
+          icon: FolderOpen,
+          off: (on?.folder ? revealOff(target) : `Not on ${target}`) ?? undefined,
+          onPick: () => reveal(folderOf(list, v, target)),
+        },
+        ...copyItems(list, v, target),
         admin && "-",
         admin &&
           (on?.state === "downloading" && on.job
@@ -176,6 +209,15 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
     });
     if (h) setSel({ model: m.id, variant: v.id });
   }
+  // frame 1: the picked host's folders (Edit… is there), or every host with more than one
+  const strips = !list
+    ? []
+    : host
+      ? foldersOf(list, host).length
+        ? [host]
+        : []
+      : list.hosts.filter((h) => (h.folders ?? []).length > 1).map((h) => h.host);
+  const multi = list?.hosts.find((h) => strips.includes(h.host) && (h.folders ?? []).length > 1);
   const states = new Set(
     models.flatMap((m) => parts(m).flatMap((v) => v.hosts.map((h) => h.state))),
   );
@@ -220,6 +262,9 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
         ))}
       </select>
       {admin && <span className="tag tag-accent">Admin</span>}
+      {tab === "models" && search.show && (
+        <SearchField {...search.field} label="Search models" className="w-60 max-md:w-full" />
+      )}
     </div>
   );
 
@@ -230,6 +275,11 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
     <>
       <main id="main" className="flex min-w-0 flex-[999_1_560px] flex-col gap-4 px-5 pt-4 pb-6">
         {header}
+        {/* ModelFolders frame 1: the strip above the legend */}
+        {list &&
+          strips.map((h) => (
+            <FolderStrip key={h} list={list} host={h} admin={admin} onChanged={reload} />
+          ))}
         <div className="flex flex-wrap gap-2">
           <Legend dot="bg-a1" text="present" />
           <Legend dot="shadow-[inset_0_0_0_1.5px_var(--t2)]" text="missing" />
@@ -241,14 +291,23 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
             />
           )}
           {states.has("mismatch") && <Legend dot="bg-bad" text="hash mismatch" />}
+          {multi && (
+            <span className="tag inline-flex items-center gap-1.5">
+              <DiskTag name={multi.folders!.at(-1)!.name} />
+              folder
+            </span>
+          )}
         </div>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {menuError && <ErrorNote>{menuError}</ErrorNote>}
-        {list && !models.length && <p className="text-t2">No host has published any model yet.</p>}
+        {list && !all.length && <p className="text-t2">No host has published any model yet.</p>}
+        {search.q && !models.length && <NoMatch what="models" onClear={() => search.setQ("")} />}
         {models.map((m) => (
           <ModelSection
             key={m.id}
+            list={list}
             m={m}
+            q={search.q}
             selected={m.id === model?.id}
             picked={m.id === model?.id ? variant?.id : undefined}
             onPick={(v) => setSel({ model: m.id, variant: v })}
@@ -280,6 +339,33 @@ export function ModelsScreen({ tab }: { tab: "models" | "loras" }) {
   );
 }
 
+/** A copy's word in Copies (frames 1, 5c): used, spare, partial, hash mismatch, not connected. */
+const copyWord = (c: S<"ModelCopy">, used: string | null | undefined) =>
+  c.state === "unplugged"
+    ? "not connected"
+    : c.folder === used
+      ? "used"
+      : c.state === "present"
+        ? "spare"
+        : c.state === "mismatch"
+          ? "hash mismatch"
+          : c.state;
+
+/** The model card menu's Copies on <host> (frame 5c), when it is in more than one folder there. */
+function copyItems(list: List, v: Variant, host: string): Item[] {
+  const h = v.hosts.find((x) => x.host === host);
+  if ((h?.copies?.length ?? 0) < 2) return [];
+  return [
+    "-",
+    { label: `Copies on ${host}`, heading: true },
+    ...h!.copies!.map((c) => ({
+      label: folderById(list, host, c.folder)?.name ?? c.folder,
+      icon: c.folder === h!.folder ? Check : HardDrive,
+      keys: copyWord(c, h!.folder),
+    })),
+  ];
+}
+
 function Legend({ dot, text }: { dot: string; text: string }) {
   return (
     <span className="tag inline-flex items-center gap-1.5">
@@ -289,21 +375,34 @@ function Legend({ dot, text }: { dot: string; text: string }) {
   );
 }
 
-/** The model's cube colour by what it makes. */
-const cube = (m: Model) =>
-  m.media.includes("video")
-    ? "linear-gradient(155deg, #ffb07a, #e0457a)"
-    : "linear-gradient(155deg, #7af5d6, #12967f)";
+/** A kind colour's cube: light at the top left, deep at the bottom right (styles/tokens.css kind-*). */
+const kindCube = (k: string) =>
+  `linear-gradient(155deg, color-mix(in srgb, var(${k}) 55%, #fff), color-mix(in srgb, var(${k}) 60%, #000))`;
+
+/** The model's cube colour by what it makes: from API 1.79 a music or sound model in its kind colour (`sound`). */
+export const cube = (m: Model) =>
+  m.sound === "music"
+    ? kindCube("--kind-music")
+    : m.sound === "sound"
+      ? kindCube("--kind-sound")
+      : m.media.includes("video")
+        ? "linear-gradient(155deg, #ffb07a, #e0457a)"
+        : "linear-gradient(155deg, #7af5d6, #12967f)";
 
 function ModelSection({
+  list,
   m,
   selected,
   picked,
   onPick,
   onMenu,
   addons,
+  q = "",
 }: {
+  list: List | null;
   m: Model;
+  /** the search words, marked */
+  q?: string;
   selected: boolean;
   picked: string | undefined;
   onPick: (variant: string) => void;
@@ -323,7 +422,9 @@ function ModelSection({
           className="tile size-[30px] rounded-[10px]"
           style={{ "--tile": cube(m) } as React.CSSProperties}
         />
-        <h2 className="m-0 font-display text-lg font-bold">{m.title}</h2>
+        <h2 className="m-0 font-display text-lg font-bold">
+          <Marked text={m.title} q={q} />
+        </h2>
         <span className="tag">{mediaText(m)}</span>
         {runtimeTags(m).map((r) => (
           <span key={r} className="tag">
@@ -345,6 +446,7 @@ function ModelSection({
         {m.variants.map((v) => (
           <VariantCard
             key={v.id}
+            list={list}
             m={m}
             v={v}
             picked={picked === v.id}
@@ -451,7 +553,7 @@ function AddonCard({
       {a.help && <span className="text-[12px] text-t2">{a.help}</span>}
       <div className="flex flex-wrap items-center gap-1.5">
         {a.hosts.map((h) => (
-          <HostChip key={h.host} h={h} label={`${a.title} on ${h.host}`} />
+          <HostChip key={h.host} list={list} h={h} label={`${a.title} on ${h.host}`} />
         ))}
         <div className="grow" />
         {admin && (
@@ -511,6 +613,7 @@ function AddonCard({
           width="w-[min(94vw,440px)]"
         >
           <DeleteDialog
+            list={list}
             m={m}
             v={a}
             host={del}
@@ -532,12 +635,14 @@ const TAG_Q = "tag bg-[color-mix(in_srgb,var(--a1)_22%,var(--s4))]";
 const TAG_SH = "tag bg-[color-mix(in_srgb,var(--a2)_22%,var(--s4))]";
 
 function VariantCard({
+  list,
   m,
   v,
   picked,
   onPick,
   onMenu,
 }: {
+  list: List | null;
   m: Model;
   v: Variant;
   picked: boolean;
@@ -605,7 +710,7 @@ function VariantCard({
       </div>
       <div className="flex flex-wrap gap-1.5">
         {v.hosts.map((h) => (
-          <HostChip key={h.host} h={h} label={`${v.title} on ${h.host}`} />
+          <HostChip key={h.host} list={list} h={h} label={`${v.title} on ${h.host}`} />
         ))}
       </div>
     </div>
@@ -621,11 +726,24 @@ function Dot({ state }: { state: VariantHost["state"] }) {
     partial:
       "bg-[linear-gradient(90deg,var(--a1)_50%,transparent_50%)] shadow-[inset_0_0_0_1.5px_var(--a1)]",
     mismatch: "bg-bad",
+    unplugged: "shadow-[inset_0_0_0_1.5px_var(--t2)]", // API 1.78: only on a folder not connected
   }[state];
   return <span className={`size-2 shrink-0 rounded-full ${cls}`} />;
 }
 
-function HostChip({ h, label }: { h: VariantHost; label: string }) {
+/** A host chip's folder tag (frame 1): `Mac`, `T9`. */
+function DiskTag({ name }: { name: string }) {
+  return (
+    <span
+      title="Loaded from this folder"
+      className="mono rounded-md bg-s4 px-1.5 text-[10px] leading-4 font-medium text-t1"
+    >
+      {name}
+    </span>
+  );
+}
+
+function HostChip({ list, h, label }: { list: List | null; h: VariantHost; label: string }) {
   const chip =
     "inline-flex min-w-0 items-center gap-1.5 rounded-full bg-s1 px-2.5 py-1 text-[12px]";
   if (h.state === "downloading") {
@@ -650,6 +768,22 @@ function HostChip({ h, label }: { h: VariantHost; label: string }) {
       </span>
     );
   }
+  const { tag, note } = list ? copyNote(list, h) : { tag: null, note: null };
+  if (h.state === "unplugged")
+    return (
+      <span
+        className={`${chip} bg-transparent text-t2 shadow-[inset_0_0_0_1px_var(--ln)]`}
+        title={
+          note
+            ? `Its only copy is on ${note.replace(/ not connected$/, "")}, which is unplugged`
+            : "unplugged"
+        }
+      >
+        <Dot state="unplugged" />
+        {h.host}
+        {note && ` · ${note}`}
+      </span>
+    );
   return (
     <span
       className={`${chip} ${h.state === "present" ? "" : h.state === "mismatch" ? "text-bad" : "text-t2"}`}
@@ -660,6 +794,8 @@ function HostChip({ h, label }: { h: VariantHost; label: string }) {
       {h.state === "partial" || h.state === "mismatch" ? (
         <span className="mono text-[11px]">{h.state === "partial" ? "partial" : "mismatch"}</span>
       ) : null}
+      {tag && <DiskTag name={tag} />}
+      {note && <span className="text-[11px] text-t2">{note}</span>}
     </span>
   );
 }
@@ -802,12 +938,48 @@ function VariantPanel({
               className={`mono text-right text-[12px] ${h.state === "downloading" ? "text-a2" : h.state === "mismatch" ? "text-bad" : "text-t2"}`}
               title={h.mismatch?.join(", ")}
             >
-              {stateText(h)}
+              {hostText(list, h)}
             </span>
           </div>
         ))}
         {!v.hosts.length && <p className="m-0 text-[13px] text-t2">No host has an env for it.</p>}
       </div>
+
+      {v.hosts
+        .filter((h) => (h.copies?.length ?? 0) > 1)
+        .map((h) => (
+          <div key={h.host} className="flex flex-col gap-2">
+            <h3 className="heading flex items-center">
+              Copies on {h.host}
+              <Info>
+                The runner loads the copy in the first folder of the list. The other is used when
+                that folder is unplugged.
+              </Info>
+            </h3>
+            {h.copies!.map((c) => {
+              const f = folderById(list, h.host, c.folder);
+              const n = foldersOf(list, h.host).findIndex((x) => x.id === c.folder) + 1;
+              return (
+                <div
+                  key={c.folder}
+                  className="flex flex-col gap-1 rounded-[18px_18px_18px_8px] bg-s2 px-3 py-2.5"
+                >
+                  <div className="flex justify-between gap-2.5 text-[13px]">
+                    <span className="font-semibold">
+                      {n} · {f?.name ?? c.folder}
+                    </span>
+                    <span className="mono text-[12px] text-t2">{copyWord(c, h.folder)}</span>
+                  </div>
+                  {f && v.dir && (
+                    <span className="mono text-[12px] break-all text-t2">
+                      {f.root.replace(/\/$/, "")}/{v.dir}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ))}
 
       {admin && (
         <div className="mt-auto flex flex-col gap-2">
@@ -912,6 +1084,7 @@ function VariantPanel({
         width="w-[min(94vw,440px)]"
       >
         <DeleteDialog
+          list={list}
           m={m}
           v={v}
           host={target}
@@ -956,7 +1129,12 @@ function DownloadDialog({
   onDone: (j: S<"ModelJob">) => void;
 }) {
   const plan = downloadPlan(list, v, host);
-  const free = list.hosts.find((h) => h.host === host)?.free_bytes;
+  // frame 4: a Folder pick on a host with more than one
+  const pickable = downloadFolders(list, host);
+  const many = pickable.folders.length > 1;
+  const [folder, setFolder] = useState(pickable.pick);
+  const into = folderById(list, host, folder);
+  const free = many ? into?.free_bytes : list.hosts.find((h) => h.host === host)?.free_bytes;
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -971,6 +1149,7 @@ function DownloadDialog({
               host,
               ...("component" in v ? { addon: v.component } : { variant: v.id }),
               ...(plan.mustAccept && { accept_licence: accepted }),
+              ...(many && folder && { folder }),
             },
           }),
         ),
@@ -996,9 +1175,42 @@ function DownloadDialog({
             .join(" · ")}
         </span>
       </div>
+      {many && (
+        <div className="flex flex-col gap-1.5">
+          <h3 className="heading">Folder</h3>
+          <div role="radiogroup" aria-label="Folder" className="flex flex-col gap-1.5">
+            {pickable.folders.map((f) => {
+              const can = f.connected && f.writable;
+              return (
+                <Pick
+                  key={f.id}
+                  name="download-folder"
+                  label={f.name}
+                  path={f.root}
+                  checked={folder === f.id}
+                  off={!can}
+                  onPick={() => setFolder(f.id)}
+                  tag={f.downloads && <DownloadsTag />}
+                  end={
+                    !f.connected
+                      ? "Not connected"
+                      : !f.writable
+                        ? "Read-only"
+                        : `${diskText(f.free_bytes)} free`
+                  }
+                />
+              );
+            })}
+          </div>
+        </div>
+      )}
       <div className={ROW}>
         <span>Into</span>
-        <span className={VAL}>{folderOf(list, v, host)}</span>
+        <span className={VAL}>
+          {many && into && v.dir
+            ? `${into.root.replace(/\/$/, "")}/${v.dir}`
+            : folderOf(list, v, host)}
+        </span>
       </div>
       {plan.licence && (
         <div className="flex flex-col gap-1.5">
@@ -1062,8 +1274,53 @@ function DownloadDialog({
   );
 }
 
-/** Delete with confirm; the server's refusal (loaded, in use, downloading) is shown as it words it. */
+/** A folder or copy pick (frames 4, 6): a radio row with its name, path, a tag and what it says at the end. */
+function Pick({
+  name,
+  label,
+  path,
+  checked,
+  off,
+  onPick,
+  tag,
+  end,
+}: {
+  name: string;
+  label: string;
+  path?: string;
+  checked: boolean;
+  off?: boolean;
+  onPick: () => void;
+  tag?: React.ReactNode;
+  end: string;
+}) {
+  return (
+    <label
+      className={`grid grid-cols-[18px_minmax(0,1fr)_auto] items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] ${off ? "text-t2 shadow-[inset_0_0_0_1px_var(--ln)]" : checked ? "bg-s4 shadow-[inset_0_0_0_1.5px_var(--a1)]" : "bg-s3"}`}
+    >
+      <input
+        type="radio"
+        name={name}
+        className="m-0 accent-[var(--a1)]"
+        checked={checked}
+        disabled={off}
+        onChange={onPick}
+      />
+      <span className="flex min-w-0 items-center gap-2">
+        <b className="font-semibold">{label}</b>
+        {path && <span className="mono truncate text-[12px] text-t2">{path}</span>}
+        {tag}
+      </span>
+      <span className="mono text-[12px] text-t2">{end}</span>
+    </label>
+  );
+}
+
+/** Delete with confirm; the server's refusal (loaded, in use, downloading) is shown as it words it. A variant in more
+ * than one folder of the host asks which copy (frame 6): each with the space it gives back and the free space after, the
+ * used one marked and picked first, Both (off while a copy is unplugged). */
 function DeleteDialog({
+  list,
   m,
   v,
   host,
@@ -1071,6 +1328,7 @@ function DeleteDialog({
   onClose,
   onDone,
 }: {
+  list: List;
   m: Model;
   v: Variant | Addon;
   host: string;
@@ -1078,8 +1336,19 @@ function DeleteDialog({
   onClose: () => void;
   onDone: (j: S<"ModelJob">) => void;
 }) {
+  const on = v.hosts.find((h) => h.host === host);
+  const copies = deleteCopies(list, on);
+  const many = copies.length > 1;
+  const live = copies.filter((c) => c.copy.state !== "unplugged");
+  const away = copies.find((c) => c.copy.state === "unplugged");
+  const [pick, setPick] = useState<string>(live[0]?.copy.folder ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const both = pick === "*";
+  const picked = both ? live : live.filter((c) => c.copy.folder === pick);
+  const nameOf = (c: (typeof copies)[number] | undefined) =>
+    c?.folder?.name ?? c?.copy.folder ?? "";
+  const title = v.title;
   async function remove() {
     setBusy(true);
     try {
@@ -1088,7 +1357,11 @@ function DeleteDialog({
           api.DELETE("/v1/studio/admin/models/{model}", {
             params: {
               path: { model: m.id },
-              query: { host, ...("component" in v ? { addon: v.component } : { variant: v.id }) },
+              query: {
+                host,
+                ...("component" in v ? { addon: v.component } : { variant: v.id }),
+                ...(many && { folder: picked.map((c) => c.copy.folder) }),
+              },
             },
           }),
         ),
@@ -1099,25 +1372,94 @@ function DeleteDialog({
       setBusy(false);
     }
   }
+  const sum = (cs: typeof copies) => cs.reduce((n, c) => n + (c.copy.freed_bytes ?? 0), 0);
+  const rest = copies.filter((c) => !picked.includes(c));
+  const after = !many
+    ? ""
+    : rest.length === 0
+      ? `After this, ${title} is not on ${host}: it shows missing there.`
+      : !picked.some((c) => c.used)
+        ? `After this, ${host} still loads ${title} from ${nameOf(copies.find((c) => c.used))}.`
+        : rest.every((c) => c.copy.state === "unplugged")
+          ? `After this, ${title} is only on ${nameOf(rest[0])}: it shows ${nameOf(rest[0])} not connected until ${nameOf(rest[0])} is back.`
+          : `After this, ${host} loads ${title} from ${nameOf(rest.find((c) => c.copy.state !== "unplugged"))}, the other copy.`;
   return (
     <>
-      <p className="mb-4 text-[13px] text-t2">
-        {"component" in v
-          ? `The files of this add-on under ${folder || "its folder"} on ${host} are removed. Every variant keeps working without it. A download can fetch it again.`
-          : `The files of this variant under ${folder || "its folder"} on ${host} are removed. Shared components another variant on the host loads are kept. A download can fetch it again.`}
-      </p>
+      {many ? (
+        <div className="mb-4 flex flex-col gap-3">
+          <div className={ROW}>
+            <span>On host</span>
+            <span className={VAL}>{host}</span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <h3 className="heading">Copy</h3>
+            <div role="radiogroup" aria-label="Copy" className="flex flex-col gap-1.5">
+              {copies.map((c) => {
+                const gone = c.copy.state === "unplugged";
+                return (
+                  <Pick
+                    key={c.copy.folder}
+                    name="delete-copy"
+                    label={nameOf(c)}
+                    path={c.folder?.root}
+                    checked={pick === c.copy.folder}
+                    off={gone}
+                    onPick={() => setPick(c.copy.folder)}
+                    tag={
+                      c.used && (
+                        <span className="tag" title="Loaded from here: first in the list">
+                          used
+                        </span>
+                      )
+                    }
+                    end={
+                      gone
+                        ? "Not connected"
+                        : `${bytesText(c.copy.freed_bytes)} back · ${diskText((c.folder?.free_bytes ?? 0) + (c.copy.freed_bytes ?? 0))} free`
+                    }
+                  />
+                );
+              })}
+              <Pick
+                name="delete-copy"
+                label={copies.length === 2 ? "Both" : "All"}
+                checked={both}
+                off={!!away}
+                onPick={() => setPick("*")}
+                end={away ? `${nameOf(away)} not connected` : `${bytesText(sum(live))} back`}
+              />
+            </div>
+          </div>
+          <p className="m-0 text-[12px] text-t2">{after}</p>
+          <span className="text-[11px] text-t2">
+            Space back counts only the files that go: shared parts another variant loads stay.
+          </span>
+        </div>
+      ) : (
+        <p className="mb-4 text-[13px] text-t2">
+          {"component" in v
+            ? `The files of this add-on under ${folder || "its folder"} on ${host} are removed. Every variant keeps working without it. A download can fetch it again.`
+            : `The files of this variant under ${folder || "its folder"} on ${host} are removed. Shared components another variant on the host loads are kept. A download can fetch it again.`}
+        </p>
+      )}
       {error && <ErrorNote>{error}</ErrorNote>}
       <div className="mt-3 flex justify-end gap-2">
         <button type="button" className="chip bevel" onClick={onClose}>
-          Keep it
+          {many ? "Cancel" : "Keep it"}
         </button>
         <button
           type="button"
-          className="chip bevel bg-a1 font-semibold text-on1"
-          disabled={busy}
+          className={`chip bevel font-semibold ${many ? "bg-bad text-[#2b0c02]" : "bg-a1 text-on1"}`}
+          disabled={busy || (many && !picked.length)}
           onClick={() => void remove()}
         >
-          Delete
+          {!many
+            ? "Delete"
+            : both
+              ? copies.length === 2
+                ? "Delete both"
+                : "Delete all"
+              : `Delete ${nameOf(picked[0])} copy`}
         </button>
       </div>
     </>

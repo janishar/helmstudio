@@ -39,14 +39,17 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `messages/evt.auth.revoked.schema.json` | auth_service → studio: drop cached token validations |
 | `messages/req.runner.unload.schema.json` | NATS request/reply studio's dispatcher → a runner (not enveloped): unload the named components now, reply what was freed and what remains (Two envs on one host: the hand-over) |
 | `messages/req.runner.plugins.key.schema.json` | (API 1.73) NATS request/reply studio → a host's supervising runner (not enveloped): a plugin's key from its file in `~/.helm` (Plugins: a key from its host) |
+| `messages/req.runner.folders.check.schema.json` | (API 1.78) NATS request/reply studio → a host's supervising runner (not enveloped): what each model folder path is on that host now (Model folders) |
 | `messages/defs.schema.json` | shared definitions (uuid, object keys, seq, host/env names, the workflow graph, param values: `inputValue` with `imageRef` / `loraRef`, `resolvedValue` with `image` / `lora`) |
 | `registry.schema.json` | KV values: `$defs/nodes`, `$defs/workflows`, `$defs/models` (with a family's `loraBlock`), `$defs/loras`, `$defs/looks`, (API 1.30) `$defs/voices` (bucket `registry`), `$defs/host` (bucket `hosts`), (API 1.16) `$defs/settings` (bucket `host_settings`, key `<host>`: Hosts admin) and `$defs/pin`, (API 1.15) `$defs/custom` (key `pipelines.engine.custom`: the registered custom nodes) |
 | `fixtures/{messages,registry}/` | `<name>.valid[.N].json` must pass, `<name>.invalid[.N].json` must fail (request/reply: `<type>.{request,reply}.…`) |
 | `fixtures/http/` | HTTP bodies, `<Schema>.{valid,invalid}[.N].json` against `openapi.yaml` `components/schemas/<Schema>` (the names in `check.py` `HTTP_SCHEMAS`) |
+| `fixtures/magic/edits.json` | (API 1.80) Magic edits by ops: each case's ops applied to a document, with the document after or the refusal (`expect`); replayed through studio's `api/magic` and the web's `lib/magic.ts` (Magic: edits by ops) |
 | `fixtures/registry/{nodes,workflows,models,looks,voices}.valid.json` | **canonical** fake-runner registry values (echo family): the fake runner publishes them verbatim, with its own `published_at` (API 1.30: `echo/speak`, workflow `echo-voice-over`, starter voices `echo/ada` and `echo/bo`; the qwen3-tts pack's canonical `qwen3-tts.{nodes,workflows,models,voices}.valid.json`, M8 step 3, pinned by runner_service tests/test_packs.py and test_qwen3_tts.py) |
 | `fixtures/registry/qwen-image.{nodes,workflows}.valid.json` | **canonical** torch-runner values (qwen-image family, host `mac`, env `torch`): published verbatim; `qwen-image.models.valid.json` is an example (presence and sizes are measured), so are `qwen-image.{loras,looks}.valid.json` |
 | `fixtures/registry/minimax-h3-image.{nodes,workflows}.valid.json` | (API 1.20) **canonical** torch-runner values of the minimax-h3-image family (workflow `minimax-h3-image`), published with the qwen-image values (the core kinds they share are identical); `minimax-h3-image.models.valid.json` is an example (bytes and sizes measured) |
 | `fixtures/registry/minimax-h3.{nodes,workflows}.valid.json` | (API 1.21) **canonical** native-runner values (minimax-h3 family, host `mac`, env `native`, workflows `minimax-h3-text-to-video`, `minimax-h3-image-to-video`, `minimax-h3-references`): published verbatim; `minimax-h3.models.valid.json` is an example (bytes measured, `peak_gb` a placeholder until measured; `components: []` in its memory item: the native runtime) |
+| `fixtures/registry/{ace-step,minimax-music3,stable-audio-3}.{nodes,workflows,models}.valid.json` | (API 1.79) the **canonical** music and sound packs' values (Music and sound, below): ACE-Step 1.5 (Compose, Repaint, Cover, Extend; sections, Auto BPM and Length), MiniMax Music 3 (the Music default) and Stable Audio 3 (Sound: `studio.count` 4 of 8, Repaint, Vary, Extend); `models` are examples (sizes measured). `fixtures/http/TakeMux{,Request}.{valid,invalid}.json` are Save with the video's bodies |
 | `fixtures/registry/zonos3.{nodes,workflows,models,voices}.valid.json` | (API 1.31, M8 step 4) **canonical** native-runner values of the zonos3 pack (family `zonos3`, host `mac`, env `native`, workflow `zonos3-voice-over`, the 27 starter voices; Voices: the zonos3 family): published verbatim; the models value's sizes are measured on the owner's Mac |
 | `fixtures/registry/ltx.{nodes,workflows}.valid.json` | **canonical** mlx-runner values (ltx family, host `mac`, env `mlx`, workflows `ltx-text-to-video`, `ltx-image-to-video`): published verbatim; `ltx.models.valid.json` (with the canonical ltx `lora` block; its `prefused` id is a placeholder the runner fills from its index) and `host.valid.6.json` are examples (sizes measured) |
 | `fixtures/registry/llm.{nodes,workflows}.valid.json` | **canonical** mlx-runner values of the llm pack (API 1.14; family `llm`, workflow `llm-ask`), published with the ltx values; `llm.models.valid.json` is an example (sizes measured, peak extrapolated). `qwen-image.*` add `qwen-image/ask`, `answer`, `qwen-image-ask`; the echo values add `echo/ask`, `answer`, `echo-ask` |
@@ -62,7 +65,7 @@ copies what it needs from here into its `gen/` (`make gen`) and commits it.
 | `fixtures/voices/` | (API 1.30) the **shared voice fixtures** (Voices, below): `media.json` (a graph → `Workflow.media`, audio included), `fit.json` (a LibraryItem and a workflow → the voice fit's reason; looks and elements in an audio workflow), `seconds.json` (a graph and a stage → the `peak_gb` variable `speech_seconds`), each `{description, workflows: {name: WorkflowDoc}, cases: [{description, workflow, …, expect}]}` against `fixtures/graphs/palette.json`. studio_service, the web and the runner core run them | (API 1.32) `scripts.json` (a dialogue graph, the caller's elements and voices → `expand_script`; the fake take → `echo_dialogue`; write-script answers → `script_check`)
 | `fixtures/loras/` | the **shared LoRA fixtures** (LoRA normaliser, below): header-only files `{description, name, family?, metadata, tensors: {key: {dtype, shape}}, values: {alpha key: number}, ignore?, expect}` that runner_service and studio_service tests turn into synthetic safetensors (random A/B values, `values` for the alphas); `expect` = `{key_style, rank, total, applied, ignored, unapplied, error, family, licence}` against the canonical lora block of `family` (absent = qwen-image; `ltx`: `ltx.models.valid.json`'s) (`ignore`, when present, replaces its ignore list); `detect/families.json`: family detection cases (families with their envs and blocks, a LoRA fixture, the detected family) |
 | `fixtures/tools/offered.json` | (API 1.44) the **shared offer fixtures** (Assistant, below): roles and switches → the tools a turn offers (`offered_tools`), a screen and roles → the actions it registers (`screen_actions`) |
-| `check.py` | validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, (API 1.44) the assistant's tool files (Assistant: tools) and the offer fixtures through `offered_tools` / `screen_actions`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
+| `check.py` | (its rules by topic in the sibling `check_*.py` modules, all re-exported by `check.py`) validates every fixture (a registry fixture may carry a family prefix, `<family>.<key>.…`), checks each canonical workflow against its node schemas (kinds, params, wire types by `fits`, values and defaults in range, `media`; a `frames` param's `fps` names an int/float param), runs the graph fixtures through its reference implementation of the graph rules (`graph_problems`, `autowire`, `wire_drop`), the pipeline fixtures through `pipeline_problems` (and their `bounds` / `models` / `egress` / `reserved`), the decision fixtures through `judge_verdict` / `inputs_hash` / `agent_turn` / `turn_schema`, the mention and look fixtures through `scan` / `look_fit` / `resolve_mentions`, (API 1.30) the voice fixtures through `workflow_media` / `voice_fit` (`voice_reason` per param) / `look_fit` / `speech_seconds`, the LoRA fixtures through `normalise`, the video fixtures through `auto_frames` / `position_errors` (and `retake_map` / `extend_map` / `audio_map`, `take_uses` / `media_fit`, `h3_generate_error`), the timeline fixtures through `t_normalize` / `t_apply` / `snap_point` / `drop_index` / `frame_at` / `export_plan` / `shot_keyframes` / `rerender_steps`, the dispatch fixtures through `admit` / `simulate` / `place`, (API 1.44) the assistant's tool files (Assistant: tools) and the offer fixtures through `offered_tools` / `screen_actions`, node schemas' `values` / `values_by` / `auto`, lints `openapi.yaml` and the house rules |
 
 ```sh
 make -C contract_tests venv              # once: contract_tests' own .venv has the checker's dependencies
@@ -87,7 +90,7 @@ make -C contract_tests check-contracts   # exit 1 on any failure
 | `pipelines.memory` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.memory`) | studio → pipelines (5 s; API 1.14) |
 | `cmd.pipeline.chat` | stream `CMD` (work queue) | `cmd.pipeline.chat`, `Nats-Msg-Id <batch_id>:<n>` (the batch's command counter) | studio outbox relay → pipelines (durable `pipelines`; API 1.15) |
 | `evt.pipeline.<batch_id>.chat` | stream `EVT` | `evt.pipeline.chat`, `Nats-Msg-Id <batch_id>:<seq>` | pipelines → studio projector (durable `studio-pipelines`; API 1.15) |
-| `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s; API 1.15) |
+| `studio.tools` | core request/reply, queue group `studio` | bare JSON (`req.studio.tools`) | pipelines → studio (5 s, 25 s for get_take and look_at from 1.108; API 1.15) |
 | `pipelines.providers.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.test`) | studio → pipelines (30 s; API 1.15) |
 | `pipelines.providers.key` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.providers.key`) | studio → pipelines (5 s; API 1.51) |
 | `pipelines.judge.test` | core request/reply, queue group `pipelines` | bare JSON (`req.pipelines.judge.test`) | studio → pipelines (5 s; API 1.28) |
@@ -915,6 +918,48 @@ or presigned URLs, which the claim-check rule (never signed URLs in messages) ru
     (`ct` URL-encoded in the query, raw in the HMAC). A GET signature never verifies as a PUT. Answers: 204 stored,
     403 bad / expired / path, 409 exists, 411 `Content-Length` not the signed bytes, 415 `Content-Type` not `ct`.
 
+## Search in lists (API 1.92; alpha.6 row 27, board docs/mock/Search.dc.html, owner 2026-11-27 "approved"; normative)
+
+One rule for every list that can grow, the Gallery's `q` (GET /v1/studio/takes) made general.
+
+- **Matching.** `q` is split on whitespace; every word must occur, case-insensitively, as a substring of one of the
+  list's searched fields, in any order (`rooftop mara` finds "Mara, rooftop"). Blank `q` filters nothing; more than
+  200 characters is 422 `q must be at most 200 characters`. The caller's own items only (row-level security): another
+  user's item never matches, whatever it is called.
+- **What each list searches.**
+
+  | List | `q` matches | Paging |
+  |---|---|---|
+  | `GET /v1/studio/sessions` | the title | `cursor` / `limit` (default 100), newest `created_at` first |
+  | `GET /v1/studio/magic/boards` | the name | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/timelines` | the name | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/assistant/threads` | the title (the first message, cut) | `cursor` / `limit` (default 200), newest `updated_at` first |
+  | `GET /v1/studio/pipelines` | the title | `cursor` / `limit` (default 100), newest `updated_at` first |
+  | `GET /v1/studio/sessions/{id}/runs` | the workflow id and title, every text value of the inputs (the prompt) | `cursor` / `limit` (default 100), newest `created_at` first |
+  | `GET /v1/studio/batches` | the title, the pipeline title, the workflow title; `state` keeps one or more statuses | `cursor` / `limit` (default 60, as before) |
+  | `GET /v1/studio/batches/{id}/rows` | every text value of the inputs, the row's `status` | `cursor` / `limit` (default 60, as before), by row number |
+  | `GET /v1/studio/library` | `words` (not `q`): the name, the handle, the text, a voice's `speaker`, `design`, `style`, `language` (a word's leading `@` ignored) | none: the list is whole |
+
+- **Old callers.** Without `q`, `cursor` and `limit` every list answers its first page exactly as before: the same
+  order and the old cap as the default `limit`. Ties on the time now break by `id` descending everywhere.
+- **Pages.** Each page answers `next_cursor` (null on the last page); pass it back as `cursor` with the same `q` (and
+  `state`) for the next page. It is opaque (base64 of the last row's time and id, as batches' always was); a malformed
+  one is 422 `cursor is not a next_cursor`. Lists by `updated_at`: an item edited while you page moves to the first
+  page (one you have not reached yet is skipped); reload from the first page to be exact.
+- **Capped lists.** A user has at most 100 boards, 100 sequences, 100 pipelines and 200 chats (409 on create), so their
+  default page is the whole list; the cursor matters only with a smaller `limit`. Sessions and runs have no cap: past
+  the first page they are reached only by `cursor` or `q`.
+- **The library.** `q` stays the `@` menu's prefix match (a handle or a name starting with it; Mentions) for the menu,
+  `helm`, the MCP tools and the assistant's `library.read`; `words` is the pickers' search and does not change the
+  order. Own items are capped at 200 and the list answers up to 1000, so it has no cursor.
+- **Batches' `state`.** Repeat it for several: `state=queued&state=running`; each a `BatchStatus` (else 422 `state must
+  be one of queued, running, waiting, paused, done, failed, stopped`). It and `q` combine with AND, and the cursor pages
+  the matches.
+- **Indexes.** None added: every search runs inside one owner's rows, reached by the existing owner indexes
+  (`(owner_id, created_at|updated_at DESC)`, a session's runs, a batch's rows), and these lists are hundreds of rows
+  per user (the capped ones at most 200). A `pg_trgm` GIN index (Postgres 18 ships it) is the step if one grows to tens
+  of thousands.
+
 ## Thumbnails (API 1.48; plan 22-thumbnails section 26; normative)
 
 Lists draw `thumb_url`; viewers, compare, export and every model input use `url` (the full file). A video player's
@@ -957,6 +1002,99 @@ Lists draw `thumb_url`; viewers, compare, export and every model input use `url`
 - **Deletes**: the take sweep removes `thumb.key` with the take's other objects (same `u/<owner_id>/` check); a
   thumbnail is never shared between takes. A frame job at `last` stores its frame once for the video (`video.last`)
   and a copy `u/<owner>/frames/<take>.png` for the frame take, so sweeping one never deletes the other's file.
+
+## Take facts (API 1.104; plan 42-listen-and-watch, owner 2026-11-28; normative)
+
+Claude takes text and pictures only, so the Assistant judges sound and moving video from facts and one picture.
+
+- **The facts** (defs `takeFacts`, openapi `TakeFacts`) of a video or audio take, from ffmpeg on its file:
+  `seconds` (the file's real length, ffprobe), `sound_seconds`, `lufs` (integrated loudness, EBU R128; -70 is
+  silence), `peak_db` (true peak, dBTP), `silence_start` / `silence_end` (seconds under -50 dB at each end,
+  silencedetect `d=0.1`), `end_lufs` (the loudness of the last 0.5 s), `abrupt` (the sound stops within 10 LU of its
+  loudness with no silence at the end: no fade out) and, for a video, `cuts` (scene cuts in seconds, score over 0.3 on
+  a 320 px copy, the first 32). No sound: the sound facts are null.
+- **The frame grid** of a video: 12 frames (fewer for a shorter clip) at ⌊F·(2k+1)/24⌋, in one JPEG (q85), left to
+  right then down, the layout with the largest tiles in 1024 × 1024 (never upscaled), each frame's time `m:ss.s`
+  printed white on black at its top left; `at` = each frame's seconds.
+- **`takes.facts`** `{facts, key, width, height, bytes, at}` (key null for audio; null until made). `GET
+  /v1/studio/takes/{take_id}` answers `facts` (the facts with `grid_url` signed and `at`) for a video or audio take
+  (null until made), so get_take has them on both surfaces; helm mcp's get_take shows the grid instead of the
+  thumbnail when there is one.
+- **Measured on demand, then kept** (1.108; owner, 2026-11-28: "can it not do on fly it want the fact and it does not
+  exists", then "Only on demand"): there is no background loop. A take is measured the first time `studio.see`,
+  `look_at` or `GET /v1/studio/takes/{take_id}` asked by the Assistant or helm mcp (`X-Helm-Client` `assistant` or
+  `mcp`; never the web's GET) meets the caller's own ready, live video or audio take with `facts` null,
+  `facts_tries` < 3, at most 20 minutes long; its facts are then kept on the take. Studio sends facts jobs (as
+  System) for those of the asked takes in no open facts job, as few as hold them (4 each): a take is never in two
+  open facts jobs. It then waits up to 20 s while any asked take is in an open facts job and answers the facts made;
+  one still measured is answered without facts and with `facts_note` "The facts are being measured; ask again in a
+  minute." (Take, `studio.see` and `look_at`); asked again, it waits on the same job. When no live media env has
+  `media.facts: true` (no runner on, or none that measures), it answers at once, sends nothing and counts no try,
+  with `facts_note` "No runner is on to measure the facts; ask again once one is on."; once one is on, the next ask
+  measures. An image, a take not ready or one never measured (too long, out of tries) is answered as before, with no
+  wait and no note. So `studio.see` answers within 25 s and
+  `studio.tools` within 25 s for get_take and look_at.
+- **The facts job** (`cmd.media.job` kind `facts`): one owner's takes, 1-4, only when a media env whose hosts key has
+  `media.facts: true` is live; a take whose key is outside `u/<owner_id>/` is never sent. `inputs`: each take's file
+  (kind video or audio); `output_prefix` `u/<owner_id>/facts/<job_id>/`. The runner answers `result.facts[]`: `{index, facts}` and
+  for a video `key` `<prefix><i>.jpg`, `width`, `height`, `bytes`, `at`; or `{index, error}` (the job goes on). The
+  projector stores each only on a live take still without facts and only a key exactly `<prefix><i>.jpg` (else the
+  object is deleted); an error or a missing item adds a try, and a job that fails, is cancelled or is lost adds one
+  to each of its takes and deletes its keys no take points at. It does not count toward a user's open media jobs and
+  has no endpoint. The take sweep deletes `facts.key` with the take.
+- **The Assistant**: `studio.see` answers a video's grid (not its poster) once made, with `facts` and `at`, and an
+  audio take's `facts`; a model that sees gets them with its next prompt (each take's facts as a line after the
+  prompt). `look_at`'s ask run (a text-only model) shows its local model each video as the same grid, made in the
+  run, and its result carries the stored `facts` of its takes.
+
+## The listen tool (API 1.107; plan 42-listen-and-watch step 2, owner 2026-11-28; normative)
+
+The Assistant and helm mcp ask a local model that hears one question about a video or audio take.
+
+- **Route** `POST /v1/studio/takes/{take_id}/listen` `{question 1-500, transcript = true}` → 202 Run: one
+  interactive run of the listen workflow that can run now (a template with a node whose kind ends in `/listen` and an
+  `answer` sink; `omni-listen` first, from 1.109 then the smaller `omni-listen-3b`, else the fake `echo-listen`) in
+  the take's session, else the caller's newest.
+  The node gets `source` `{take_id}` (a media param accepting `[video, audio]`, `max_s` 120), `question` and
+  `transcript`. Refusals: 404 (the take unknown, another user's, deleted or not ready); 409 when no listen workflow
+  can run now, from 1.108 in plain words with what to do (the first listen workflow's dispatch reason, `omni-listen`
+  first): `Can't listen: no runner that can listen is on; start the Mac's runner and ask again.` (no live host for
+  its env, or none publishes a listen workflow); from 1.109, as neither Qwen3-Omni nor the 3B is present:
+  `Can't listen: Qwen3-Omni is on the T9 drive, which is not connected, and the smaller Qwen2.5-Omni-3B is not on
+  this Mac; connect the T9 or download the 3B in Models, and ask again.` (a host lists `q8` `unplugged`), `Can't
+  listen: neither Qwen3-Omni nor the smaller Qwen2.5-Omni-3B is on this Mac; download one in Models (or connect the
+  drive that holds it) and ask again.` (no host has either), else `Can't listen now: <reason>.`; `open Create once first: listening needs a session`; 422
+  `question must be 1-500 characters`, `take <id> is <kind>; listen hears video and audio takes (look_at sees
+  images)`.
+- **Result**: the run's `answer` (defs `answer`: one try, `seen` empty) is the answer; `resolved.texts`
+  `listen.transcript` the speech written down (the node's `reports`; absent with no speech, no sound or `transcript`
+  false).
+- **The smaller model** (from 1.109; owner, 2026-11-28: "Qwen3-Omni, 3B fallback", "use GGUF"): when `omni-listen`
+  cannot run and `omni-listen-3b` can, the 202 (`ListenRun`) and the tool's reply carry `note`, which model answers
+  and why, for the Assistant to tell the owner: `Answered by the smaller listen model (Qwen2.5-Omni-3B): the T9 with
+  Qwen3-Omni is not connected.` (q8 `unplugged`), `…: Qwen3-Omni is not on this Mac.` (missing), else `…: Qwen3-Omni
+  can't run now (<reason>).`. Absent when Qwen3-Omni (or the fake) answers. Studio places and plans the run as any:
+  the 3B's `model` component is its own files (about 5.1 GB, against 33.6 GB).
+- **Use in…** (`take_uses`): a text workflow (`media` text: `echo-listen`, `omni-listen`, the ask workflows) is never
+  a use, though its media param accepts the take.
+- **Tool** `listen` (tools/catalog.json; surfaces assistant and mcp, no card): the Assistant gets the run to await (as
+  look_at) and, from 1.108, is offered it only while a listen workflow can run now (offered_tools `listen`), so it
+  never offers to listen when it cannot; helm mcp always lists it and gets the 409's words; helm mcp posts the route, waits for the run (at
+  most 10 minutes) and answers `{run_id, session_id, workflow_id, host, position, status, answer, transcript}`, from
+  1.109 with `note` when the smaller model answered (the Assistant's reply carries it too).
+- **The omni family** (`fixtures/registry/omni.{nodes,workflows}.valid.json`, the mlx runner's `packs/omni`, title
+  `Qwen Omni` from 1.109): `omni/model` variant `q8` (dir `Qwen3-Omni-30B-A3B-Instruct-GGUF`, ggml-org at 6e35a28f,
+  Apache-2.0; components `model` = the Q8_0 GGUF and its Q8_0 mmproj, stored; `asr` = Qwen3-ASR-1.7B in its own
+  folder, bf16) and, from 1.109, `3b` (dir `Qwen2.5-Omni-3B-GGUF`, ggml-org at 75f1b73b, Qwen Research License;
+  its `model` files are `Qwen2.5-Omni-3B-Q8_0.gguf` and its Q8_0 mmproj; the same `asr`), precision `int8` only. `omni/listen` (Model → answer: Text, transcript: Text; `reports [transcript]`; uses both components;
+  `peak_gb` 4.5): the model runs in llama.cpp's `llama-server` (one 32k slot, Metal, video sampled at 2 frames a
+  second), a server child the residency manager holds as the `model` component, so it stays loaded between runs
+  (keep_warm) and is stopped when the component is unloaded; a video goes whole plus its sound as 16 kHz mono WAV,
+  an audio take as the WAV; greedy (temperature 0, seed 0). The transcript is Qwen3-ASR through mlx-audio. Workflow
+  `omni-listen` (`Listen (Qwen3-Omni)`, media text) and, from 1.109, `omni-listen-3b` (`Listen (Qwen2.5-Omni-3B)`,
+  variant `3b`, the same path and `peak_gb`).
+- **The fake** `echo/listen` (workflow `echo-listen`, `Listen (fake)`): answers `ECHO-LISTEN: <question>` and the
+  transcript `ECHO-TRANSCRIPT` when `transcript` is true; the take is read, not heard.
 
 ## Video (API 1.11, M4 stage A; 1.12, M4 stage B)
 
@@ -1441,7 +1579,7 @@ resolve.audio-*.json`); `check.py` holds the reference (`workflow_media`, `voice
 
 - **Port `Audio`** (registry `portType`, openapi `PortType`): a plain value, speech as PCM samples with
   `sample_rate` and `duration_s`, never a handle. The core `output` node's `media` input (type `Media`) also accepts
-  it (Graph rules: fits). The runner stores it as `<output_prefix><n>.wav` (RIFF WAVE, PCM 16-bit, mono, the model's
+  it (Graph rules: fits). The runner stores it as `<output_prefix><n>.wav` (RIFF WAVE, PCM 16-bit, mono or from 1.79 stereo, the model's
   own rate; `Content-Type: audio/wav`) and sends one `evt.run.output`: `kind: audio`, `key` (`.wav`), `bytes`,
   `etag`, `seed`, `audio {duration_s = samples / sample_rate, sample_rate}`, no `width` / `height`. The projector
   stores the take `kind: audio`, `content_type` `audio/wav`, `width` / `height` null, `audio {duration_s,
@@ -1711,6 +1849,70 @@ timeline's fifth generating action (9). References in `check.py`: `script_lines`
   voice-over per shot (`each`, unchanged); the director can add rows with a script input (`rows.add`). Binds: a voice
   step's one take fits a `media` param (`audio.source`) or a rows param of one media field (`generate.audios`) as item
   1 (`bind_type`). No new pipeline node kinds.
+
+## Music and sound (API 1.79; alpha.6 item 6, plan 38, board docs/mock/CreateMusicSound.dc.html; normative)
+
+Music, Sound and Voice are a **sound class** on audio takes and workflows (`SoundClass`, defs `soundClass`), never take
+kinds of their own: `TakeKind` stays `image | video | audio`. `check.py` holds the reference (`workflow_sound`,
+`workflow_media`, `spoken`, `take_uses`, `group_errors`).
+
+- **Where a class comes from.** A pack's model.yaml `sound` (music, sound or voice) is published on its `models`
+  entry (`models[].sound`, the Models page's cube colour) and on every node schema with an `Audio` output
+  (`NodeSchema.sound`); a stage's own `sound` wins (echo holds all three: echo/speak and dialogue voice, echo/music,
+  repaint and lengthen music, echo/sound, foley and vary sound). qwen3-tts and zonos3 are voice.
+- **Workflow.sound** (computed, like `media`, for templates and user workflows): the `sound` of the first node, in
+  output node id order, whose Audio output an output node takes; absent without one. `media` is computed as before,
+  except that a `Video` output does not count beside a classed Audio one (MMAudio's video workflow, an Audio and a
+  Video output, makes audio and shows under Sound). `GET /v1/studio/workflows?media=music|sound|voice` lists the
+  audio workflows of that class.
+- **Take.sound** (kind audio only, always sent): a run's take its workflow's `sound` (voice when it has none); an
+  upload's and a plugin take's as sent (`UploadCreate.sound`, `PluginTakeCreate.sound`; absent = voice;
+  on another kind 422 `only audio has a sound class`). Audio takes made before 1.79 are voice. `GET /v1/studio/takes?
+  kind=music|sound|voice` lists the audio takes of that class (the Gallery's Voice, Music and Sound filters, the
+  assistant's `search_takes` and screen action `gallery.filter`).
+- **The voice rules re-scope.** What Voices says of an audio workflow (spoken text is never expanded, a mention is
+  refused, looks do not apply) holds for class voice (or no class): music and sound prompts expand mentions and looks
+  as an image workflow's do (an element's images are dropped: no reference rows). Studio `mentions.go` and `looks.go`,
+  the web's `lib/mentions.ts` and pipelines' assistant follow `spoken`.
+- **Stereo.** An `Audio` value may carry `channels` 2 (PCM 16-bit interleaved); the output node writes a stereo WAV
+  and `evt.run.output audio.channels` 2 (absent = mono), stored as `Take.audio.channels`. Voice clone and LTX audio to
+  video downmix a stereo source (the core's `pcm(data, rate, channels)` decodes any audio input at the rate and
+  channels a pack needs).
+- **Sections.** A song with tagged lyrics carries `audio.sections` (`[{label, start_s, end_s}]`, in order, from the
+  model's lyric timestamps: ACE-Step only), stored as `Take.audio.sections`; the stage draws them as markers.
+- **Offers by class** (Media inputs: offers). A workflow with a `sound` takes an audio take into a `media` param only
+  when the take is of that class, and never a video's sound (Repaint · ACE-Step only on music takes, Vary · Stable
+  Audio only on sound takes; a voice take gets neither). A video into a param that accepts video is no sound
+  (MMAudio's video workflow is offered on videos). Rows params (references) take any class. `POST …/use` holds the
+  same rule, a `param` named too: a take of another class is 422 `take <id> is <class>; workflow <id> takes <class>
+  only` (`a video` for a video's sound). From 1.91 so does every run (`POST …/runs`, a batch's rows, a Magic run: the run's media
+  rules): `<node>.<param>: take <id> is <class>; this workflow takes <class> only` (`repaint.source: take <id> is
+  voice; this workflow takes music only`), the one rule (studio `gallery.ByClass`) offers, Use and runs share. The
+  screens never send such a run: they fill media params from offers and Magic's requests.
+- **Span on audio.** A `span` may sit on a node whose workflow's media source accepts audio: offers fill it with the
+  whole take (a Timeline range: the range), studio snaps it to whole milliseconds. ltx's extend room (`extend_room`)
+  is a video source's rule only: an audio extend is capped by the 600 s take limit.
+- **Auto values.** An `int` or `float` param with `auto: true` takes 0 as Auto (allowed below `min`): the model
+  picks it (ACE-Step's BPM and Length); the chip and slider show Auto with a switch. An enum's Auto is a value `auto`.
+  The planner's picks come back as `reports` texts (`resolved.texts`).
+- **Lyrics tags.** A `text` param's `tags` are the chips over the field, each inserted at the caret as `[<tag>]`.
+- **Chip groups and count.** `StudioLayout.groups` show quick chips as one chip with one popup (each item a quick
+  param path, in one group at most); `StudioLayout.count {default, max}` is how many takes one Generate makes (Stable
+  Audio 3: 4, at most 8); absent = Create's own.
+- **Save with the video** (`POST /v1/studio/takes/{take_id}/mux`, body `{video_take_id}`): a media job of kind `mux`
+  (`cmd.media.job` inputs [video, audio], output prefix `u/<owner_id>/muxes/<job_id>/`): the runner copies the
+  picture (H.264), encodes the sound as AAC 48 kHz stereo, pads it with silence or cuts it to the picture's length
+  (the core's `mux(mp4, wav)`), writes `mux.mp4`, `mux.poster.png` (frame 0) and `mux.last.png`, and answers them in
+  `evt.media.status result` as an export does. The projector makes a video take (source `create`, `parents` [video,
+  audio], the video's `made_with`). 202 with the job; idempotent per pair (a running job, or one whose take is not
+  deleted, is answered again); 404 for either take unknown, another user's or deleted; 422 `take <id> is not audio` /
+  `take <id> is not a video`; 409 `no live host can export (ffmpeg)`. "Sound only" needs nothing new: the sibling take
+  of the same `run_id`.
+- **The echo fakes** (env fake, no GPU): workflows `echo-music` (stereo 48 kHz, sections from the lyrics' `[tag]`
+  lines evenly spread, the plan line as its `plan` report; Length and BPM Auto: 10 s, 90), `echo-sound` (44.1 kHz
+  stereo, count 4 of 8), `echo-sound-video` (a video in: a sound take and the video with it, two outputs),
+  `echo-repaint` (Repaint: the span replaced), `echo-vary` (Vary) and `echo-music-extend` (Extend: Add seconds at the
+  End or Start).
 
 ## User workflows (API 1.5)
 
@@ -2068,7 +2270,8 @@ project memory, saved checklists, thumbnails for server or remote models.
   counts it as an output) and `<family>/ask` (input `model: Model`; output `answer: Text`; params `system` string
   ≤ 4000, `prompt` string ≤ 32768 (a `string`, so it is never scanned for mentions), `media` rows 0–8 of `{take:
   Media}`, `schema` string ≤ 16384 (a JSON schema; `""` = plain text), `max_tokens` int 16–4096 default 800).
-  Temperature (0), thinking (off), seed (0), thumbnail size (1024) and keyframes (3) are fixed, not params.
+  Temperature (0), thinking (off), seed (0), thumbnail size (1024) and keyframes (3; from 1.104 one frame grid) are
+  fixed, not params.
 - `llm-ask` (env `mlx`, family `llm`, `fixtures/registry/llm.*`): `llm/model` (`variant` 4bit, `precision` int4:
   ~/GenAI/models/Qwen3.8-27B-4bit on mlx-vlm, component `model` 15.4 GB) → `llm/ask` → `answer`. The mlx runner
   publishes the ltx and llm values together (both lists, the core kinds once). `qwen-image-ask` (env `torch`):
@@ -2086,8 +2289,10 @@ project memory, saved checklists, thumbnails for server or remote models.
   An ask run makes no take and no lineage.
 - **Runner**: thumbnails per image take: decoded as for Image inputs, RGBA over white, Lanczos to long edge
   min(1024, native), both sides floored to multiples of 32 (area ≥ 65536), JPEG q90, PUT once to
-  `u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg` (defs `thumbKey`); a video take: 3 keyframes at frames
-  ⌊F·(2k+1)/6⌋, k = 0..2 (ffmpeg), each as an image; at most 24 thumbnails per run. Structured answers: with a
+  `u/<owner_id>/llm/thumbs/<sha256 of the JPEG>.jpg` (defs `thumbKey`); a video take: until 1.104 3 keyframes at
+  frames ⌊F·(2k+1)/6⌋, k = 0..2, each as an image; from 1.104 its frame grid (Take facts) as one image (`seen.frame`
+  null), the prompt led by `Each video is one picture of its frames in time order (left to right, then down), each
+  with its time at its top left.`; at most 24 thumbnails per run. Structured answers: with a
   `schema`, constrained decoding where the env has it (mlx: llguidance through mlx-vlm), then the outermost `{…}` is
   parsed and validated with jsonschema; a failure is asked once more **in the same run** with `Your answer was
   invalid: <error>. Answer again with JSON only.` appended; a second failure fails the run `answer did not match the
@@ -2100,7 +2305,7 @@ project memory, saved checklists, thumbnails for server or remote models.
   a terminal `studio.runs.create` reply.
 - **Memory plans**: a models `memory` item may name a `workflow` (it plans only runs of that workflow; else the item
   of the run's precision without one; a workflow that loads no component, `echo-ask`, has no item of its own) and `planned_at.images` (more thumbnails than that: no plan, P = B; studio counts
-  1 per image and 3 per video item of the run's `media`). `llm`: kept 15.4, peak 27.2 at 4 × 1024 px (fit from two
+  1 per image and 3 per video item of the run's `media`; from 1.105 1 per item, a video being one frame grid). `llm`: kept 15.4, peak 27.2 at 4 × 1024 px (fit from two
   points, extrapolated: measure before relying on it). `qwen-image-ask`: components `[text_encoder]`, peak = kept +
   2.5 + 1.5 × 4 (a bound, not measured). The dispatcher treats `llm` as one more family on env mlx; with no `lora`
   block, resident = any `model` entry of that model, variant and precision.
@@ -3144,6 +3349,43 @@ hashes, `HEAD` / `GET /<repo>/resolve/<rev>/<path>` with `ETag`, `X-Repo-Commit`
 `HF_ENDPOINT` in runner tests and the fake compose overlay. Deletes run on a throwaway folder under a scratch models
 root, never `~/GenAI/models`.
 
+### Model folders (API 1.78; alpha.6 item 7, plan 40, board docs/mock/ModelFolders.dc.html; normative)
+
+A host may keep its weights in several folders (the Mac's `~/GenAI/models` and an external drive's
+`/Volumes/T9/models`), in a priority order the admin sets (`PUT /v1/studio/admin/hosts/{host}/folders`).
+
+- **The list** is host settings (Hosts admin): studio's `host_settings.folders` and `downloads` are the truth, written to
+  the KV `host_settings` value as `folders: [path]` and `downloads: <index>` **only when set** (an older runner keeps its
+  one `HELMSTUDIO_MODELS`). Never set: the runner's one folder, `HELMSTUDIO_MODELS` (`HostSettings.folders` null).
+- **A folder's id** is the first 12 hex of the SHA-256 of its path as stored (`~/GenAI/models`, not expanded); studio
+  and the runner compute it alike. With no list, the id is that of `HELMSTUDIO_MODELS` with the home written `~`.
+  **Its name**: `/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name. Messages never carry a path: a job
+  names folders by id (cmd.model.job `folder`, `folders`).
+- **Connected** = the path is a directory now. A folder not connected is skipped and **never created** (an unplugged
+  drive's `/Volumes/T9` would otherwise appear on the system disk); downloads and deletes never `mkdir` a root.
+- **The resolver** (per model folder, the `dir` of a variant, add-on or component): the first connected folder of the
+  list holding a complete copy (files and no unfinished download marker), else the first connected one holding some
+  of it (partial), else the downloads folder. So a variant in T9 still loads the parts it shares from the Mac folder.
+- **Downloads** go to the job's `folder`, else the downloads folder, else the next connected one; shared components
+  complete in any connected folder are reused, not fetched again.
+- **Delete** removes only the copies in its `folders` (absent: the copy a run loads); the guards of Models and model
+  jobs apply per folder (inside that folder, never through a link). Studio answers 409 `<title> is in <n> folders on
+  <host>; pick one` when a variant has two or more copies and no folder is named.
+- **Copies and unplugged**: the models key's variants and add-ons carry `folder` (the copy a run loads) and `copies`
+  (every folder of the list with files of it: state, bytes, freed_bytes). The runner keeps `CACHE/folders-seen.json`
+  (folder id → the model folders it held when last connected); a variant whose only copies are in folders not
+  connected now has presence `unplugged`, not `missing`, and such folders show as copies with state `unplugged`. The
+  60 s rescan notices a drive plugged in or out.
+- **The hosts key's `models_disks`**: each folder in order (id, name, root, connected, free and total bytes when
+  connected, writable, downloads); `models_disk` stays and is the downloads folder's. Studio's `ModelHost.folders`
+  copies the freshest key's.
+- **The check**: before a PUT stores a list, studio asks the host's supervising runner `req.runner.folders.check`
+  (`runner.folders.check.<host>`, the runner with RUNNER_PLUGINS on, as `req.runner.plugins.key`). A path neither a
+  folder now nor under `/Volumes/` is refused; the downloads folder must be connected and writable. No answer in 5 s:
+  503 `<host> is offline`. Remote GPU hosts do not export this subject yet (their PUT answers 503).
+- **LoRAs and looks** scan the `loras/` folder of every connected folder.
+- A runner in a container sees only its mounted paths: a folder not mounted there shows not connected.
+
 ### Quantized variants for NVIDIA hosts (API 1.33, M9; plan 17-nvidia-quantized 21; normative)
 
 The official weights stay every pack's default; a community pre-quantized build (FP8 where one exists, else int8) is
@@ -3664,7 +3906,8 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   at most 4 unfinished media jobs (exports and frame jobs) per user, counted under a per-user lock (409).
   Studio builds the ffmpeg arguments (the one filter graph, ported from the old `internal/timeline` Build/EncodeArgs:
   conform chain per clip `trim, setpts, scale(in_color_matrix bt601 for untagged), pad, setsar=1, fps, format=yuv420p,
-  settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above; `-fflags +bitexact
+  settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above (from 1.106 with its
+  fades, crossfades and ducking: Audio fades, crossfades and ducking); `-fflags +bitexact
   -map_metadata -1 -movflags +faststart`) and sends `cmd.media.job` kind `export` with the object keys, never URLs.
   A copy plan also carries `expect` (the facts it planned with) and `conform_args`: the runner re-probes the downloads
   and runs `conform_args` when any fact differs (`mode: conform`, `reason`).
@@ -3711,6 +3954,7 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   host stopped responding: Several hosts, host loss).
 - (1.48) Kind `thumbs`: the takes' thumbnails (Thumbnails); exports and frames also write the thumbnail of their
   poster or frame (`result.thumb`).
+- (1.104) Kind `facts`: video and audio takes' facts and frame grids (Take facts).
 
 ## Timeline rules (normative)
 
@@ -3763,6 +4007,8 @@ Numbers in fixtures compare by value (1 = 1.0).
 | `too_many_markers` | (1.50) more than 200 markers (track and clip null) |
 | `duplicate_marker` | (1.50) a marker id twice (the clip field holds the marker's id, track null) |
 | `marker_past_end` | (1.50) a marker after the sequence's end, `frames(at) > frames` (with V1 clips; a marker on the end is fine) |
+| `fade_clip` | (1.106) a `fade_in` or `fade_out` on a clip without sound: an image, an empty slot or a line placeholder |
+| `crossfade_track` | (1.106) a `crossfade` on a V1 clip |
 
 - **Shot numbers** (from 1.29): a V1 clip's `number` (the board's "Shot 4 · birches"). Normalize keeps it as
   written on V1 and drops it on an audio track; studio alone gives numbers, when it stores a revision (every write,
@@ -3793,7 +4039,8 @@ Numbers in fixtures compare by value (1 = 1.0).
   hold, id, gap_id}` (Make shot); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
   {track, gain_db?, mute?}`. From 1.50 `remove {clip, ripple?}` (`ripple` on an audio-track clip: the later clips of
   its track, start frame at or after its start, move left by its length in frames; V1 always ripples), `split {…, ids?}`
-  (below: linked clips) and `set {…, link?}`, and the tools' ops below.
+  (below: linked clips) and `set {…, link?}`, and the tools' ops below. From 1.106 `set {…, fade_in?, fade_out?, crossfade?}` and
+  `ducking {on?, db?}` (Audio fades, crossfades and ducking).
 - **Tools' ops** (from 1.50; plan 23 27.2). Every bound is in frames on the target grid; `least` = max(1, d_in/2 +
   d_out/2) of the clip it applies to. The ops do not clamp: past a bound the op's code, or the problem normalize finds
   in the result (`trim` past a take's start or end, `dissolve_handles`), so a drag clamps in the web and an op sent
@@ -3856,8 +4103,474 @@ Numbers in fixtures compare by value (1 = 1.0).
   pictures bottom first `{clip, t (source seconds, null for an image), opacity}` (in a dissolve the incoming opacity =
   (f − (cut − d/2)) / d), an offline clip `{…, offline: true}`; sounds `{clip, t, gain_db = track gain + clip gain,
   fade}` for V1 video clips with sound and every audio-track clip, not muted (clip or track), with a dissolve's fades
-  (incoming = its opacity, outgoing = 1 − that). The old preview's bug (V1's track gain left out) is fixed here and the
+  (incoming = its opacity, outgoing = 1 − that; from 1.106 times its clip fades, crossfade and ducking: Audio fades,
+  crossfades and ducking). The old preview's bug (V1's track gain left out) is fixed here and the
   export applies the same gains. Gain above 0 dB needs Web Audio (a GainNode); `<video>.volume` stops at 1.
+
+## Audio fades, crossfades and ducking (API 1.106; plan 41, board docs/mock/AudioFades.dc.html; normative)
+
+Owner, 2026-11-28: "Per clip", "Make cues longer", "Auto, on in Magic", "Timeline too", "Keep these". Fades and ramps are
+**linear in amplitude** (ffmpeg `afade`'s default `tri`), so the player and Export sound the same.
+
+- **Fades** (`TimelineClip.fade_in` / `fade_out`, `MagicBlock.fade_in` / `fade_out`): seconds, 0 to 10 (0 is stored as
+  absent). On the Timeline a clip with sound has them: an audio-track clip with a take and a V1 video clip; an image, an
+  empty slot or a line placeholder with one is the problem `fade_clip`. Normalize snaps them to frames and clamps them:
+  `fade_in` ≤ the clip's length, `fade_out` ≤ the length − `fade_in` (never a refusal, so a trim never fails on a fade).
+  Edits: `set {clip, fade_in?, fade_out?}` (0 or null removes). In Magic a voice, music or sound block has them (another
+  kind is the board rules' 422 `blocks[<i>]: fade_in is for voice, music and sound blocks`), set by the `block` op's
+  `set.fade_in` / `set.fade_out`. The menu's Fade in… / Fade out… start at 1 s; quick picks 0.5, 1, 2, 4 s.
+- **Crossfade on the Timeline** (`TimelineClip.crossfade`, Crossfade into next): on an audio-track clip only (V1 keeps
+  its picture dissolves: `crossfade_track`), d seconds (the menu's 2 s, at most 10) into the clip of its track that starts
+  on its end frame. Normalize snaps d to frames, clamps it to both clips' lengths and **drops** it when no clip touches its
+  end any more (a move, a remove or a trim: the diff shows it). Set by `set {clip, crossfade}` (0 or null removes). It is
+  a **true blend** when the outgoing clip's take has d of sound past its `out` (in samples: `samples(out) + samples(d) ≤
+  samples(take length)`): the outgoing clip plays on past its end for d under the next clip's head, fading out over
+  [end, end + d) while the next fades in over the same span. Else a **dip**: the outgoing fades out over [end − d/2, end),
+  the next fades in over [start, start + d/2), and the edit's warnings carry `crossfade_dip: <clip> has no sound past
+  its cut: it dips` (code first); an offline take dips. While a clip has a crossfade its own `fade_out` and the next
+  clip's `fade_in` are kept but do not play. The agent view shows `crossfade` and `crossfade_mode` (blend | dip).
+- **Crossfade in Magic** (transition kind `crossfade`): `between` two music or sound blocks that meet (another pair,
+  or a lane's `start` / `end`: 422 `A crossfade joins two music or sound blocks.`); a new one is 2 s (in whole
+  frames). **Every kind between two sound blocks** (voice, music or sound; dissolve, fade, wipe, morph, crossfade) plays
+  and sends as a crossfade of its length, one rule for Play, Send and the Timeline; a morph there never runs (plan and run
+  skip it: `A morph is for shots.`). **Longer cues** ("Make cues longer"): a music or sound block with a crossfade-kind
+  join after it runs with that much extra: the resolver's `length` is the block's seconds + d, the run records `tail`
+  (`MagicBlockRun.tail`, seconds) and the plan's units count it. A blend when the outgoing block's shown take is at least
+  its block + d long (`MagicTake.duration_s`, one frame's slack), else a dip as on the Timeline, with the warning
+  `<block> was made before the crossfade: it dips instead.` (`MagicEditResult.warnings`, the FixList) and the agent
+  view's transition `mode` (blend | dip); a voice block never gets a tail and dips without a warning. A block's status
+  turns **out of date** only when its shown take came from a run with a `tail` and is now too short for the join's d
+  (the length grew past its tail); a take made with no tail stays done and dips. A sound lane's `start` / `end`
+  transition (any kind) is its first block's fade in / last block's fade out of that length (the longer of it and the
+  block's own).
+- **Ducking** (`Ducking {on, db}`: `TimelineDoc.ducking`, `MagicDoc.ducking`; `db` −24 to −3, the picks −6, −9, −12,
+  −18, default −12): a sequence without it is off, a board without it is on at −12 (a new board stores it on). Set by
+  the op `ducking {on?, db?}` (both documents; absent fields kept; one revision, undoable). **Music** dips under
+  **voice**: on the Timeline a music clip is an audio-track clip whose take is an audio take of class music, a voice clip
+  one of class voice (`TimelineTake.sound`; a video's sound and class sound are neither); in Magic music and voice
+  blocks (a dialogue is voice). Muted clips and clips on muted tracks are left out. Voice spans [a, b) are each voice
+  clip's sounding time (with its crossfade tail); the duck envelope at t is e(t) = max over spans of clamp(min((t − (a −
+  0.3)) / 0.3, (b + 0.3 − t) / 0.3), 0, 1), and a music clip's level is multiplied by 10^(db × e(t) / 20): it eases down
+  over the 0.3 s before a line, holds, and eases back over the 0.3 s after; spans closer than 0.6 s merge.
+- **Preview** (`frame_at`, Timeline rules: Preview): each sound's `fade` is the product of its dissolve fade (as
+  before), its clip fades (fade in: (f − start) / frames(fade_in) while under 1; fade out: (end − f) / frames(fade_out)),
+  its crossfade (blend: the outgoing sound is also listed during [end, end + d) with `t` = out + seconds(f − end) and
+  fade (end + d − f) / d, the incoming (f − start) / d; dip: over the halves) and, on a music clip, the duck factor
+  10^(db × e / 20). `gain_db` stays the track + clip gain. Magic's Play does the same with its blocks.
+- **Export** (Export, `cmd.media.job` kind `export`): each sound chain, after its trim and resample, gets `afade=t=in:
+  st=0:d=<fade_in>` and `afade=t=out:st=<length − fade_out>:d=<fade_out>`; a blend trims the outgoing clip to `out + d`
+  and fades it out over its last d (`afade=t=out:st=<length>:d=<d>`) while the incoming fades in over its first d: the
+  two **overlap** in the `amix` (each is placed with its own silence prefix, so no `acrossfade`, which would need them in
+  one stream and shorten it); a dip fades each side over d/2 the same way. Ducking is a **volume automation** on each
+  music chain after its placement, in sequence seconds: `volume=eval=frame:volume='pow(10,<db>*max(<span>,…)/20)'`, each
+  span `clip(min((t-(a-0.3))/0.3,(b+0.3-t)/0.3),0,1)` (none: no filter). Order in a chain: fades, dissolve fades, gain,
+  ducking. Send's bake jobs are unchanged.
+- **Send to Timeline** carries them: a voice, music or sound block's fades onto its clip's `fade_in` / `fade_out` (a
+  block cut at V1's end keeps them, clamped by normalize); a join of two sound blocks as the outgoing clip's `crossfade`
+  (seconds of its length; `MagicSendJoin` kind `crossfade` or its own kind, how `crossfade`); a sound lane's fade in and
+  out as its first and last block's clip's fades (how `fades`); the board's ducking as the sequence's `ducking`
+  (written out, on −12 when the board has none).
+- **The tools**: the Timeline ops (`set`'s `fade_in`, `fade_out`, `crossfade`; `ducking`) are in `try_timeline_edit`,
+  `edit_timeline` (helm mcp) and the in-app screen action `timeline.edit`; the Magic ops (`block` `set.fade_in` /
+  `set.fade_out`, transition kind `crossfade`, `ducking`) in `try_board_edit` and `edit_board` (the Assistant and helm
+  mcp). The agent views show clip and block fades, the crossfade's mode and the document's `ducking`.
+
+## Magic (API 1.80; alpha.6 item 5, plan 39 phase C, board docs/mock/MagicBoard.dc.html; normative)
+
+A Magic board is lanes in time: one JSON document per board (`MagicDoc`), stored as revisions and edited by named ops
+tried first without saving, the Timeline's shape (Edits by ops) for a different document. Phase C keeps the board in
+studio; from 1.81 the standard request per kind, runs and takes on blocks (phase D, below); from 1.82 Send to Timeline
+(phase G, below); from 1.87 the Assistant's tools (Magic: the Assistant, below); from 1.88 the agent view's block
+`request` and the ask rule's total without board frames (cross-lane review).
+
+- **Boards**: `GET /v1/studio/magic/boards` (newest `updated_at` first, at most 100), `POST` (an empty body:
+  "Untitled board", no lanes, 1280 × 720, 24 fps, 48000 Hz; `target` sets those; `doc` starts it from a whole
+  document, its blocks put in lane then time order), `GET/PATCH/DELETE …/boards/{board_id}` (PATCH renames, no
+  revision; DELETE is soft and takes its revisions and snapshots with it). **100 boards** per user: the 101st is the
+  409 `You have 100 boards; delete some first.` Every table is owner-scoped by `app_can_see`, so another user's
+  board (and its snapshots) is 404 on every route. A board's name is 1-80 characters.
+- **The document** (`MagicDoc`): `target`; `lanes[]` in order (`role` storyboard, shots, voice, music, sound or free:
+  it only picks the kind Add offers first; any kind goes on any lane); `blocks[]` (`at`, `length` in frames at the
+  board's fps; `kind` frame, image, video, voice, music or sound; `request` = `MagicRequest`; `takes[]` and `pinned`,
+  the caller's take ids; `note`; `effects[]` badges; `from_frame`); `links[]` (a block tied to one shot or a run of
+  shots); `transitions[]` (dissolve, fade, wipe or morph `between` two blocks that meet, or at a lane's `start` or
+  `end`; a cut is no transition); `assets[]` (the board's own characters, props and places; their `sheet` take ids);
+  `notes[]`. Status (draft, running, done, out of date) is derived, never stored (plan 39 §45.7).
+- **The board rules** (a whole document given to studio, and every edit's result): ids `[A-Za-z0-9_-]{1,40}`, unique
+  among lanes, blocks and transitions together (assets among themselves); every block on a lane of the board, from
+  frame 0, at least one frame long, not over the block before it on its lane; `pinned` one of its `takes`; links and
+  transitions naming what is there (a `between` pair on one lane, meeting); at most 64 lanes, 2000 blocks, 200 assets.
+  Every take id a document names that the stored one did not must be the caller's (unknown, deleted or another
+  user's: 422 `take <id> not found`). A broken rule is a 422 `{detail}` (`blocks[2]: it overlaps the block before it
+  on its lane`).
+- **Names** (API 1.91; owner, 2026-11-27: "auto naming here as well"), as Timeline: names: `MagicBoard.title_source`
+  (`default` for "Untitled board", `prompt`, `user` for a typed name and any rename, `model` with `named_by`). Boards
+  made before 1.91: "Untitled board" is `default`, any other name `user`. While it is `default` and never asked, the
+  first stored document (a create with `doc`, an edit, an undo, redo or restore; the Assistant's edits from a brief
+  too) whose blocks hold a prompt (the first block, lane then time order, with a `prompt`, else a `line`, else a
+  dialogue's first line with words; `<imageN>` tags removed, spaces collapsed, 2000 characters) names it once: the
+  prompt's first 5 words at once (`prompt`; the board's own session is made then if it has none, and is marked asked,
+  so its runs never ask again), then `cmd.pipeline.name` for the board's session with the board id as `run_id`, when
+  the admin's setting is not off. The answer renames the board whose session it is while its `title_source` is
+  `default` or `prompt` (a rename wins), and that session, with one `session` event (`TitleEvent`, `run_id` the board
+  id) in its log. The board's session is never named from its first run (it is made `user`). The Magic page reads the
+  board again on that event and shows "named by <model>" under the board's name once per browser, as the Timeline.
+
+### Magic: edits by ops (API 1.80; normative)
+
+- **`POST …/boards/{board_id}/edits {base_revision, ops, dry_run?}`**: `ops` (`MagicOp`, 1 to **200**; more =
+  `too_many_ops`) applied in order under the board's row lock to the current document, which must be
+  `base_revision` (else the 409 `board changed since you opened it (now revision <n>)`, a dry run too; from 1.103
+  not when every revision since is studio's `take`, a finished run's or morph's take added, and the ops keep those
+  takes: they then apply on top of the current document, and `revision` says where it landed). **All or
+  nothing**: one revision for the call (`by` user, `undo_to` the one before), so one undo undoes it. 200
+  `MagicEditResult {revision, dry_run, board, diff, warnings}`: `diff` by id per list (blocks, lanes, transitions,
+  assets; links by their block), `warnings` what the board shows after it (`Line 1 runs 3 s past Shot 1`), never a
+  refusal. `dry_run: true`: the same answer, `revision` = the current one, nothing stored. `X-Helm-Client` labels the
+  revision's `via` as the Timeline's does.
+- **The ops** (`web_service/lib/magic.ts` `apply` and `studio_service/api/magic` `Apply`, held equal by
+  `fixtures/magic/edits.json` and its replay in `make contracts-check`): `add` (a block at a point; `mode` insert
+  pushes what starts there or later along, a point inside a block goes to its end; overwrite covers the span,
+  trimming or splitting what is there), `move` (`ids` by `dt` frames, on their lanes or onto `lane`; insert closes the
+  gap they leave, a drop point counting in the lane without them), `trim` (`at`, `length`; never over the next
+  block), `delete` (insert closes the gap), `duplicate` (copies after the group, unpinned, `<name> copy`), `split`
+  (the join after it follows the second part), `link` / `unlink`, `transition` (exactly one of `between`, `start`,
+  `end`; `cut` takes it away; a new one's length is 0.5 s for a dissolve or wipe and 1 s for a fade or morph, in whole
+  frames; from 1.106 2 s for a `crossfade`, between two music or sound blocks only), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins; from
+  1.101 `gain_db`, a voice, music or sound block's level, -60 to 12 dB as a Timeline clip's gain, 0 or null takes it off;
+  another kind is the board rules' 422 `blocks[<i>]: gain_db is for voice, music and sound blocks`; Play applies it and
+  Send to Timeline puts it on the block's clips' `gain_db`; the agent view shows it; from 1.106 `fade_in` and `fade_out`,
+  seconds, the same blocks only: Audio fades, crossfades and ducking), `ducking {on?, db?}` (from 1.106, the board's
+  Duck music),
+  `lane_add` (after `after`, else last), `lane` (`set` name, role, hidden, kind), `lane_move` (`by` -1 or 1),
+  `lane_delete` (its blocks go), `asset_delete` (its @ picks go: refs and, from 1.83, a first or last frame; its
+  mentions in a prompt become its name), and from 1.83 `asset_add`, `asset` and `take_add` (Magic: assets and the
+  storyboard). After an op: a block tied to shots that moved
+  moves with the first of them, or keeps fitting the run when it fitted it; ties and transitions naming what is gone,
+  and joins that no longer meet, go; blocks are in lane, then time order.
+- **Refusals** are a 422 `MagicEditError {detail, op_index}`, `detail` the board's own words (`That lane is gone.`,
+  `Those blocks don't meet.`, `It would cover the block next to it.`, `The playhead isn't on it.`, `Pick a join.`,
+  `That id is taken.`, …). A body that does not fit is the usual `{detail}` (`ops[1]: unknown field at`).
+  Nothing is stored on any error.
+- **Ids**: an op that makes a block, lane or transition may give its id (unused); absent ones studio makes: the
+  first unused `b<n>`, `l<n>`, `t<n>`, the same in the web, so a dry run and the editor agree.
+- **History**: `GET …/revisions` (the last 100 and every snapshot's, newest first, `before`, `limit` ≤ 100),
+  `POST …/undo` and `…/redo` `{revision}` (written forward; 409 `nothing to undo` / `nothing to redo`; an edit after
+  an undo clears redo), `POST …/restore {revision, to}` (the kept revision `to` written forward; 422 `revision <n> is
+  not kept`). `can_undo` and `can_redo` on every `MagicBoard` say whether the buttons go.
+- **Snapshots**: `GET/POST …/snapshots`, `PATCH/DELETE …/snapshots/{snapshot_id}`: a named pointer to a kept
+  revision (absent: the current one; a missing name is `Snapshot <n>`). Unlimited (owner, 2026-11-27). A snapshot's
+  revision is never pruned while it exists; Restore is `…/restore` with its `revision`.
+- **The agent view**: `GET …/boards/{board_id}?view=agent` (`MagicAgentView`): lanes with their block counts, every
+  block flat with `at`/`length` in frames and `at_s`/`end_s`, its status (draft or done until runs come), the take it
+  shows, its prompt or line, what it is tied to and its badges (from 1.88 its whole `request` too: a `block` op's
+  `request` replaces the stored one, so an agent sends it back with its changes, or a music block's lyrics or a
+  shot's picks are lost); transitions with where their join is; assets with the blocks they are used in; no signed
+  links.
+
+### Magic: the standard request (API 1.81; plan 39 phase D; normative)
+
+- **A workflow serves a kind** by its registry entry's `standard` block (registry.schema.json `standard`): `kind`
+  (image, video, voice; from 1.85 music and sound), `model` (its name in the picker), `fields` (each
+  shared field it fills → the `<node>.<param>` it fills), `set` (inputs every standard run of it carries:
+  `canvas.mode: fixed`) and `seconds` (the declared GPU seconds per unit, below). The runner checks it at start and
+  `make contracts-check` checks the canonical ones: the kind fits the media, each field's param is unwired and of a
+  type the field fills (prompt and line: text or string; refs: rows with an Image item; first and last: an image
+  param, or rows with an Image item and a `position: seconds` field; length: frames; width and height: int; seed:
+  seed; voice: voice; from 1.85 Magic: music and sound, below), each `set` key a param. Today: Qwen Image (`qwen-image`), MiniMax H3 Image, LTX 2.5
+  (`ltx-image-to-video`), MiniMax H3 (`minimax-h3-image-to-video`), Qwen3-TTS and ZONOS3 (their voice-overs); the
+  fake host's Echo, Echo video, Echo keyframes and Echo voice.
+- **`GET /v1/studio/magic/kinds`**: per kind its shared fields in form order (image: prompt, refs, size, seed; video:
+  prompt, first, last, length, size, seed; voice: line, voice, seed) and its models in registry order, each with the
+  fields it fills, `greyed` (every other field of the kind → `<model> can't take a last frame`), `seconds`, and
+  `advanced` (every other param of its workflow that a form can set: not rows, image, media, voice or span; not
+  wired; the workflow's value as `default`). Before 1.85 Music and Sound carried `off` (`Comes with Create's Music and
+  Sound`); before 1.83 a board frame carried `off` (`Board frames come with the storyboard`); from
+  1.83 it is served by the image models.
+- **`MagicRequest`** (a block's `request`): `model` (a workflow id from the kinds; absent: the kind's first),
+  `prompt` or `line`, `refs`, `first` and `last` (`MagicRef`s), `width` and `height` (absent: the board's), `seed`,
+  `count` (1-4 runs), `voice` (an asset; its `voice_id`) or `voice_id` (a saved voice), `advanced`
+  (`<node>.<param>` → value). **Studio's resolver** turns it into a normal run request of that workflow: each field
+  the model fills goes to its param (a picture: the block's take for `take`, else the first or last frame take of
+  its video, made at once as `POST /takes/{id}/frame` does; an asset: its sheet's first take; a rows param gets
+  `{image: {take_id}}` items, a frame row at `seconds` 0 or the clip's last frame; such a rows param left empty
+  bypasses its node), the length on the frames param's grid at its fps, the size scaled to fit the params' bounds
+  and snapped to their steps; `set` then `advanced` fill the rest, the shared fields winning (an `advanced` key
+  that is not one of the model's own Advanced params is dropped: one kept from another model). A field the model
+  cannot fill is left out (the form greys it). A model's required picks are why a block cannot run: a first frame on
+  an image node that may not stay empty (MiniMax H3: `MiniMax H3 needs a first frame`) and a voice (`Qwen3-TTS needs a
+  voice`). Everything else is the run's own rules and 422s.
+
+### Magic: runs (API 1.81; normative)
+
+- **`POST …/boards/{board_id}/run {revision, blocks | lane | stale}`**: 202 `MagicRunStarted {board, started,
+  skipped}`. Each block's request is resolved and run `count` times (seeds `seed`, `seed + 1`, …) in the board's
+  own session (`MagicBoard.session_id`, made at the first run, titled `Magic · <board>`, hidden from GET
+  /v1/studio/sessions); `magic_runs` keeps run → block with the hash of the block's inputs then. Named `blocks` must
+  all run (422 with why, `Shot 2: …`; 409 `Shot 2 is already running`); a `lane`'s or `stale`'s (every block not
+  done) that cannot are `skipped` with why, also when refused on the way (`Shot 1 has no take yet`, a frame still
+  being made, the run's own 4xx) while the others run. A frame a pick needs is made in a transaction of its own, so
+  its job outlives a refusal. 409 when `revision` is not the current one.
+- **Takes** join their block as the projector stores them: a studio revision appends the take id to the block's
+  `takes` (undo skips it, as the Timeline's fills); a block gone since leaves the take in the gallery. The board's
+  session events (`GET /v1/studio/sessions/{session_id}/events`) carry every run's status, progress and outputs: the
+  page reads the board again on them.
+- **`MagicBoard`** carries `runs` (every block's, oldest first, the last 20 each: status, progress, takes, seed,
+  `current`, `by` user or assistant, `render_s`: the run history), `takes` (the document's takes with signed links
+  and seeds) and `status` per block, **derived**: running (a run queued or running), else done (its shown take, the
+  pinned or latest, came from a run whose inputs hash is the block's now, or from no run of the board), out_of_date
+  (they differ: its request, the pictures its first, last and refs pick, the frame it was made from), failed (no
+  take, its last run failed), draft (no take). The agent view's `status` is the same.
+- **`POST …/boards/{board_id}/plan {blocks | lane | stale}`**: `MagicPlan`, nothing stored. Per block `seconds`
+  (all its runs), `source`, `host` and `peak_gb` (as POST /runs/plan) or `reason` it cannot run; the estimate is
+  **yours** (the median over your last 5 takes of that workflow on that host of render_s per unit, × the block's
+  units), else **pack** (`standard.seconds` × units), else **unknown** (null). Units: an image's megapixels, a
+  video's seconds × its pixels / (1280 × 720), a voice's seconds. Per lane and in all (null when any is unknown);
+  `order` (board frames first, then lane by lane in time); from 1.94 the estimate follows the variant (Magic:
+  variants, below); **the ask rule** `ask`: true when a run other than a
+  board frame has no estimate or the total of those runs is above `ask_above_gpu_minutes` (from 1.88 board frames
+  are left out of that total, as they never ask), with `ask_text` (`3 shots, about 6 min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
+- **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 10 from API 1.110, was 5; owner, 2026-11-28: "make it to 10 min limit"; `magic_settings`).
+
+### Magic: variants (API 1.94; owner 2026-11-27, board MagicBoard frames 3 and 7; normative)
+
+- **The request's variant** is its Advanced `<model node>.variant` (`advanced: {"model.variant": "turbo"}`; every
+  standard workflow's model node is `model`); absent, or not one of the param's values, the workflow's own (Qwen
+  Image: `base`). No new request field: the form lifts it out of Advanced into a Variant choice beside Model, and
+  the Assistant sets it the same way ("use turbo"). A variant that loads at one precision (fp8) runs at it, as any
+  run does (the registry's RunsAt).
+- **`MagicModel.family`**: its model node's family, so the page reads that model's variants (titles, devices,
+  presence per host) from GET /v1/studio/models: the Variant choice offers the param's values, an fp8 one
+  (`devices: [cuda]`) only when a connected host has that device, and greys one no host it may run on has
+  (`Turbo fp8 not downloaded on gcp`, as Create's Run on says it).
+- **`MagicBlockRun.variant`**: the variant the run loaded (from its resolved graph's model node), as its title
+  (`Turbo`); the run history, a frame's take rows (`Sketch · 2 · Turbo`) and the take on stage (`Qwen Image 2.1 ·
+  Turbo`) show it.
+- **The estimate follows it**: **yours** is the median over your last 5 takes of that workflow on that host **made at
+  that variant** (`made_with.model.variant`); **pack** (`standard.seconds`) only when the variant is the workflow's
+  own, as that is what the pack measured; another variant with no runs of yours is **unknown** until it has one
+  (the page then says Time unknown; a shot asks first). The page's own estimate of an edited request does the same
+  with the pack's rate.
+
+### Magic: Send to Timeline (API 1.82; plan 39 phase G, board MagicBoard frame 9; normative)
+
+- **`POST …/boards/{board_id}/send {revision, name?, dry_run?}`** makes a **new sequence** every time (the Timeline is
+  never changed, and a sequence keeps no link back to its board): `MagicSendResult {plan, send}`. `dry_run`: 200 with
+  the `plan` only, nothing stored. No bakes: 201, the send `done` with its `timeline_id`. Bakes: 202, the send
+  `baking` with its `jobs` (media jobs of kind `bake`, outside the four open media jobs a user may have); the
+  projector makes the sequence when the last one succeeds, in the same transaction, and a failed or cancelled one
+  fails the send (`failure`). 409 when `revision` is not the current one, `You have 100 sequences; delete some
+  first.` (the Timeline's, also when the cap is reached while it bakes: the send fails with it), `no live host can
+  export (ffmpeg)` when it needs bakes and no env can run them, `This board is still sending; wait for it.` while a
+  send of the board bakes; 422 `Nothing to send: add a shot with a take first.` (no shot or sound with a take).
+  The name is `<board> · send <n>` (n counts the board's sends), or `name`; its session as the Timeline's own.
+- **The doc builder** (`studio_service/api/magic` `BuildSend`, a pure function of the document, its takes and
+  statuses): the board's first `shots` lane goes on V1 in time, each block's shown take (pinned, else latest): a
+  video from its start for the block's length (a take shorter than its block leaves the rest an empty slot, with a
+  warning), an image held; gaps and blocks with no take are empty slots (`Shot 3 has no take: a gap`); an out-of-date
+  block goes as it is (`Shot 3 is out of date: sends take 2 as it is`). V1 clip ids are the block ids. The audio
+  lanes (role voice, music or sound, and free lanes' audio blocks), up to 8 in lane order, are audio tracks A2… (the
+  Timeline's names: V1 is track 1), each block at its time for its length (cut at V1's end), `link` to the shot it is tied to
+  (`TimelineClip.link`, the first of its run when that shot goes). Storyboard frames, assets, other picture lanes and
+  blocks of the wrong kind for their track stay on the board (a warning names each lane). The target is the board's
+  (fps not on the Timeline's table: 24, sample rate not 44100: 48000, each a warning).
+- **Joins on V1.** A cut is a cut. A **dissolve** is the Timeline's own `transition_in` when both takes have the
+  media for it (the first runs half its length past its block, the second half past its block, whose clip then starts
+  half the dissolve into its take); else it is baked. **Fade** (through black), **wipe** (left to right) and an
+  unhandled dissolve are **baked**: the clip of `length` frames centred on the cut, from the first block's last half
+  and the second's first half (each side's take past its block where it has it, else its end frame held), takes
+  their place, so every time on the board stays the same on the sequence. A lane's **fade in** and **fade out** (on
+  the Shots lane) bake its first block's first `length` frames from black, or its last block's last ones to black.
+  A **morph** with a shown take is that take as its own clip in the same span; with none it goes as a cut (a
+  warning). A block too short for both its ends' bakes sends its second join as a cut (a warning). Effects on a shot
+  (badges that are not `off`): Grade (`temperature`, `contrast`), Slow (`rate` 0.5-2: the take slowed to fill the
+  block) and Stabilize are baked into that shot's clip and into the joins that read it; any other is skipped (a
+  warning). From 1.106 sound goes with its fades, crossfades and ducking (Audio fades, crossfades and ducking: Send);
+  before, a sound lane's fade was skipped.
+- **The bake job** (`cmd.media.job` kind `bake`, `bake {target, frames, samples, video_bitrate, args}`): studio's
+  graph (`studio_service/api/timeline` `BuildBake`: the export's picture steps, xfade `fadeblack`, `wipeleft` or
+  `fade`, `fade` in or out, the effects' filters, `tpad` for a held end, each side's sound faded across, silence where
+  a side has none) run with the export's placeholders and checks, conformed and verified as an export; output
+  `u/<owner_id>/bakes/<job_id>/bake.mp4` with its poster, last frame and thumbnail. Its take is source `bake`
+  (`parents` the takes it read, title `<board> · <join>`), in the gallery like an export.
+- **Morphs** (from 1.82): a `morph` transition carries its own `request` (kind video; a model whose standard block
+  fills `first` and `last`; absent: the fastest such), `takes` and `pinned`, set by the `transition` op's `request`
+  and `pinned` (kept while it stays a morph; another kind drops them). It runs as a block does (`…/run` and
+  `…/plan` pick it by its id, with its lane, or by `stale`): a video of its length from the first block's last frame
+  to the second's first frame; its runs, takes and status are on `MagicBoard` under its id.
+- **The sends list**: `GET …/boards/{board_id}/sends` (`MagicSendList`, newest first: name, the revision it was sent
+  from, status, `bakes` and `baked`, `timeline_id`, `timeline_gone` once that sequence is deleted). A listed send's
+  revision is kept (never pruned), so Restore board to it works. `DELETE …/sends/{send_id}` removes it from the list
+  (204; its sequence stays; a send still baking is stopped, its jobs cancelled).
+
+### Magic: assets and the storyboard (API 1.83; plan 39 phase E; normative)
+
+- **Assets** are the board's own characters, props and places (`MagicAsset`): Import copies a Gallery take or an
+  Element in (its pictures' take ids, its voice, its text as the note; `imported_from` for the record), never a link,
+  so later changes in the Gallery don't reach it. `asset_add {asset}` (`MagicAssetNew`: kind, `handle` by
+  LibraryItem.handle's rule, unique on the board whatever its case: `That handle is taken.`, `A handle starts with a
+  letter: letters, digits, - or _.`; `name` 1-80: `Give it a name.`; absent `id`: the first unused `a<n>` among the
+  assets), `asset {id, set}` (kind, name, note, `voice_id`: null takes it off, `sheet`: each take once, `views`;
+  `That asset is gone.`); the handle is kept from asset_add. `views` names sheet takes (`Front`), only ones on the
+  sheet (others are dropped). `take_add {id, take}`: a picture of your own (an upload, a Gallery take) joins a block's
+  `takes` (at most 200: `A block keeps at most 200 takes.`) and is pinned; one it has is only pinned.
+- **@ picks**: a request's `refs`, `first` and `last` name assets by id; a prompt names them as `@handle` (the
+  Mentions grammar). Studio's resolver writes each board asset's mention as its name, followed by its picture's row
+  (`Mara <image1>`) when the model takes references and the asset is one of them, so Create's resolver never reads a
+  board's handle as an element; other mentions (the user's Elements) are left to it. An asset is **used in** the
+  blocks whose refs, first or last frame, or voice name it.
+- **Make views**: `POST …/boards/{board_id}/assets/{asset_id}/views {revision, views, model?}` (1-6 names): one run
+  of an image model per view (`A character sheet view of Mara (her note): front. …`; a character's or prop's square at
+  the board's short side, at most 1024; its first sheet take the reference), in the board's session; `magic_runs`
+  keeps them against the asset (`asset`, `label` the view) and the projector adds each take to its sheet named by the
+  view, as a studio revision. `MagicBoard.asset_runs` lists them (the last 20 of each asset). From 1.84: a view of
+  the asset still queued or running is not made again (409 `Front is already being made`).
+  From 1.98: `width`, `height` and `advanced` (as a block request's: `model.variant`, `model.precision`) apply to
+  every view of the batch; the size goes on the model's grid under its max, a key or value the model lacks is dropped.
+- **Board frames run** (`kind` frame) on the image kind's models: GET /magic/kinds lists them with the image fields.
+  The prompt is the frame's style (from 1.99 `film`, also absent: the film's own style, no style sentence; `sketch`:
+  `A storyboard sketch: loose pencil lines, black and white`; rough; full), its `framing` size and angle (`Wide shot, from a low angle`), its words, then `With @handle` for each asset
+  it picks that its words don't name. `magic_runs.label` keeps the style it ran in (`MagicBlockRun.style`). Frames
+  never go to the Timeline.
+- **A shot made from a frame** (`from_frame`): its first frame is the frame's take unless it picks one; with no prompt
+  of its own its prompt is the frame's framing, words and `move` (`The camera slowly pushes in`). Generate from board
+  adds it under the frame (the frame's `shot_model`) and runs it. Its inputs include the frame's request, so the shot
+  goes **out of date** when the frame changes (its take or its words).
+- **The rough cut** is the web's: the board's frames in time order, each for its length, with its `line` (else the
+  lines of the voice blocks under it), and the voice takes under them played; nothing is stored.
+
+### Magic: music and sound (API 1.85; plan 39 phase H; normative)
+
+- **The kinds.** Music's shared fields, in form order: prompt (the style), lyrics, length, key, bpm, seed; Sound's:
+  from, prompt, length, seed. A field a model can't fill is greyed as before (`MiniMax Music 3 can't take a key`,
+  `Stable Audio 3 Small-SFX can't take a shot's video`). Standard blocks: MiniMax Music 3 (`minimax-music3`,
+  `default: true`: the owner's default), ACE-Step 1.5 (`ace-step-music`; XL or 2B under Advanced, its variant),
+  Stable Audio 3 Small-SFX (`sa3-sound`), MMAudio (`mmaudio-sound` and `mmaudio-video`); the fake host's Echo music,
+  Echo sound and Echo sound from a video. A kind's models are listed default first, then the fastest declared.
+- **One model, two workflows.** Workflows of one kind with the same `standard.model` are one model in GET
+  /magic/kinds: the one without `from` is its `workflow_id`, the one with `from` its `video` (`{workflow_id, title,
+  advanced}`); its `fields` are both's. A request's `model` is the first's id; with `from` the `video` workflow runs.
+  A request with `from` and no `model` runs the kind's first model that takes a video.
+- **The resolver** (beside Magic: the standard request): `length` on a float param is the block's seconds on the
+  param's grid and bounds; `lyrics` goes as is and `instrumental` is true when they are empty; `key` only when the key
+  param has it as a value (else the model's Auto); `bpm` clamped to the param's bounds; `from` is the shot's shown
+  take as `{take_id}` (why a block can't run: `<model> can't take a shot's video`, `Shot 2 is not on the board`,
+  `Shot 2 has no take yet`, 422 on a named block). A music or sound block's units are its seconds.
+- **The block keeps the audio take.** A voice, music or sound block takes only its runs' audio takes (from 1.86 the
+  rule as built: other kinds take every take a run makes), so MMAudio's video with the sound stays in the Gallery and
+  the run history lists the audio take. `MagicTake.sound` is the take's class: the web draws a music take as an album cover
+  (its gradient from the prompt, a vinyl disc) and a sound or voice take as an orb (sky, amber), by the take's class
+  whatever its lane.
+
+### Magic: dialogue, Run on and Loop (API 1.89; plan 39 gaps; normative)
+
+- **A dialogue** is a voice block whose request has `turns` (`[{speaker, text}]`: a speaker is a board asset). Each
+  turn is its own run of the voice model: the turn's text is the line, the speaker's `voice_id` the voice (the
+  request's own line and voice are not used), the request's model, seed and Advanced as for a line. Why it can't run:
+  `Line 2 has no words`, `Line 2's @mara has no voice`, no turns (`A dialogue needs a line`), the model's own (it must
+  take a line and a voice). `magic_runs.turn` keeps each run's turn; `MagicBlockRun.turn` says it. A Run of a dialogue
+  runs the turns that are not done (all of them when every one is); its count is one run per turn.
+- **A run's turn follows its line** (API 1.90). A run is for the turn it ran for while its inputs match that turn's,
+  else for the turn whose inputs it matches now (a line moved up or down, or a line before it removed), else for the
+  turn it ran for (its line changed: out of date). `MagicBlockRun.turn` is that turn and `current` is against it; a
+  turn's `take` is its newest run's take made from its inputs now, else its newest run's take.
+- **Per turn status.** Each turn's runs (the last 20 of each turn) are hashed as a line block of that turn (its text,
+  speaker, the speaker's voice, the model, seed and Advanced, the block's length), so changing one line puts only that
+  turn out of date. `MagicStatus.turns[i]` is each turn's status and `take` (its newest run's take); the block's own
+  status is running when a turn is, failed when a turn failed with no take, draft when no turn has a take, out of date
+  when a turn is out of date or has no take yet, else done. Every turn's take joins the block's `takes`.
+- **Playing and sending.** A dialogue's turns play one after another from the block's start, each its take's length
+  (`MagicTake.duration_s`), cut at the block's end; Send to Timeline puts them on the lane's audio track the same way,
+  the first linked to the block's shot.
+- **Run on.** `MagicRequest.host` sends the block's runs to that host only (RunRequest.host, Create's Run on); the
+  plan's `host` is it. `MagicModel.env` is the workflow's env (the page greys a host without it). Not one of the
+  block's inputs: a change keeps its takes current.
+- **Loop.** `MagicRequest.loop` on a sound block repeats its take to fill the block when played and sent (one clip
+  after another, the last cut at the block's end). The web offers it for a sound made from a prompt (a sound made from
+  a shot's video follows the shot; from 1.90 Loop is off while the request has `from`, played and sent). Not one
+  of the block's inputs.
+- **Takes.** `MagicTake.duration_s` (a video's or audio take's seconds) and `sections` (a song with tagged lyrics,
+  Take.audio.sections): the page draws a music block's sections as markers (a click seeks), else, for lyrics with
+  `[tags]` and no take that has sections, the tags spread over the block by their lines.
+
+### Magic: the Assistant (API 1.87; plan 39 phase F, board MagicBoard frame 8; normative)
+
+- **Tools** (`tools/catalog.json`, surface assistant, served by studio as the thread's owner, its writes labelled
+  `via` assistant: a revision's History says "by Assistant", a run's `by` is assistant): `list_boards`, `show_board`
+  (the agent view and the plan of every block not done: the estimate), `try_board_edit` (a dry run: the diff, the
+  warnings and a `summary`; nothing stored), `edit_board` (the same ops on `base_revision`; card `board_edit`),
+  `restore_board` (card `board_edit`), `plan_board` (`…/plan`), `run_blocks` (card `magic_run`, asked only above the
+  limit), `board_frame` (what each visible lane shows at a board time: block, take, seconds into it, status; nothing
+  is rendered: look at a take with look_at) and `send_to_timeline` (card `send`). They are not on helm mcp yet.
+- **From 1.93** (owner, 2026-11-27: "Yes, fix them", after the Assistant's Magic audit): `list_boards` takes `q`;
+  `create_board` (`POST …/boards` {name?, target?}: an empty board, the one assistant write with no card, since
+  nothing is lost or run; answers {board_id, name, revision}, then the Assistant opens it with navigate `/magic` b);
+  `magic_kinds` (GET /v1/studio/magic/kinds, optionally one `kind`: model workflow ids, greyed fields, env, Advanced
+  params); `make_views` {board_id, revision, asset, views, model?} (`…/assets/{asset_id}/views`, card `magic_run`
+  under the ask rule: the views are planned in process as image runs, within the limit they start at once with no
+  card, above it or with no estimate the preview is {revision, plan, frames: [], rest} as run_blocks' and the Yes
+  starts them). The agent view adds a block's `take_ids` (newest first), `pinned`, `error` (failed: why) and a
+  dialogue's `turns` (MagicStatus.turns), an asset's `sheet` [{take_id, view?}], `voice_id` and `note`, a morph's
+  `request`, `takes` and `pinned`; an asset's `used_in` counts what lib/magic.ts usedIn counts (refs, voice, a
+  dialogue's speakers, first and last picks). run_blocks' and make_views' final reply carry `seconds` (the estimate
+  of what started; null unknown).
+- **design_voice and save_voice** (alpha.6; owner, 2026-11-28: "Yes, build it"; from 1.102 on helm mcp too, owner:
+  "yes add voice tools to mcp as well"). `design_voice` {board_id, revision, asset, design, line, language?, voice_id?} is Create's Design a voice for a
+  board's character: a designed voice named after the asset (`POST /library` {kind voice, group designed, voice
+  {design, language?}}; with `voice_id`, a PUT of that one), then one run of the voice design template (an audio
+  template whose voice param takes `design` only, a real one first; Echo's voice-over in fake mode) saying `line`
+  in the board's session (not on the sheet). Card `magic_run` under the ask rule: the estimate is the owner's recent
+  rate of that workflow (any host) × the line's speech seconds; unknown or above the limit (or `ask`) the preview is
+  {revision, plan {limit_minutes, seconds, ask}, frames: [], rest {names, seconds, ask_text}} and the voice is made
+  only on the Yes. Answers {revision, voice_id, started: [{run_id}], seconds}. `save_voice` {board_id, revision,
+  asset, take_id} keeps the picked take: the first designed voice of its `made_with.voices` gets it as its `clip`
+  (PUT with `consent: true`: the Yes on the card is the rights tick; a take under 3 s is the PUT's 422) and the asset
+  `voice_id` (one edit, `asset` set voice_id). Card `board_edit`: the preview is the edit's dry run plus {ops,
+  voice_id, name}; answers {voice_id, revision, summary}. ZONOS3 then clones that clip in dialogue.
+  Over helm mcp (1.102) there is no card: `design_voice` is `POST …/boards/{board_id}/assets/{asset}/voice/design`
+  {revision, design, line, language?, voice_id?}, started at once (202, the same answer); `save_voice` is `POST
+  …/assets/{asset}/voice` {revision, take_id, consent} and needs `consent: true`, the voice-rights OK (else the 422
+  `consent: say you have the right to use this voice (consent: true)`); the Assistant's `save_voice` ignores
+  `consent` (its card's Yes is the OK).
+- **cancel_runs** (1.95; owner, 2026-11-27: "yes build it", after the Assistant started 8 frame runs that only the
+  Assistant's Stop could not end): {board_id, exactly one of blocks, lane, run_ids, all} stops the board's runs still
+  queued or running, for the Assistant and helm mcp, with no card (stopping loses only work in flight): it reads the
+  board (GET …/boards/{board_id}, owner scoped: another user's board is not found) and asks each matching run's own
+  cancel (POST /v1/studio/runs/{run_id}/cancel), so a queued run drops at once and a running one stops at its next
+  safe point; a run that ended meanwhile (409) is left out. `all` and `run_ids` take Make views' runs too (`block` is
+  then the asset's id). Answers {stopped: [{run_id, block, status: cancelled | running}]}. The web stops runs the
+  same way (each run's cancel): a running block's Stop (menu, dialog), Stop runs (N) in the board toolbar after a
+  confirm, and the Assistant's Stop offers "Stop its runs too" (the board's open runs by Assistant). No board route.
+- **Auto mode's caps** (1.93): with the chat's Auto on, every Magic run that starts without a card (run_blocks within
+  the limit, its board frames, make_views within the limit) is reserved in `assistant_spend` (kind `auto`, keyed by
+  the call: one take per run, its estimate in GPU seconds, unknown as 0). Once the hour's takes or GPU minutes are at
+  a cap, pipelines asks studio with `ask` true: studio answers the preview even within the limit, and the card's
+  note is `Auto paused · 8 of 8 takes this hour` (or GPU minutes); the user's Yes runs it (not counted: the user
+  said yes). Auto off: nothing is counted, nothing changes.
+- **The summary** of an edit names what changed by block name: `Added Shot 2 and Frame 4; moved Line 2; removed
+  Shot 5` (more than two blocks in one action: a kind with several is counted, one alone named, `Added 3 shots and
+  Frame 4`, the board's frame 8), then lanes, assets, transitions and ties (`Added lane Music`, `Added a dissolve`);
+  an assistant edit's revision keeps it as its `ops_summary`.
+- **Asking first.** studio.tools (req.studio.tools) asks a card tool without `confirmed` first: studio answers a
+  `preview` and does nothing else: `edit_board` the dry run (diff, warnings, summary) and `estimate` {seconds, host,
+  blocks} for the blocks it adds or changes that can run (null seconds: unknown); `restore_board` the revision it
+  brings back (`to`, its `by`, `via`, `ops_summary`, `saved_at`); `send_to_timeline` the send's dry-run plan. The
+  user's Yes asks again with `confirmed` under the same call id: studio does it and keeps that reply (asked again: the
+  same reply). Not now leaves the board as it was.
+- **The ask rule** (plan 39 §45.8): `run_blocks` plans the pick first (`…/plan`). Its ask rule false: everything
+  runs at once, no card, the final reply. True (a run above `ask_above_gpu_minutes`, or one with no estimate): the
+  pick's board frames start at once (they never ask) and the `preview` is the plan with `frames` (what started, each
+  `{block, run_id, seconds}`); the card says `Run 3 shots, about 6 min?` with `Above your 10 min limit. Frame 4 ran on
+  its own (6 s).` (or `It has no estimate yet.`); its Yes runs the rest. A run is checked against the board's
+  revision as the route does (409: read the board again).
+- **The proposal on the board** (frame 8): the `board_edit` card carries `board` {board_id, base_revision, ops} (a
+  restore: `to`, no ops). The Magic page with that board open applies the ops to its own document and draws the
+  result: new blocks dashed green with `New`, moved or changed ones dashed blue with `Moved`, removed ones faded, and a
+  bar `Assistant's change · <summary>` with the estimate, Discard (Not now) and Apply (Yes); the drawer shows the same
+  card. After the answer the page reads the board again.
+- **Screen actions** (`actions.json` screen `magic`, route `/magic`): `select` (block ids), `openBlock`, `play`
+  (from `at_s`, or `pause`) and `scrub` (`at_s`); the summary's fields are the board's id, name, revision and length,
+  its lanes with their block counts, the selection and the playhead. `navigate` takes `/magic` with `b` (a board id).
 
 ## Deleting runs (API 1.43; plan 21 25.3; normative)
 
@@ -3936,7 +4649,12 @@ chats (threads), their rows, roles, caps and SSE in studio_service.
 - **One input = one command.** Studio stores the input and writes `cmd.assistant.turn` (owner from its thread row,
   roles from the token, `tools` = `offered_tools`, `actions` = the screen's registered ones, the settings) in one
   transaction; pipelines answers with `evt.assistant.step`s; studio stores their text, lines and cards as entries and
-  sets the thread's `state`, `client_id` and `pending`. Only the tab `client_id` runs pending actions; its drawer
+  sets the thread's `state`, `client_id` and `pending`. From 1.97 a working turn also sends progress steps (done
+  false, nothing pending, no text): before each tool call that runs at once, its line `running` with a short present
+  label ("Making the board…"), and after the calls, their lines `done`; seq is the next step's, so studio stores the
+  lines (by id: a running line becomes its done line), leaves the thread's seq and state, and drops a progress step
+  once that seq is applied. The drawer's `Thinking… N s` starts again at each new line and hides under a running
+  one. Only the tab `client_id` runs pending actions; its drawer
   posts their `results`. A message to a chat parked on a tab that went away first resumes it with each pending
   action `did_not_run` (`the tab was closed`).
 - **Ids.** A call (a tool call, a screen action, a card) is `<thread_id>:<turn>:<n>`: `turn` counts the chat's
@@ -4023,7 +4741,8 @@ Takes in the chat both ways: you hand the assistant pictures, and its answers sh
   with no preset: false). When it sees, every model call of a message carries the pictures of the takes that message
   names (refs in the user's words and its attachments, then those it looked at with `look_at`), at most 8, as image
   parts after the text: pipelines asks `studio.see` for each (req.studio.see: the thumbnail as JPEG, long side at most
-  1024; a video's poster; audio none) and never stores them. A line `Looked at <titles>` shows once per message.
+  1024; a video's poster, from 1.104 its frame grid once made; audio none; from 1.104 a video's or audio's facts as
+  the line `Facts of [[take:<id>]] (ffmpeg): <json>` after the prompt) and never stores them. A line `Looked at <titles>` shows once per message.
   `look_at` is then offered always and runs without a card or a run: its takes join the pictures of the next call.
 - **Text-only model.** `look_at` stays the way to see (an ask run on your machine), but on takes you attached or
   @-picked in this chat it needs no card: they are yours to show. The drawer says once, when you attach, "This model
@@ -4183,6 +4902,11 @@ showing a setup message instead of a chat while it is not set up or off.
 - A route under `/v1/studio/admin/` ⇔ `roles` [admin]; an admin tool is never offered to anyone else and studio
   checks the role again (`forbidden`).
 - A write is mcp only, or the assistant's behind a `card`; only memory writes (`remember`, from 1.69 `save_shots`) go without one.
+  (plan 16 §20.8, owner 2026-11-27: "yes add them to mcp") A write on both surfaces (the Magic tools) keeps its card
+  in the app and carries `mcp_description`, the text helm mcp offers in place of `description`: over MCP there is no
+  card, the call does what it says at once (the client's own ask is the Yes), and a costly one answers the plan it
+  ran with (run_blocks: MagicPlan next to the runs; send_to_timeline: its own plan). `mcp_description` is only for a
+  tool on both surfaces.
 - (1.62) Checks past the input schema, each an invalid answer (asked once more, then the turn ends `answer`):
   `remember`'s text is plain words: no JSON, no UUID, no field name (a word with `_`, or a dotted path of three or
   more parts; an `@handle` is fine). A `generate` after a `switchTo` (this message) to a workflow whose `media` is
@@ -4190,7 +4914,7 @@ showing a setup message instead of a chat while it is not set up or off.
   so the model must write the spoken line (or a Dialogue script, one `@name: text` line each) first.
 - (plan 16) A tool for `mcp` only is called by `helm mcp` over Kong as the signed-in user; its `routes` are the calls
   it makes and `served_by` stays studio, but studio never serves it on `studio.tools`. `destructive` (the deletes; from 1.49
-  `edit_timeline` and `restore_timeline`) is an mcp-only write; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
+  `edit_timeline` and `restore_timeline`; from plan 16 §20.8 `edit_board` and `restore_board`) is a write helm mcp serves; `helm mcp` sends it as `destructiveHint` (and every other write as `destructiveHint` false), so
   the client asks before each call.
 - `offered_tools(roles, web_search, look_at)`: surface assistant, every role held, `web_search` only when on,
   `look_at` only when an ask workflow can run now.
@@ -4200,7 +4924,7 @@ names a card kind), the card kinds (each asked by some action or tool; tags from
 every screen. An action is never named like an assistant tool (an mcp-only tool such as `pick` is helm mcp's own
 namespace) or a shell action; every screen route is a `navigate` target; a
 screen with `roles` registers only for them (`screen_actions`). The server's card kinds in assistant.schema.json are
-the tools' cards plus `delete` (Clear all).
+the tools' cards plus `delete` (Clear all); from 1.87 the tag `board` (`changes the board`) on Magic's `board_edit`.
 
 ## Plugins (API 1.61; board docs/mock/Plugins.dc.html, release 0.1.0-alpha.2 items 33-34; normative)
 
@@ -4418,6 +5142,16 @@ animator", "i would want to add a skill into the plugin without upgrading the ap
   `skill` (tap to see); read_skill_file `Read <file> · <title>`. What they return goes to the model fenced as data:
   guidance it follows, never orders, and it never overrides the system rules. Typing `@<skill>` in a message makes
   the model read it first.
+- **Magic director, always on for Magic** (API 1.96; owner, 2026-11-27: "add this skill internally while using
+  magic"): the built-in skill `magic-director` (plugins/magic-director: planning and running a board) is on from its
+  first scan and stays on: turning it off or removing it is 409 `Magic director is built in and always on for Magic`,
+  and a copy of yours of that name never replaces it (`problem`: `Can't replace a built-in that is always on; using
+  built in`). The Plugins page lists it as any skill (built in, on). Being on, it is in every turn's `skills`; the
+  Assistant (pipelines) reads it itself, without @ or the model asking: before the model's first call on the Magic
+  screen (route `/magic`), or after any Magic tool (a tools/catalog.json tool whose routes are under `/v1/studio/magic/`) was
+  used on another screen, it calls use_skill `magic-director` once per chat (the usual `Using skill: Magic director`
+  line, one tool call of the message's). A chat whose transcript already holds that call (also the model's own, or
+  @magic-director) does not read it again; once folded away it reads it again.
 
 ## Rules
 

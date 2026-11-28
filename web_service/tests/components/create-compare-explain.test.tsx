@@ -67,6 +67,7 @@ const made = (seed: number, prompt = "a fox @mira"): S<"MadeWith"> => ({
   inputs: {
     "prompt.text": "a fox, Mira, a girl in a red coat, soft window light",
     "seed.seed": seed,
+    "model.variant": "base", // Base, not the Turbo default: its Steps show
     "sample.steps": 20,
     "canvas.mode": "auto",
     "canvas.width": 1024,

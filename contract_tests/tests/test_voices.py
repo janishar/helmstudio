@@ -19,8 +19,18 @@ from urllib.parse import urlsplit
 import pytest
 import schemas
 from conftest import headers, make_client
-from helpers import NO_SUCH_ID, STUDIO, new_session, ok, png_bytes, take_of_run, upload, wait_run
-from test_elements import LIB, detail, element
+from helpers import (
+    NO_SUCH_ID,
+    STUDIO,
+    detail,
+    new_session,
+    ok,
+    png_bytes,
+    take_of_run,
+    upload,
+    wait_run,
+)
+from test_elements import LIB, element
 from test_looks import look
 
 WF = "echo-voice-over"

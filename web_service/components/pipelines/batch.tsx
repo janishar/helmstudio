@@ -9,6 +9,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft } from "lucide-react";
 import { ErrorNote, Modal } from "@/components/kit";
+import { NoMatch, SearchField, useSearch } from "@/components/search";
 import { FullScreen } from "@/components/media";
 import { RowsDone, StateChip, controlBatch, followBatch } from "@/components/pipelines/pipelines";
 import { RunTable } from "@/components/pipelines/run-table";
@@ -27,9 +28,8 @@ import {
   rowState,
   type BatchView,
 } from "@/lib/batches";
-import { safeUrl, when } from "@/lib/format";
+import { clock, safeUrl, when } from "@/lib/format";
 import { useHydrated } from "@/lib/hydrated";
-import { clock } from "@/lib/runs";
 import { canPick, countFacts } from "@/lib/pipeline-run";
 import type { PDoc } from "@/lib/pipeline";
 import { useScreenTools } from "@/components/assistant/tools";
@@ -56,6 +56,23 @@ export function BatchRun({
   const [stopping, setStopping] = useState(false);
   const [again, setAgain] = useState<"same" | "again" | null>(null);
   const [viewer, setViewer] = useState<{ takes: S<"Take">[]; i: number } | null>(null);
+  // the rows' search (past 8 rows or with more pages): the loaded rows at once, then the server's q on every row
+  const search = useSearch({
+    items: view?.rows,
+    text: (r) => [
+      ...Object.values(r.inputs).filter((v): v is string => typeof v === "string"),
+      r.status,
+    ],
+    id: (r) => String(r.row),
+    more: !!cursor,
+    server: (q, c) =>
+      ok(
+        api.GET("/v1/studio/batches/{batch_id}/rows", {
+          params: { path: { batch_id: id }, query: { q, cursor: c ?? undefined, limit: ROWS } },
+        }),
+      ).then((p) => ({ items: p.rows, next: p.next_cursor })),
+    onError: setError,
+  });
   const router = useRouter();
   // a pipeline batch: the pipeline now, for its node and workflow titles (cells name nodes the snapshot had)
   const pipelineId = view?.batch.pipeline_id ?? null;
@@ -369,11 +386,16 @@ export function BatchRun({
         )}
         {error && <ErrorNote>{error}</ErrorNote>}
 
+        {search.show && (
+          <div className="flex justify-end">
+            <SearchField {...search.field} label="Search rows" className="w-72 max-md:w-full" />
+          </div>
+        )}
         <div className="panel shrink-0 overflow-x-auto px-2 py-1.5">
           {isPipeline ? (
             <RunTable
               batch={b}
-              rows={rows}
+              rows={search.rows}
               doc={(pipeline as PDoc | null) ?? null}
               titles={pipeline?.workflow_titles ?? {}}
               busy={busy}
@@ -395,7 +417,7 @@ export function BatchRun({
                 </tr>
               </thead>
               <tbody>
-                {rows.map((r) => {
+                {search.rows.map((r) => {
                   const inputs = summarise(r);
                   return (
                     <tr key={r.row}>
@@ -459,15 +481,23 @@ export function BatchRun({
               </tbody>
             </table>
           )}
-          {cursor && (
+          {search.q && !search.rows.length && !search.searching && (
+            <NoMatch what="rows" onClear={() => search.setQ("")} />
+          )}
+          {search.q && search.searching && (
+            <p role="status" className="m-0 p-2 text-center text-[13px] text-t2">
+              Searching more rows…
+            </p>
+          )}
+          {(search.q ? search.olderNext && !search.searching : !!cursor) && (
             <div className="flex justify-center p-2">
               <button
                 type="button"
                 className="chip bevel h-[30px]"
                 disabled={busy === "more"}
-                onClick={() => void more()}
+                onClick={() => (search.q ? search.moreOlder() : void more())}
               >
-                More rows
+                {search.q ? "Load more matches" : "More rows"}
               </button>
             </div>
           )}

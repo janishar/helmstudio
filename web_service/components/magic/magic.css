@@ -1,0 +1,1297 @@
+/* Magic's board (docs/mock/MagicBoard.dc.html, its own rules ported as drawn): lanes in time, blocks, joins, ties,
+   the floating player, the Add dialog. Scoped under .mg; loaded only with the page. Names that the global sheet uses
+   for something else are renamed (.st → .mst, .ast → .mast, .ki → .kio). */
+.mg {
+  --lh: 120px;
+}
+:is(.mg, .mg-side) .mb {
+  position: relative;
+  box-sizing: border-box;
+  /* fills the page's height, so the player sits at the window's bottom right; the lanes scroll inside (owner,
+     2026-11-27) */
+  flex: 1 1 auto;
+  min-height: 360px;
+  border-radius: 28px 28px 28px 12px;
+  background: var(--in);
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .btools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  flex-wrap: wrap;
+}
+:is(.mg, .mg-side) .btools .chip {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 10px;
+  background: var(--s4);
+}
+:is(.mg, .mg-side) .chip.on {
+  background: var(--s5);
+  box-shadow: inset 0 0 0 1px var(--a1);
+}
+:is(.mg, .mg-side) .btools .seg {
+  padding: 3px;
+  border: 0;
+  border-radius: 11px;
+  background: var(--s2);
+}
+:is(.mg, .mg-side) .btools .seg button {
+  height: 28px;
+  font-size: 12px;
+}
+:is(.mg, .mg-side) .bsep {
+  width: 1px;
+  height: 20px;
+  background: var(--s5);
+}
+:is(.mg, .mg-side) .est {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .est b {
+  color: var(--t1);
+  font-weight: 500;
+}
+:is(.mg, .mg-side) .pill {
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--s2);
+  color: var(--t2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  white-space: nowrap;
+}
+/* zoom: the Timeline's group with the board's slider */
+:is(.mg, .mg-side) .zr {
+  position: relative;
+  width: 96px;
+  margin: 0 4px;
+}
+:is(.mg, .mg-side) .zv {
+  min-width: 84px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t2);
+}
+
+/* the scroller: the Assets row, the ruler and the lanes scroll sideways together, and down when they outgrow the panel */
+:is(.mg, .mg-side) .scroller {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+:is(.mg, .mg-side) .lh {
+  position: sticky;
+  left: 0;
+  z-index: 10; /* over the playhead (8) and a dragged block (9) */
+  flex: 0 0 var(--lh);
+  box-sizing: border-box;
+  padding: 6px 10px 6px 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  background: var(--in);
+  text-align: left;
+  border: 0;
+  color: inherit;
+}
+:is(.mg, .mg-side) .lh b {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .lh small {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .lh input {
+  width: 100%;
+  height: 26px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: var(--s4);
+  color: var(--t1);
+  font: 600 13px var(--font-sans);
+}
+:is(.mg, .mg-side) .rulc {
+  /* the ruler's label cell: the ruler and the playhead's time slide under it, as the lanes under their labels */
+  position: sticky;
+  left: 0;
+  z-index: 10;
+  width: var(--lh);
+  height: 26px;
+  margin-bottom: -26px;
+  background: var(--in);
+}
+:is(.mg, .mg-side) .rul {
+  position: relative;
+  height: 26px;
+  margin-left: var(--lh);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  cursor: pointer;
+}
+:is(.mg, .mg-side) .rul > span {
+  position: absolute;
+  top: 0;
+  transform: translateX(-1px);
+  padding-left: 4px;
+  border-left: 1px solid var(--ln);
+  height: 14px;
+  line-height: 12px;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .rul::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 2px;
+  height: 6px;
+  background: repeating-linear-gradient(90deg, var(--ln) 0 1px, transparent 1px var(--px));
+}
+:is(.mg, .mg-side) .ln {
+  display: flex;
+  align-items: stretch;
+}
+:is(.mg, .mg-side) .lt {
+  position: relative;
+  flex: 0 0 auto;
+  border-radius: 12px 12px 12px 5px;
+  background-color: var(--s1);
+  background-image: repeating-linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--s4) 70%, transparent) 0 1px,
+    transparent 1px var(--px4)
+  );
+}
+:is(.mg, .mg-side) .lt.empty {
+  background-color: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--s4);
+  background-image: none;
+  display: flex;
+  align-items: center;
+  padding-left: 14px;
+  font-size: 12px;
+  color: var(--t2);
+}
+:is(.mg, .mg-side) .lt.drop {
+  box-shadow: inset 0 0 0 1.5px var(--a1);
+}
+:is(.mg, .mg-side) .ph {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--t1);
+  z-index: 8;
+  pointer-events: none;
+  /* scrolled under the lane names: clipped from its left (--sl, the scroll, set on scroll; --x, its own left) */
+  clip-path: inset(-40px -40px -40px calc(var(--lh) + var(--sl, 0px) - var(--x, 0px)));
+}
+:is(.mg, .mg-side) .ph > span {
+  position: absolute;
+  top: 0;
+  left: -26px;
+  width: 54px;
+  height: 18px;
+  border-radius: 6px;
+  background: var(--t1);
+  color: var(--g);
+  font: 500 10px/18px var(--font-mono);
+  text-align: center;
+}
+
+/* blocks */
+:is(.mg, .mg-side) .blk {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  box-sizing: border-box;
+  padding: 5px 7px 6px;
+  border: 0;
+  border-radius: 11px 11px 11px 4px;
+  background: linear-gradient(180deg, var(--s4), var(--s3));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.09),
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 14px;
+  overflow: hidden;
+  z-index: 2;
+  min-width: 0;
+  color: var(--t1);
+  text-align: left;
+  touch-action: none;
+  cursor: grab;
+}
+:is(.mg, .mg-side) .blk:focus-visible {
+  outline: 2px solid var(--a1);
+}
+:is(.mg, .mg-side) .blk.sel {
+  outline: 2px solid var(--t1);
+  outline-offset: 1px;
+}
+:is(.mg, .mg-side) .blk.old {
+  box-shadow:
+    inset 0 0 0 1.5px #e8c468,
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.fl {
+  box-shadow:
+    inset 0 0 0 1.5px #ff8a80,
+    0 10px 18px -10px #000;
+}
+:is(.mg, .mg-side) .blk.tied {
+  box-shadow:
+    inset 0 0 0 2px #86cdea,
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.lift {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 26px 34px -10px #000;
+  transform: rotate(-0.6deg);
+  z-index: 9;
+  cursor: grabbing;
+}
+:is(.mg, .mg-side) .blk.ghostb {
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  opacity: 0.8;
+  pointer-events: none;
+  z-index: 1;
+}
+:is(.mg, .mg-side) .blk.use {
+  box-shadow:
+    inset 0 0 0 2px var(--a1),
+    0 10px 18px -10px color-mix(in srgb, var(--shd) 90%, transparent);
+}
+:is(.mg, .mg-side) .blk.use .bh b {
+  color: var(--a1);
+}
+:is(.mg, .mg-side) .dimb .blk:not(.use) {
+  opacity: 0.5;
+}
+:is(.mg, .mg-side) .redge {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 7px;
+  cursor: ew-resize;
+  z-index: 3;
+}
+:is(.mg, .mg-side) .bh {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .bh b {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .bh .len {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--t2);
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .kb {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 15px;
+  color: #111;
+}
+:is(.mg, .mg-side) .k-video {
+  background: #ff9a6e;
+}
+:is(.mg, .mg-side) .k-image {
+  background: #b8abff;
+}
+:is(.mg, .mg-side) .k-frame {
+  background: #e8d88a;
+}
+:is(.mg, .mg-side) .k-voice {
+  background: #f2b84b;
+}
+:is(.mg, .mg-side) .k-music {
+  background: #d59bf6;
+}
+:is(.mg, .mg-side) .k-sound {
+  background: #7cc7f2;
+}
+:is(.mg, .mg-side) .k-char {
+  background: #f2a8ff;
+}
+:is(.mg, .mg-side) .k-prop {
+  background: #ffd27a;
+}
+:is(.mg, .mg-side) .k-place {
+  background: #9fe0a8;
+}
+:is(.mg, .mg-side) .bf {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+:is(.mg, .mg-side) .rc {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--a2) 22%, var(--s5));
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .rc.ch {
+  background: color-mix(in srgb, var(--a1) 22%, var(--s5));
+}
+:is(.mg, .mg-side) .rc.lk {
+  background: color-mix(in srgb, #86cdea 24%, var(--s5));
+}
+:is(.mg, .mg-side) .rc.big {
+  font-size: 12px;
+  line-height: 22px;
+  padding: 0 9px;
+}
+:is(.mg, .mg-side) .mst {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .mst::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  display: block;
+}
+:is(.mg, .mg-side) .mst.done {
+  color: var(--a1);
+}
+:is(.mg, .mg-side) .mst.run {
+  color: var(--a2);
+}
+:is(.mg, .mg-side) .mst.old {
+  color: #e8c468;
+}
+:is(.mg, .mg-side) .mst.dr {
+  color: var(--t2);
+}
+:is(.mg, .mg-side) .mst.fail {
+  color: #ff8a80;
+}
+:is(.mg, .mg-side) .mst.old::before,
+:is(.mg, .mg-side) .mst.dr::before {
+  background: transparent;
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+:is(.mg, .mg-side) .fx {
+  flex: 0 0 auto;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, #ff9ad0 30%, var(--s5));
+  font-size: 10px;
+  line-height: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .fx.off {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+:is(.mg, .mg-side) .pin,
+:is(.mg, .mg-side) .lkm {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+:is(.mg, .mg-side) .pin {
+  background: var(--a1);
+  color: var(--on1);
+}
+:is(.mg, .mg-side) .lkm {
+  background: #86cdea;
+  color: #10222b;
+}
+:is(.mg, .mg-side) .art {
+  flex: 1 1 auto;
+  min-height: 0;
+  border-radius: 6px;
+  background-size: cover;
+  background-position: center;
+}
+:is(.mg, .mg-side) .fs {
+  position: relative;
+  box-shadow:
+    inset 0 4px 0 #000,
+    inset 0 -4px 0 #000;
+}
+:is(.mg, .mg-side) .fs::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, transparent 0 3px, #555 3px 6px);
+}
+:is(.mg, .mg-side) .sk {
+  filter: grayscale(1) contrast(1.9) brightness(1.25);
+  opacity: 0.9;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4);
+}
+:is(.mg, .mg-side) .sk.rough {
+  filter: grayscale(0.5) contrast(1.2);
+  opacity: 1;
+}
+:is(.mg, .mg-side) .art.none {
+  background: repeating-linear-gradient(135deg, var(--s3) 0 6px, var(--s2) 6px 12px);
+}
+:is(.mg, .mg-side) .wvf {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  width: 100%;
+}
+:is(.mg, .mg-side) .arow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+:is(.mg, .mg-side) .scr {
+  flex: 0 0 auto;
+  font-size: 11px;
+  line-height: 14px;
+  font-style: italic;
+  color: var(--t1b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .k8s {
+  --k: #7cc7f2;
+  --kd: #06202e;
+}
+:is(.mg, .mg-side) .k8v {
+  --k: #f2b84b;
+  --kd: #2a1c00;
+}
+:is(.mg, .mg-side) .mo {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 45%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--kd);
+}
+:is(.mg, .mg-side) .mcv {
+  position: relative;
+  overflow: hidden;
+  flex: 0 0 auto;
+  width: 38px;
+  height: 38px;
+  border-radius: 7px;
+  box-shadow: 0 4px 10px -4px #000;
+}
+:is(.mg, .mg-side) .mcv .disc {
+  position: absolute;
+  top: 50%;
+  right: -14px;
+  width: 32px;
+  height: 32px;
+  margin-top: -16px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, #c9b8f0 0 18%, #0d0b10 18% 21%, transparent 21%),
+    repeating-radial-gradient(circle, #141018 0 2px, #262030 2px 3px);
+  box-shadow: -4px 0 10px rgba(0, 0, 0, 0.45);
+}
+
+/* joins: one chip look, an icon per kind (the owner's bowtie set) */
+:is(.mg, .mg-side) .tj {
+  position: absolute;
+  top: 50%;
+  height: 26px;
+  min-width: 26px;
+  margin-top: -13px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--s2);
+  border: 1.5px solid var(--k, #d59bf6);
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  z-index: 5;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .tj svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .tj.cut {
+  --k: var(--t2);
+  padding: 0;
+  width: 26px;
+}
+:is(.mg, .mg-side) .tj.dissolve {
+  --k: #d59bf6;
+}
+:is(.mg, .mg-side) .tj.fade {
+  --k: #ffe07a;
+}
+:is(.mg, .mg-side) .tj.wipe {
+  --k: #7cc7f2;
+}
+:is(.mg, .mg-side) .tj.morph {
+  --k: #ff9ad0;
+}
+:is(.mg, .mg-side) .tj:hover,
+:is(.mg, .mg-side) .tj:focus-visible {
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 0 0 5px var(--t1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  outline: none;
+}
+:is(.mg, .mg-side) .tie {
+  position: absolute;
+  width: 0;
+  border-left: 1.5px dashed #86cdea;
+  z-index: 3;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .snapl {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 2px solid #ffe07a;
+  z-index: 10;
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .snapl > span {
+  position: absolute;
+  top: -2px;
+  left: 6px;
+  padding: 0 7px;
+  border-radius: 6px;
+  background: #ffe07a;
+  color: #2a2000;
+  font-size: 10px;
+  line-height: 17px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .tip {
+  position: absolute;
+  z-index: 11;
+  padding: 5px 9px;
+  border-radius: 9px;
+  background: var(--t1);
+  color: var(--g);
+  font-size: 11px;
+  line-height: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.5);
+  pointer-events: none;
+}
+:is(.mg, .mg-side) .warn {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #e8c468 18%, var(--s2));
+  box-shadow: inset 0 0 0 1px #e8c468;
+  font-size: 12px;
+}
+:is(.mg, .mg-side) .warn.bad {
+  background: color-mix(in srgb, #ff8a80 16%, var(--s2));
+  box-shadow: inset 0 0 0 1px #ff8a80;
+}
+:is(.mg, .mg-side) .warn b {
+  color: #e8c468;
+}
+:is(.mg, .mg-side) .warn.bad b {
+  color: #ff8a80;
+}
+:is(.mg, .mg-side) .warn .chip {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  background: var(--s4);
+}
+
+/* assets: off the ruler */
+:is(.mg, .mg-side) .shelf {
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 4px;
+}
+:is(.mg, .mg-side) .shb {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px;
+  border-radius: 14px 14px 14px 6px;
+  background: color-mix(in srgb, var(--s2) 60%, transparent);
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  min-width: 0;
+}
+:is(.mg, .mg-side) .mast {
+  box-sizing: border-box;
+  width: 206px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border: 0;
+  border-radius: 12px 12px 12px 5px;
+  background: var(--s3);
+  min-width: 0;
+  color: inherit;
+  text-align: left;
+}
+:is(.mg, .mg-side) .mast.hov {
+  background: var(--s5);
+  box-shadow:
+    inset 0 0 0 2px var(--a1),
+    0 12px 22px -10px #000;
+}
+:is(.mg, .mg-side) .mast > span {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+:is(.mg, .mg-side) .mast .nm {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:is(.mg, .mg-side) .mast small {
+  font-size: 10px;
+  line-height: 13px;
+  color: var(--t2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:is(.mg, .mg-side) .mast small.u {
+  color: var(--t1b);
+}
+:is(.mg, .mg-side) .mast.hov small.u {
+  color: var(--a1);
+  font-weight: 600;
+}
+:is(.mg, .mg-side) .ath {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background-size: cover;
+  background-position: center;
+}
+:is(.mg, .mg-side) .astb {
+  box-sizing: border-box;
+  height: 60px;
+  flex: 0 0 auto;
+  padding: 0 12px;
+  border-radius: 12px 12px 12px 5px;
+  border: 0;
+  background: transparent;
+  box-shadow: inset 0 0 0 1.5px var(--dash);
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .astb:disabled {
+  color: var(--t2);
+}
+
+/* the floating player */
+:is(.mg, .mg-side) .fp {
+  position: absolute;
+  box-sizing: border-box;
+  border-radius: 16px 16px 16px 7px;
+  background: var(--s2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 26px 44px -14px #000,
+    0 0 0 1px var(--s5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  z-index: 12;
+}
+:is(.mg, .mg-side) .fp .bar {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  flex: 0 0 auto;
+  padding: 0 5px 0 9px;
+  font-size: 11px;
+  color: var(--t2);
+  cursor: grab;
+  touch-action: none;
+}
+:is(.mg, .mg-side) .fp .bar button {
+  height: 20px;
+  min-width: 20px;
+  padding: 0 5px;
+  border-radius: 6px;
+  border: 0;
+  background: var(--s4);
+  font-size: 10px;
+  line-height: 20px;
+  color: var(--t1);
+}
+:is(.mg, .mg-side) .fp .vid {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #000 center / cover no-repeat;
+}
+:is(.mg, .mg-side) .fp:fullscreen {
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0;
+  box-shadow: none;
+}
+:is(.mg, .mg-side) .fp:fullscreen .bar {
+  cursor: default;
+}
+:is(.mg, .mg-side) .fp:fullscreen .vid {
+  background-size: contain;
+}
+:is(.mg, .mg-side) .fp .ctl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0 9px;
+  font-size: 10px;
+}
+:is(.mg, .mg-side) .fp .scrub {
+  flex-grow: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--s5);
+  position: relative;
+  cursor: pointer;
+}
+:is(.mg, .mg-side) .fp .scrub > span {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--t1);
+}
+:is(.mg, .mg-side) .fp .pb {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 0;
+  padding: 0;
+  background: var(--t1);
+  color: var(--g);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+:is(.mg, .mg-side) .fp .rz {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 11px;
+  height: 11px;
+  cursor: nwse-resize;
+  touch-action: none;
+  background: linear-gradient(
+    135deg,
+    transparent 45%,
+    var(--t2) 45% 55%,
+    transparent 55% 70%,
+    var(--t2) 70% 80%,
+    transparent 80%
+  );
+}
+
+/* the side panel */
+.mg-side h2 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.mg-side h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--t2);
+}
+.mg-side .kv {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.mg-side .kv > div {
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  min-width: 0;
+}
+.mg-side .kv span {
+  display: block;
+  font-size: 11px;
+  color: var(--t2);
+}
+.mg-side .kv b {
+  font-weight: 600;
+  font-size: 13px;
+}
+.mg-side .nr,
+.mg-add .nr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  font-size: 12px;
+  min-width: 0;
+}
+.mg-side .nr .mono,
+.mg-add .nr .mono {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--t2);
+  white-space: nowrap;
+}
+.mg-side .wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.mg-side .pic {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border-radius: 12px;
+  background-size: cover;
+  background-position: center;
+  display: flex;
+  align-items: flex-end;
+  padding: 8px;
+  box-sizing: border-box;
+}
+
+/* the Add dialog: the kind with its orb */
+.mg-add .kg {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.mg-add .kt {
+  box-sizing: border-box;
+  height: 84px;
+  padding: 10px;
+  border-radius: 14px 14px 14px 6px;
+  border: 0;
+  background: var(--s3);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: space-between;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--t1);
+}
+.mg-add .kt[aria-pressed="true"] {
+  background: var(--s5);
+  box-shadow: inset 0 0 0 2px var(--a1);
+}
+.mg-add .kt:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.mg-add .kt .kn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.mg-add .kt small {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--t2);
+  line-height: 14px;
+}
+.mg-add .kio {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: #14201a;
+  background: radial-gradient(
+    circle at 34% 30%,
+    color-mix(in srgb, var(--k) 30%, #fff) 0,
+    var(--k) 42%,
+    color-mix(in srgb, var(--k) 45%, #000) 100%
+  );
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 14px 2px color-mix(in srgb, var(--k) 40%, transparent);
+}
+.mg-add .kio.k-video {
+  --k: #ff9a6e;
+}
+.mg-add .kio.k-image {
+  --k: #b8abff;
+}
+.mg-add .kio.k-frame {
+  --k: #e8d88a;
+}
+.mg-add .kio.k-voice,
+.mg-add .kio.k-dialogue {
+  --k: #f2b84b;
+}
+.mg-add .kio.k-sound {
+  --k: #7cc7f2;
+}
+.mg-add .kio.k-gallery {
+  --k: #f59a8c;
+}
+.mg-add .kio.k-music {
+  --k: #d59bf6;
+  background:
+    radial-gradient(circle, #e9e2f0 0 3px, #0d0b10 3px 4px, transparent 4px),
+    repeating-radial-gradient(circle, #141018 0 1.5px, #2a2236 1.5px 2.5px);
+  box-shadow:
+    0 0 0 3px #d59bf633,
+    0 0 14px 2px #d59bf666;
+}
+.mg-add .kio.k-music svg {
+  display: none;
+}
+.mg-add .fld {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+.mg-add .fld > .lb {
+  font-size: 12px;
+  color: var(--t2);
+}
+.mg-add .seg {
+  align-self: flex-start;
+}
+
+/* loading */
+:is(.mg, .mg-side) .sk-ln {
+  height: var(--h, 56px);
+  border-radius: 12px 12px 12px 5px;
+  background: linear-gradient(90deg, var(--s2) 0, var(--s3) 40%, var(--s2) 80%);
+  background-size: 300% 100%;
+  animation: mg-shine 1.6s linear infinite;
+}
+@keyframes mg-shine {
+  to {
+    background-position: -300% 0;
+  }
+}
+/* a quick open shows no bars: they wait 0.4 s, then fade in (MagicBoard frame 11) */
+.mg-wait {
+  animation: mg-wait 0.2s ease-out 0.4s both;
+}
+@keyframes mg-wait {
+  from {
+    opacity: 0;
+  }
+}
+
+/* a phone: the player sits on top, the lanes scroll sideways */
+@media (max-width: 47.99rem) {
+  .mg {
+    --lh: 64px;
+  }
+  .mg .fp {
+    position: relative;
+    inset: auto !important;
+    width: auto !important;
+    height: auto !important;
+    order: -1;
+  }
+  .mg .fp .vid {
+    aspect-ratio: 16 / 9;
+  }
+  .mg .fp .ctl,
+  .mg .fp .bar,
+  .mg .fp .rz,
+  .mg .shelf {
+    display: none;
+  }
+}
+
+/* plan 39 phase H: the large cover and orb on a block's take stage */
+:is(.mg, .mg-side) .mcv.lg {
+  width: 112px;
+  height: 112px;
+  border-radius: 12px;
+}
+:is(.mg, .mg-side) .mcv.lg .disc {
+  right: -40px;
+  width: 94px;
+  height: 94px;
+  margin-top: -47px;
+}
+:is(.mg, .mg-side) .mo.lg {
+  width: 64px;
+  height: 64px;
+  box-shadow:
+    0 0 0 6px color-mix(in srgb, var(--k) 16%, transparent),
+    0 0 30px 4px color-mix(in srgb, var(--k) 45%, transparent);
+}
+
+/* what to fix (frame 11): the warning icon at the board's bottom left, its count, and the list's rows */
+:is(.mg, .mg-side) .fixb {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--s4);
+  color: #e8c468;
+  box-shadow: inset 0 0 0 1px #e8c468;
+}
+:is(.mg, .mg-side) .fixb.bad {
+  color: #ff8a80;
+  box-shadow: inset 0 0 0 1px #ff8a80;
+}
+:is(.mg, .mg-side) .fixb[aria-expanded="true"] {
+  background: var(--s5);
+}
+:is(.mg, .mg-side) .fixc {
+  position: absolute;
+  top: -5px;
+  right: -6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e8c468;
+  color: #111;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+}
+:is(.mg, .mg-side) .fixb.bad .fixc {
+  background: #ff8a80;
+}
+#magic-fix .fixr {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 6px;
+  border-radius: 10px;
+}
+#magic-fix .fixr:hover,
+#magic-fix .fixr:focus-visible {
+  background: var(--s3);
+}
+#magic-fix .fixt {
+  flex: 0 0 40px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: var(--s3) center / cover;
+}
+#magic-fix .fixn {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  font-size: 12px;
+  line-height: 16px;
+}
+#magic-fix .fixn > span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 15px;
+}
+#magic-fix .fixo {
+  color: #e8c468;
+}
+#magic-fix .chip {
+  height: 28px;
+  padding: 0 10px;
+  font-size: 12px;
+  border-radius: 9px;
+  background: var(--s4);
+}
+#magic-fix .chip.on {
+  box-shadow: inset 0 0 0 1px var(--a1);
+}
+
+/* the player filling the window where the browser refused full screen (player.tsx toggleFull); ⛶ or F again leaves */
+:is(.mg, .mg-side) .fp.fp-max {
+  position: fixed !important;
+  inset: 0 !important;
+  width: auto !important;
+  height: auto !important;
+  z-index: 60;
+  border-radius: 0;
+}
+:is(.mg, .mg-side) .fp.fp-max .vid {
+  background-size: contain;
+}
+
+/* API 1.106 (AudioFades): a block's fade handles sit on the waveform, under the title row; joins (crossfade badges
+   among them) and handles above the playhead's line */
+:is(.mg, .mg-side) .fhs {
+  top: 5px;
+  bottom: 5px;
+  z-index: 9;
+}
+:is(.mg, .mg-side) .fhs .fh-h {
+  top: 27px;
+}
+:is(.mg, .mg-side) .tj {
+  z-index: 9;
+}
+/* the playhead's grab band and readout (AudioFades frame 5), not its time label */
+:is(.mg, .mg-side) .ph > .phg {
+  top: 26px;
+  bottom: 0;
+  left: -4px;
+  width: 10px;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+:is(.mg, .mg-side) .ph > .phg:hover,
+:is(.mg, .mg-side) .ph > .phg.on {
+  background: color-mix(in srgb, var(--t1) 9%, transparent);
+}
+:is(.mg, .mg-side) .ph > .phr {
+  left: 10px;
+  width: auto;
+  height: auto;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-mono);
+}

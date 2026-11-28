@@ -1,0 +1,24 @@
+#!/bin/sh
+# .tools/runner <env> <name> <command...>: one native runner in the background (make runners, make runners-nvidia).
+# Runs <command> in runner_service/ with the caller's environment, under a small supervisor whose pid is in
+# runner_service/.run/<name>.pid (its command line holds the command, so "uv run": make runners-stop checks that) and
+# whose output goes to .run/<name>.log. The supervisor restarts the runner after a stall (exit 70) or a SIGKILL
+# (137: jetsam), passes any other exit on, and stops it on SIGTERM or SIGINT. A runner already up is left alone.
+self=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
+cd "$(dirname "$self")/../runner_service" || exit 1
+if [ "$1" = --supervise ]; then
+  shift 2
+  echo $$ > ".run/$1.pid"; shift
+  trap 'kill $c; wait $c; exit 143' TERM INT
+  while :; do
+    "$@" & c=$!; wait $c; s=$?
+    [ $s -eq 70 ] || [ $s -eq 137 ] || exit $s
+    echo "runner exited $s: restarting"; sleep 2
+  done
+fi
+env=$1 name=$2; shift 2
+mkdir -p .run
+pid=$(cat ".run/$name.pid" 2>/dev/null)
+if [ -n "$pid" ] && ps -p "$pid" -o command= | grep -q 'uv run'; then echo "runner $env already runs ($pid)"; exit 0; fi
+nohup "$self" --supervise "$env" "$name" "$@" > ".run/$name.log" 2>&1 &
+sleep 1; echo "runner $env started ($(cat ".run/$name.pid")); log runner_service/.run/$name.log"

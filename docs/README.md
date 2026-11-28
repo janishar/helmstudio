@@ -11,6 +11,10 @@ described by config, including what LoRAs they accept. Apple Silicon (MLX and
 PyTorch MPS) and CUDA are both first class. It is a multi-user, self-hosted
 system of Go and Python services (section 17).
 
+## Design system
+
+[design-system/](design-system/README.md) is the reference for every UI element: tokens in all seven themes, type, spacing, radius, components with previews, the card looks and the right-click menu. It is a copy of the [helmstudio Design System](https://claude.ai/artifact/ACz7ZcQyjdZ6NVFZc95Rk9); change both together (owner, 2026-11-27).
+
 ## Framework plan
 
 Section numbers (§) are stable across files. Each topic has one owning section;
@@ -55,6 +59,11 @@ other sections point to it rather than restate it.
 | [Host memory auto](plan/35-host-memory-auto.md) | §39 | System › Hosts: Memory budget Automatic (the Mac's GPU limit when set, else RAM minus the default reserve) or Custom (today's reserve); `reserve_mode` on host settings, `gpu_limit_gb` on `machine` (asked by the owner 2026-11-26, board drawn) |
 | [Drawer move, Create popups](plan/36-drawer-move-create-popups.md) | §40–41, §43 | alpha.5 items 3, 10 and 17: the Assistant drawer floats anywhere by its top bar and docks back on the right (Assistant frames 29–30); Create's size and length chips edit in popups, one sliders button opens all settings on the right, closed by default (Text to video frames 1–6); our own right-click menus app-wide, text fields keep the browser's (Right-click menus frames 0–6) (asked by the owner 2026-11-26, boards drawn) |
 | [Magic concept](plan/37-magic-concept.md) | §37 | alpha.6 (owner, 2026-11-26: "move magic in next alpha release"): a new screen of parallel lanes where every block is a node with a preview, a standard generation request per kind, Send to Timeline; not scheduled |
+| [Create: Music and Sound](plan/38-create-music-sound.md) | §44 | alpha.6 item 6 (owner, 2026-11-27: "approved, build it"): Music (ACE-Step 1.5 2B and XL, MiniMax Music 3) and Sound (Stable Audio 3 Small-SFX, MMAudio from text or a video) as Create kinds; a sound class (music, sound, voice) on audio takes, stereo Audio, span on audio, offers by class, a mux job; four torch packs; phases P0–P6 and M, packs in parallel in their own worktrees |
+| [Magic](plan/39-magic.md) | §45 | alpha.6 item 5 (owner, 2026-11-27: "can we develop the magic screen in parallel?"): the build of plan 37: boards as documents edited by ops (try then apply), the standard generation request in studio from the packs' registry `standard` blocks, the GPU estimate and the ask above the limit, Send to Timeline as a new sequence (fades and wipes baked); phases A–H, the page shell and lane editor in parallel with plan 38, Music and Sound waiting for it |
+| [Model folders](plan/40-model-folders.md) | §46 | alpha.6 item 7 (owner, 2026-11-27: "mac default, ask which copy, approved build it"): several model folders per host in priority order (a Mac folder and the T9), the first folder that has a model wins, falling back when one is unplugged; downloads to the Mac folder by default; Delete asks which copy; the Models page edits the list; phases P1–P6, API 1.78.0 |
+| [Audio fades](plan/41-audio-fades.md) | §47 | alpha.6 row 82 (owner, 2026-11-28, decided one by one): fades in and out per audio clip and Magic sound block, crossfades by running cues longer (a dip for older takes), ducking music under voice (on in Magic, off on the Timeline); boards first |
+| [Listen and watch](plan/42-listen-and-watch.md) | §48 | alpha.6 row 83 (owner, 2026-11-28, decided one by one): the look tool gets a 12 to 16 frame grid and ffmpeg facts; a listen tool asks Qwen3-Omni (Q8 GGUF on the T9, llama.cpp; Qwen2.5-Omni-3B fallback) about a take, with a Qwen3-ASR transcript; small models moved to the T9 |
 | [Production on this Mac](plan/26-production.md) | §36 | Compose project `helmstudio-prod` next to the dev stack: the base file plus `prod.yml` only (no fakes, no Echo), its own ports (Kong 8400), network, volumes, image tag and fresh secrets (`deploy/secrets-prod`), restarts, log caps, memory limits, the owner's admin; `make prod`, `make runners STACK=prod`; server deployment later (decided by the owner 2026-11-25) |
 
 ## Guides

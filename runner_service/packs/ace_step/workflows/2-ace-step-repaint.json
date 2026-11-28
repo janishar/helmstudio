@@ -1,0 +1,91 @@
+{
+  "id": "ace-step-repaint",
+  "title": "ACE-Step Repaint",
+  "action": "Repaint",
+  "family": "ace-step",
+  "env": "torch",
+  "media": "audio",
+  "nodes": {
+    "prompt": {
+      "kind": "prompt",
+      "params": {
+        "text": ""
+      }
+    },
+    "seed": {
+      "kind": "seed",
+      "params": {
+        "seed": -1
+      }
+    },
+    "model": {
+      "kind": "ace-step/model",
+      "params": {
+        "variant": "turbo-2b",
+        "precision": "bf16"
+      }
+    },
+    "song": {
+      "kind": "ace-step/song",
+      "params": {
+        "lyrics": "",
+        "instrumental": false,
+        "seconds": 0,
+        "bpm": 0,
+        "key": "auto",
+        "time": "auto",
+        "language": "auto"
+      }
+    },
+    "repaint": {
+      "kind": "ace-step/repaint",
+      "in": {
+        "model": "model.model",
+        "song": "song.song",
+        "text": "prompt.text",
+        "seed": "seed.seed"
+      },
+      "params": {
+        "source": null,
+        "span": null,
+        "steps": 8
+      }
+    },
+    "decode": {
+      "kind": "ace-step/decode",
+      "in": {
+        "model": "model.model",
+        "latent": "repaint.latent"
+      },
+      "params": {}
+    },
+    "output": {
+      "kind": "output",
+      "in": {
+        "media": "decode.audio"
+      }
+    }
+  },
+  "studio": {
+    "composer": [
+      "prompt.text",
+      "song.lyrics",
+      "repaint.source",
+      "repaint.span"
+    ],
+    "quick": [
+      "model.variant",
+      "song.instrumental",
+      "song.language"
+    ],
+    "inspector": [
+      {
+        "title": "Advanced",
+        "items": [
+          "seed.seed",
+          "repaint.steps"
+        ]
+      }
+    ]
+  }
+}

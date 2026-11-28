@@ -34,7 +34,7 @@
         },
         "run_id": {
           "$ref": "defs.schema.json#/$defs/uuid",
-          "description": "cmd.pipeline.name's run_id"
+          "description": "cmd.pipeline.name's run_id (from API 1.91 a Magic board's id when the board asked)"
         },
         "title": {
           "type": "string",

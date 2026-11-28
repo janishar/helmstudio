@@ -9,7 +9,7 @@ continue from their checkpoints on the next start (after the user's Resume).
 Stage B: publishes the custom nodes (registry `pipelines.engine.custom`), answers pipelines.providers.test and (API 1.51) pipelines.providers.key, sends
 queued remote calls (remote.py; only with PIPELINES_REMOTE_MODELS on and a pipeline that enables them) and is the
 `server` env runner of each host in PIPELINES_SERVER_HOSTS (server.py). Agent tools reach studio by studio.tools.
-API 1.28: answers pipelines.judge.test (judge_test.py). API 1.43: names untitled sessions (names.py). API 1.44: the
+API 1.28: answers pipelines.judge.test (judge.py). API 1.43: names untitled sessions (names.py). API 1.44: the
 in-app assistant (assistant.py): pulls cmd.assistant.> from CMD (durable `pipelines-assistant`, chats handled
 concurrently, each in order) and answers pipelines.assistant.memory (assistant_memory.py) and pipelines.assistant.cache (assistant.py)."""
 
@@ -45,7 +45,7 @@ import consumer
 import custom
 import events
 import health
-import judge_test
+import judge
 import memory
 import names
 import providers
@@ -92,8 +92,10 @@ async def migrate(pool, saver: AsyncPostgresSaver) -> None:
             await conn.execute("SELECT pg_advisory_unlock(hashtext('pipelines_migrate'))")
 
 
-async def pull(sub, handle, stop: asyncio.Event, batch: int) -> None:
-    """Fetch and handle deliveries one by one until `stop`."""
+async def pull(sub, handle, stop: asyncio.Event, batch: int, concurrent: bool = False) -> None:
+    """Fetch and handle deliveries until `stop`: one by one, or (`concurrent`) each in its own task, waited for at
+    the end (the assistant: one chat's inputs stay in order by its lock)."""
+    tasks: set[asyncio.Task] = set()
     while not stop.is_set():
         try:
             msgs = await sub.fetch(batch, timeout=2)
@@ -105,7 +107,13 @@ async def pull(sub, handle, stop: asyncio.Event, batch: int) -> None:
                 await asyncio.wait_for(stop.wait(), 2)
             continue
         for m in msgs:
-            await handle(m)
+            if not concurrent:
+                await handle(m)
+                continue
+            t = asyncio.create_task(handle(m))
+            tasks.add(t)
+            t.add_done_callback(tasks.discard)
+    await asyncio.gather(*tasks, return_exceptions=True)
 
 
 async def durable(js, stream: str, name: str, subject: str, ack_wait: int, max_ack: int, **kw):
@@ -127,9 +135,7 @@ async def durable(js, stream: str, name: str, subject: str, ack_wait: int, max_a
 
 
 async def main() -> None:
-    logging.basicConfig(
-        level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     pool = await open_pool(config.DATABASE_URL)
     nc = await nats.connect(
         config.NATS_URL,
@@ -165,17 +171,18 @@ async def main() -> None:
         )
         runs = await durable(js, "EVT", "pipelines-runs", "evt.studio.>", events.ACK_WAIT, 64)
         namer = names.Names(js, studio.create_run)  # API 1.43: session names
-        helper = assistant.Assistant(pool, saver, store, js, studio.tool, see=studio.see,
-                                     passes=studio.plugin_pass)  # fmt: skip
+        helper = assistant.Assistant(pool, saver, store, js, studio.tool, see=studio.see, passes=studio.plugin_pass)
         asks = await durable(js, "CMD", "pipelines-assistant", "cmd.assistant.>", assistant.ACK_WAIT, 16,
                              max_deliver=-1)  # fmt: skip
         server = await health.serve(nc, pool)
-        state_sub = await states.serve(nc, engine)
-        memory_sub = await memory.serve(nc, store)
-        test_subs = await providers.serve(nc)
-        judge_sub = await judge_test.serve(nc, store)
-        assistant_sub = await assistant_memory.serve(nc, store)
-        cache_sub = await assistant.serve_cache(nc, pool)  # API 1.66
+        subs = [
+            await states.serve(nc, engine),
+            await memory.serve(nc, store),
+            *await providers.serve(nc),
+            await judge.serve(nc, store),
+            await assistant_memory.serve(nc, store),
+            await assistant.serve_cache(nc, pool),  # API 1.66
+        ]
         executors = [server_env.Executor(js, pool, h.strip()) for h in config.SERVER_HOSTS]
         server_subs = [await x.start() for x in executors]
 
@@ -187,20 +194,15 @@ async def main() -> None:
         await asyncio.gather(
             pull(cmds, consumer.Commands(engine, pool, js, namer).handle, stop, 1),
             pull(runs, events.RunEvents(engine, namer).handle, stop, 16),
-            assistant.pull(asks, assistant.Commands(helper, pool, js).handle, stop),
+            pull(asks, assistant.Commands(helper, pool, js).handle, stop, 16, concurrent=True),
             engine.remote.run(stop),
             *[pull(sub, x.handle, stop, 1) for x, sub in zip(executors, server_subs)],
             *[x.beat(stop) for x in executors],
         )
         log.info("shutting down")
         server.close()
-        await state_sub.unsubscribe()
-        await memory_sub.unsubscribe()
-        for sub in test_subs:
+        for sub in subs:
             await sub.unsubscribe()
-        await judge_sub.unsubscribe()
-        await assistant_sub.unsubscribe()
-        await cache_sub.unsubscribe()
         await engine.close()
     finally:
         # close, not drain: every publish was awaited; draining pull subscriptions is slow

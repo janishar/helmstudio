@@ -22,11 +22,15 @@ func asJSON(t *testing.T, v any) any {
 	return out
 }
 
-// The ltx, qwen-image, minimax-h3-image and minimax-h3 templates with their schemas, as check.py check_media reads them.
-func mediaWorkflows(t *testing.T) []registry.Workflow {
+// The ltx, qwen-image, minimax-h3-image and minimax-h3 templates with their schemas, as check.py check_media reads them,
+// or (API 1.79) the registries a case names ("" is echo's).
+func mediaWorkflows(t *testing.T, families ...string) []registry.Workflow {
 	dir := filepath.Join("..", "..", "..", "contracts", "fixtures", "registry")
 	var out []registry.Workflow
-	for _, family := range []string{"ltx.", "qwen-image.", "minimax-h3-image.", "minimax-h3."} {
+	if families == nil {
+		families = []string{"ltx.", "qwen-image.", "minimax-h3-image.", "minimax-h3."}
+	}
+	for _, family := range families {
 		var nodes struct{ Nodes []registry.NodeSchema }
 		var workflows struct{ Workflows []registry.Workflow }
 		for name, into := range map[string]any{"nodes": &nodes, "workflows": &workflows} {
@@ -58,6 +62,7 @@ func TestUsesFixtures(t *testing.T) {
 			Description string
 			Take        string
 			Range       *[2]float64
+			Registries  []string
 			Param       *registry.Param
 			Expect      json.RawMessage
 		}
@@ -73,7 +78,11 @@ func TestUsesFixtures(t *testing.T) {
 	for _, c := range fx.Cases {
 		take := fx.Takes[c.Take]
 		take.ID = c.Take
-		var got any = map[string]any{"uses": Offers(take, workflows, c.Range)}
+		wfs := workflows
+		if c.Registries != nil {
+			wfs = mediaWorkflows(t, c.Registries...)
+		}
+		var got any = map[string]any{"uses": Offers(take, wfs, c.Range)}
 		if c.Param != nil {
 			var fit any
 			if text := MediaFit(*c.Param, take); text != "" {
@@ -145,5 +154,26 @@ func TestUploadLimits(t *testing.T) {
 	}
 	if got := limits(); got != MaxSide {
 		t.Fatal(got)
+	}
+}
+
+// The class rule offers and Use share (API 1.79): a classed workflow takes an audio take of its class only into a media
+// param, never a video's sound; a param that accepts video takes the video; an unclassed workflow takes any.
+func TestByClass(t *testing.T) {
+	audio := registry.Param{Type: "media", Accepts: []string{"audio"}}
+	video := registry.Param{Type: "media", Accepts: []string{"video", "audio"}}
+	voice, music, clip := MediaTake{Kind: "audio", Sound: "voice"}, MediaTake{Kind: "audio", Sound: "music"}, MediaTake{Kind: "video"}
+	for _, c := range []struct {
+		class string
+		take  MediaTake
+		p     registry.Param
+		want  bool
+	}{
+		{"music", music, audio, true}, {"music", voice, audio, false}, {"music", clip, audio, false},
+		{"sound", clip, video, true}, {"", voice, audio, true}, {"", clip, audio, true},
+	} {
+		if got := ByClass(c.class, c.take, c.p); got != c.want {
+			t.Errorf("ByClass(%q, %+v, %v) = %v", c.class, c.take, c.p.Accepts, got)
+		}
 	}
 }

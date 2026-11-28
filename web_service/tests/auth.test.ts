@@ -186,7 +186,14 @@ describe("api helpers", () => {
   it("errorText reads every error shape", () => {
     expect(errorText(404, { detail: "run not found" })).toBe("run not found");
     expect(errorText(429, { message: "API rate limit exceeded" })).toBe("API rate limit exceeded");
-    expect(errorText(502, null)).toMatch(/502/);
+    expect(errorText(500, null)).toMatch(/500/);
+    // an outage is the banner's words (docs/mock/ErrorStates.dc.html a2r); studio's own 503 detail stays
+    expect(errorText(502, null)).toBe("The studio isn’t answering.");
+    expect(errorText(502, { detail: "the API is unreachable" })).toBe("The studio isn’t answering.");
+    expect(errorText(503, { message: "failure to get a peer from the ring-balancer" })).toBe(
+      "The studio isn’t answering.",
+    );
+    expect(errorText(503, { detail: "the registry is loading" })).toBe("the registry is loading");
   });
   it("safeUrl never lets a javascript: link through", () => {
     expect(safeUrl("/files/a.png?sig=1")).toBe("/files/a.png?sig=1");

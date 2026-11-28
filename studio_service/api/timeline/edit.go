@@ -26,6 +26,8 @@ type Op struct {
 	Ripple  bool     `json:"ripple"` // 1.50: remove on an audio track ripples it
 	Name    *string  `json:"name"`   // 1.50: a marker's
 	Color   *string  `json:"color"`  // 1.50: a marker's
+	On      *bool    `json:"on"`     // 1.106: ducking's
+	DB      *float64 `json:"db"`     // 1.106: ducking's
 	Set     map[string]json.RawMessage
 }
 
@@ -105,7 +107,7 @@ func follow(before Doc, raw *Doc, op Op, takes map[string]Take) string {
 						if f < 0 {
 							return "link_start"
 						}
-						c.At = f64(g.S(f))
+						c.At = new(g.S(f))
 					}
 				}
 			}
@@ -129,18 +131,18 @@ func v1Starts(clips []Clip, takes map[string]Take, g Grid) ([]int, int) {
 // grow moves a V1 clip's end by df frames: a video's out, else its hold.
 func grow(c *Clip, kind string, df int, g Grid) {
 	if kind == "video" {
-		c.Out = f64(g.S(g.F(val(c.Out)) + df))
+		c.Out = new(g.S(g.F(val(c.Out)) + df))
 	} else {
-		c.Hold = f64(g.S(g.F(val(c.Hold)) + df))
+		c.Hold = new(g.S(g.F(val(c.Hold)) + df))
 	}
 }
 
 // front moves a V1 clip's start df frames into it: a video's in, else its hold shrinks.
 func front(c *Clip, kind string, df int, g Grid) {
 	if kind == "video" {
-		c.In = f64(g.S(g.F(val(c.In)) + df))
+		c.In = new(g.S(g.F(val(c.In)) + df))
 	} else {
-		c.Hold = f64(g.S(g.F(val(c.Hold)) - df))
+		c.Hold = new(g.S(g.F(val(c.Hold)) - df))
 	}
 }
 
@@ -173,12 +175,12 @@ func cut(t *Track, k, f, a, ln int, id string, onV1 bool, takes map[string]Take,
 	case !onV1:
 		// the left part ends on the right part's start sample
 		s := float64(g.Smp(g.S(f))-g.Smp(val(c.At))+g.Smp(val(c.In))) / float64(g.sr)
-		c.Out, c2.In, c2.At = f64(s), f64(s), f64(g.S(f))
+		c.Out, c2.In, c2.At = new(s), new(s), new(g.S(f))
 	case Kind(*c, takes) == "video":
 		s := g.S(g.F(val(c.In)) + f - a)
-		c.Out, c2.In = f64(s), f64(s)
+		c.Out, c2.In = new(s), new(s)
 	default:
-		c.Hold, c2.Hold = f64(g.S(f-a)), f64(g.S(ln-f+a))
+		c.Hold, c2.Hold = new(g.S(f-a)), new(g.S(ln-f+a))
 	}
 	t.Clips = slices.Insert(t.Clips, k+1, c2)
 }
@@ -270,11 +272,11 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				if g.Smp(g.S(f)) < e {
 					f++
 				}
-				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: f64(0), Out: f64(tk.DurationS), At: f64(g.S(f))})
+				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: new(0.0), Out: new(tk.DurationS), At: new(g.S(f))})
 			case tk.Kind == "image":
-				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, Hold: f64(ImageHoldS)})
+				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, Hold: new(ImageHoldS)})
 			default:
-				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: f64(0), Out: f64(tk.DurationS)})
+				t.Clips = append(t.Clips, Clip{ID: cid, TakeID: &tid, In: new(0.0), Out: new(tk.DurationS)})
 			}
 		}
 		return d, ""
@@ -286,10 +288,10 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 		if op.Op == "place" { // 1.32, Make shot: an empty slot at exactly frames(at)
 			f, n := g.F(val(op.At)), g.F(op.Hold)
 			last := cuts[len(cuts)-1]
-			slot := Clip{ID: op.ID, Hold: f64(g.S(n))}
+			slot := Clip{ID: op.ID, Hold: new(g.S(n))}
 			if f >= last { // past V1's end: a gap up to it first
 				if f > last {
-					*v1 = append(*v1, Clip{ID: op.GapID, Hold: f64(g.S(f - last))})
+					*v1 = append(*v1, Clip{ID: op.GapID, Hold: new(g.S(f - last))})
 				}
 				*v1 = append(*v1, slot)
 				return d, ""
@@ -305,7 +307,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				left, right := f-cuts[k], cuts[k+1]-f-n
 				var parts []Clip
 				if left > 0 {
-					gap.Hold = f64(g.S(left))
+					gap.Hold = new(g.S(left))
 					parts = append(parts, gap)
 				}
 				parts = append(parts, slot)
@@ -314,7 +316,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 					if left > 0 {
 						id = op.GapID
 					}
-					parts = append(parts, Clip{ID: id, Hold: f64(g.S(right))})
+					parts = append(parts, Clip{ID: id, Hold: new(g.S(right))})
 				}
 				*v1 = slices.Replace(*v1, k, k+1, parts...)
 				cutAt(k + len(parts))
@@ -322,7 +324,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 					for ti := 1; ti < len(d.Tracks); ti++ {
 						for i, c := range d.Tracks[ti].Clips {
 							if g.F(val(c.At)) >= cuts[k+1] {
-								d.Tracks[ti].Clips[i].At = f64(g.S(g.F(val(c.At)) - right))
+								d.Tracks[ti].Clips[i].At = new(g.S(g.F(val(c.At)) - right))
 							}
 						}
 					}
@@ -338,7 +340,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				best = k
 			}
 		}
-		insert(v1, best, Clip{ID: op.ID, Hold: f64(op.Hold)})
+		insert(v1, best, Clip{ID: op.ID, Hold: new(op.Hold)})
 		cutAt(best + 1)
 		return d, ""
 	case "add_track", "remove_track", "track":
@@ -347,7 +349,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			if len(d.Tracks) > MaxAudioTracks {
 				return d, "too_many_tracks"
 			}
-			d.Tracks = append(d.Tracks, Track{Kind: "audio", GainDB: f64(0), Mute: boolp(false), Clips: []Clip{}})
+			d.Tracks = append(d.Tracks, Track{Kind: "audio", GainDB: new(0.0), Mute: new(false), Clips: []Clip{}})
 		case "remove_track":
 			if op.Track == "V1" {
 				return d, "video_track"
@@ -458,7 +460,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				if len(ids) == 0 {
 					return d, "ids_short"
 				}
-				insert(v1, first, Clip{ID: ids[0], Hold: f64(g.S(min(hi, end) - lo))})
+				insert(v1, first, Clip{ID: ids[0], Hold: new(g.S(min(hi, end) - lo))})
 				next++
 			}
 			cutAt(next)
@@ -472,7 +474,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 					continue
 				}
 				if a >= hi && op.Op == "remove_range" { // open point 4: audio tracks ripple too
-					c.At = f64(g.S(a - (hi - lo)))
+					c.At = new(g.S(a - (hi - lo)))
 				}
 				keep = append(keep, c)
 			}
@@ -489,6 +491,20 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			return d, "unknown_marker"
 		}
 		d.Markers = slices.Delete(d.Markers, i, i+1)
+		return d, ""
+	case "ducking": // 1.106: the sequence's Duck music (absent fields kept; a sequence without it is off)
+		was := Ducking{DB: new(float64(DuckDB))}
+		if d.Ducking != nil {
+			was = *d.Ducking
+		}
+		now := Ducking{On: was.On, DB: new(was.Amount())}
+		if op.On != nil {
+			now.On = *op.On
+		}
+		if op.DB != nil {
+			now.DB = new(*op.DB)
+		}
+		d.Ducking = &now
 		return d, ""
 	}
 	var t *Track
@@ -519,7 +535,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			cutAt(index + 1)
 		} else {
 			moved := *c
-			moved.At = f64(val(op.At))
+			moved.At = new(val(op.At))
 			t.Clips = slices.Delete(t.Clips, i, i+1)
 			to := t
 			if op.Track != "" {
@@ -549,31 +565,31 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 						out = min(out, src-dOut/2)
 					}
 				}
-				c.In, c.Out = f64(g.S(in)), f64(g.S(out))
+				c.In, c.Out = new(g.S(in)), new(g.S(out))
 			} else {
 				if op.Edge != "out" {
 					df = -df
 				}
-				c.Hold = f64(g.S(max(g.F(val(c.Hold))+df, least)))
+				c.Hold = new(g.S(max(g.F(val(c.Hold))+df, least)))
 			}
 		} else if kind == "slot" { // 1.32: a line placeholder's hold, its start kept
 			if op.Edge != "out" {
 				df = -df
 			}
-			c.Hold = f64(g.S(max(g.F(val(c.Hold))+df, 1)))
+			c.Hold = new(g.S(max(g.F(val(c.Hold))+df, 1)))
 		} else {
 			in, out, frame := g.Smp(val(c.In)), g.Smp(val(c.Out)), g.Smp(g.S(1))
 			sr := float64(g.sr)
 			if op.Edge == "in" {
 				df = max(df, -g.F(val(c.At)))
 				ni := min(max(in+g.Smp(g.S(df)), 0), out-frame)
-				c.At, c.In = f64(g.Snap(val(c.At)+float64(ni-in)/sr)), f64(float64(ni)/sr)
+				c.At, c.In = new(g.Snap(val(c.At)+float64(ni-in)/sr)), new(float64(ni)/sr)
 			} else {
 				no := max(out+g.Smp(g.S(df)), in+frame)
 				if hasSrc {
 					no = min(no, g.Smp(takes[c.Take()].DurationS))
 				}
-				c.Out = f64(float64(no) / sr)
+				c.Out = new(float64(no) / sr)
 			}
 		}
 	case "remove", "lift":
@@ -581,7 +597,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 			return d, "lift_track"
 		}
 		if op.Op == "lift" {
-			*c = Clip{ID: c.ID, Hold: f64(g.S(Len(*c, kind, g, false)))}
+			*c = Clip{ID: c.ID, Hold: new(g.S(Len(*c, kind, g, false)))}
 			cutAt(i + 1)
 		} else {
 			removed := *c
@@ -592,7 +608,7 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				a, ln := g.F(val(removed.At)), Len(removed, kind, g, true)
 				for k := range t.Clips {
 					if x := g.F(val(t.Clips[k].At)); x >= a {
-						t.Clips[k].At = f64(g.S(x - ln))
+						t.Clips[k].At = new(g.S(x - ln))
 					}
 				}
 			}
@@ -617,10 +633,10 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 		}
 		df := g.F(op.Delta)
 		if onV1 {
-			c.In, c.Out = f64(g.S(g.F(val(c.In))+df)), f64(g.S(g.F(val(c.Out))+df))
+			c.In, c.Out = new(g.S(g.F(val(c.In))+df)), new(g.S(g.F(val(c.Out))+df))
 		} else { // on the sample grid
 			ds, sr := g.Smp(g.S(df)), float64(g.sr)
-			c.In, c.Out = f64(float64(g.Smp(val(c.In))+ds)/sr), f64(float64(g.Smp(val(c.Out))+ds)/sr)
+			c.In, c.Out = new(float64(g.Smp(val(c.In))+ds)/sr), new(float64(g.Smp(val(c.Out))+ds)/sr)
 		}
 	case "slide": // 1.50: the clip moves along V1 by delta; its neighbours give and take the frames
 		if !onV1 {
@@ -652,11 +668,11 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 		}
 		c.In, c.Out, c.Hold = nil, nil, nil
 		if tk.Kind == "image" && onV1 {
-			c.Hold = f64(g.S(ln))
+			c.Hold = new(g.S(ln))
 		} else {
 			src := g.F(tk.DurationS)
 			in := min(oldIn, src-1)
-			c.In, c.Out = f64(g.S(in)), f64(g.S(min(in+ln, src)))
+			c.In, c.Out = new(g.S(in)), new(g.S(min(in+ln, src)))
 		}
 		tid := op.TakeID
 		c.TakeID = &tid
@@ -689,15 +705,24 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				if !null {
 					_ = json.Unmarshal(raw, &c.Link)
 				}
+			case "fade_in", "fade_out", "crossfade": // 1.106: 0 or null removes
+				p := map[string]**float64{"fade_in": &c.FadeIn, "fade_out": &c.FadeOut, "crossfade": &c.Crossfade}[key]
+				*p = nil
+				if !null {
+					_ = json.Unmarshal(raw, p)
+					if *p != nil && **p == 0 {
+						*p = nil
+					}
+				}
 			}
 		}
 	case "fill": // studio: a shot's take fills its slot (README, Timeline: New shot; take actions)
 		tk, ln, in0, out0 := takes[op.TakeID], Len(*c, kind, g, false), c.In, c.Out
 		c.In, c.Out, c.Hold, c.Shot = nil, nil, nil, nil
 		if sm := tk.SourceMap; !onV1 { // 1.32, an audio track (New line, a line's re-render): the whole take at its start
-			c.In, c.Out = f64(0), f64(tk.DurationS)
+			c.In, c.Out = new(0.0), new(tk.DurationS)
 		} else if tk.Kind == "image" {
-			c.Hold = f64(g.S(ln))
+			c.Hold = new(g.S(ln))
 		} else if sm != nil {
 			// the generated part; replacing its source (or a take made from it): the clip's window, grown on a side
 			// only where the generated part lies outside the source (extend), never by the 8-frame snap (retake)
@@ -714,9 +739,9 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 					b = *out0 - mine + sm.OffsetS
 				}
 			}
-			c.In, c.Out = f64(g.S(max(g.F(a), 0))), f64(g.S(min(g.F(b), g.F(tk.DurationS))))
+			c.In, c.Out = new(g.S(max(g.F(a), 0))), new(g.S(min(g.F(b), g.F(tk.DurationS))))
 		} else {
-			c.In, c.Out = f64(0), f64(g.S(min(g.F(tk.DurationS), ln)))
+			c.In, c.Out = new(0.0), new(g.S(min(g.F(tk.DurationS), ln)))
 		}
 		tid := op.TakeID
 		c.TakeID = &tid
@@ -796,7 +821,7 @@ func overwrite(d *Doc, ti, i int, op Op, takes map[string]Take, g Grid) string {
 		moved := clone(c)
 		moved.TransitionIn = nil
 		starts, end := v1Starts(*v1, takes, g)
-		(*v1)[i] = Clip{Hold: f64(g.S(n))}
+		(*v1)[i] = Clip{Hold: new(g.S(n))}
 		if i+1 < len(*v1) {
 			(*v1)[i+1].TransitionIn = nil
 		}
@@ -840,7 +865,7 @@ func overwrite(d *Doc, ti, i int, op Op, takes map[string]Take, g Grid) string {
 			if !ok {
 				return "ids_short"
 			}
-			gap = []Clip{{ID: id, Hold: f64(g.S(lo - end))}}
+			gap = []Clip{{ID: id, Hold: new(g.S(lo - end))}}
 		}
 		before, after := []Clip{}, right
 		for k, p := range parts {
@@ -904,8 +929,8 @@ func overwrite(d *Doc, ti, i int, op Op, takes map[string]Take, g Grid) string {
 		switch {
 		case xs < lo:
 			x2 := clone(x)
-			x2.In, x2.At = f64(float64(is+re-xs)/sr), f64(g.S(fe))
-			x.Out = f64(float64(is+lo-xs) / sr)
+			x2.In, x2.At = new(float64(is+re-xs)/sr), new(g.S(fe))
+			x.Out = new(float64(is+lo-xs) / sr)
 			keep = append(keep, x)
 			if xe > re {
 				id, ok := next()
@@ -916,11 +941,11 @@ func overwrite(d *Doc, ti, i int, op Op, takes map[string]Take, g Grid) string {
 				keep = append(keep, x2)
 			}
 		case xe > re:
-			x.In, x.At = f64(float64(is+re-xs)/sr), f64(g.S(fe))
+			x.In, x.At = new(float64(is+re-xs)/sr), new(g.S(fe))
 			keep = append(keep, x)
 		}
 	}
-	c.At = f64(at)
+	c.At = new(at)
 	tt.Clips = append(keep, c)
 	return ""
 }
@@ -966,7 +991,7 @@ func Apply(doc Doc, op Op, takes map[string]Take) Result {
 			slices.SortStableFunc(order, func(a, b *Clip) int { return g.Smp(val(a.At)) - g.Smp(val(b.At)) })
 			for k := 1; k < len(order); k++ {
 				if prev, c := order[k-1], order[k]; overlap[c.ID] && prev.Out != nil {
-					prev.Out = f64(float64(g.Smp(val(prev.In))+g.Smp(val(c.At))-g.Smp(val(prev.At))) / float64(g.sr))
+					prev.Out = new(float64(g.Smp(val(prev.In))+g.Smp(val(c.At))-g.Smp(val(prev.At))) / float64(g.sr))
 				}
 			}
 		}
@@ -983,9 +1008,9 @@ func Apply(doc Doc, op Op, takes map[string]Take) Result {
 			t.Clips = slices.DeleteFunc(t.Clips, func(c Clip) bool { return past[c.ID] && g.Smp(val(c.At)) >= end })
 			for i, c := range t.Clips {
 				if past[c.ID] && c.Hold != nil { // 1.32: a line placeholder, never longer than it is
-					t.Clips[i].Hold = f64(float64(min(g.Smp(val(c.Hold)), end-g.Smp(val(c.At)))) / float64(g.sr))
+					t.Clips[i].Hold = new(float64(min(g.Smp(val(c.Hold)), end-g.Smp(val(c.At)))) / float64(g.sr))
 				} else if past[c.ID] { // never past its out (a line already cut at the next clip stays cut)
-					t.Clips[i].Out = f64(float64(min(g.Smp(val(c.Out)), g.Smp(val(c.In))+end-g.Smp(val(c.At)))) / float64(g.sr))
+					t.Clips[i].Out = new(float64(min(g.Smp(val(c.Out)), g.Smp(val(c.In))+end-g.Smp(val(c.At)))) / float64(g.sr))
 				}
 			}
 		}

@@ -19,6 +19,10 @@ def rec(status, run_id=None, take_ids=None, error=None, attempt=1) -> dict:
     return d | {"take_ids": take_ids, "error": error}
 
 
+def build(kind, batch, data):
+    return publisher.envelope(f"evt.pipeline.{kind}", batch["batch_id"], batch["owner_id"], batch["trace"], data)
+
+
 @pytest.mark.parametrize(
     "record",
     [
@@ -32,7 +36,7 @@ def rec(status, run_id=None, take_ids=None, error=None, attempt=1) -> dict:
     ],
 )
 def test_row_events_are_on_contract(record):
-    msg = publisher.build("row", BATCH, {"seq": 4} | row_data(record))
+    msg = build("row", BATCH, {"seq": 4} | row_data(record))
     assert msg["type"] == "evt.pipeline.row" and msg["job_id"] == BATCH["batch_id"]
 
 
@@ -47,14 +51,14 @@ def test_row_events_are_on_contract(record):
     ],
 )
 def test_batch_events_are_on_contract(data):
-    publisher.build("batch", BATCH, {"seq": 1} | data)
+    build("batch", BATCH, {"seq": 1} | data)
 
 
 def test_off_contract_events_are_refused():
     with pytest.raises(ValueError):
-        publisher.build("batch", BATCH, {"seq": 1, "status": "paused"})  # no reason
+        build("batch", BATCH, {"seq": 1, "status": "paused"})  # no reason
     with pytest.raises(ValueError):
-        publisher.build("row", BATCH, {"seq": 1} | row_data(rec("succeeded")))  # no run id
+        build("row", BATCH, {"seq": 1} | row_data(rec("succeeded")))  # no run id
 
 
 class FakeMsg:
@@ -159,9 +163,7 @@ def test_the_contract_copy_is_current():
         *(CONTRACTS / "tools").glob("*.json"),
         *(CONTRACTS / "plugins").glob("*.json"),
     ]:
-        assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), (
-            f"make gen: {p.name}"
-        )
+        assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), f"make gen: {p.name}"
 
 
 def test_assistant_tool_calls_resolve_into_the_tools_copy():

@@ -23,7 +23,18 @@ def test_readme_example_generates_the_canonical_qwen_image_nodes(tmp_path, monke
     assert list(q.schemas.values()) == want
 
 
-@pytest.mark.parametrize("family", ["qwen-image", "minimax-h3-image", "qwen3-tts"])
+@pytest.mark.parametrize(
+    "family",
+    [
+        "qwen-image",
+        "minimax-h3-image",
+        "qwen3-tts",
+        "minimax-music3",
+        "stable-audio-3",
+        "mmaudio",
+        "ace-step",
+    ],
+)
 def test_real_torch_packs_match_the_fixtures(family):
     """The torch runner publishes both families merged (contracts README): each family's canonical nodes, in its
     order (the core kinds they share are identical), and its workflows."""
@@ -101,9 +112,7 @@ def test_peak_formulas(formula, values, want):
     assert pack.evaluate(code, values) == pytest.approx(want)
 
 
-@pytest.mark.parametrize(
-    "formula", ["__import__('os')", "mp.real", "open('x')", "nope * 2", "[1][0]", "lambda: 1"]
-)
+@pytest.mark.parametrize("formula", ["__import__('os')", "mp.real", "open('x')", "nope * 2", "[1][0]", "lambda: 1"])
 def test_peak_formulas_refuse_anything_else(formula):
     with pytest.raises(ValueError):
         pack.compile_formula(formula, {"mp"})
@@ -177,7 +186,7 @@ def test_real_qwen_lora_block_equals_the_contract_fixture():
 
 def test_lora_stack_node_is_generated_from_the_lora_block(tmp_path, monkeypatch):
     q = FakeQwen(tmp_path, monkeypatch)
-    want = next(n for n in fixture("qwen-image.nodes.valid.json")["nodes"] if n["kind"] == "qwen-image/lora-stack")  # fmt: skip
+    want = next(n for n in fixture("qwen-image.nodes.valid.json")["nodes"] if n["kind"] == "qwen-image/lora-stack")
     assert pack.lora_stack_schema(q.pack) == want
     assert schemas.registry_errors("loras", fixture("qwen-image.loras.valid.json")) == []
 
@@ -229,9 +238,7 @@ def test_echo_lora_block_fits_the_contract_lora_fixtures():
 
 
 @pytest.mark.parametrize("variant", ["base", "turbo"])
-def test_memory_plan_lists_components_in_order_of_last_use_and_the_warm_peak(
-    tmp_path, monkeypatch, variant
-):
+def test_memory_plan_lists_components_in_order_of_last_use_and_the_warm_peak(tmp_path, monkeypatch, variant):
     """models[].variants[].memory (the hand-over): the canonical workflow at its default sizes (1024², no refs):
     decode's 8.5 * mp is the largest stage peak, on top of every kept component. The enhance node's add-ons come
     first (the default model's, unloaded after it; not on this host, so 0 GB)."""
@@ -242,10 +249,7 @@ def test_memory_plan_lists_components_in_order_of_last_use_and_the_warm_peak(
     pes, comps = plan["components"][:2], plan["components"][2:]
     assert [(c["component"], c["variant"], c["precision"], c["gb"], c["unloads_after"]) for c in pes] == [
         ("text_enhancer", "base", "bf16", 0, True), ("edit_enhancer", "base", "bf16", 0, True)]  # fmt: skip
-    want = [
-        (c, owner[c], "bf16" if c == "vae" else "int8")
-        for c in ("text_encoder", "transformer", "vae")
-    ]
+    want = [(c, owner[c], "bf16" if c == "vae" else "int8") for c in ("text_encoder", "transformer", "vae")]
     assert [(c["component"], c["variant"], c["precision"]) for c in comps] == want
     kept = sum(c["gb"] for c in comps)
     assert plan["precision"] == "int8" and not any("unloads_after" in c for c in comps)
@@ -277,9 +281,7 @@ def test_a_text_workflow_gets_its_own_memory_plan_at_four_thumbnails(tmp_path, m
     q = FakeQwen(tmp_path, monkeypatch)
     q.pack.workflows = fixture("qwen-image.workflows.valid.json")["workflows"]
     media, text = registry.memory_plans(q.pack, "turbo", "int8", q.impls, q.schemas)
-    assert "workflow" not in media and media == registry.memory_plan(
-        q.pack, "turbo", "int8", q.impls, q.schemas
-    )
+    assert "workflow" not in media and media == registry.memory_plan(q.pack, "turbo", "int8", q.impls, q.schemas)
     assert text["workflow"] == "qwen-image-ask" and text["planned_at"] == {
         "mp": 0.0,
         "frames": 0,
@@ -288,9 +290,7 @@ def test_a_text_workflow_gets_its_own_memory_plan_at_four_thumbnails(tmp_path, m
     (te,) = text["components"]
     assert (te["component"], te["variant"], te["precision"]) == ("text_encoder", "base", "int8")
     assert text["peak_gb"] == pytest.approx(te["gb"] + 2.5 + 1.5 * 4, abs=0.01)
-    q.pack.workflows = q.pack.workflows[
-        1:
-    ]  # only text workflows (the llm pack): one item, no `workflow`
+    q.pack.workflows = q.pack.workflows[1:]  # only text workflows (the llm pack): one item, no `workflow`
     (only,) = registry.memory_plans(q.pack, "turbo", "int8", q.impls, q.schemas)
     assert "workflow" not in only and only["planned_at"]["images"] == 4
 
@@ -334,7 +334,7 @@ def test_minimax_h3_pack_publishes_the_canonical_fixtures():
     comps = lambda v: [(c["component"], c["precisions"], c["bytes"]) for c in v["components"]]
     assert comps(variant) == comps(want["variants"][0]) and variant["precisions"] == ["int8"]
     # the native runtime: no component in the plan, P = the child's peak at the template size (24 + 0.05 mp frames)
-    assert variant["memory"] == [{"precision": "int8", "peak_gb": 26.57, "components": [],
+    assert variant["memory"] == [{"precision": "int8", "peak_gb": 31.07, "components": [],
                                   "planned_at": {"mp": 0.4147, "frames": 124}}]  # fmt: skip
 
 
@@ -370,8 +370,7 @@ def test_the_native_runner_names_the_gpu_on_cuda(monkeypatch):
     from core import loaders_native, residency
 
     out = "NVIDIA RTX PRO 6000 Blackwell Server Edition, 97887, 595.58.03\n"
-    monkeypatch.setattr(residency.subprocess, "run",
-                        lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out))  # fmt: skip
+    monkeypatch.setattr(residency.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess(a, 0, stdout=out))
     monkeypatch.setattr(loaders_native, "device", lambda: "cuda")
     residency._gpu.cache_clear()
     try:
@@ -401,17 +400,11 @@ def test_minimax_h3_refusals_equal_the_contract_fixture():
         got = native.render_size(*c["args"])
         assert (list(got) if got else None) == c["expect"], c["description"]
     one = {"refs": [{"image": None}]}
-    assert (
-        native.check_generate(one, {"prompt", "first"})
-        == ": references cannot go with a first or last frame"
-    )
+    assert native.check_generate(one, {"prompt", "first"}) == ": references cannot go with a first or last frame"
     assert native.check_generate(one, {"prompt"}) is None
     assert native.check_generate({"refs": []}, {"first", "last"}) is None
     for kind in ("videos", "audios"):  # API 1.22: any reference kind
-        assert (
-            native.check_generate({kind: [{}]}, {"last"})
-            == ": references cannot go with a first or last frame"
-        )
+        assert native.check_generate({kind: [{}]}, {"last"}) == ": references cannot go with a first or last frame"
 
 
 FAKE_H3 = """#!{python}
@@ -487,9 +480,7 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     assert a[6:22] == ["--width", "256", "--height", "288", "--frames", "22", "--steps", "2", "--seed",
                        str(2**53 - 1), "--layers", "45", "--reuse", "2", "--use-int8-row-fc2", "--first-frame"]  # fmt: skip
     assert a[23] == "--last-frame" and len(a) == 25
-    assert run["cwd"] == str(fake.parent.resolve()) and all(
-        x.startswith("/") for x in (a[5], a[22], a[24])
-    )
+    assert run["cwd"] == str(fake.parent.resolve()) and all(x.startswith("/") for x in (a[5], a[22], a[24]))
     assert run["images"] == ["89504e470d0a1a0a"] * 2  # PNGs
     assert "H3_FAKE_LOG" in run["env"] and "NATS_URL" not in run["env"]
     tmp = Path(a[5]).parent
@@ -506,13 +497,9 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     )
     # refused before the child starts
     log.unlink()
-    with pytest.raises(
-        RunError, match="^generate: references cannot go with a first or last frame$"
-    ):
+    with pytest.raises(RunError, match="^generate: references cannot go with a first or last frame$"):
         native.generate(ctx, params | {"refs": [{"image": Image.new("RGB", (8, 8))}]}, inputs)
-    with pytest.raises(
-        RunError, match=r"^generate: the canvas is 1344 × 1344; at most 1032192 pixels"
-    ):
+    with pytest.raises(RunError, match=r"^generate: the canvas is 1344 × 1344; at most 1032192 pixels"):
         native.generate(ctx, params, inputs | {"canvas": {"width": 1344, "height": 1344}})
     assert not log.exists()
     # API 1.22: video and audio references, cut to their parts in the per-run folder, after the image ones; audios
@@ -556,18 +543,14 @@ def test_minimax_h3_generate_runs_the_binary_and_returns_a_video(tmp_path, monke
     ]:
         with pytest.raises(RunError, match=f"^generate: {re.escape(why)}$"):
             native.generate(ctx, refs, {k: x for k, x in frames.items() if x is not None} | change)
-    with pytest.raises(
-        RunError, match="^generate: audio references need an image or video reference$"
-    ):
+    with pytest.raises(RunError, match="^generate: audio references need an image or video reference$"):
         native.generate(
             ctx,
             params | {"audios": refs["audios"]},
             {k: x for k, x in frames.items() if x is not None},
         )
     # a 2 s part with sound: h3 keeps 39 of its 48 frames, under 2 s of sound (the dev run that found it)
-    with pytest.raises(
-        RunError, match=r"part of at least 56 frames at 24 fps \(video 1 reads 48\)$"
-    ):
+    with pytest.raises(RunError, match=r"part of at least 56 frames at 24 fps \(video 1 reads 48\)$"):
         native.generate(
             ctx,
             params | {"videos": [{"video": take("video", v, **{"in": 0.5, "out": 2.5})}]},
@@ -598,9 +581,7 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
     core reuse only at reuse 1, and the refusals on Base."""
     from packs.minimax_h3 import native
 
-    wf = json.loads(
-        (Path(native.__file__).parent / "workflows/1-minimax-h3-text-to-video.json").read_text()
-    )
+    wf = json.loads((Path(native.__file__).parent / "workflows/1-minimax-h3-text-to-video.json").read_text())
     presets = wf["studio"]["presets"]
     assert wf["studio"]["preset_order"] == [
         "Draft",
@@ -611,8 +592,8 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
     ]  # API 1.41
     params = wf["nodes"]["generate"]["params"]
     assert all(
-        params[k.split(".")[1]] == v for k, v in presets["Default"].items()
-    )  # the template opens on Default
+        params[k.split(".")[1]] == v for k, v in presets["Turbo"].items()
+    )  # the template opens on Turbo (owner, 2026-11-28: "make turbo as default in image and video gen")
 
     def flags(**kw):
         a = native.argv(
@@ -656,18 +637,14 @@ def test_minimax_h3_presets_and_advanced_map_onto_h3_flags(tmp_path):
     }
     for name, values in presets.items():
         p = {k.split(".")[1]: v for k, v in values.items()}
-        p = {
-            k: v for k, v in p.items() if k not in ("lora", "flow_shift", "audio_flow_shift")
-        }  # not h3 flags
+        p = {k: v for k, v in p.items() if k not in ("lora", "flow_shift", "audio_flow_shift")}  # not h3 flags
         assert flags(**p) == want[name] + ["--use-int8-row-fc2"], name
     assert flags(steps=4, core_reuse=4) == want["Draft"] + [
         "--core-reuse",
         "4",
         "--use-int8-row-fc2",
     ]
-    assert flags(steps=20, reuse=2, core_reuse=4)[-1:] == [
-        "--use-int8-row-fc2"
-    ]  # h3 refuses both: not passed
+    assert flags(steps=20, reuse=2, core_reuse=4)[-1:] == ["--use-int8-row-fc2"]  # h3 refuses both: not passed
     size = native.render_size(864, 480, "75%")
     assert flags(steps=4, render=size)[-5:] == [
         "--render-width",
@@ -688,21 +665,13 @@ def test_compute_is_a_load_option_keyed_only_off_its_default(tmp_path, monkeypat
                                        "components": ["transformer"], "runtime": "torch"}  # fmt: skip
     p = next(x for x in pack.model_schema(q.pack)["params"] if x["name"] == "compute")
     assert p == {"name": "compute", "type": "enum", "label": "Compute", "default": "float32", "enum": ["float32", "float16"]}  # fmt: skip
-    plain, f32, f16 = (
-        pack.ModelRef(q.pack, "base", "bf16", compute=c) for c in (None, "float32", "float16")
-    )
+    plain, f32, f16 = (pack.ModelRef(q.pack, "base", "bf16", compute=c) for c in (None, "float32", "float16"))
     assert plain.key("transformer") == f32.key("transformer") == f16.key("transformer")[:4]
     assert f16.key("transformer")[4:] == ("float16",) and f16.key("vae") == plain.key("vae")
-    assert (
-        plain.fingerprint(["transformer"])
-        == f32.fingerprint(["transformer"])
-        != f16.fingerprint(["transformer"])
-    )
+    assert plain.fingerprint(["transformer"]) == f32.fingerprint(["transformer"]) != f16.fingerprint(["transformer"])
     assert pack.models_entry(q.pack)["compute"] == {"components": ["transformer"]}
     q.pack.spec["model"]["compute"]["runtime"] = "mlx"
-    assert f16.key("transformer") == plain.key(
-        "transformer"
-    ) and "compute" not in pack.models_entry(q.pack)
+    assert f16.key("transformer") == plain.key("transformer") and "compute" not in pack.models_entry(q.pack)
 
 
 def test_qwens_enhancers_are_per_task_add_ons_named_as_the_boards(tmp_path, monkeypatch):
@@ -714,10 +683,8 @@ def test_qwens_enhancers_are_per_task_add_ons_named_as_the_boards(tmp_path, monk
 
     from core import models
 
-    spec = yaml.safe_load(
-        (Path(pack.__file__).parents[1] / "packs/qwen_image/model.yaml").read_text()
-    )
-    monkeypatch.setattr(pack, "models_root", lambda: tmp_path)
+    spec = yaml.safe_load((Path(pack.__file__).parents[1] / "packs/qwen_image/model.yaml").read_text())
+    monkeypatch.setattr("config.MODELS", tmp_path)
     p = SimpleNamespace(spec=spec, component=lambda c: spec["components"][c])
     got = {c: models.addon_entry(p, c) for c in pack.addons(p)}
     assert {c: (a["title"], a["short"], a["tag"], a["refs"]) for c, a in got.items()} == {

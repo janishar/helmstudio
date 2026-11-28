@@ -1,0 +1,8 @@
+{
+ "target": {
+  "width": 1920,
+  "height": 1080,
+  "fps": 25,
+  "sample_rate": 48000
+ }
+}

@@ -1,7 +1,7 @@
 "use client";
 // The frame of every signed-in page: the floating dock on the left, the page beside it.
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, use, useEffect, useRef, useState } from "react";
 import {
   Blocks,
@@ -12,7 +12,9 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  WandSparkles,
   Workflow,
+  Wrench,
 } from "lucide-react";
 import {
   AssistantDrawer,
@@ -21,7 +23,9 @@ import {
   type AssistantApi,
 } from "@/components/assistant/assistant";
 import { ToolsContext } from "@/components/assistant/tools";
+import { openMenu } from "@/components/context-menu";
 import { MarkPaths } from "@/components/kit";
+import { Banner, StatusLogo } from "@/components/status";
 import { ApiError, api, ok, type S } from "@/lib/api";
 
 /** The signed-in user (null when auth can't be reached). */
@@ -35,11 +39,12 @@ export const useAssistantApi = () => use(AssistantContext);
 /** Dock items: route, label, glyph and the tile's gradient. Hub and System follow for admins (plan 33), as a group. */
 const ITEMS = [
   { href: "/", label: "Create", Icon: Sparkles, tile: "linear-gradient(155deg,#a393ff,#4a2fe0)" },
+  // plan 39: lanes in time, right after Create (owner, 2026-11-27)
   {
-    href: "/pipelines",
-    label: "Pipelines",
-    Icon: Workflow,
-    tile: "linear-gradient(155deg,#6cc4ff,#1f5fe0)",
+    href: "/magic",
+    label: "Magic",
+    Icon: WandSparkles,
+    tile: "linear-gradient(155deg,#f2a8ff,#8a3fd6)",
   },
   {
     href: "/gallery",
@@ -54,13 +59,20 @@ const ITEMS = [
     tile: "linear-gradient(155deg,#ffe07a,#f08a1c)",
   },
   {
+    href: "/pipelines",
+    label: "Pipelines",
+    Icon: Workflow,
+    tile: "linear-gradient(155deg,#6cc4ff,#1f5fe0)",
+  },
+  {
     href: "/models",
     label: "Models",
     Icon: Boxes,
     tile: "linear-gradient(155deg,#7af5d6,#12967f)",
   },
 ];
-/** plan 33 37.9: everything AI (Hub) and the deployment (System), admins only */
+/** plan 33 37.9: everything AI (Hub) and the deployment (System), admins only; with Settings they are the rail's
+ * bottom panel, "Setup" (docs/mock/Rail.dc.html option 4, owner 2026-11-28) */
 const ADMIN_ITEMS = [
   { href: "/hub", label: "Hub", Icon: Blocks, tile: "linear-gradient(155deg,#d8f58c,#3c9a2e)" },
   {
@@ -70,6 +82,12 @@ const ADMIN_ITEMS = [
     tile: "linear-gradient(155deg,#c9ced9,#5b6478)",
   },
 ];
+const SETTINGS = {
+  href: "/settings",
+  label: "Settings",
+  Icon: Settings,
+  tile: "linear-gradient(155deg,#a7b0c2,#4b5468)",
+};
 type Item = (typeof ITEMS)[number];
 
 /** One page in the dock. */
@@ -78,13 +96,49 @@ function DockLink({ it: { href, label, Icon, tile }, path }: { it: Item; path: s
     <Link
       href={href}
       aria-current={isCurrent(href, path) ? "page" : undefined}
-      className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
-        <Icon size={20} strokeWidth={1.75} aria-hidden />
+        <Icon size={18} strokeWidth={1.75} aria-hidden />
       </span>
       {label}
     </Link>
+  );
+}
+
+/** Setup folded into one gear tile (Rail.dc.html frames 4, 5): an admin's Hub, System and Settings in the shared menu,
+ * the current page ticked. A non-admin has Settings only, so a plain Settings tile. */
+function SetupGear({ admin, path }: { admin: boolean; path: string }) {
+  const router = useRouter();
+  if (!admin) return <DockLink it={SETTINGS} path={path} />;
+  const setup = [...ADMIN_ITEMS, SETTINGS];
+  const here = setup.some((it) => isCurrent(it.href, path));
+  return (
+    <button
+      type="button"
+      aria-haspopup="menu"
+      aria-current={here ? "page" : undefined}
+      title="Hub, System, Settings"
+      onClick={(e) =>
+        openMenu(e, {
+          title: "Setup",
+          beside: true,
+          items: setup.map((it) => ({
+            label: it.label,
+            icon: it.Icon,
+            checked: isCurrent(it.href, path),
+            onPick: () => router.push(it.href),
+          })),
+        })
+      }
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+    >
+      <span className="tile" style={{ "--tile": SETTINGS.tile } as React.CSSProperties}>
+        {/* a wrench, not the Settings gear its menu holds (owner, 2026-11-28: "chane icon of setup") */}
+        <Wrench size={18} strokeWidth={1.75} aria-hidden />
+      </span>
+      Setup
+    </button>
   );
 }
 
@@ -138,8 +192,8 @@ export function AppShell({
     if (path !== "/") cats.current?.stop();
   }, [path]);
   useEffect(() => {
-    // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view, again once
-    // the Assistant item arrives and pushes it along
+    // a phone's dock is a bar that scrolls sideways: keep the current item in view, again once the Assistant item
+    // arrives and pushes it along
     nav.current
       ?.querySelector("[aria-current=page]")
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
@@ -153,51 +207,52 @@ export function AppShell({
             // only while docked: a floating drawer leaves the page its full width (plan 36 §40)
             data-drawer={(a.ready && a.open && !a.floating) || undefined}
           >
-            {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
+            {/* the rail (md+): the logo in its own panel, 14 px above the menu, Setup at the menu panel's foot; a phone's bar has no logo. A window too short
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}
-            <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
+            <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
-                <Link
-                  href="/"
-                  aria-label="helmstudio, home (Create)"
-                  title="helmstudio"
-                  // on Create a click is a no-op, so a double-click never navigates twice
-                  onClick={(e) => path === "/" && e.preventDefault()}
-                  onDoubleClick={() =>
-                    void import("@/components/cats").then((m) => (cats.current = m).play())
-                  }
-                  className="tile text-on1"
-                  style={
-                    {
-                      "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
-                      borderRadius: "12px 12px 12px 5px",
-                    } as React.CSSProperties
-                  }
-                >
-                  <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
-                    <MarkPaths />
-                  </svg>
-                </Link>
+                {/* the logo carries the studio's state: a dot and its popover while something is down */}
+                <StatusLogo admin={admin}>
+                  {(word) => (
+                    <Link
+                      href="/"
+                      aria-label={word ? `helmstudio · ${word}` : "helmstudio, home (Create)"}
+                      title={word ? `helmstudio · ${word}` : "helmstudio"}
+                      aria-haspopup={word ? "dialog" : undefined}
+                      // something down: a click opens the status popover; else on Create a click is a no-op, so a double-click never
+                      // navigates twice
+                      onClick={(e) => {
+                        if (word) {
+                          e.preventDefault();
+                          document.getElementById("status")?.togglePopover?.(true);
+                        } else if (path === "/") e.preventDefault();
+                      }}
+                      onDoubleClick={() =>
+                        void import("@/components/cats").then((m) => (cats.current = m).play())
+                      }
+                      className="tile text-on1"
+                      style={
+                        {
+                          "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
+                          borderRadius: "12px 12px 12px 5px",
+                        } as React.CSSProperties
+                      }
+                    >
+                      <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+                        <MarkPaths />
+                      </svg>
+                    </Link>
+                  )}
+                </StatusLogo>
               </div>
               <nav
                 ref={nav}
                 aria-label="Sections"
-                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:gap-2.5 md:w-[76px] md:flex-1 md:flex-col md:overflow-visible md:px-1 md:py-3.5"
               >
                 {ITEMS.map((it) => (
                   <DockLink key={it.href} it={it} path={path} />
                 ))}
-                {admin && (
-                  <div
-                    role="group"
-                    aria-label="Admin only"
-                    className="flex shrink-0 items-center gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--s3)_55%,transparent)] px-1 md:flex-col md:px-0 md:py-1.5"
-                  >
-                    {ADMIN_ITEMS.map((it) => (
-                      <DockLink key={it.href} it={it} path={path} />
-                    ))}
-                  </div>
-                )}
                 {a.ready && <span aria-hidden className="h-8 w-px shrink-0 bg-s4 md:h-px md:w-8" />}
                 {a.ready && (
                   <button
@@ -205,7 +260,7 @@ export function AppShell({
                     aria-expanded={a.open}
                     title={`Assistant (${shortcut()})`}
                     onClick={() => a.setOpen((o) => !o)}
-                    className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
+                    className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
                   >
                     <span
                       className="tile"
@@ -215,37 +270,53 @@ export function AppShell({
                         } as React.CSSProperties
                       }
                     >
-                      <Bot size={20} strokeWidth={1.75} aria-hidden />
+                      <Bot size={18} strokeWidth={1.75} aria-hidden />
                     </span>
                     Assistant
-                    {a.cardWaits && !a.open && (
+                    {/* closed with something for you: a card waits (yellow) or an answer you have not read (accent) */}
+                    {!a.open && a.cardWaits ? (
                       <span aria-label="1 card waits for you" className="dot" />
-                    )}
+                    ) : !a.open && a.newAnswer !== null ? (
+                      <span aria-label="A new answer" className="dot new" />
+                    ) : null}
                   </button>
                 )}
-                <Link
-                  href="/settings"
-                  aria-current={isCurrent("/settings", path) ? "page" : undefined}
-                  className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1 md:mt-1.5"
+                {/* a phone's bar: Setup pinned at its right end, the rest scrolls under it */}
+                <span className="sticky right-0 flex shrink-0 items-center gap-3.5 bg-s1 shadow-[12px_0_0_var(--s1)] md:hidden">
+                  <span aria-hidden className="h-8 w-px shrink-0 bg-s4" />
+                  <SetupGear admin={admin} path={path} />
+                </span>
+                {/* md+: Setup at the foot of the same panel, under a rule the free space pushes down (one panel, owner
+                    2026-11-28: "rail is broken in two parts"); a window too short for it folds it into one gear tile
+                    (.rail-setup / .rail-gear in globals.css) */}
+                <span aria-hidden className="hidden h-px w-8 shrink-0 bg-s4 md:mt-auto md:block" />
+                <div
+                  role="group"
+                  aria-label="Setup"
+                  className={`rail-setup flex-col items-center gap-2.5${admin ? " admin" : ""}`}
                 >
-                  <span
-                    className="tile"
-                    style={
-                      { "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties
-                    }
-                  >
-                    <Settings size={20} strokeWidth={1.75} aria-hidden />
-                  </span>
-                  Settings
-                </Link>
+                  {admin && ADMIN_ITEMS.map((it) => <DockLink key={it.href} it={it} path={path} />)}
+                  <DockLink it={SETTINGS} path={path} />
+                </div>
+                {admin && (
+                  <div className="rail-gear justify-center">
+                    <SetupGear admin path={path} />
+                  </div>
+                )}
               </nav>
             </div>
             {/* md+: the window never scrolls (overflow-clip: not even a focus or scrollIntoView moves it; owner, alpha.5
                 item 9), the rail stays put. 60rem (the Mac app's narrowest window, 960 px) and up: the side panel sits
                 beside <main> and each scrolls on its own; narrower, the side panel wraps under <main> and the page
                 area scrolls as one */}
-            <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start md:overflow-y-auto min-[60rem]:flex-nowrap min-[60rem]:overflow-hidden min-[60rem]:[&>.aside]:max-h-[calc(100dvh-28px)] min-[60rem]:[&>.aside]:shrink-0 min-[60rem]:[&>.aside]:overflow-y-auto min-[60rem]:[&>main]:min-h-0 min-[60rem]:[&>main]:overflow-y-auto">
-              {children}
+            {/* the page column: the banner on top pushes the page down (ErrorStates a1) */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              <div className="empty:hidden shrink-0 px-3.5 pt-3.5 md:pr-3.5 md:pl-0">
+                <Banner />
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-wrap content-start md:overflow-y-auto min-[60rem]:flex-nowrap min-[60rem]:overflow-hidden min-[60rem]:[&>.aside]:max-h-[calc(100dvh-28px)] min-[60rem]:[&>.aside]:shrink-0 min-[60rem]:[&>.aside]:overflow-y-auto min-[60rem]:[&>main]:min-h-0 min-[60rem]:[&>main]:overflow-y-auto">
+                {children}
+              </div>
             </div>
           </div>
           {a.ready && <AssistantDrawer a={a} />}

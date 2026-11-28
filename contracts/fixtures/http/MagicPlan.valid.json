@@ -1,0 +1,35 @@
+{
+  "blocks": [
+    {
+      "block": "b1",
+      "seconds": 110,
+      "source": "yours",
+      "host": "mac",
+      "peak_gb": 21.5,
+      "reason": null
+    },
+    {
+      "block": "b2",
+      "seconds": null,
+      "source": "unknown",
+      "host": "mac",
+      "peak_gb": null,
+      "reason": null
+    }
+  ],
+  "lanes": [
+    {
+      "lane": "l1",
+      "seconds": null,
+      "blocks": 2
+    }
+  ],
+  "seconds": null,
+  "order": [
+    "b1",
+    "b2"
+  ],
+  "ask": true,
+  "ask_text": "2 shots, time unknown",
+  "limit_minutes": 5
+}

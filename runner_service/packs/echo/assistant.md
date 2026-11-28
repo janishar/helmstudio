@@ -3,7 +3,9 @@
 ## Card
 
 Echo (fake) is the test model of a dev or test stack (workflows `echo`, `echo-tiny`, `echo-video` and the other
-`echo-*`): it draws its prompt's text on a gradient, makes a still MP4 or a short sound. Never offer it for real work.
+`echo-*`): it draws its prompt's text on a gradient, makes a still MP4, a short sound, a fake song (`echo-music`:
+stereo, sections from the lyrics' tags) or sound effect (`echo-sound`, `echo-sound-video`, with Repaint, Vary and
+Extend). Never offer it for real work.
 
 ## Settings that matter
 

@@ -44,9 +44,7 @@ from core.graph import RunError
 log = logging.getLogger("residency")
 
 POLICIES = ("unload", "keep_warm", "keep_pinned")
-SETTLE_S = (
-    10.0  # at most this long waiting for the measured footprint to fall after a free (_make_room)
-)
+SETTLE_S = 10.0  # at most this long waiting for the measured footprint to fall after a free (_make_room)
 
 
 def ram_gb() -> float:
@@ -141,9 +139,7 @@ class Residency:
     ) -> None:
         self.budget_gb, self.free, self.measure, self.pins = budget_gb, free, measure, pins
         self.total_gb: float | None = None  # what budget_gb is cut from (CUDA: VRAM); None = RAM
-        self.pin_refs: set[tuple] | None = (
-            None  # host_settings pins of this env (ident), replacing `pins`
-        )
+        self.pin_refs: set[tuple] | None = None  # host_settings pins of this env (ident), replacing `pins`
         # key → [gb, value, loras, last_used (epoch s)]; LRU first
         self.entries: OrderedDict[tuple, list] = OrderedDict()
         self.in_use: set[tuple] = set()  # the running stage's components: not evictable
@@ -175,9 +171,7 @@ class Residency:
         missing = sum(gb for k, gb in needs.items() if k not in self.entries)
         self._make_room(missing + peak_gb, later)
 
-    def get(
-        self, key: tuple, gb: float, transient_gb: float, load: Callable[[], object], loras=None
-    ):
+    def get(self, key: tuple, gb: float, transient_gb: float, load: Callable[[], object], loras=None):
         """The loaded component `key`, loading it (with room for `gb` + the load-time transient) if needed. `loras`:
         what the hosts value lists as its baked LoRAs (names may change; the key does not)."""
         self.used.add(key)
@@ -189,9 +183,7 @@ class Residency:
         self._make_room(gb + transient_gb, set())
         t = time.monotonic()
         value = load()
-        log.info(
-            "loaded %s (%.1f GB est.) in %.1f s", "/".join(map(str, key)), gb, time.monotonic() - t
-        )
+        log.info("loaded %s (%.1f GB est.) in %.1f s", "/".join(map(str, key)), gb, time.monotonic() - t)
         with self.lock:
             self.entries[key] = [gb, value, loras, time.time()]
         return value
@@ -239,9 +231,7 @@ class Residency:
 
         def order(
             k: tuple,
-        ) -> (
-            tuple
-        ):  # unpinned first (a pin is the last resort); not needed later; a baked set unused; LRU
+        ) -> tuple:  # unpinned first (a pin is the last resort); not needed later; a baked set unused; LRU
             return self.pinned(k), k in later, not (_baked(k) and k not in self.used), lru.index(k)
 
         evicted = False
@@ -262,6 +252,8 @@ class Residency:
         with self.lock:
             entry = self.entries.pop(key)
         log.info("unloaded %s", "/".join(map(str, key)))
+        if callable(evicted := getattr(entry[1], "evicted", None)):  # a resident server child (omni): stop it
+            evicted()
         entry.clear()  # drop the reference to the loaded module here, so free() can return its memory
 
     def release(self, keys: set[tuple]) -> None:
@@ -288,11 +280,7 @@ class Residency:
         """runner.unload `components`: unload exactly the named entries held and not in use, pinned ones too (the
         dispatcher names a pin only as a last resort); returns (their names, their GB)."""
         want = {ident(n) for n in names}
-        victims = [
-            k
-            for k, e in self.entries.items()
-            if ident(_name(k, e[2])) in want and k not in self.in_use
-        ]
+        victims = [k for k, e in self.entries.items() if ident(_name(k, e[2])) in want and k not in self.in_use]
         freed = [_name(k, self.entries[k][2]) for k in victims]
         gb = sum(self.entries[k][0] for k in victims)
         for k in victims:
@@ -321,8 +309,7 @@ class Residency:
         """The hosts value's `memory` and `resident`."""
         with self.lock:
             entries = [(k, e[0], e[2], e[3]) for k, e in self.entries.items()]
-        why = {k: "pin" if self.pinned(k) else "in_use" for k, *_ in entries
-               if self.pinned(k) or k in self.in_use}  # fmt: skip
+        why = {k: "pin" if self.pinned(k) else "in_use" for k, *_ in entries if self.pinned(k) or k in self.in_use}
         used = sum(e[1] for e in entries)
         measured = self.measure()
         return {
@@ -383,8 +370,6 @@ def ident(name: dict) -> tuple:
         name.get("model"),
         name.get("variant"),
         name.get("precision"),
-        None
-        if name.get("compute") in (None, "float32")
-        else name["compute"],  # absent = float32 (API 1.39)
+        None if name.get("compute") in (None, "float32") else name["compute"],  # absent = float32 (API 1.39)
         loras,
     )

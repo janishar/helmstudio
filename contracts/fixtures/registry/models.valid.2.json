@@ -1,0 +1,170 @@
+{
+  "schema_version": 1,
+  "host": "fake",
+  "env": "fake",
+  "published_at": "2026-11-14T10:00:00Z",
+  "published_by": "runner fake 0.1.0",
+  "models": [
+    {
+      "id": "echo",
+      "family": "echo",
+      "title": "Echo (fake)",
+      "media": [
+        "image"
+      ],
+      "runtimes": [
+        {
+          "runtime": "fake",
+          "env": "fake"
+        }
+      ],
+      "variants": [
+        {
+          "id": "tiny",
+          "presence": "unplugged",
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Tiny",
+          "dir": "Echo-Tiny",
+          "source": {
+            "repo": "helm-test/echo-tiny",
+            "revision": "b5800734cb8cbaf5f439eaec38cf987d912ddf8c",
+            "allow_patterns": [
+              "config.json",
+              "transformer/*",
+              "vae/*"
+            ],
+            "licence": "echo-test",
+            "must_accept": true,
+            "gated": false,
+            "bytes": 98502
+          },
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "tiny",
+              "precisions": [
+                "bf16"
+              ]
+            },
+            {
+              "component": "vae",
+              "from_variant": "tiny",
+              "precisions": [
+                "bf16"
+              ]
+            }
+          ],
+          "copies": [
+            {
+              "folder": "a81d0e5c22f9",
+              "state": "unplugged"
+            }
+          ]
+        },
+        {
+          "id": "plus",
+          "presence": "missing",
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Plus",
+          "dir": "Echo-Tiny-Plus",
+          "source": {
+            "repo": "helm-test/echo-tiny-plus",
+            "revision": "bd41ceaa49a7a29228baa60c8c7ab952b736893b",
+            "allow_patterns": [
+              "config.json",
+              "transformer/*"
+            ],
+            "licence": "echo-test",
+            "must_accept": true,
+            "gated": false,
+            "bytes": 25166027
+          },
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "plus",
+              "precisions": [
+                "bf16"
+              ]
+            },
+            {
+              "component": "vae",
+              "from_variant": "tiny",
+              "precisions": [
+                "bf16"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "gated",
+          "presence": "missing",
+          "precisions": [
+            "bf16"
+          ],
+          "title": "Gated",
+          "dir": "Echo-Tiny-Gated",
+          "source": {
+            "repo": "helm-test/echo-tiny-gated",
+            "revision": "0ae47312f432cb40425628796865750b44b948ce",
+            "allow_patterns": [
+              "config.json",
+              "transformer/*"
+            ],
+            "licence": "echo-test",
+            "must_accept": true,
+            "gated": true,
+            "bytes": 16500
+          },
+          "components": [
+            {
+              "component": "transformer",
+              "from_variant": "gated",
+              "precisions": [
+                "bf16"
+              ]
+            },
+            {
+              "component": "vae",
+              "from_variant": "tiny",
+              "precisions": [
+                "bf16"
+              ]
+            }
+          ]
+        }
+      ],
+      "lora": {
+        "component": "transformer",
+        "modules": [
+          "img_in",
+          "modulation.1",
+          "proj_out",
+          "time_text_embed.timestep_embedder.linear_1",
+          "transformer_blocks.0.attn.to_k",
+          "transformer_blocks.0.attn.to_out.0",
+          "transformer_blocks.0.attn.to_q",
+          "transformer_blocks.0.attn.to_v",
+          "transformer_blocks.0.img_mlp.gate_layer",
+          "transformer_blocks.30.img_mlp.out",
+          "transformer_blocks.31.img_mlp.proj",
+          "transformer_blocks.7.attn.to_out.0",
+          "transformer_blocks.7.attn.to_q"
+        ],
+        "renames": [],
+        "ignore": []
+      }
+    }
+  ],
+  "licences": [
+    {
+      "id": "echo-test",
+      "title": "Echo Test Licence",
+      "text": "# Echo Test Licence\n\nThe tiny fake weights of the echo pack (helm-test/echo-tiny, -plus and -gated on the fake hub) are test data: random\nbytes in safetensors files. They exist only to prove that a download asks for this licence to be accepted before it\nstarts and records the text that was accepted. They may be copied, changed and deleted freely; they make no images.\n"
+    }
+  ]
+}

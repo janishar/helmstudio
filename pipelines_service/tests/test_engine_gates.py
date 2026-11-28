@@ -29,9 +29,7 @@ def gated(b: str, n: int, branch: bool = True) -> dict:
 
 
 def open_of(studio: FakeStudio, node: str) -> list[str]:
-    return [
-        k for k, r in studio.runs.items() if k.split(":")[3] == node and r["status"] == "queued"
-    ]
+    return [k for k, r in studio.runs.items() if k.split(":")[3] == node and r["status"] == "queued"]
 
 
 async def finish_open(e, studio: FakeStudio, node: str) -> None:
@@ -79,9 +77,7 @@ async def test_a_park_or_step_whose_publish_failed_is_published_again(pool, monk
     monkeypatch.setattr(publisher, "RETRY_FOR", 0.0)  # a publish that fails raises at once
     real, failed = js.publish, []
 
-    async def flaky(
-        subject, data, headers=None
-    ):  # the first step event and the first parked row are lost
+    async def flaky(subject, data, headers=None):  # the first step event and the first parked row are lost
         parked = subject.endswith(".row") and b'"waiting"' in data
         if (subject.endswith(".step") or parked) and subject[-4:] not in failed:
             failed.append(subject[-4:])

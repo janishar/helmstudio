@@ -17,7 +17,7 @@ from packs.echo import fake
 FIXTURES = CONTRACTS / "fixtures"
 PALETTE = {n["kind"]: n for g in json.loads((FIXTURES / "graphs/palette.json").read_text())["groups"]
            for n in g["nodes"]}  # fmt: skip
-ADA = {"item_id": "echo/ada", "version": 1, "source": "preset", "family": "echo", "speaker": "ada", "language": "en"}  # fmt: skip
+ADA = {"item_id": "echo/ada", "version": 1, "source": "preset", "family": "echo", "speaker": "ada", "language": "en"}
 
 
 def speak_command(n: int = 10, **params) -> dict:
@@ -50,7 +50,7 @@ async def test_echo_voice_over_stores_a_wav_and_reports_an_audio_output(n):
     assert read_wav(data) == (1, 2, 24000, 48000)
 
 
-def test_output_writes_pcm_or_a_mono_wav_and_refuses_stereo():
+def test_output_writes_pcm_or_a_mono_or_stereo_wav_and_refuses_more_channels():
     got = []
     ctx = types.SimpleNamespace(node="output", output=lambda data, **kw: got.append((data, kw)))
     pcm = bytes(2 * 8000)
@@ -58,17 +58,20 @@ def test_output_writes_pcm_or_a_mono_wav_and_refuses_stereo():
     data, kw = got[-1]
     assert kw == {"ext": "wav", "kind": "audio", "audio": {"duration_s": 0.5, "sample_rate": 16000}}
     assert read_wav(data) == (1, 2, 16000, 8000)
-    nodes.output(
-        ctx, {}, {"media": {"wav": data, "sample_rate": 0, "duration_s": 0}}
-    )  # a WAV file: its own facts
+    nodes.output(ctx, {}, {"media": {"wav": data, "sample_rate": 0, "duration_s": 0}})  # a WAV file: its own facts
     assert got[-1] == (data, kw)
     buf = io.BytesIO()
-    with wave.open(buf, "wb") as w:
-        w.setnchannels(2), w.setsampwidth(2), w.setframerate(24000), w.writeframes(bytes(400))
-    with pytest.raises(RunError, match="output: audio must be PCM 16-bit mono"):
-        nodes.output(
-            ctx, {}, {"media": {"wav": buf.getvalue(), "sample_rate": 24000, "duration_s": 0}}
-        )
+    with wave.open(buf, "wb") as w:  # API 1.79: stereo is stored as it is, its channels reported
+        w.setnchannels(2), w.setsampwidth(2), w.setframerate(24000), w.writeframes(bytes(4 * 2400))
+    nodes.output(ctx, {}, {"media": {"wav": buf.getvalue(), "sample_rate": 24000, "duration_s": 0}})
+    assert got[-1][1]["audio"] == {"duration_s": 0.1, "sample_rate": 24000, "channels": 2}
+    assert read_wav(got[-1][0]) == (2, 2, 24000, 2400)
+    nodes.output(ctx, {}, {"media": {"wav": bytes(4 * 4800), "sample_rate": 48000, "channels": 2, "duration_s": 0,
+                                     "sections": [{"label": "verse", "start_s": 0, "end_s": 0.1}]}})  # fmt: skip
+    assert got[-1][1]["audio"] == {"duration_s": 0.1, "sample_rate": 48000, "channels": 2,
+                                   "sections": [{"label": "verse", "start_s": 0, "end_s": 0.1}]}  # fmt: skip
+    with pytest.raises(RunError, match="output: audio must be PCM 16-bit mono or stereo"):
+        nodes.output(ctx, {}, {"media": {"wav": pcm, "sample_rate": 16000, "channels": 6, "duration_s": 0}})
     with pytest.raises(RunError, match="outside 8-96 kHz"):
         nodes.output(ctx, {}, {"media": {"wav": b"", "sample_rate": 24000, "duration_s": 0}})
     for rate in (0, None, "24000", True, 24000.5, 100000):  # checked before it divides
@@ -105,15 +108,9 @@ def test_a_run_needs_a_resolved_voice_that_fits(voice, why, extra):
 
 def test_echo_speaks_a_clip_voice_in_a_pitch_from_its_etag():
     ctx = types.SimpleNamespace(node="speak", check=lambda: None, progress=lambda *a: None)
-    say = lambda v: fake.speak(ctx, {"voice": v, "seed": 1, "delay_ms": 0}, {"text": "hello"})[
-        "audio"
-    ]["wav"]
+    say = lambda v: fake.speak(ctx, {"voice": v, "seed": 1, "delay_ms": 0}, {"text": "hello"})["audio"]["wav"]
     other = CLIP | {"clip": CLIP["clip"] | {"etag": "e2"}}
-    assert (
-        say(CLIP)
-        == say(CLIP | {"clip": CLIP["clip"] | {"data": b"x", "take_id": "t9"}})
-        != say(other)
-    )
+    assert say(CLIP) == say(CLIP | {"clip": CLIP["clip"] | {"data": b"x", "take_id": "t9"}}) != say(other)
 
 
 def test_a_registry_workflow_holds_a_null_voice():
@@ -126,15 +123,15 @@ def test_a_registry_workflow_holds_a_null_voice():
 def test_workflow_media_follows_the_contract_fixture():
     fx = json.loads((FIXTURES / "voices/media.json").read_text())
     for c in fx["cases"]:
-        assert (
-            graph.workflow_media(fx["workflows"][c["workflow"]]["nodes"], PALETTE) == c["expect"]
-        ), c
+        nodes = fx["workflows"][c["workflow"]]["nodes"]
+        assert graph.workflow_media(nodes, PALETTE) == c["expect"], c
+        assert "sound" not in c or graph.workflow_sound(nodes, PALETTE) == c["sound"], c  # API 1.79
 
 
 def test_seconds_follows_the_contract_fixture():
     fx = json.loads((FIXTURES / "voices/seconds.json").read_text())
     for c in fx["cases"]:
-        got = graph.speech_seconds(fx["workflows"][c["workflow"]]["nodes"], PALETTE, c["stage"], c.get("max_seconds"))  # fmt: skip
+        got = graph.speech_seconds(fx["workflows"][c["workflow"]]["nodes"], PALETTE, c["stage"], c.get("max_seconds"))
         assert got == c["expect"], c
 
 
@@ -159,12 +156,7 @@ def test_seconds_in_peak_gb_and_memory_plans_plan_at_max_seconds():
     assert peak(long, False) == 21  # 900 characters = 60 s, capped at 40
     assert peak(empty, False) == 1  # the run's own (empty) text
     assert peak(empty, True) == 21  # a plan: at max_seconds
-    assert (
-        graph.stage_peak(
-            empty, PALETTE, "speak", speech_node("1 + speech_seconds"), {}, {}, plan=True
-        )
-        == 1
-    )
+    assert graph.stage_peak(empty, PALETTE, "speak", speech_node("1 + speech_seconds"), {}, {}, plan=True) == 1
     with pytest.raises(ValueError, match="max_seconds must be a number > 0"):
         speech_node("1", max_seconds=0)
 
@@ -183,19 +175,15 @@ def test_a_stage_param_keeps_its_own_name_and_size_names_are_refused():
 
 
 def test_echo_speak_is_deterministic_and_fails_without_text():
-    ctx = types.SimpleNamespace(
-        node="speak", check=lambda: None, progress=lambda *a: steps.append(a)
-    )
+    ctx = types.SimpleNamespace(node="speak", check=lambda: None, progress=lambda *a: steps.append(a))
     steps = []
-    run = lambda text, **p: fake.speak(
-        ctx, {"voice": ADA, "seed": 42, "delay_ms": 0} | p, {"text": text}
-    )["audio"]
+    run = lambda text, **p: fake.speak(ctx, {"voice": ADA, "seed": 42, "delay_ms": 0} | p, {"text": text})["audio"]
     a = run("Hello there, how are you, Ada?")
     assert a["sample_rate"] == 24000 and a["duration_s"] == 2.0 and len(a["wav"]) == 2 * 48000
     assert [s[:2] for s in steps] == [(1, 2), (2, 2)]  # one step per 15 characters
     assert run("Hello there, how are you, Ada?")["wav"] == a["wav"]
     assert run("Hello there, how are you, Ada?", seed=43)["wav"] != a["wav"]
-    assert run("Hello there, how are you, Ada?", voice=ADA | {"item_id": "echo/bo", "speaker": "bo"})["wav"] != a["wav"]  # fmt: skip
+    assert run("Hello there, how are you, Ada?", voice=ADA | {"item_id": "echo/bo", "speaker": "bo"})["wav"] != a["wav"]
     with pytest.raises(RunError, match="^speak: nothing to say$"):
         run("")
 
@@ -216,9 +204,7 @@ def voice_pack(tmp_path, files: dict, looks=()):
         p = tmp_path / "voices" / name
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(body if isinstance(body, bytes) else body.encode())
-    p = types.SimpleNamespace(
-        name="t", dir=tmp_path, family="echo", looks=[{"id": x} for x in looks]
-    )
+    p = types.SimpleNamespace(name="t", dir=tmp_path, family="echo", looks=[{"id": x} for x in looks])
     p.voices = voices.load(p)
     return p
 
@@ -238,9 +224,7 @@ async def test_a_preview_is_published_on_contract_and_put_once(tmp_path):
     (entry,) = voices.entries([p])
     assert entry["id"] == "echo/ryan" and entry["version"] == 2 and "style" not in entry
     assert entry["preview"]["duration_s"] == 0.5 and entry["preview"]["sample_rate"] == 24000
-    assert entry["preview"]["key"].startswith("packs/echo/voices/ryan-") and entry["preview"][
-        "bytes"
-    ] == len(clip)
+    assert entry["preview"]["key"].startswith("packs/echo/voices/ryan-") and entry["preview"]["bytes"] == len(clip)
     value = {"schema_version": 1, "host": "h", "env": "fake", "published_at": "2026-11-21T10:00:00Z",
              "published_by": "t", "voices": [entry]}  # fmt: skip
     assert schemas.registry_errors("voices", value) == []
@@ -283,8 +267,6 @@ def test_a_starter_voice_may_not_take_a_starter_look_id(monkeypatch):
     loaded = pack.for_env("fake")
     echo = next(p for p, _ in loaded if p.family == "echo")
     same = dataclasses.replace(echo, voices=[echo.voices[0] | {"id": echo.looks[0]["id"]}])
-    monkeypatch.setattr(
-        pack, "for_env", lambda env: [(same if p is echo else p, n) for p, n in loaded]
-    )
+    monkeypatch.setattr(pack, "for_env", lambda env: [(same if p is echo else p, n) for p, n in loaded])
     with pytest.raises(ValueError, match="are also look ids"):
         registry.build("fake")

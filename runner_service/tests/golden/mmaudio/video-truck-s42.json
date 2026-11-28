@@ -1,0 +1,26 @@
+{
+  "workflow": "mmaudio-video",
+  "text": "pickup truck engine driving on a road",
+  "seconds": 2.0,
+  "seed": 42,
+  "guidance": 4.5,
+  "steps": 25,
+  "avoid": "",
+  "video": "truck-2s.mp4",
+  "name": "video-truck-s42",
+  "metrics": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "samples": 89088,
+    "duration_s": 2.0201,
+    "rms": 0.29352,
+    "peak": 0.96872
+  },
+  "wav_sha256": "343f70b2a4da8b81d9894241c5c3b8e8e458038c16d52173205bc73d41e556a0",
+  "generate_s": 3.37,
+  "load_s": 13.3,
+  "load_footprint_gb": 7.79,
+  "footprint_gb": 9.05,
+  "device": "mps",
+  "torch": "2.15.0"
+}

@@ -26,6 +26,9 @@ torch = [
     # resample (2.11.1: the newest, pure Python, runs on torch 2.15)
     "einops>=0.8.2",
     "torchaudio==2.11.1",
+    # the mmaudio pack's CLIP (DFN5B ViT-H-14-384) and its timm backbone (plan 38: as the samples' venv ran them)
+    "open-clip-torch>=4.2.2",
+    "timm>=1.0.31",
 ]
 
 [dependency-groups]
@@ -44,6 +47,6 @@ markers = ["gpu: loads real weights on the GPU (run with -m gpu)"]
 addopts = "-m 'not gpu'"
 
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py314"
-extend-exclude = ["gen", "packs/ltx/vendor", "packs/qwen3_tts/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)
+extend-exclude = ["gen", "packs/ltx/vendor", "packs/qwen3_tts/vendor", "packs/mmaudio/vendor"]  # vendored unchanged (packs/ltx/vendor/VENDORED.md)

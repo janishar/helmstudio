@@ -181,6 +181,7 @@ export function valueError(
   if (t === "int" && values && !values.includes(v as number))
     return `must be one of ${values.join(", ")}`;
   if (t === "bool") return null;
+  if ((t === "int" || t === "float") && p.auto === true && v === 0) return null; // API 1.79: 0 is Auto
   const n = t === "string" || t === "text" ? codePoints(v as string) : (v as number);
   if ((min != null && n < min) || (max != null && n > max))
     return `outside ${min ?? "…"}..${max ?? "…"}`;

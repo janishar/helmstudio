@@ -2,7 +2,7 @@
 // The shell asks /auth/me again when the layout could not load the user (auth restarting): the Admin item appears
 // without a reload; a 401 stops asking; the workflow picker greys a workflow whose model is not on any live host.
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { AppShell } from "@/components/shell";
 import { WorkflowPicker } from "@/components/create/workflows";
 import { api, type S } from "@/lib/api";
@@ -44,13 +44,14 @@ describe("sign-in check retry", () => {
     const spy = answer("GET", { "/auth/me": () => ({ status: 503, error: { detail: "down" } }) });
     render(<AppShell user={null}>page</AppShell>);
     await act(() => vi.advanceTimersByTimeAsync(60000));
-    expect(spy).toHaveBeenCalledTimes(5); // 1, 2, 4, 8, 16 s
+    // 1, 2, 4, 8, 16 s (the status tile reads the hosts on its own)
+    expect(spy.mock.calls.filter((c) => c[0] === "/auth/me")).toHaveLength(5);
     cleanup();
     spy.mockClear();
     const gone = answer("GET", { "/auth/me": () => ({ status: 401, error: { detail: "no" } }) });
     render(<AppShell user={null}>page</AppShell>);
     await act(() => vi.advanceTimersByTimeAsync(60000));
-    expect(gone).toHaveBeenCalledTimes(1);
+    expect(gone.mock.calls.filter((c) => c[0] === "/auth/me")).toHaveLength(1);
   });
   it("asks nothing when the layout had the user", () => {
     const spy = vi.spyOn(api, "GET");
@@ -73,6 +74,42 @@ describe("rail logo", () => {
     expect(panel.className).toMatch(/\bhidden\b.*\bmd:flex\b/);
     expect(panel.parentElement).toBe(nav.parentElement);
     expect(panel.nextElementSibling).toBe(nav);
+  });
+});
+
+describe("rail setup (Rail.dc.html option 4)", () => {
+  it("keeps the tools and the Assistant on top, Hub, System and Settings at the same panel's foot", () => {
+    render(<AppShell user={admin}>page</AppShell>);
+    const top = screen.getByRole("navigation", { name: "Sections" });
+    // one panel (owner: "Yes, one panel"): the tools first, Setup's links at the same panel's foot
+    const names = within(top)
+      .getAllByRole("link")
+      .filter((l) => !l.closest('[aria-label="Setup"]'))
+      .map((l) => l.textContent);
+    expect(names).toEqual(["Create", "Magic", "Gallery", "Timeline", "Pipelines", "Models"]);
+    const setup = screen.getByRole("group", { name: "Setup" });
+    expect(
+      within(setup)
+        .getAllByRole("link")
+        .map((l) => l.textContent),
+    ).toEqual(["Hub", "System", "Settings"]);
+    expect(setup.className).toMatch(/\badmin\b/);
+  });
+  it("folds into a Setup gear whose menu ticks the current page; a non-admin has Settings only", () => {
+    render(<AppShell user={admin}>page</AppShell>);
+    // one gear in the phone bar, one for a short window (CSS picks)
+    fireEvent.click(screen.getAllByRole("button", { name: "Setup" })[0]);
+    const menu = screen.getByRole("menu");
+    for (const n of ["Hub", "System", "Settings"]) expect(within(menu).getByText(n)).toBeTruthy();
+    cleanup();
+    render(<AppShell user={{ ...admin, roles: [] }}>page</AppShell>);
+    expect(screen.queryByRole("button", { name: "Setup" })).toBeNull();
+    const setup = screen.getByRole("group", { name: "Setup" });
+    expect(
+      within(setup)
+        .getAllByRole("link")
+        .map((l) => l.textContent),
+    ).toEqual(["Settings"]);
   });
 });
 

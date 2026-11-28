@@ -5,6 +5,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ErrorNote, Modal } from "@/components/kit";
+import { Marked, NoMatch, SearchField, useSearch } from "@/components/search";
 import { FullScreen } from "@/components/media";
 import { api, message, ok, type S } from "@/lib/api";
 import { mb } from "@/lib/format";
@@ -75,25 +76,33 @@ function SequenceList({
       .catch((e) => setError(message(e)));
   }, []);
   const act = (f: () => Promise<void>) => f().catch((e) => setError(message(e)));
+  const pick = (t: Summary) => {
+    onOpen(t.id);
+    onClose();
+  };
+  // the whole list is loaded (at most 100 sequences a user): the browser searches it
+  const search = useSearch({ items: list, text: (t) => [t.name], id: (t) => t.id, onPick: pick });
   return (
     <div className="flex flex-col gap-3">
+      {search.show && <SearchField {...search.field} label="Search sequences" autoFocus />}
       <button type="button" className="chip bevel justify-center rounded-[10px]" onClick={onNew}>
         + New sequence
       </button>
       {list === null && !error && <p className="m-0 text-t2">Loading…</p>}
+      {search.q && !search.rows.length && (
+        <NoMatch what="sequences" onClear={() => search.setQ("")} />
+      )}
       <ul className="m-0 flex max-h-[50dvh] list-none flex-col gap-1 overflow-y-auto p-0">
-        {list?.map((t) => (
+        {search.shown.map((t) => (
           <li key={t.id}>
             <button
               type="button"
+              id={search.rowId(t)}
               aria-current={t.id === current?.id}
-              onClick={() => {
-                onOpen(t.id);
-                onClose();
-              }}
-              className="h-9 w-full rounded-[10px] px-3 text-left text-[13px] aria-current:bg-s4 aria-current:font-semibold"
+              onClick={() => pick(t)}
+              className={`h-9 w-full rounded-[10px] px-3 text-left text-[13px] aria-current:bg-s4 aria-current:font-semibold ${search.rows[search.active] === t ? "sf-on" : ""}`}
             >
-              {t.name}{" "}
+              <Marked text={t.name} q={search.q} />{" "}
               <span className="mono text-[12px] font-normal text-t2">
                 · {t.clips === 1 ? "1 clip" : `${t.clips} clips`} · {shortTime(t.duration_s)}
               </span>

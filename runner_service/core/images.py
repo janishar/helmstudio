@@ -23,9 +23,7 @@ from PIL import Image, ImageOps
 
 from core import graph  # graph imports this module: RunError is looked up at call time
 
-MAX_BYTES = (
-    64 * 2**20
-)  # ponytail: one cap for every input image; per-pack caps if a pack ever needs them
+MAX_BYTES = 64 * 2**20  # ponytail: one cap for every input image; per-pack caps if a pack ever needs them
 # a media take is held in memory while its node runs; ponytail: a temp file if takes ever get larger
 MEDIA_MAX_BYTES = 1 << 30
 FORMATS = ("PNG", "JPEG", "WEBP")  # the decoders tried
@@ -79,17 +77,11 @@ def decode(data: bytes, take_id: str) -> Image.Image:
         with Image.open(io.BytesIO(data), formats=FORMATS) as img:
             if img.format not in OPENED:
                 raise ValueError(img.format)
-            if (
-                img.width * img.height > MAX_PIXELS
-            ):  # checked on the header, before any pixel is decoded
-                raise graph.RunError(
-                    f"input image {take_id} is larger than {MAX_PIXELS // 10**6} MP"
-                )
+            if img.width * img.height > MAX_PIXELS:  # checked on the header, before any pixel is decoded
+                raise graph.RunError(f"input image {take_id} is larger than {MAX_PIXELS // 10**6} MP")
             img.load()  # an MPO loads its first frame
             if img.format in ("JPEG", "MPO"):
-                return ImageOps.exif_transpose(
-                    img
-                )  # a new image either way: no reference to `data`
+                return ImageOps.exif_transpose(img)  # a new image either way: no reference to `data`
             return img.copy()
     except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as e:
         raise graph.RunError(f"input image {take_id} is not a readable image") from e
@@ -148,9 +140,7 @@ def thumb_of(data: bytes) -> tuple[bytes, int, int] | None:
             if not jpeg:
                 img.load()
                 return thumb(img, len(data), size)
-            img.draft(
-                "RGB", size
-            )  # decode at 1/2, 1/4 or 1/8 while still at least the thumbnail's size
+            img.draft("RGB", size)  # decode at 1/2, 1/4 or 1/8 while still at least the thumbnail's size
             img.load()
             if img.getexif().get(0x0112, 1) in (
                 5,
@@ -170,9 +160,7 @@ async def read(value: dict, owner: str, fetch, media: bool = False) -> Image.Ima
     ETag is no longer `etag` (re-PUT after studio checked it)."""
     take_id, key, size = value["take_id"], value["key"], value["bytes"]
     what, cap = ("take", MEDIA_MAX_BYTES) if media else ("image", MAX_BYTES)
-    if not key.startswith(
-        f"u/{owner}/"
-    ):  # also a dlq'd command (messaging.schemas.foreign_keys): never read
+    if not key.startswith(f"u/{owner}/"):  # also a dlq'd command (messaging.schemas.foreign_keys): never read
         raise graph.RunError(f"input {what} {take_id} is not the run owner's")
     if size > cap:
         raise graph.RunError(f"input {what} {take_id} is too large ({size} bytes, at most {cap})")
@@ -217,9 +205,7 @@ async def load(specs: list[dict], params: dict, owner: str, fetch) -> dict:
         if s["name"] not in media(specs, params):
             continue
         if s["type"] == "media":
-            params[s["name"]] = params[s["name"]] | {
-                "data": await read(params[s["name"]], owner, fetch, True)
-            }
+            params[s["name"]] = params[s["name"]] | {"data": await read(params[s["name"]], owner, fetch, True)}
             continue
         if s["type"] == "voice":  # API 1.31: a voice's clip is read like a media input
             params[s["name"]] = await _clip(params[s["name"]], owner, fetch, {})

@@ -32,7 +32,13 @@ async function load(wanted?: string): Promise<CreateInitial | undefined> {
   ]);
   if (!s || !w) return undefined;
   const sessionId = s.sessions.find((x) => x.id === wanted)?.id ?? s.sessions[0]?.id ?? null;
-  const base = { sessions: s.sessions, workflows: w.workflows, sessionId, naming: s.naming };
+  const base = {
+    sessions: s.sessions,
+    sessionsNext: s.next_cursor ?? null,
+    workflows: w.workflows,
+    sessionId,
+    naming: s.naming,
+  };
   if (!sessionId) return { ...base, runs: [], takes: [] };
   const path = { params: { path: { session_id: sessionId } } };
   const [r, t] = await Promise.all([

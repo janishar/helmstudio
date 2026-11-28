@@ -1,0 +1,51 @@
+<!-- @dsCard group="Magic" height=1000 -->
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>MagicBlockDialog · preview</title></head>
+<body>
+<div class="pop" style="width:460px;padding:16px;display:flex;flex-direction:column;gap:12px">
+  <div style="display:flex;align-items:center;gap:8px">
+    <b class="modal-title">Shot 2</b>
+    <span style="padding:0 5px;border-radius:5px;font-size:10px;font-weight:600;line-height:15px;color:#111;background:var(--kind-voice)">Dialogue</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--t2)">Shots · 0:08 – 0:16<span class="st" style="color:var(--a2)">62%</span><button class="chip bevel" type="button"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>Stop</button></div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+    <span class="tag">Model</span>
+    <select class="in" style="height:32px"><option>MiniMax Speech</option></select>
+    <span style="font-size:11px;color:var(--t2)">or Kokoro</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px">
+    <span class="tag">Variant</span>
+    <div class="seg" role="group" aria-label="Variant"><button type="button" aria-pressed="false">Base</button><button type="button" aria-pressed="true">Turbo</button><button type="button" aria-pressed="false" disabled style="opacity:.45" title="Turbo fp8 not downloaded on gcp">Turbo fp8</button></div>
+  </div>
+  <span style="font-size:11px;color:var(--t2);margin-top:-6px">Turbo fp8 not downloaded on gcp</span>
+  <div style="display:flex;flex-direction:column;gap:6px">
+    <span style="font-size:12px;color:var(--t2)">Lines · 2</span>
+    <div style="display:flex;gap:6px"><select class="in" style="height:32px;width:110px"><option>@mara</option></select><input class="in" style="height:32px;flex:1" value="Ready when you are."><span class="st st-ok">done</span></div>
+    <div style="display:flex;gap:6px"><select class="in" style="height:32px;width:110px"><option>@jo</option></select><input class="in" style="height:32px;flex:1" value="Let's go."><span class="st">out of date</span></div>
+    <span style="font-size:11px;color:var(--t2)">Give an asset a voice to make it a speaker.</span>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px;font-size:13px">Tied to Shot 2<span style="flex:1"></span><button class="chip bevel" type="button">Unlink</button></div>
+  <div style="display:flex;align-items:center;gap:8px"><button class="ghost" type="button">Cancel</button><span style="flex:1"></span><button class="key" type="button">Generate<span class="mono" style="font-size:11px"> ≈ 0:12</span></button></div>
+</div>
+<div class="pop" style="width:380px;padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:12px">
+  <b class="modal-title">New board</b>
+  <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">Size</span><div class="seg" style="flex-wrap:wrap;align-self:flex-start"><button aria-pressed="true">16:9 · 1280 × 720</button><button aria-pressed="false">16:9 · 1920 × 1080</button><button aria-pressed="false">9:16 · 720 × 1280</button><button aria-pressed="false">1:1 · 1024 × 1024</button></div></div>
+  <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">fps</span><div class="seg" style="align-self:flex-start"><button aria-pressed="true">24</button><button aria-pressed="false">25</button><button aria-pressed="false">30</button></div><span style="font-size:11px;color:var(--t2)">Can't change later</span></div>
+  <div style="display:flex"><span style="flex:1"></span><button class="key" type="button">Create</button></div>
+</div>
+<div class="pop" style="width:380px;padding:16px;margin-top:12px;display:flex;flex-direction:column;gap:8px">
+  <b class="modal-title">Make views · @mara</b>
+  <div class="seg" role="group" aria-label="Views to make" style="flex-wrap:wrap;align-self:flex-start"><button aria-pressed="false" disabled style="opacity:.45" title="Being made">Front</button><button aria-pressed="true">Side</button><button aria-pressed="false">Back</button><button aria-pressed="true">Full figure</button><button aria-pressed="true">Smiling</button></div>
+  <div style="display:flex;align-items:center;gap:8px"><input class="in" style="height:32px;width:128px;font-size:12px" placeholder="Add a view" aria-label="Add a view"><button class="chip bevel" type="button"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>Make 3 · ≈ 2:15</button><select class="in" style="height:32px;font-size:12px" aria-label="Views model"><option>Qwen Image 2.1</option><option>Echo</option></select></div>
+  <button type="button" aria-expanded="true" style="align-self:flex-start;border:0;background:none;padding:0;font-size:11px;color:var(--t2)">768 × 1024 · Turbo · int8</button>
+  <div role="group" aria-label="Views setup" style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px;padding:8px;border-radius:12px;background:var(--s2)">
+    <label style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">Width</span><input class="in" type="number" value="768" style="height:32px;width:80px;font-size:12px"></label>
+    <label style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">Height</span><input class="in" type="number" value="1024" style="height:32px;width:80px;font-size:12px"></label>
+    <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">Variant</span><div class="seg" role="group" aria-label="Variant"><button aria-pressed="false">Base</button><button aria-pressed="true">Turbo</button></div></div>
+    <div style="display:flex;flex-direction:column;gap:5px"><span style="font-size:12px;color:var(--t2)">Precision</span><div class="seg" role="group" aria-label="Precision"><button aria-pressed="false">bf16</button><button aria-pressed="true">int8</button></div></div>
+  </div>
+</div>
+<span class="pill" style="margin-top:12px;display:inline-block" title="Set when the board was made"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;vertical-align:-1px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>720 × 1280 · 30 fps · 0:00</span>
+</body>
+</html>

@@ -354,8 +354,8 @@ func voiceClips(ctx context.Context, tx pgx.Tx, store storage.Store, ownerID str
 // clipTakes reads the owner's ready takes among ids (an explicit owner check), deleted ones too when deleted: a voice
 // keeps its clip's take after it left the gallery (README, Voices: cloned voices).
 func clipTakes(ctx context.Context, tx pgx.Tx, ownerID string, ids []string, deleted bool) (map[string]inputTake, error) {
-	rows, err := collect[inputTake](ctx, tx, `SELECT id::text, kind, key, content_type, bytes, etag, width, height, video, audio
-		FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND ready AND (deleted_at IS NULL OR $3)`, uuids(ids), ownerID, deleted)
+	rows, err := collect[inputTake](ctx, tx, `SELECT id::text, kind, key, content_type, bytes, etag, width, height, video, audio,
+		sound FROM takes WHERE id = ANY($1::uuid[]) AND owner_id = $2 AND ready AND (deleted_at IS NULL OR $3)`, uuids(ids), ownerID, deleted)
 	out := map[string]inputTake{}
 	for _, row := range rows {
 		out[row.ID] = row

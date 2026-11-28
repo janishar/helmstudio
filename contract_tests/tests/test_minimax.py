@@ -16,11 +16,10 @@ import os
 
 import pytest
 from conftest import headers, make_client, sign_in
-from helpers import STUDIO, TERMINAL, new_session, ok, start_run, upload, wait_for
+from helpers import CONTRACTS, STUDIO, TERMINAL, check, new_session, ok, start_run, upload, wait_for
 from PIL import Image
 from test_elements import element
 from test_qwen import events_of, get
-from test_user_workflows import CONTRACTS, check
 from test_video_source import mfacts, uses
 
 WF = "minimax-h3-image"

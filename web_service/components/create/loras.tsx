@@ -33,6 +33,7 @@ import {
 } from "@/lib/loras";
 import { move } from "@/lib/refs";
 import { choosable } from "@/lib/video";
+import { Range } from "@/components/range";
 
 type Row = S<"RowItem">;
 
@@ -165,9 +166,9 @@ export function LoraRows({
                         </button>
                       )}
                     </span>
-                    <input
+                    <Range
                       id={sid}
-                      type="range"
+
                       min={strength[1].min}
                       max={strength[1].max}
                       step={strength[1].step ?? "any"}
@@ -333,10 +334,10 @@ function Picker({
       }
       search={{
         id: "lora-q",
-        label: "Search names",
-        placeholder: "Search names",
+        label: "Search LoRAs",
         value: q,
         onChange: setQ,
+        count: shown.length,
         className: "flex-[1_1_260px]",
       }}
       filters={[

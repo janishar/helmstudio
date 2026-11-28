@@ -45,5 +45,16 @@
         "media": "video.video"
       }
     }
+  },
+  "standard": {
+    "kind": "video",
+    "model": "Echo video",
+    "fields": {
+      "prompt": "prompt.text",
+      "length": "duration.frames",
+      "width": "canvas.width",
+      "height": "canvas.height"
+    },
+    "seconds": 0.5
   }
 }

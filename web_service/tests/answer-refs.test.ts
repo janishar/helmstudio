@@ -32,6 +32,19 @@ describe("options", () => {
       picked: null,
     });
   });
+
+  it("off while a card after them waits on its Apply; live again once it is answered", () => {
+    const a = e("a", "assistant", block(OPTS));
+    const card = (state: string) => ({ ...e("c", "card", ""), card: { state } }) as Entry;
+    expect(pickOf([a, card("waiting")], "a", OPTS)).toEqual({
+      live: false,
+      picked: null,
+      card: true,
+    });
+    expect(liveOptions([a, card("waiting")])).toBeNull();
+    expect(pickOf([a, card("done")], "a", OPTS)).toEqual({ live: true, picked: null });
+    expect(liveOptions([a, card("done")])).toEqual(OPTS);
+  });
 });
 
 describe("refs", () => {

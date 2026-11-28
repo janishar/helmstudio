@@ -27,10 +27,20 @@ import uuid
 
 import pytest
 from conftest import headers, make_client, sign_in
-from helpers import STUDIO, TERMINAL, new_session, ok, png_bytes, ref, start_run, upload, wait_for
+from helpers import (
+    CONTRACTS,
+    STUDIO,
+    TERMINAL,
+    new_session,
+    ok,
+    png_bytes,
+    ref,
+    start_run,
+    upload,
+    wait_for,
+)
 from test_elements import element
 from test_qwen import events_of, get
-from test_user_workflows import CONTRACTS
 from test_video_source import import_video, wav
 
 FAMILY = "minimax-h3"

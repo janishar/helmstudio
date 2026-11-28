@@ -3,6 +3,7 @@ package studio
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"image"
 	"image/jpeg"
@@ -32,8 +33,13 @@ type SeeReply struct {
 	Kind   string    `json:"kind,omitempty"`
 	Title  *string   `json:"title,omitempty"`
 	Images *[][]byte `json:"images,omitempty"` // base64 in JSON; a pointer so an ok reply keeps "images": [] and an error has none
-	Error  string    `json:"error,omitempty"`
-	Code   string    `json:"code,omitempty"`
+	// API 1.104: a video's or audio's facts (defs takeFacts) and, when the picture is its frame grid, its frames' seconds
+	Facts json.RawMessage `json:"facts,omitempty"`
+	At    []float64       `json:"at,omitempty"`
+	// API 1.108: why there are no facts yet (being measured, no runner), plain words (Take facts)
+	FactsNote string `json:"facts_note,omitempty"`
+	Error     string `json:"error,omitempty"`
+	Code      string `json:"code,omitempty"`
 }
 
 // seeSide is the long side the model gets (alpha.2 item 8: "about 1024 px"); seeMax caps one picture's bytes.
@@ -42,19 +48,32 @@ const (
 	seeMax  = 500 << 10
 )
 
-// See answers studio.see: the thread's owner's take as JPEG pictures (an image's thumbnail, a video's poster; none
-// for audio), never stored. Another owner's thread or take, or a missing one, is not_found.
+// See answers studio.see: the thread's owner's take as JPEG pictures (an image's thumbnail, a video's poster or, from
+// API 1.104, its frame grid; none for audio) with a video's or audio's facts, never stored. Another owner's thread or take, or a missing one, is not_found.
 func (s *Service) See(ctx context.Context, req *SeeRequest) SeeReply {
 	if !utility.IsUUID(req.OwnerID) || !utility.IsUUID(req.ThreadID) || !utility.IsUUID(req.TakeID) {
 		return SeeReply{Error: "owner_id, thread_id and take_id are ids", Code: "invalid"}
 	}
 	var kind, title, key string
-	err := common.System(ctx, s.db, func(tx pgx.Tx) error {
-		return tx.QueryRow(ctx, `SELECT t.kind, t.title, `+gallerymodel.ThumbKey+` FROM takes t
-			JOIN assistant_threads a ON a.id = $2 AND a.owner_id = $3
-			WHERE t.id = $1 AND t.owner_id = $3 AND t.deleted_at IS NULL AND t.ready`, req.TakeID, req.ThreadID,
-			req.OwnerID).Scan(&kind, &title, &key)
-	})
+	var facts struct {
+		Facts json.RawMessage `json:"facts"`
+		Key   *string         `json:"key"`
+		At    []float64       `json:"at"`
+	}
+	read := func() error {
+		return common.System(ctx, s.db, func(tx pgx.Tx) error {
+			return tx.QueryRow(ctx, `SELECT t.kind, t.title, `+gallerymodel.ThumbKey+`, coalesce(t.facts, '{}') FROM takes t
+				JOIN assistant_threads a ON a.id = $2 AND a.owner_id = $3
+				WHERE t.id = $1 AND t.owner_id = $3 AND t.deleted_at IS NULL AND t.ready`, req.TakeID, req.ThreadID,
+				req.OwnerID).Scan(&kind, &title, &key, &facts)
+		})
+	}
+	err := read()
+	note := ""
+	if err == nil && kind != "image" && len(facts.Facts) == 0 { // API 1.108: measured on demand
+		note = MeasureFacts(ctx, s.db, s.registry, req.OwnerID, []string{req.TakeID})
+		err = read()
+	}
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
 		return SeeReply{Error: "not found", Code: "not_found"}
@@ -63,9 +82,17 @@ func (s *Service) See(ctx context.Context, req *SeeRequest) SeeReply {
 		return SeeReply{Error: "internal error", Code: "internal"}
 	}
 	pics := [][]byte{}
-	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: &pics}
+	out := SeeReply{TakeID: req.TakeID, Kind: kind, Title: &title, Images: &pics, Facts: facts.Facts,
+		FactsNote: map[bool]string{true: note}[len(facts.Facts) == 0]}
 	if kind == "audio" {
 		return out
+	}
+	if facts.Key != nil { // API 1.104: a video's frame grid, not its poster
+		if pic, err := s.seeJPEG(ctx, *facts.Key); err == nil {
+			out.At = facts.At
+			*out.Images = append(*out.Images, pic)
+			return out
+		}
 	}
 	pic, err := s.seeJPEG(ctx, key)
 	if err != nil {

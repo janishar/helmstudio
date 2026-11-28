@@ -29,9 +29,7 @@ class Net(nn.Module):
 
 
 SHAPES = {"blocks.0": (64, 64), "blocks.1": (64, 64), "head": (64, 32)}
-PACK = Pack(
-    "t", None, {"family": "t", "id": "t-1", "lora": {"component": "transformer"}}, "torch", None
-)
+PACK = Pack("t", None, {"family": "t", "id": "t-1", "lora": {"component": "transformer"}}, "torch", None)
 
 
 def use(n: int, strength: float, mode: str = "adapter") -> LoraUse:
@@ -50,9 +48,7 @@ def files(tmp_path):
         paths[f"{n:064x}"] = tmp_path / f"l{n}.safetensors"
         make_lora(paths[f"{n:064x}"], mods, rank=4, style=style, alpha=2, seed=n)
     fetched = []
-    ctx = types.SimpleNamespace(
-        check=lambda: None, lora_path=lambda u: fetched.append(u.name) or paths[u.sha256]
-    )
+    ctx = types.SimpleNamespace(check=lambda: None, lora_path=lambda u: fetched.append(u.name) or paths[u.sha256])
     return paths, ctx, fetched
 
 
@@ -78,7 +74,7 @@ def test_adapter_equals_bake_and_detach_restores_the_exact_base(files, tmp_path)
     save_file(net().state_dict(), str(weights))
     bake = {}
     for u in (use(1, 0.8), use(2, -1.5)):
-        for name, (a, b, f) in lt.lora_tensors(model(u), u, paths[u.sha256], SHAPES, "cpu", torch.float32).items():  # fmt: skip
+        for name, (a, b, f) in lt.lora_tensors(model(u), u, paths[u.sha256], SHAPES, "cpu", torch.float32).items():
             bake.setdefault(name, []).append((a, b, u.strength * f))
     with torch.device("meta"):
         meta = Net()
@@ -117,13 +113,9 @@ def test_a_strength_change_is_a_scale_write_and_stacks_swap_on_one_base(files):
 def test_a_lora_whose_keys_do_not_all_apply_fails_and_names_them(files, tmp_path):
     _, ctx, _ = files
     bad = tmp_path / "bad.safetensors"
-    make_lora(
-        bad, {"head": (64, 32), "blocks.0": (64, 99)}, style="peft"
-    )  # blocks.0's out is 64, not 99
+    make_lora(bad, {"head": (64, 32), "blocks.0": (64, 99)}, style="peft")  # blocks.0's out is 64, not 99
     ctx.lora_path = lambda u: bad
-    with pytest.raises(
-        RunError, match=r"LoRA l1: 2 of 4 keys do not apply to t: transformer\.blocks\.0"
-    ):
+    with pytest.raises(RunError, match=r"LoRA l1: 2 of 4 keys do not apply to t: transformer\.blocks\.0"):
         lt.activate(model(use(1, 1.0)), "transformer", net(), ctx)
 
 
@@ -142,7 +134,7 @@ def test_int8_adapter_is_close_to_the_quantized_bake(tmp_path):
     assert torch.equal(holder.q(x), plain)  # strength 0 on an int8 base: the base exactly
     lt.activate(model(use(1, 0.7)), "transformer", holder, ctx)
     adapted = holder.q(x).float()
-    a, b, _ = lt.lora_tensors(model(use(1, 0.7)), use(1, 0.7), p, {"q": (256, 64)}, "cpu", torch.float32)["q"]  # fmt: skip
+    a, b, _ = lt.lora_tensors(model(use(1, 0.7)), use(1, 0.7), p, {"q": (256, 64)}, "cpu", torch.float32)["q"]
     merged = (lin.weight.float() + 0.7 * (b @ a)).to(torch.bfloat16)
     qb = lt.Int8Linear(lin)
     qb.quantize(merged)
@@ -182,15 +174,9 @@ def test_keys_the_family_ignores_are_ignored_at_load(tmp_path):
 
     p = tmp_path / "te.safetensors"
     make_lora(p, SHAPES, style="kohya")
-    save_file(
-        load_file(str(p)) | {"lora_te1_text_model.q.lora_down.weight": torch.zeros(4, 8)}, str(p)
-    )
+    save_file(load_file(str(p)) | {"lora_te1_text_model.q.lora_down.weight": torch.zeros(4, 8)}, str(p))
     spec = PACK.spec | {"lora": {"component": "transformer", "ignore": ["lora_te1_*"]}}
     m = ModelRef(Pack("t", None, spec, "torch", None), "v", "bf16")
     assert set(lt.lora_tensors(m, use(1, 1.0), p, SHAPES, "cpu", torch.float32)) == set(SHAPES)
-    with pytest.raises(
-        RunError, match="lora_te1_text_model.q.lora_down.weight is not a LoRA weight"
-    ):
-        lt.lora_tensors(
-            model(), use(1, 1.0), p, SHAPES, "cpu", torch.float32
-        )  # no ignore globs: refused
+    with pytest.raises(RunError, match="lora_te1_text_model.q.lora_down.weight is not a LoRA weight"):
+        lt.lora_tensors(model(), use(1, 1.0), p, SHAPES, "cpu", torch.float32)  # no ignore globs: refused

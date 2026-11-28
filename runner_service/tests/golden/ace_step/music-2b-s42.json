@@ -1,0 +1,69 @@
+{
+  "name": "music-2b-s42",
+  "workflow": "ace-step-music",
+  "variant": "turbo-2b",
+  "seed": 42,
+  "seconds": 10,
+  "style": "warm indie pop, acoustic guitar, female vocal, 100 bpm",
+  "lyrics": "[verse]\nMorning light on the harbour wall\nBoats come home and the seagulls call\n[chorus]\nHold the tide, hold it still\nI will wait by the window sill",
+  "sha256": "808c18d993f80a019f017f9cebb7e3317fa117a34cab4be3eec3ba044885660a",
+  "facts": {
+    "sample_rate": 48000,
+    "channels": 2,
+    "duration_s": 10.0
+  },
+  "rms": 0.0802,
+  "peak": 0.8912,
+  "sections": [
+    {
+      "label": "verse",
+      "start_s": 0.0,
+      "end_s": 8.24
+    },
+    {
+      "label": "chorus",
+      "start_s": 8.24,
+      "end_s": 10.0
+    }
+  ],
+  "texts": {
+    "plan.style": "A gentle and serene acoustic folk piece centered around a clean, fingerpicked acoustic guitar playing a steady, arpeggiated pattern. A soft, breathy female lead vocal delivers a lullaby-like melody with a clear, gentle tone. The chorus introduces lush, layered vocal harmonies that create an ethereal, choir-like texture, enhanced by a spacious reverb. The arrangement is minimalist and intimate, with a brief instrumental section featuring wordless vocalizations before a final verse and a concluding, resonant guitar chord.",
+    "plan.plan": "125 BPM · C major · 4/4 · 0:10 · en"
+  },
+  "cold": {
+    "s": {
+      "plan": 20.7,
+      "compose": 3.5,
+      "decode": 0.4
+    },
+    "peak_gb": {
+      "plan": 8.55,
+      "compose": 20.18,
+      "decode": 21.27
+    },
+    "total_s": 24.68,
+    "before_gb": 0.4,
+    "resident_gb": 18.36
+  },
+  "warm": {
+    "s": {
+      "plan": 7.9,
+      "compose": 1.2,
+      "decode": 0.3
+    },
+    "peak_gb": {
+      "plan": 21.33,
+      "compose": 21.25,
+      "decode": 21.33
+    },
+    "total_s": 9.39,
+    "resident_gb": 18.36
+  },
+  "wav": "music-2b-s42.wav",
+  "kept_s": 2.0,
+  "versions": {
+    "torch": "2.15.0",
+    "python": "3.14.10"
+  },
+  "device": "mps"
+}

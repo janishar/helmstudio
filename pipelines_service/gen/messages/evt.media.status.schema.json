@@ -81,7 +81,7 @@
         "result": {
           "type": "object",
           "additionalProperties": false,
-          "description": "succeeded: an export's or a frame's take (key, width, height, bytes); (1.48) a thumbs job's `thumbs` (no key)",
+          "description": "succeeded: an export's or a frame's take (key, width, height, bytes); (1.48) a thumbs job's `thumbs` (no key); (1.79) a mux's take: key mux.mp4 and its `video` (as an export's, poster mux.poster.png at frame 0, last mux.last.png); (1.82) a bake's: key bake.mp4, as an export's (bake.poster.png, bake.last.png, its thumb bake.thumb.webp); (1.104) a facts job's `facts` (no key)",
           "properties": {
             "key": {
               "allOf": [
@@ -89,7 +89,7 @@
                   "$ref": "defs.schema.json#/$defs/objectKey"
                 },
                 {
-                  "pattern": "/(export\\.mp4|frame\\.png)$"
+                  "pattern": "/(export\\.mp4|frame\\.png|mux\\.mp4|bake\\.mp4)$"
                 }
               ]
             },
@@ -132,7 +132,7 @@
                 "last"
               ],
               "additionalProperties": false,
-              "description": "export: as evt.run.output video",
+              "description": "export, (1.79) mux and (1.82) bake: as evt.run.output video",
               "properties": {
                 "duration_s": {
                   "type": "number",
@@ -232,12 +232,12 @@
                 {
                   "properties": {
                     "key": {
-                      "pattern": "/(export|frame)\\.thumb\\.webp$"
+                      "pattern": "/(export|frame|bake)\\.thumb\\.webp$"
                     }
                   }
                 }
               ],
-              "description": "API 1.48, export and frame: the thumbnail of the poster (export.thumb.webp) or of the frame (frame.thumb.webp) under output_prefix; absent when it would save nothing"
+              "description": "API 1.48, export and frame (and from 1.82 bake: bake.thumb.webp): the thumbnail of the poster (export.thumb.webp) or of the frame (frame.thumb.webp) under output_prefix; absent when it would save nothing"
             },
             "thumbs": {
               "type": "array",
@@ -328,6 +328,95 @@
                   }
                 ]
               }
+            },
+            "facts": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 4,
+              "description": "API 1.104, a facts job: one item per input, by its index: its facts and, for a video, its frame grid written at <output_prefix><index>.jpg (JPEG, long side at most 1024; `at` each frame's seconds), or `error` (it could not be read; the job goes on)",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "facts"
+                    ],
+                    "additionalProperties": false,
+                    "dependentRequired": {
+                      "key": [
+                        "width",
+                        "height",
+                        "bytes",
+                        "at"
+                      ]
+                    },
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "facts": {
+                        "$ref": "defs.schema.json#/$defs/takeFacts"
+                      },
+                      "key": {
+                        "allOf": [
+                          {
+                            "$ref": "defs.schema.json#/$defs/objectKey"
+                          },
+                          {
+                            "pattern": "/facts/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9]+\\.jpg$"
+                          }
+                        ]
+                      },
+                      "width": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1024
+                      },
+                      "height": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "maximum": 1024
+                      },
+                      "bytes": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "at": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 16,
+                        "items": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "index",
+                      "error"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "index": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 3
+                      },
+                      "error": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 300
+                      }
+                    }
+                  }
+                ]
+              }
             }
           },
           "anyOf": [
@@ -339,8 +428,17 @@
                 "bytes"
               ],
               "not": {
-                "required": [
-                  "thumbs"
+                "anyOf": [
+                  {
+                    "required": [
+                      "thumbs"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "facts"
+                    ]
+                  }
                 ]
               }
             },
@@ -358,6 +456,35 @@
                   {
                     "required": [
                       "thumb"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "facts"
+                    ]
+                  }
+                ]
+              }
+            },
+            {
+              "required": [
+                "facts"
+              ],
+              "not": {
+                "anyOf": [
+                  {
+                    "required": [
+                      "key"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "thumb"
+                    ]
+                  },
+                  {
+                    "required": [
+                      "thumbs"
                     ]
                   }
                 ]

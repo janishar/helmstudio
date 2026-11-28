@@ -25,7 +25,18 @@ from contextlib import contextmanager
 
 import httpx
 import pytest
-from helpers import NO_SUCH_ID, STUDIO, new_session, ok, start_run, wait_for, wait_run
+from helpers import (
+    CONTRACTS,
+    NO_SUCH_ID,
+    PROJECT,
+    STUDIO,
+    check,
+    new_session,
+    ok,
+    start_run,
+    wait_for,
+    wait_run,
+)
 from test_batches import BATCH_TIMEOUT, BATCHES, finish, rows_of, wait_batch, wait_rows
 from test_pipelines import (
     PIPELINE_FIXTURES,
@@ -39,11 +50,10 @@ from test_pipelines import (
     live_workflows,
     submit,
 )
-from test_user_workflows import CONTRACTS, check, keys
+from test_user_workflows import keys
 
 ASK = "echo-ask"
 PROVIDERS = f"{STUDIO}/admin/providers"
-FAKE_PROJECT = os.environ.get("COMPOSE_PROJECT", "helmstudio-test")
 FAKE_URL = os.environ.get("FAKE_OPENAI_URL", "").rstrip("/")
 SERVER_BASE = os.environ.get("FAKE_SERVER_BASE", "http://fake-openai:8000/v1")
 REMOTE_BASE = os.environ.get("FAKE_REMOTE_BASE", "https://fake-openai:8443/v1")
@@ -207,7 +217,7 @@ def fake(method: str, path: str, body=None):
         r = httpx.request(method, FAKE_URL + path, json=body, timeout=10)
         r.raise_for_status()
         return r.json()
-    cmd = ["docker", "exec", "-i", f"{FAKE_PROJECT}-fake-openai-1", "python", "server.py", "call"]
+    cmd = ["docker", "exec", "-i", f"{PROJECT}-fake-openai-1", "python", "server.py", "call"]
     out = subprocess.run(
         cmd + [method, path] + (["-"] if body is not None else []),
         input=json.dumps(body).encode() if body is not None else None,
@@ -244,12 +254,6 @@ def most_in_flight(reqs: list[dict]) -> int:
 
 
 # ---------------------------------------------------------------- providers
-
-
-@pytest.fixture(scope="module")
-def palette(api) -> dict:
-    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
-    return {n["kind"]: n for g in groups for n in g["nodes"]}
 
 
 @pytest.fixture(scope="module", autouse=True)

@@ -1,0 +1,7940 @@
+{
+ "description": "Magic edits by ops (contracts/README.md, Magic: edits by ops): each case's ops applied in order, all or nothing, to a document; `expect` is the document after the last op or {error, op_index}. Replayed through studio_service/api/magic (go test TestMagicReplay) and web_service/lib/magic.ts (replay_magic.mjs) by check.py.",
+ "documents": {
+  "board": {
+   "target": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "sample_rate": 48000
+   },
+   "lanes": [
+    {
+     "id": "story",
+     "name": "Storyboard",
+     "role": "storyboard"
+    },
+    {
+     "id": "shots",
+     "name": "Shots",
+     "role": "shots"
+    },
+    {
+     "id": "lines",
+     "name": "Lines",
+     "role": "voice"
+    },
+    {
+     "id": "music",
+     "name": "Music",
+     "role": "music"
+    },
+    {
+     "id": "l5",
+     "name": "Lane 5",
+     "role": "free",
+     "hidden": false
+    }
+   ],
+   "blocks": [
+    {
+     "id": "f1",
+     "lane": "story",
+     "at": 0,
+     "length": 96,
+     "kind": "frame",
+     "name": "Frame 1",
+     "request": {
+      "kind": "frame",
+      "prompt": "a pier at dawn",
+      "style": "sketch"
+     },
+     "takes": [],
+     "effects": []
+    },
+    {
+     "id": "s1",
+     "lane": "shots",
+     "at": 0,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 1 · pier",
+     "request": {
+      "kind": "video",
+      "prompt": "the pier"
+     },
+     "takes": [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222"
+     ],
+     "effects": [],
+     "pinned": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+     "id": "s2",
+     "lane": "shots",
+     "at": 96,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 2 · rain",
+     "request": {
+      "kind": "video",
+      "prompt": "rain",
+      "refs": [
+       {
+        "asset": "mara"
+       },
+       {
+        "block": "f1",
+        "part": "last"
+       }
+      ]
+     },
+     "takes": [],
+     "effects": [],
+     "note": "slow",
+     "from_frame": "f1"
+    },
+    {
+     "id": "s3",
+     "lane": "shots",
+     "at": 192,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 3 · puddle",
+     "request": {
+      "kind": "video"
+     },
+     "takes": [],
+     "effects": [
+      {
+       "name": "Grade",
+       "params": {
+        "look": "teal"
+       }
+      }
+     ]
+    },
+    {
+     "id": "v1",
+     "lane": "lines",
+     "at": 10,
+     "length": 60,
+     "kind": "voice",
+     "name": "Line 1",
+     "request": {
+      "kind": "voice",
+      "line": "Not again.",
+      "voice": "mara"
+     },
+     "takes": [],
+     "effects": []
+    },
+    {
+     "id": "m1",
+     "lane": "music",
+     "at": 0,
+     "length": 288,
+     "kind": "music",
+     "name": "Theme",
+     "request": {
+      "kind": "music"
+     },
+     "takes": [],
+     "effects": []
+    }
+   ],
+   "links": [
+    {
+     "block": "v1",
+     "to": [
+      "s1"
+     ]
+    },
+    {
+     "block": "m1",
+     "to": [
+      "s1",
+      "s2",
+      "s3"
+     ]
+    }
+   ],
+   "transitions": [
+    {
+     "id": "t1",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "dissolve",
+     "length": 12
+    },
+    {
+     "id": "t2",
+     "start": "shots",
+     "kind": "fade",
+     "length": 24
+    },
+    {
+     "id": "t3",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "wipe",
+     "length": 12
+    }
+   ],
+   "assets": [
+    {
+     "id": "mara",
+     "kind": "character",
+     "handle": "mara",
+     "name": "Mara",
+     "sheet": [],
+     "voice_id": "warm"
+    }
+   ],
+   "notes": [
+    "keep it grey"
+   ]
+  },
+  "morph_board": {
+   "target": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "sample_rate": 48000
+   },
+   "lanes": [
+    {
+     "id": "story",
+     "name": "Storyboard",
+     "role": "storyboard"
+    },
+    {
+     "id": "shots",
+     "name": "Shots",
+     "role": "shots"
+    },
+    {
+     "id": "lines",
+     "name": "Lines",
+     "role": "voice"
+    },
+    {
+     "id": "music",
+     "name": "Music",
+     "role": "music"
+    },
+    {
+     "id": "l5",
+     "name": "Lane 5",
+     "role": "free",
+     "hidden": false
+    }
+   ],
+   "blocks": [
+    {
+     "id": "f1",
+     "lane": "story",
+     "at": 0,
+     "length": 96,
+     "kind": "frame",
+     "name": "Frame 1",
+     "request": {
+      "kind": "frame",
+      "prompt": "a pier at dawn",
+      "style": "sketch"
+     },
+     "takes": [],
+     "effects": []
+    },
+    {
+     "id": "s1",
+     "lane": "shots",
+     "at": 0,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 1 · pier",
+     "request": {
+      "kind": "video",
+      "prompt": "the pier"
+     },
+     "takes": [
+      "11111111-1111-4111-8111-111111111111",
+      "22222222-2222-4222-8222-222222222222"
+     ],
+     "effects": [],
+     "pinned": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+     "id": "s2",
+     "lane": "shots",
+     "at": 96,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 2 · rain",
+     "request": {
+      "kind": "video",
+      "prompt": "rain",
+      "refs": [
+       {
+        "asset": "mara"
+       },
+       {
+        "block": "f1",
+        "part": "last"
+       }
+      ]
+     },
+     "takes": [],
+     "effects": [],
+     "note": "slow",
+     "from_frame": "f1"
+    },
+    {
+     "id": "s3",
+     "lane": "shots",
+     "at": 192,
+     "length": 96,
+     "kind": "video",
+     "name": "Shot 3 · puddle",
+     "request": {
+      "kind": "video"
+     },
+     "takes": [],
+     "effects": [
+      {
+       "name": "Grade",
+       "params": {
+        "look": "teal"
+       }
+      }
+     ]
+    },
+    {
+     "id": "v1",
+     "lane": "lines",
+     "at": 10,
+     "length": 60,
+     "kind": "voice",
+     "name": "Line 1",
+     "request": {
+      "kind": "voice",
+      "line": "Not again.",
+      "voice": "mara"
+     },
+     "takes": [],
+     "effects": []
+    },
+    {
+     "id": "m1",
+     "lane": "music",
+     "at": 0,
+     "length": 288,
+     "kind": "music",
+     "name": "Theme",
+     "request": {
+      "kind": "music"
+     },
+     "takes": [],
+     "effects": []
+    }
+   ],
+   "links": [
+    {
+     "block": "v1",
+     "to": [
+      "s1"
+     ]
+    },
+    {
+     "block": "m1",
+     "to": [
+      "s1",
+      "s2",
+      "s3"
+     ]
+    }
+   ],
+   "transitions": [
+    {
+     "id": "t1",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "dissolve",
+     "length": 12
+    },
+    {
+     "id": "t2",
+     "start": "shots",
+     "kind": "fade",
+     "length": 24
+    },
+    {
+     "id": "t3",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph",
+     "length": 24,
+     "request": {
+      "kind": "video",
+      "model": "ltx-image-to-video"
+     },
+     "takes": [
+      "33333333-3333-4333-8333-333333333333",
+      "44444444-4444-4444-8444-444444444444"
+     ]
+    }
+   ],
+   "assets": [
+    {
+     "id": "mara",
+     "kind": "character",
+     "handle": "mara",
+     "name": "Mara",
+     "sheet": [],
+     "voice_id": "warm"
+    }
+   ],
+   "notes": [
+    "keep it grey"
+   ]
+  }
+ },
+ "cases": [
+  {
+   "description": "add, insert: pushes what is after along; the music tied to the run stretches; the dissolve no longer meets",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "shots",
+      "at": 96,
+      "length": 48,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": []
+     },
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "lane": "shots",
+      "at": 96,
+      "length": 48,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "b1"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 144,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 240,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 336,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "add, insert inside a block: it goes to that block's end",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "shots",
+      "at": 120,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": []
+     },
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "lane": "shots",
+      "at": 192,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "b1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 216,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 312,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "add, overwrite inside a block: it splits it, the new parts take fresh ids",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "shots",
+      "at": 120,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": []
+     },
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 24,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "lane": "shots",
+      "at": 120,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "b1"
+     },
+     {
+      "id": "b2",
+      "lane": "shots",
+      "at": 144,
+      "length": 48,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "add, overwrite across two blocks trims both",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "shots",
+      "at": 72,
+      "length": 48,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "x9"
+     },
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "lane": "shots",
+      "at": 72,
+      "length": 48,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "x9"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 120,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "add on an empty lane at a point",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "l5",
+      "at": 48,
+      "length": 24,
+      "kind": "sound",
+      "name": "Rain",
+      "request": {
+       "kind": "sound"
+      },
+      "takes": [],
+      "effects": []
+     },
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "lane": "l5",
+      "at": 48,
+      "length": 24,
+      "kind": "sound",
+      "name": "Rain",
+      "request": {
+       "kind": "sound"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "b1"
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "add with an id in use is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "l5",
+      "at": 0,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [],
+      "id": "s1"
+     },
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "error": "That id is taken.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "add on a lane that is gone is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "add",
+     "block": {
+      "lane": "nope",
+      "at": 0,
+      "length": 24,
+      "kind": "video",
+      "name": "New",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": []
+     },
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "error": "That lane is gone.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "move, insert: Shot 3 to the start; the line tied to Shot 1 follows it",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s3"
+     ],
+     "dt": -192,
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 106,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move, overwrite: Shot 1 later onto Shot 2's time",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s1"
+     ],
+     "dt": 120,
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 24,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 120,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 216,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 130,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 96,
+      "length": 192,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move, overwrite into the middle of a block splits it",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s3"
+     ],
+     "dt": -162,
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 30,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 30,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 126,
+      "length": 66,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 192,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move past the end leaves a gap",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s2"
+     ],
+     "dt": 400,
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 496,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 592,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move two blocks to another lane",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s1",
+      "s2"
+     ],
+     "dt": 0,
+     "lane": "l5",
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 192,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "l5",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "l5",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move blocks of two lanes onto one is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s1",
+      "v1"
+     ],
+     "dt": 0,
+     "lane": "l5",
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "error": "Move blocks from one lane at a time.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "move blocks of two lanes along their own lanes",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "s2",
+      "v1"
+     ],
+     "dt": 24,
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 120,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 216,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 34,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "move nothing that exists is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "move",
+     "ids": [
+      "zz"
+     ],
+     "dt": 5,
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "error": "Nothing to move.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "trim the end of Shot 1: nothing else moves",
+   "document": "board",
+   "ops": [
+    {
+     "op": "trim",
+     "id": "s1",
+     "length": 72
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "trim the start of Shot 3 later",
+   "document": "board",
+   "ops": [
+    {
+     "op": "trim",
+     "id": "s3",
+     "at": 216
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 216,
+      "length": 72,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "trim over the next block is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "trim",
+     "id": "s1",
+     "length": 120
+    }
+   ],
+   "expect": {
+    "error": "It would cover the block next to it.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "delete, insert: the gap closes and the tied music fits the shots left",
+   "document": "board",
+   "ops": [
+    {
+     "op": "delete",
+     "ids": [
+      "s2"
+     ],
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "delete, overwrite: the gap stays",
+   "document": "board",
+   "ops": [
+    {
+     "op": "delete",
+     "ids": [
+      "s2"
+     ],
+     "mode": "overwrite"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "delete a shot a line is tied to: the tie goes",
+   "document": "board",
+   "ops": [
+    {
+     "op": "delete",
+     "ids": [
+      "s1"
+     ],
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "duplicate two shots: copies go after them, pushing the rest",
+   "document": "board",
+   "ops": [
+    {
+     "op": "duplicate",
+     "ids": [
+      "s1",
+      "s2"
+     ]
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "b1",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier copy",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": []
+     },
+     {
+      "id": "b2",
+      "lane": "shots",
+      "at": 288,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain copy",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 384,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 480,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "split Shot 2: the join after it follows the second part",
+   "document": "board",
+   "ops": [
+    {
+     "op": "split",
+     "id": "s2",
+     "at": 144
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 48,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "b1",
+      "lane": "shots",
+      "at": 144,
+      "length": 48,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "b1",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "split where the playhead is not on the block is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "split",
+     "id": "s2",
+     "at": 10
+    }
+   ],
+   "expect": {
+    "error": "The playhead isn't on it.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "link Line 1 to Shot 2, then move Shot 2: the line follows",
+   "document": "board",
+   "ops": [
+    {
+     "op": "link",
+     "block": "v1",
+     "to": [
+      "s2"
+     ]
+    },
+    {
+     "op": "move",
+     "ids": [
+      "s2"
+     ],
+     "dt": 120,
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 106,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     },
+     {
+      "block": "v1",
+      "to": [
+       "s2"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "unlink, then the move leaves the line",
+   "document": "board",
+   "ops": [
+    {
+     "op": "unlink",
+     "block": "v1"
+    },
+    {
+     "op": "move",
+     "ids": [
+      "s1"
+     ],
+     "dt": 120,
+     "mode": "insert"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "link to itself is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "link",
+     "block": "v1",
+     "to": [
+      "v1"
+     ]
+    }
+   ],
+   "expect": {
+    "error": "Tie it to a shot.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "transitions: a fade out at the lane's end with its default length, a dissolve's length changed, a cut takes one away",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "end": "shots",
+     "kind": "fade"
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "dissolve",
+     "length": 6
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "cut"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t4",
+      "end": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 6
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "transition between blocks that do not meet is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s3"
+     ],
+     "kind": "dissolve"
+    }
+   ],
+   "expect": {
+    "error": "Those blocks don't meet.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "transition naming two joins is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "start": "shots",
+     "end": "shots",
+     "kind": "fade"
+    }
+   ],
+   "expect": {
+    "error": "Pick a join.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "all or nothing: the second op fails, nothing applies",
+   "document": "board",
+   "ops": [
+    {
+     "op": "trim",
+     "id": "s1",
+     "length": 48
+    },
+    {
+     "op": "trim",
+     "id": "zz",
+     "length": 4
+    }
+   ],
+   "expect": {
+    "error": "That block is gone.",
+    "op_index": 1
+   }
+  },
+  {
+   "description": "effects: add to two blocks, replace one, take one off",
+   "document": "board",
+   "ops": [
+    {
+     "op": "effect",
+     "ids": [
+      "s1",
+      "s3"
+     ],
+     "effect": {
+      "name": "Speed · 1.5×",
+      "params": {
+       "rate": 1.5
+      }
+     }
+    },
+    {
+     "op": "effect_set",
+     "id": "s3",
+     "index": 0,
+     "effect": {
+      "name": "Grade",
+      "params": {
+       "look": "warm"
+      },
+      "off": true
+     }
+    },
+    {
+     "op": "effect_set",
+     "id": "s1",
+     "index": 0,
+     "effect": null
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "warm"
+        },
+        "off": true
+       },
+       {
+        "name": "Speed · 1.5×",
+        "params": {
+         "rate": 1.5
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "effect_set on an effect that is not there is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "effect_set",
+     "id": "s2",
+     "index": 0,
+     "effect": null
+    }
+   ],
+   "expect": {
+    "error": "That effect is gone.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "block: rename, a note, a new request, unpin",
+   "document": "board",
+   "ops": [
+    {
+     "op": "block",
+     "id": "s1",
+     "set": {
+      "name": "Shot 1 · dock",
+      "note": "wider",
+      "request": {
+       "kind": "video",
+       "prompt": "the dock",
+       "model": "ltx-2.5"
+      },
+      "pinned": null
+     }
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · dock",
+      "request": {
+       "kind": "video",
+       "prompt": "the dock",
+       "model": "ltx-2.5"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "note": "wider"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "lanes: add one after Shots, rename it, hide it, move it up",
+   "document": "board",
+   "ops": [
+    {
+     "op": "lane_add",
+     "lane": {
+      "name": "Rain",
+      "role": "sound",
+      "kind": "sound"
+     },
+     "after": "shots"
+    },
+    {
+     "op": "lane",
+     "id": "l1",
+     "set": {
+      "name": "Rain bed",
+      "hidden": true
+     }
+    },
+    {
+     "op": "lane_move",
+     "id": "l1",
+     "by": -1
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "name": "Rain bed",
+      "role": "sound",
+      "kind": "sound",
+      "id": "l1",
+      "hidden": true
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "lane rename to blank is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "lane",
+     "id": "l5",
+     "set": {
+      "name": "  "
+     }
+    }
+   ],
+   "expect": {
+    "error": "Give the lane a name.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "lane move past the top is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "lane_move",
+     "id": "story",
+     "by": -1
+    }
+   ],
+   "expect": {
+    "error": "It can't go further.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "lane delete: its blocks and their ties go",
+   "document": "board",
+   "ops": [
+    {
+     "op": "lane_delete",
+     "id": "lines"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "lane delete of the Shots lane: its joins and the music's tie go",
+   "document": "board",
+   "ops": [
+    {
+     "op": "lane_delete",
+     "id": "shots"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [],
+    "transitions": [],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "asset delete: its @ picks go, a voice stays as it is",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset_delete",
+     "id": "mara"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "morphs (API 1.82): a morph gets its request; it keeps it when its length changes and drops it as a dissolve",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "morph",
+     "request": {
+      "kind": "video",
+      "prompt": "the pier melts into rain"
+     }
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "morph",
+     "length": 30
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph"
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "dissolve"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "morph",
+      "length": 30,
+      "request": {
+       "kind": "video",
+       "prompt": "the pier melts into rain"
+      }
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "morphs: a morph's takes stay with it; pinned picks one, null unpins",
+   "document": "morph_board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph",
+     "pinned": "33333333-3333-4333-8333-333333333333"
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph",
+     "length": 12
+    },
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph",
+     "pinned": null
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "morph",
+      "length": 12,
+      "request": {
+       "kind": "video",
+       "model": "ltx-image-to-video"
+      },
+      "takes": [
+       "33333333-3333-4333-8333-333333333333",
+       "44444444-4444-4444-8444-444444444444"
+      ]
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "morphs: a pin that is not one of its takes is refused",
+   "document": "morph_board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s2",
+      "s3"
+     ],
+     "kind": "morph",
+     "pinned": "55555555-5555-4555-8555-555555555555"
+    }
+   ],
+   "expect": {
+    "error": "That take isn't the morph's.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "morphs: a request that is not a video's is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "morph",
+     "request": {
+      "kind": "image"
+     }
+    }
+   ],
+   "expect": {
+    "error": "A morph's request is a video's.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "morphs: only a morph takes a request",
+   "document": "board",
+   "ops": [
+    {
+     "op": "transition",
+     "between": [
+      "s1",
+      "s2"
+     ],
+     "kind": "dissolve",
+     "request": {
+      "kind": "video"
+     }
+    }
+   ],
+   "expect": {
+    "error": "Only a morph has a request.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "asset add (API 1.83): a new asset is a1, its sheet each take once, its views only of its sheet",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset_add",
+     "asset": {
+      "kind": "prop",
+      "handle": "umbrella",
+      "name": "Red umbrella",
+      "sheet": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222",
+       "11111111-1111-4111-8111-111111111111"
+      ],
+      "views": {
+       "11111111-1111-4111-8111-111111111111": "Front",
+       "33333333-3333-4333-8333-333333333333": "Side"
+      },
+      "imported_from": "11111111-1111-4111-8111-111111111111"
+     }
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     },
+     {
+      "kind": "prop",
+      "handle": "umbrella",
+      "name": "Red umbrella",
+      "sheet": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "views": {
+       "11111111-1111-4111-8111-111111111111": "Front"
+      },
+      "imported_from": "11111111-1111-4111-8111-111111111111",
+      "id": "a1"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "asset add: a handle in use is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset_add",
+     "asset": {
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara 2"
+     }
+    }
+   ],
+   "expect": {
+    "error": "That handle is taken.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "asset add: a handle starts with a letter (no spaces)",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset_add",
+     "asset": {
+      "kind": "place",
+      "handle": "bus stop",
+      "name": "Bus stop"
+     }
+    }
+   ],
+   "expect": {
+    "error": "A handle starts with a letter: letters, digits, - or _.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "asset: its name, a note, its voice off (null), a new sheet and its views",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset",
+     "id": "mara",
+     "set": {
+      "name": "Mara Lee",
+      "note": "late 20s",
+      "voice_id": null,
+      "sheet": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "views": {
+       "11111111-1111-4111-8111-111111111111": "Front",
+       "22222222-2222-4222-8222-222222222222": "Side"
+      }
+     }
+    },
+    {
+     "op": "asset",
+     "id": "mara",
+     "set": {
+      "sheet": [
+       "22222222-2222-4222-8222-222222222222"
+      ]
+     }
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara Lee",
+      "sheet": [
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "note": "late 20s",
+      "views": {
+       "22222222-2222-4222-8222-222222222222": "Side"
+      }
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "asset: one that is gone is refused",
+   "document": "board",
+   "ops": [
+    {
+     "op": "asset",
+     "id": "nobody",
+     "set": {
+      "name": "X"
+     }
+    }
+   ],
+   "expect": {
+    "error": "That asset is gone.",
+    "op_index": 0
+   }
+  },
+  {
+   "description": "take add: a picture of your own joins the block's takes, pinned; again only pins it",
+   "document": "board",
+   "ops": [
+    {
+     "op": "take_add",
+     "id": "f1",
+     "take": "11111111-1111-4111-8111-111111111111"
+    },
+    {
+     "op": "take_add",
+     "id": "f1",
+     "take": "22222222-2222-4222-8222-222222222222"
+    },
+    {
+     "op": "take_add",
+     "id": "f1",
+     "take": "11111111-1111-4111-8111-111111111111"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "asset delete: its first and last frame picks go too, and its mentions in a prompt become its name",
+   "document": "board",
+   "ops": [
+    {
+     "op": "block",
+     "id": "s3",
+     "set": {
+      "request": {
+       "kind": "video",
+       "prompt": "@mara runs, @Mara-! @@mara x@mara @maraa",
+       "first": {
+        "asset": "mara"
+       },
+       "last": {
+        "asset": "mara"
+       }
+      }
+     }
+    },
+    {
+     "op": "block",
+     "id": "s1",
+     "set": {
+      "request": {
+       "kind": "video",
+       "prompt": "the pier",
+       "first": {
+        "block": "f1",
+        "part": "take"
+       }
+      }
+     }
+    },
+    {
+     "op": "asset_delete",
+     "id": "mara"
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier",
+       "first": {
+        "block": "f1",
+        "part": "take"
+       }
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video",
+       "prompt": "Mara runs, Mara-! @@mara x@mara @maraa"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": []
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  },
+  {
+   "description": "block: an audio block's level (API 1.101); 0 takes it off",
+   "document": "board",
+   "ops": [
+    {
+     "op": "block",
+     "id": "m1",
+     "set": {
+      "gain_db": -6
+     }
+    },
+    {
+     "op": "block",
+     "id": "v1",
+     "set": {
+      "gain_db": -3
+     }
+    },
+    {
+     "op": "block",
+     "id": "v1",
+     "set": {
+      "gain_db": 0
+     }
+    }
+   ],
+   "expect": {
+    "target": {
+     "width": 1280,
+     "height": 720,
+     "fps": 24,
+     "sample_rate": 48000
+    },
+    "lanes": [
+     {
+      "id": "story",
+      "name": "Storyboard",
+      "role": "storyboard"
+     },
+     {
+      "id": "shots",
+      "name": "Shots",
+      "role": "shots"
+     },
+     {
+      "id": "lines",
+      "name": "Lines",
+      "role": "voice"
+     },
+     {
+      "id": "music",
+      "name": "Music",
+      "role": "music"
+     },
+     {
+      "id": "l5",
+      "name": "Lane 5",
+      "role": "free",
+      "hidden": false
+     }
+    ],
+    "blocks": [
+     {
+      "id": "f1",
+      "lane": "story",
+      "at": 0,
+      "length": 96,
+      "kind": "frame",
+      "name": "Frame 1",
+      "request": {
+       "kind": "frame",
+       "prompt": "a pier at dawn",
+       "style": "sketch"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "s1",
+      "lane": "shots",
+      "at": 0,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 1 · pier",
+      "request": {
+       "kind": "video",
+       "prompt": "the pier"
+      },
+      "takes": [
+       "11111111-1111-4111-8111-111111111111",
+       "22222222-2222-4222-8222-222222222222"
+      ],
+      "effects": [],
+      "pinned": "11111111-1111-4111-8111-111111111111"
+     },
+     {
+      "id": "s2",
+      "lane": "shots",
+      "at": 96,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 2 · rain",
+      "request": {
+       "kind": "video",
+       "prompt": "rain",
+       "refs": [
+        {
+         "asset": "mara"
+        },
+        {
+         "block": "f1",
+         "part": "last"
+        }
+       ]
+      },
+      "takes": [],
+      "effects": [],
+      "note": "slow",
+      "from_frame": "f1"
+     },
+     {
+      "id": "s3",
+      "lane": "shots",
+      "at": 192,
+      "length": 96,
+      "kind": "video",
+      "name": "Shot 3 · puddle",
+      "request": {
+       "kind": "video"
+      },
+      "takes": [],
+      "effects": [
+       {
+        "name": "Grade",
+        "params": {
+         "look": "teal"
+        }
+       }
+      ]
+     },
+     {
+      "id": "v1",
+      "lane": "lines",
+      "at": 10,
+      "length": 60,
+      "kind": "voice",
+      "name": "Line 1",
+      "request": {
+       "kind": "voice",
+       "line": "Not again.",
+       "voice": "mara"
+      },
+      "takes": [],
+      "effects": []
+     },
+     {
+      "id": "m1",
+      "lane": "music",
+      "at": 0,
+      "length": 288,
+      "kind": "music",
+      "name": "Theme",
+      "request": {
+       "kind": "music"
+      },
+      "takes": [],
+      "effects": [],
+      "gain_db": -6
+     }
+    ],
+    "links": [
+     {
+      "block": "v1",
+      "to": [
+       "s1"
+      ]
+     },
+     {
+      "block": "m1",
+      "to": [
+       "s1",
+       "s2",
+       "s3"
+      ]
+     }
+    ],
+    "transitions": [
+     {
+      "id": "t1",
+      "between": [
+       "s1",
+       "s2"
+      ],
+      "kind": "dissolve",
+      "length": 12
+     },
+     {
+      "id": "t2",
+      "start": "shots",
+      "kind": "fade",
+      "length": 24
+     },
+     {
+      "id": "t3",
+      "between": [
+       "s2",
+       "s3"
+      ],
+      "kind": "wipe",
+      "length": 12
+     }
+    ],
+    "assets": [
+     {
+      "id": "mara",
+      "kind": "character",
+      "handle": "mara",
+      "name": "Mara",
+      "sheet": [],
+      "voice_id": "warm"
+     }
+    ],
+    "notes": [
+     "keep it grey"
+    ]
+   }
+  }
+ ]
+}
