@@ -782,485 +782,573 @@ func apply(doc Doc, op Op) Applied {
 	for _, b := range doc.Blocks {
 		before[b.ID] = *b
 	}
-	get := d.block
-	group := func() []*Block {
-		var out []*Block
-		for _, id := range f.IDs {
-			if b := get(id); b != nil {
-				out = append(out, b)
-			}
-		}
-		return out
+	if fn, ok := opApply[op.Name]; ok {
+		return fn(&d, f, before)
 	}
-	done := func() Applied { tidy(&d); return Applied{Doc: d} }
-	switch op.Name {
-	case "add":
-		var nb BlockNew
-		if err := strict(f.Block, &nb); err != nil {
-			return refused("block: " + err.Error())
+	return refused("unknown op " + op.Name)
+}
+
+// opApply is each op's apply: d is the clone it edits, before the blocks as they were.
+var opApply = map[string]func(d *Doc, f fields, before map[string]Block) Applied{
+	"add":          opAdd,
+	"move":         opMove,
+	"trim":         opTrim,
+	"delete":       opDelete,
+	"duplicate":    opDuplicate,
+	"split":        opSplit,
+	"link":         opLink,
+	"unlink":       opUnlink,
+	"transition":   opTransition,
+	"effect":       opEffect,
+	"effect_set":   opEffectSet,
+	"block":        opBlock,
+	"lane_add":     opLaneAdd,
+	"lane":         opLane,
+	"lane_move":    opLaneMove,
+	"lane_delete":  opLaneDelete,
+	"asset_delete": opAssetDelete,
+	"asset_add":    opAssetAdd,
+	"asset":        opAsset,
+	"take_add":     opTakeAdd,
+}
+
+// picked is the blocks of ids still on d.
+func picked(d *Doc, ids []string) []*Block {
+	var out []*Block
+	for _, id := range ids {
+		if b := d.block(id); b != nil {
+			out = append(out, b)
 		}
-		if d.lane(nb.Lane) == nil {
+	}
+	return out
+}
+
+// done tidies d and returns it.
+func done(d *Doc) Applied { tidy(d); return Applied{Doc: *d} }
+
+// opAdd applies the add op to d.
+func opAdd(d *Doc, f fields, before map[string]Block) Applied {
+	var nb BlockNew
+	if err := strict(f.Block, &nb); err != nil {
+		return refused("block: " + err.Error())
+	}
+	if d.lane(nb.Lane) == nil {
+		return refused("That lane is gone.")
+	}
+	if nb.Length < 1 {
+		return refused("A block needs a length.")
+	}
+	if nb.ID != nil && slices.Contains(d.ids(), *nb.ID) {
+		return refused("That id is taken.")
+	}
+	b := Block{Lane: nb.Lane, At: nb.At, Length: nb.Length, Kind: nb.Kind, Name: nb.Name, Request: nb.Request,
+		Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame, GainDB: nb.GainDB}
+	if nb.ID != nil {
+		b.ID = *nb.ID
+	} else {
+		b.ID = d.FreshID("b")
+	}
+	place(d, []*Block{&b}, b.Lane, b.At, f.Mode)
+	follow(d, before, []string{b.ID})
+	return done(d)
+}
+
+// opMove applies the move op to d.
+func opMove(d *Doc, f fields, before map[string]Block) Applied {
+	g := picked(d, f.IDs)
+	if len(g) == 0 {
+		return refused("Nothing to move.")
+	}
+	var from []string
+	for _, b := range g {
+		if !slices.Contains(from, b.Lane) {
+			from = append(from, b.Lane)
+		}
+	}
+	target := ""
+	if f.Lane != nil {
+		if err := json.Unmarshal(f.Lane, &target); err != nil {
+			return refused("lane must be a lane id")
+		}
+		if d.lane(target) == nil {
 			return refused("That lane is gone.")
 		}
-		if nb.Length < 1 {
-			return refused("A block needs a length.")
+		if len(from) > 1 && slices.ContainsFunc(from, func(l string) bool { return l != target }) {
+			return refused("Move blocks from one lane at a time.")
 		}
-		if nb.ID != nil && slices.Contains(d.ids(), *nb.ID) {
-			return refused("That id is taken.")
+	}
+	copies := make([]*Block, len(g))
+	for i, b := range g {
+		c := clone(*b)
+		copies[i] = &c
+	}
+	maps := lift(d, f.IDs, f.Mode)
+	lanes := from
+	if target != "" {
+		lanes = []string{target}
+	}
+	for _, l := range lanes {
+		var part []*Block
+		lo := math.MaxInt
+		for _, b := range copies {
+			if target != "" || b.Lane == l {
+				part = append(part, b)
+				lo = min(lo, b.At)
+			}
 		}
-		b := Block{Lane: nb.Lane, At: nb.At, Length: nb.Length, Kind: nb.Kind, Name: nb.Name, Request: nb.Request,
-			Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame, GainDB: nb.GainDB}
-		if nb.ID != nil {
-			b.ID = *nb.ID
-		} else {
-			b.ID = d.FreshID("b")
+		at := max(0, lo+*f.Dt)
+		if m, ok := maps[l]; ok {
+			at = m(at)
 		}
-		place(&d, []*Block{&b}, b.Lane, b.At, f.Mode)
-		follow(&d, before, []string{b.ID})
-		return done()
-	case "move":
-		g := group()
-		if len(g) == 0 {
-			return refused("Nothing to move.")
+		place(d, part, l, at, f.Mode)
+	}
+	follow(d, before, f.IDs)
+	return done(d)
+}
+
+// opTrim applies the trim op to d.
+func opTrim(d *Doc, f fields, before map[string]Block) Applied {
+	b := d.block(f.ID)
+	if b == nil {
+		return refused("That block is gone.")
+	}
+	at := b.At
+	if f.At != nil {
+		at = *f.At
+	}
+	length := b.end() - at
+	if f.Length != nil {
+		length = *f.Length
+	}
+	if at < 0 || length < 1 {
+		return refused("A block needs a length.")
+	}
+	for _, x := range d.Blocks {
+		if x.Lane == b.Lane && x != b && x.At < at+length && x.end() > at {
+			return refused("It would cover the block next to it.")
 		}
-		var from []string
+	}
+	b.At, b.Length = at, length
+	follow(d, before, []string{b.ID})
+	return done(d)
+}
+
+// opDelete applies the delete op to d.
+func opDelete(d *Doc, f fields, before map[string]Block) Applied {
+	if len(picked(d, f.IDs)) == 0 {
+		return refused("Nothing to delete.")
+	}
+	lift(d, f.IDs, f.Mode)
+	follow(d, before, nil)
+	return done(d)
+}
+
+// opDuplicate applies the duplicate op to d.
+func opDuplicate(d *Doc, f fields, before map[string]Block) Applied {
+	g := picked(d, f.IDs)
+	if len(g) == 0 {
+		return refused("Nothing to duplicate.")
+	}
+	var lanes []string
+	for _, b := range g {
+		if !slices.Contains(lanes, b.Lane) {
+			lanes = append(lanes, b.Lane)
+		}
+	}
+	for _, l := range lanes {
+		var part, copies []*Block
+		last := 0
 		for _, b := range g {
-			if !slices.Contains(from, b.Lane) {
-				from = append(from, b.Lane)
+			if b.Lane == l {
+				part = append(part, b)
+				last = max(last, b.end())
 			}
 		}
-		target := ""
-		if f.Lane != nil {
-			if err := json.Unmarshal(f.Lane, &target); err != nil {
-				return refused("lane must be a lane id")
-			}
-			if d.lane(target) == nil {
-				return refused("That lane is gone.")
-			}
-			if len(from) > 1 && slices.ContainsFunc(from, func(l string) bool { return l != target }) {
-				return refused("Move blocks from one lane at a time.")
-			}
-		}
-		copies := make([]*Block, len(g))
-		for i, b := range g {
+		for _, b := range part {
 			c := clone(*b)
-			copies[i] = &c
+			c.ID, c.Name, c.Pinned = d.FreshID("b"), b.Name+" copy", nil
+			d.Blocks = append(d.Blocks, &c)
+			copies = append(copies, &c)
 		}
-		maps := lift(&d, f.IDs, f.Mode)
-		lanes := from
-		if target != "" {
-			lanes = []string{target}
+		d.without(func(b *Block) bool { return slices.Contains(copies, b) })
+		place(d, copies, l, last, "insert")
+	}
+	follow(d, before, nil)
+	return done(d)
+}
+
+// opSplit applies the split op to d.
+func opSplit(d *Doc, f fields, before map[string]Block) Applied {
+	b := d.block(f.ID)
+	if b == nil || !(b.At < *f.At && *f.At < b.end()) {
+		return refused("The playhead isn't on it.")
+	}
+	rest := clone(*b)
+	rest.ID, rest.At, rest.Length = d.FreshID("b"), *f.At, b.end()-*f.At
+	b.Length = *f.At - b.At
+	d.Blocks = append(d.Blocks, &rest)
+	for _, t := range d.Transitions {
+		if t.Between != nil && t.Between[0] == b.ID {
+			t.Between = &[2]string{rest.ID, t.Between[1]}
 		}
-		for _, l := range lanes {
-			var part []*Block
-			lo := math.MaxInt
-			for _, b := range copies {
-				if target != "" || b.Lane == l {
-					part = append(part, b)
-					lo = min(lo, b.At)
-				}
-			}
-			at := max(0, lo+*f.Dt)
-			if m, ok := maps[l]; ok {
-				at = m(at)
-			}
-			place(&d, part, l, at, f.Mode)
+	}
+	return done(d)
+}
+
+// opLink applies the link op to d.
+func opLink(d *Doc, f fields, before map[string]Block) Applied {
+	var id string
+	if json.Unmarshal(f.Block, &id) != nil {
+		return refused("block must be a block id")
+	}
+	if d.block(id) == nil || slices.ContainsFunc(f.To, func(t string) bool { return d.block(t) == nil || t == id }) {
+		return refused("Tie it to a shot.")
+	}
+	d.Links = append(slices.DeleteFunc(d.Links, func(l *Link) bool { return l.Block == id }),
+		&Link{Block: id, To: f.To})
+	return done(d)
+}
+
+// opUnlink applies the unlink op to d.
+func opUnlink(d *Doc, f fields, before map[string]Block) Applied {
+	var id string
+	if json.Unmarshal(f.Block, &id) != nil {
+		return refused("block must be a block id")
+	}
+	d.Links = slices.DeleteFunc(d.Links, func(l *Link) bool { return l.Block == id })
+	return Applied{Doc: *d}
+}
+
+// opTransition applies the transition op to d.
+func opTransition(d *Doc, f fields, before map[string]Block) Applied {
+	n := 0
+	for _, set := range []bool{f.Between != nil, f.Start != nil, f.End != nil} {
+		if set {
+			n++
 		}
-		follow(&d, before, f.IDs)
-		return done()
-	case "trim":
-		b := get(f.ID)
-		if b == nil {
-			return refused("That block is gone.")
+	}
+	if n != 1 {
+		return refused("Pick a join.")
+	}
+	same := func(t *Transition) bool {
+		switch {
+		case f.Between != nil:
+			return t.Between != nil && *t.Between == *f.Between
+		case f.Start != nil:
+			return t.Start != nil && *t.Start == *f.Start
 		}
-		at := b.At
-		if f.At != nil {
-			at = *f.At
+		return t.End != nil && *t.End == *f.End
+	}
+	var was *Transition
+	for _, t := range d.Transitions {
+		if same(t) {
+			was = t
+			break
 		}
-		length := b.end() - at
-		if f.Length != nil {
-			length = *f.Length
+	}
+	d.Transitions = slices.DeleteFunc(d.Transitions, same)
+	if f.Between != nil {
+		a, b := d.block(f.Between[0]), d.block(f.Between[1])
+		if a == nil || b == nil || a.Lane != b.Lane || a.end() != b.At {
+			return refused("Those blocks don't meet.")
 		}
-		if at < 0 || length < 1 {
-			return refused("A block needs a length.")
+	}
+	if f.Kind != "cut" {
+		t := &Transition{Between: f.Between, Start: f.Start, End: f.End, Kind: f.Kind}
+		switch {
+		case was != nil:
+			t.ID = was.ID
+		default:
+			t.ID = d.FreshID("t")
 		}
-		for _, x := range d.Blocks {
-			if x.Lane == b.Lane && x != b && x.At < at+length && x.end() > at {
-				return refused("It would cover the block next to it.")
-			}
+		switch {
+		case f.Length != nil:
+			t.Length = *f.Length
+		case was != nil:
+			t.Length = was.Length
+		default:
+			t.Length = int(math.Round(DefaultLength[f.Kind] * float64(d.Target.FPS)))
 		}
-		b.At, b.Length = at, length
-		follow(&d, before, []string{b.ID})
-		return done()
-	case "delete":
-		if len(group()) == 0 {
-			return refused("Nothing to delete.")
+		if why := morphSet(t, was, f); why != "" {
+			return refused(why)
 		}
-		lift(&d, f.IDs, f.Mode)
-		follow(&d, before, nil)
-		return done()
-	case "duplicate":
-		g := group()
-		if len(g) == 0 {
-			return refused("Nothing to duplicate.")
+		d.Transitions = append(d.Transitions, t)
+	}
+	return done(d)
+}
+
+// opEffect applies the effect op to d.
+func opEffect(d *Doc, f fields, before map[string]Block) Applied {
+	var e Effect
+	if err := strict(f.Effect, &e); err != nil {
+		return refused("effect: " + err.Error())
+	}
+	for _, id := range f.IDs {
+		if b := d.block(id); b != nil {
+			b.Effects = append(b.Effects, clone(e))
 		}
-		var lanes []string
-		for _, b := range g {
-			if !slices.Contains(lanes, b.Lane) {
-				lanes = append(lanes, b.Lane)
-			}
-		}
-		for _, l := range lanes {
-			var part, copies []*Block
-			last := 0
-			for _, b := range g {
-				if b.Lane == l {
-					part = append(part, b)
-					last = max(last, b.end())
-				}
-			}
-			for _, b := range part {
-				c := clone(*b)
-				c.ID, c.Name, c.Pinned = d.FreshID("b"), b.Name+" copy", nil
-				d.Blocks = append(d.Blocks, &c)
-				copies = append(copies, &c)
-			}
-			d.without(func(b *Block) bool { return slices.Contains(copies, b) })
-			place(&d, copies, l, last, "insert")
-		}
-		follow(&d, before, nil)
-		return done()
-	case "split":
-		b := get(f.ID)
-		if b == nil || !(b.At < *f.At && *f.At < b.end()) {
-			return refused("The playhead isn't on it.")
-		}
-		rest := clone(*b)
-		rest.ID, rest.At, rest.Length = d.FreshID("b"), *f.At, b.end()-*f.At
-		b.Length = *f.At - b.At
-		d.Blocks = append(d.Blocks, &rest)
-		for _, t := range d.Transitions {
-			if t.Between != nil && t.Between[0] == b.ID {
-				t.Between = &[2]string{rest.ID, t.Between[1]}
-			}
-		}
-		return done()
-	case "link":
-		var id string
-		if json.Unmarshal(f.Block, &id) != nil {
-			return refused("block must be a block id")
-		}
-		if get(id) == nil || slices.ContainsFunc(f.To, func(t string) bool { return get(t) == nil || t == id }) {
-			return refused("Tie it to a shot.")
-		}
-		d.Links = append(slices.DeleteFunc(d.Links, func(l *Link) bool { return l.Block == id }),
-			&Link{Block: id, To: f.To})
-		return done()
-	case "unlink":
-		var id string
-		if json.Unmarshal(f.Block, &id) != nil {
-			return refused("block must be a block id")
-		}
-		d.Links = slices.DeleteFunc(d.Links, func(l *Link) bool { return l.Block == id })
-		return Applied{Doc: d}
-	case "transition":
-		n := 0
-		for _, set := range []bool{f.Between != nil, f.Start != nil, f.End != nil} {
-			if set {
-				n++
-			}
-		}
-		if n != 1 {
-			return refused("Pick a join.")
-		}
-		same := func(t *Transition) bool {
-			switch {
-			case f.Between != nil:
-				return t.Between != nil && *t.Between == *f.Between
-			case f.Start != nil:
-				return t.Start != nil && *t.Start == *f.Start
-			}
-			return t.End != nil && *t.End == *f.End
-		}
-		var was *Transition
-		for _, t := range d.Transitions {
-			if same(t) {
-				was = t
-				break
-			}
-		}
-		d.Transitions = slices.DeleteFunc(d.Transitions, same)
-		if f.Between != nil {
-			a, b := get(f.Between[0]), get(f.Between[1])
-			if a == nil || b == nil || a.Lane != b.Lane || a.end() != b.At {
-				return refused("Those blocks don't meet.")
-			}
-		}
-		if f.Kind != "cut" {
-			t := &Transition{Between: f.Between, Start: f.Start, End: f.End, Kind: f.Kind}
-			switch {
-			case was != nil:
-				t.ID = was.ID
-			default:
-				t.ID = d.FreshID("t")
-			}
-			switch {
-			case f.Length != nil:
-				t.Length = *f.Length
-			case was != nil:
-				t.Length = was.Length
-			default:
-				t.Length = int(math.Round(DefaultLength[f.Kind] * float64(d.Target.FPS)))
-			}
-			if why := morphSet(t, was, f); why != "" {
-				return refused(why)
-			}
-			d.Transitions = append(d.Transitions, t)
-		}
-		return done()
-	case "effect":
+	}
+	return Applied{Doc: *d}
+}
+
+// opEffectSet applies the effect_set op to d.
+func opEffectSet(d *Doc, f fields, before map[string]Block) Applied {
+	b := d.block(f.ID)
+	if b == nil || *f.Index >= len(b.Effects) {
+		return refused("That effect is gone.")
+	}
+	if string(f.Effect) == "null" {
+		b.Effects = slices.Delete(b.Effects, *f.Index, *f.Index+1)
+	} else {
 		var e Effect
 		if err := strict(f.Effect, &e); err != nil {
 			return refused("effect: " + err.Error())
 		}
-		for _, id := range f.IDs {
-			if b := get(id); b != nil {
-				b.Effects = append(b.Effects, clone(e))
-			}
-		}
-		return Applied{Doc: d}
-	case "effect_set":
-		b := get(f.ID)
-		if b == nil || *f.Index >= len(b.Effects) {
-			return refused("That effect is gone.")
-		}
-		if string(f.Effect) == "null" {
-			b.Effects = slices.Delete(b.Effects, *f.Index, *f.Index+1)
-		} else {
-			var e Effect
-			if err := strict(f.Effect, &e); err != nil {
-				return refused("effect: " + err.Error())
-			}
-			b.Effects[*f.Index] = e
-		}
-		return Applied{Doc: d}
-	case "block":
-		b := get(f.ID)
-		if b == nil {
-			return refused("That block is gone.")
-		}
-		var set struct {
-			Name    *string         `json:"name"`
-			Note    *string         `json:"note"`
-			Request *map[string]any `json:"request"`
-			Pinned  *string         `json:"pinned"`
-			GainDB  *float64        `json:"gain_db"`
-		}
-		if err := strict(f.Set, &set); err != nil {
-			return refused("set: " + err.Error())
-		}
-		var keys map[string]json.RawMessage
-		_ = json.Unmarshal(f.Set, &keys)
-		if set.Name != nil {
-			b.Name = *set.Name
-		}
-		if set.Note != nil {
-			b.Note = set.Note
-		}
-		if set.Request != nil {
-			b.Request = *set.Request
-		}
-		if _, ok := keys["gain_db"]; ok { // API 1.101: 0 or null is no level; the board rules check kind and range
-			b.GainDB = set.GainDB
-			if b.GainDB != nil && *b.GainDB == 0 {
-				b.GainDB = nil
-			}
-		}
-		if _, ok := keys["pinned"]; ok { // null or "" unpins
-			b.Pinned = set.Pinned
-			if set.Pinned != nil && *set.Pinned == "" {
-				b.Pinned = nil
-			}
-		}
-		return Applied{Doc: d}
-	case "lane_add":
-		var nl LaneNew
-		if err := strict(f.Lane, &nl); err != nil {
-			return refused("lane: " + err.Error())
-		}
-		if nl.ID != nil && slices.Contains(d.ids(), *nl.ID) {
-			return refused("That id is taken.")
-		}
-		l := &Lane{Name: nl.Name, Role: nl.Role, Hidden: nl.Hidden, Kind: nl.Kind}
-		if nl.ID != nil {
-			l.ID = *nl.ID
-		} else {
-			l.ID = d.FreshID("l")
-		}
-		i := len(d.Lanes)
-		if f.After != nil {
-			if k := slices.IndexFunc(d.Lanes, func(x *Lane) bool { return x.ID == *f.After }); k >= 0 {
-				i = k + 1
-			}
-		}
-		d.Lanes = slices.Insert(d.Lanes, i, l)
-		return Applied{Doc: d}
-	case "lane":
-		l := d.lane(f.ID)
-		if l == nil {
-			return refused("That lane is gone.")
-		}
-		var set struct {
-			Name   *string `json:"name"`
-			Role   *string `json:"role"`
-			Hidden *bool   `json:"hidden"`
-			Kind   *string `json:"kind"`
-		}
-		if err := strict(f.Set, &set); err != nil {
-			return refused("set: " + err.Error())
-		}
-		if set.Name != nil && strings.TrimSpace(*set.Name) == "" {
-			return refused("Give the lane a name.")
-		}
-		if set.Name != nil {
-			l.Name = *set.Name
-		}
-		if set.Role != nil {
-			l.Role = *set.Role
-		}
-		if set.Hidden != nil {
-			l.Hidden = set.Hidden
-		}
-		if set.Kind != nil {
-			l.Kind = set.Kind
-		}
-		return Applied{Doc: d}
-	case "lane_move":
-		i := slices.IndexFunc(d.Lanes, func(l *Lane) bool { return l.ID == f.ID })
-		j := i + *f.By
-		if i < 0 || j < 0 || j >= len(d.Lanes) {
-			return refused("It can't go further.")
-		}
-		d.Lanes[i], d.Lanes[j] = d.Lanes[j], d.Lanes[i]
-		return done()
-	case "lane_delete":
-		if d.lane(f.ID) == nil {
-			return refused("That lane is gone.")
-		}
-		d.Lanes = slices.DeleteFunc(d.Lanes, func(l *Lane) bool { return l.ID == f.ID })
-		d.without(func(b *Block) bool { return b.Lane == f.ID })
-		return done()
-	case "asset_delete":
-		gone := d.asset(f.ID)
-		d.Assets = slices.DeleteFunc(d.Assets, func(a *Asset) bool { return a.ID == f.ID })
-		picks := func(r any) bool {
-			m, _ := r.(map[string]any)
-			a, has := m["asset"]
-			return has && a == f.ID
-		}
-		for _, b := range d.Blocks {
-			// its @ picks go (refs, the first and last frame; a voice stays as it is); its mentions in the prompt become its name
-			if refs, ok := b.Request["refs"].([]any); ok {
-				b.Request["refs"] = slices.DeleteFunc(slices.Clone(refs), picks)
-			}
-			for _, k := range []string{"first", "last"} {
-				if picks(b.Request[k]) {
-					delete(b.Request, k)
-				}
-			}
-			if p, ok := b.Request["prompt"].(string); ok && gone != nil {
-				b.Request["prompt"] = ReplaceMention(p, gone.Handle, gone.Name)
-			}
-		}
-		return Applied{Doc: d}
-	case "asset_add":
-		var na AssetNew
-		if err := strict(f.Asset, &na); err != nil {
-			return refused("asset: " + err.Error())
-		}
-		switch {
-		case na.ID != nil && d.asset(*na.ID) != nil:
-			return refused("That id is taken.")
-		case !slices.Contains(AssetKinds, na.Kind):
-			return refused("kind must be character, prop or place")
-		case strings.TrimSpace(na.Name) == "":
-			return refused("Give it a name.")
-		case !handlePattern.MatchString(na.Handle):
-			return refused("A handle starts with a letter: letters, digits, - or _.")
-		case slices.ContainsFunc(d.Assets, func(a *Asset) bool { return strings.EqualFold(a.Handle, na.Handle) }):
-			return refused("That handle is taken.")
-		}
-		a := &Asset{Kind: na.Kind, Handle: na.Handle, Name: na.Name, Sheet: na.Sheet, Views: na.Views,
-			VoiceID: na.VoiceID, Note: na.Note, ImportedFrom: na.ImportedFrom}
-		if na.ID != nil {
-			a.ID = *na.ID
-		} else {
-			a.ID = d.FreshAssetID()
-		}
-		a.Sheet = unique(a.Sheet)
-		keepViews(a)
-		d.Assets = append(d.Assets, a)
-		return Applied{Doc: d}
-	case "asset":
-		a := d.asset(f.ID)
-		if a == nil {
-			return refused("That asset is gone.")
-		}
-		var set struct {
-			Kind    *string            `json:"kind"`
-			Name    *string            `json:"name"`
-			Note    *string            `json:"note"`
-			VoiceID *string            `json:"voice_id"`
-			Sheet   *[]string          `json:"sheet"`
-			Views   *map[string]string `json:"views"`
-		}
-		if err := strict(f.Set, &set); err != nil {
-			return refused("set: " + err.Error())
-		}
-		var keys map[string]json.RawMessage
-		_ = json.Unmarshal(f.Set, &keys)
-		switch {
-		case set.Kind != nil && !slices.Contains(AssetKinds, *set.Kind):
-			return refused("kind must be character, prop or place")
-		case set.Name != nil && strings.TrimSpace(*set.Name) == "":
-			return refused("Give it a name.")
-		}
-		if set.Kind != nil {
-			a.Kind = *set.Kind
-		}
-		if set.Name != nil {
-			a.Name = *set.Name
-		}
-		if set.Note != nil {
-			a.Note = set.Note
-		}
-		if _, ok := keys["voice_id"]; ok { // null or "" takes it off
-			a.VoiceID = set.VoiceID
-			if set.VoiceID != nil && *set.VoiceID == "" {
-				a.VoiceID = nil
-			}
-		}
-		if set.Sheet != nil {
-			a.Sheet = unique(*set.Sheet)
-		}
-		if set.Views != nil {
-			a.Views = *set.Views
-		}
-		keepViews(a)
-		return Applied{Doc: d}
-	case "take_add":
-		b := get(f.ID)
-		if b == nil {
-			return refused("That block is gone.")
-		}
-		if !slices.Contains(b.Takes, f.Take) {
-			if len(b.Takes) >= 200 {
-				return refused("A block keeps at most 200 takes.")
-			}
-			b.Takes = append(b.Takes, f.Take)
-		}
-		b.Pinned = &f.Take
-		return Applied{Doc: d}
+		b.Effects[*f.Index] = e
 	}
-	return refused("unknown op " + op.Name)
+	return Applied{Doc: *d}
+}
+
+// opBlock applies the block op to d.
+func opBlock(d *Doc, f fields, before map[string]Block) Applied {
+	b := d.block(f.ID)
+	if b == nil {
+		return refused("That block is gone.")
+	}
+	var set struct {
+		Name    *string         `json:"name"`
+		Note    *string         `json:"note"`
+		Request *map[string]any `json:"request"`
+		Pinned  *string         `json:"pinned"`
+		GainDB  *float64        `json:"gain_db"`
+	}
+	if err := strict(f.Set, &set); err != nil {
+		return refused("set: " + err.Error())
+	}
+	var keys map[string]json.RawMessage
+	_ = json.Unmarshal(f.Set, &keys)
+	if set.Name != nil {
+		b.Name = *set.Name
+	}
+	if set.Note != nil {
+		b.Note = set.Note
+	}
+	if set.Request != nil {
+		b.Request = *set.Request
+	}
+	if _, ok := keys["gain_db"]; ok { // API 1.101: 0 or null is no level; the board rules check kind and range
+		b.GainDB = set.GainDB
+		if b.GainDB != nil && *b.GainDB == 0 {
+			b.GainDB = nil
+		}
+	}
+	if _, ok := keys["pinned"]; ok { // null or "" unpins
+		b.Pinned = set.Pinned
+		if set.Pinned != nil && *set.Pinned == "" {
+			b.Pinned = nil
+		}
+	}
+	return Applied{Doc: *d}
+}
+
+// opLaneAdd applies the lane_add op to d.
+func opLaneAdd(d *Doc, f fields, before map[string]Block) Applied {
+	var nl LaneNew
+	if err := strict(f.Lane, &nl); err != nil {
+		return refused("lane: " + err.Error())
+	}
+	if nl.ID != nil && slices.Contains(d.ids(), *nl.ID) {
+		return refused("That id is taken.")
+	}
+	l := &Lane{Name: nl.Name, Role: nl.Role, Hidden: nl.Hidden, Kind: nl.Kind}
+	if nl.ID != nil {
+		l.ID = *nl.ID
+	} else {
+		l.ID = d.FreshID("l")
+	}
+	i := len(d.Lanes)
+	if f.After != nil {
+		if k := slices.IndexFunc(d.Lanes, func(x *Lane) bool { return x.ID == *f.After }); k >= 0 {
+			i = k + 1
+		}
+	}
+	d.Lanes = slices.Insert(d.Lanes, i, l)
+	return Applied{Doc: *d}
+}
+
+// opLane applies the lane op to d.
+func opLane(d *Doc, f fields, before map[string]Block) Applied {
+	l := d.lane(f.ID)
+	if l == nil {
+		return refused("That lane is gone.")
+	}
+	var set struct {
+		Name   *string `json:"name"`
+		Role   *string `json:"role"`
+		Hidden *bool   `json:"hidden"`
+		Kind   *string `json:"kind"`
+	}
+	if err := strict(f.Set, &set); err != nil {
+		return refused("set: " + err.Error())
+	}
+	if set.Name != nil && strings.TrimSpace(*set.Name) == "" {
+		return refused("Give the lane a name.")
+	}
+	if set.Name != nil {
+		l.Name = *set.Name
+	}
+	if set.Role != nil {
+		l.Role = *set.Role
+	}
+	if set.Hidden != nil {
+		l.Hidden = set.Hidden
+	}
+	if set.Kind != nil {
+		l.Kind = set.Kind
+	}
+	return Applied{Doc: *d}
+}
+
+// opLaneMove applies the lane_move op to d.
+func opLaneMove(d *Doc, f fields, before map[string]Block) Applied {
+	i := slices.IndexFunc(d.Lanes, func(l *Lane) bool { return l.ID == f.ID })
+	j := i + *f.By
+	if i < 0 || j < 0 || j >= len(d.Lanes) {
+		return refused("It can't go further.")
+	}
+	d.Lanes[i], d.Lanes[j] = d.Lanes[j], d.Lanes[i]
+	return done(d)
+}
+
+// opLaneDelete applies the lane_delete op to d.
+func opLaneDelete(d *Doc, f fields, before map[string]Block) Applied {
+	if d.lane(f.ID) == nil {
+		return refused("That lane is gone.")
+	}
+	d.Lanes = slices.DeleteFunc(d.Lanes, func(l *Lane) bool { return l.ID == f.ID })
+	d.without(func(b *Block) bool { return b.Lane == f.ID })
+	return done(d)
+}
+
+// opAssetDelete applies the asset_delete op to d.
+func opAssetDelete(d *Doc, f fields, before map[string]Block) Applied {
+	gone := d.asset(f.ID)
+	d.Assets = slices.DeleteFunc(d.Assets, func(a *Asset) bool { return a.ID == f.ID })
+	picks := func(r any) bool {
+		m, _ := r.(map[string]any)
+		a, has := m["asset"]
+		return has && a == f.ID
+	}
+	for _, b := range d.Blocks {
+		// its @ picks go (refs, the first and last frame; a voice stays as it is); its mentions in the prompt become its name
+		if refs, ok := b.Request["refs"].([]any); ok {
+			b.Request["refs"] = slices.DeleteFunc(slices.Clone(refs), picks)
+		}
+		for _, k := range []string{"first", "last"} {
+			if picks(b.Request[k]) {
+				delete(b.Request, k)
+			}
+		}
+		if p, ok := b.Request["prompt"].(string); ok && gone != nil {
+			b.Request["prompt"] = ReplaceMention(p, gone.Handle, gone.Name)
+		}
+	}
+	return Applied{Doc: *d}
+}
+
+// opAssetAdd applies the asset_add op to d.
+func opAssetAdd(d *Doc, f fields, before map[string]Block) Applied {
+	var na AssetNew
+	if err := strict(f.Asset, &na); err != nil {
+		return refused("asset: " + err.Error())
+	}
+	switch {
+	case na.ID != nil && d.asset(*na.ID) != nil:
+		return refused("That id is taken.")
+	case !slices.Contains(AssetKinds, na.Kind):
+		return refused("kind must be character, prop or place")
+	case strings.TrimSpace(na.Name) == "":
+		return refused("Give it a name.")
+	case !handlePattern.MatchString(na.Handle):
+		return refused("A handle starts with a letter: letters, digits, - or _.")
+	case slices.ContainsFunc(d.Assets, func(a *Asset) bool { return strings.EqualFold(a.Handle, na.Handle) }):
+		return refused("That handle is taken.")
+	}
+	a := &Asset{Kind: na.Kind, Handle: na.Handle, Name: na.Name, Sheet: na.Sheet, Views: na.Views,
+		VoiceID: na.VoiceID, Note: na.Note, ImportedFrom: na.ImportedFrom}
+	if na.ID != nil {
+		a.ID = *na.ID
+	} else {
+		a.ID = d.FreshAssetID()
+	}
+	a.Sheet = unique(a.Sheet)
+	keepViews(a)
+	d.Assets = append(d.Assets, a)
+	return Applied{Doc: *d}
+}
+
+// opAsset applies the asset op to d.
+func opAsset(d *Doc, f fields, before map[string]Block) Applied {
+	a := d.asset(f.ID)
+	if a == nil {
+		return refused("That asset is gone.")
+	}
+	var set struct {
+		Kind    *string            `json:"kind"`
+		Name    *string            `json:"name"`
+		Note    *string            `json:"note"`
+		VoiceID *string            `json:"voice_id"`
+		Sheet   *[]string          `json:"sheet"`
+		Views   *map[string]string `json:"views"`
+	}
+	if err := strict(f.Set, &set); err != nil {
+		return refused("set: " + err.Error())
+	}
+	var keys map[string]json.RawMessage
+	_ = json.Unmarshal(f.Set, &keys)
+	switch {
+	case set.Kind != nil && !slices.Contains(AssetKinds, *set.Kind):
+		return refused("kind must be character, prop or place")
+	case set.Name != nil && strings.TrimSpace(*set.Name) == "":
+		return refused("Give it a name.")
+	}
+	if set.Kind != nil {
+		a.Kind = *set.Kind
+	}
+	if set.Name != nil {
+		a.Name = *set.Name
+	}
+	if set.Note != nil {
+		a.Note = set.Note
+	}
+	if _, ok := keys["voice_id"]; ok { // null or "" takes it off
+		a.VoiceID = set.VoiceID
+		if set.VoiceID != nil && *set.VoiceID == "" {
+			a.VoiceID = nil
+		}
+	}
+	if set.Sheet != nil {
+		a.Sheet = unique(*set.Sheet)
+	}
+	if set.Views != nil {
+		a.Views = *set.Views
+	}
+	keepViews(a)
+	return Applied{Doc: *d}
+}
+
+// opTakeAdd applies the take_add op to d.
+func opTakeAdd(d *Doc, f fields, before map[string]Block) Applied {
+	b := d.block(f.ID)
+	if b == nil {
+		return refused("That block is gone.")
+	}
+	if !slices.Contains(b.Takes, f.Take) {
+		if len(b.Takes) >= 200 {
+			return refused("A block keeps at most 200 takes.")
+		}
+		b.Takes = append(b.Takes, f.Take)
+	}
+	b.Pinned = &f.Take
+	return Applied{Doc: *d}
 }
