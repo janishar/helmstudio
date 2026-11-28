@@ -163,7 +163,12 @@ button { font: inherit; color: inherit; }
 /* the rail */
 .tile { display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--radius-tile); color: #fff; background: var(--tile); box-shadow: var(--shadow-tile); }
 .hs-rail { display: flex; flex-direction: column; gap: 14px; width: 76px; }
-.hs-rail > .panel { border-radius: var(--radius-rail); display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 14px 4px; }
+.hs-rail > .panel { border-radius: var(--radius-rail); display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 14px 4px; }
+.hs-rail > nav.panel { flex: 1; }
+.hs-foot { margin-top: auto; }
+.dock-item .tile { width: 32px; height: 32px; border-radius: 11px; }
+.hs-rail > .panel > .tile { width: 32px; height: 32px; }
+.hs-rail .dock-item { height: 56px; }
 .dock-item { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px; width: 58px; height: 64px; border-radius: 16px; font-size: 10px; font-weight: 500; color: var(--t2); text-decoration: none; }
 .dock-item[aria-current] { color: var(--t1); }
 .dock-item:not([aria-current]) .tile { filter: saturate(0.55) brightness(0.8); }
@@ -2917,10 +2922,11 @@ outline-offset: 2px;
 .hs-auth-card .key { height: 50px; margin-top: 4px; font-size: 15px; }
 .hs-auth-card [role="alert"] { margin: 0; border-radius: 12px; background: var(--s2); padding: 8px 12px; font-size: 13px; color: var(--bad); }
 /* the rail as a phone's sideways bar (shell.tsx below md): no logo, scrolls sideways */
-.hs-dock { display: flex; align-items: center; gap: 14px; overflow-x: auto; padding: 4px 12px; border-radius: 30px; }
+.hs-dock { display: flex; position: relative; align-items: center; gap: 14px; overflow-x: auto; padding: 4px 12px; border-radius: 30px; }
 .hs-dock .dock-item { flex: 0 0 auto; }
 .hs-dock .hs-admin { flex-direction: row; gap: 8px; padding: 0 4px; }
 .hs-dock .hs-sep { width: 1px; height: 32px; flex: 0 0 auto; }
+.hs-dock .hs-pin { position: sticky; right: 0; display: flex; align-items: center; gap: 14px; flex: 0 0 auto; background: var(--s1); box-shadow: 12px 0 0 var(--s1); }
 
 /* Create's Music and Sound parts (docs/mock/CreateMusicSound.dc.html, plan 38 P0) */
 /* a composer chip that this model cannot use: greyed in place, the reason on hover ("Not on MiniMax Music 3") */
