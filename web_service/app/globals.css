@@ -2306,7 +2306,27 @@
       margin: 14px 0 14px 14px;
     }
   }
-  @media (min-width: 48rem) and (max-height: 880px) {
+  /* Setup at the rail's foot (Rail.dc.html option 4): an admin's three tiles need the whole rail 943 px tall (14 + logo
+     64 + 14 + tools and Assistant 575 + 14 + Setup 248 + 14); shorter, they fold into one gear tile (787 px, as a
+     non-admin's Settings-only panel). ponytail: fixed heights; the status tile, when shown, is not counted */
+  .rail-setup,
+  .rail-gear {
+    display: none;
+  }
+  @media (min-width: 48rem) {
+    .rail-setup {
+      display: flex;
+    }
+  }
+  @media (min-width: 48rem) and (max-height: 943px) {
+    .rail-setup.admin {
+      display: none;
+    }
+    .rail-gear {
+      display: flex;
+    }
+  }
+  @media (min-width: 48rem) and (max-height: 799px) {
     .rail-wrap {
       max-height: 100dvh;
       margin: 0 -16px 0 0;

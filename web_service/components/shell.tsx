@@ -1,7 +1,7 @@
 "use client";
 // The frame of every signed-in page: the floating dock on the left, the page beside it.
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { createContext, use, useEffect, useRef, useState } from "react";
 import {
   Blocks,
@@ -22,6 +22,7 @@ import {
   type AssistantApi,
 } from "@/components/assistant/assistant";
 import { ToolsContext } from "@/components/assistant/tools";
+import { openMenu } from "@/components/context-menu";
 import { MarkPaths } from "@/components/kit";
 import { Banner, StatusTile } from "@/components/status";
 import { ApiError, api, ok, type S } from "@/lib/api";
@@ -69,7 +70,8 @@ const ITEMS = [
     tile: "linear-gradient(155deg,#7af5d6,#12967f)",
   },
 ];
-/** plan 33 37.9: everything AI (Hub) and the deployment (System), admins only */
+/** plan 33 37.9: everything AI (Hub) and the deployment (System), admins only; with Settings they are the rail's
+ * bottom panel, "Setup" (docs/mock/Rail.dc.html option 4, owner 2026-11-28) */
 const ADMIN_ITEMS = [
   { href: "/hub", label: "Hub", Icon: Blocks, tile: "linear-gradient(155deg,#d8f58c,#3c9a2e)" },
   {
@@ -79,6 +81,12 @@ const ADMIN_ITEMS = [
     tile: "linear-gradient(155deg,#c9ced9,#5b6478)",
   },
 ];
+const SETTINGS = {
+  href: "/settings",
+  label: "Settings",
+  Icon: Settings,
+  tile: "linear-gradient(155deg,#a7b0c2,#4b5468)",
+};
 type Item = (typeof ITEMS)[number];
 
 /** One page in the dock. */
@@ -94,6 +102,40 @@ function DockLink({ it: { href, label, Icon, tile }, path }: { it: Item; path: s
       </span>
       {label}
     </Link>
+  );
+}
+
+/** Setup folded into one gear tile (Rail.dc.html frames 4, 5): an admin's Hub, System and Settings in the shared menu,
+ * the current page ticked. A non-admin has Settings only, so a plain Settings tile. */
+function SetupGear({ admin, path }: { admin: boolean; path: string }) {
+  const router = useRouter();
+  if (!admin) return <DockLink it={SETTINGS} path={path} />;
+  const setup = [...ADMIN_ITEMS, SETTINGS];
+  const here = setup.some((it) => isCurrent(it.href, path));
+  return (
+    <button
+      type="button"
+      aria-haspopup="menu"
+      aria-current={here ? "page" : undefined}
+      title="Hub, System, Settings"
+      onClick={(e) =>
+        openMenu(e, {
+          title: "Setup",
+          items: setup.map((it) => ({
+            label: it.label,
+            icon: it.Icon,
+            checked: isCurrent(it.href, path),
+            onPick: () => router.push(it.href),
+          })),
+        })
+      }
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+    >
+      <span className="tile" style={{ "--tile": SETTINGS.tile } as React.CSSProperties}>
+        <Settings size={20} strokeWidth={1.75} aria-hidden />
+      </span>
+      Setup
+    </button>
   );
 }
 
@@ -147,8 +189,8 @@ export function AppShell({
     if (path !== "/") cats.current?.stop();
   }, [path]);
   useEffect(() => {
-    // a phone's dock is a bar that scrolls sideways: keep the current item (Settings is the last) in view, again once
-    // the Assistant item arrives and pushes it along
+    // a phone's dock is a bar that scrolls sideways: keep the current item in view, again once the Assistant item
+    // arrives and pushes it along
     nav.current
       ?.querySelector("[aria-current=page]")
       ?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
@@ -162,9 +204,9 @@ export function AppShell({
             // only while docked: a floating drawer leaves the page its full width (plan 36 §40)
             data-drawer={(a.ready && a.open && !a.floating) || undefined}
           >
-            {/* the rail (md+): the logo in its own panel, 14 px above the menu; a phone's bar has no logo. A window too short
+            {/* the rail (md+): the logo in its own panel, 14 px above the menu, Setup pinned at the foot; a phone's bar has no logo. A window too short
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}
-            <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5 md:self-start">
+            <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
                 <Link
                   href="/"
@@ -196,17 +238,6 @@ export function AppShell({
                 {ITEMS.map((it) => (
                   <DockLink key={it.href} it={it} path={path} />
                 ))}
-                {admin && (
-                  <div
-                    role="group"
-                    aria-label="Admin only"
-                    className="flex shrink-0 items-center gap-2 rounded-2xl bg-[color-mix(in_srgb,var(--s3)_55%,transparent)] px-1 md:flex-col md:px-0 md:py-1.5"
-                  >
-                    {ADMIN_ITEMS.map((it) => (
-                      <DockLink key={it.href} it={it} path={path} />
-                    ))}
-                  </div>
-                )}
                 {a.ready && <span aria-hidden className="h-8 w-px shrink-0 bg-s4 md:h-px md:w-8" />}
                 {a.ready && (
                   <button
@@ -232,27 +263,31 @@ export function AppShell({
                     )}
                   </button>
                 )}
-                <Link
-                  href="/settings"
-                  aria-current={isCurrent("/settings", path) ? "page" : undefined}
-                  className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1 md:mt-1.5"
-                >
-                  <span
-                    className="tile"
-                    style={
-                      { "--tile": "linear-gradient(155deg,#a7b0c2,#4b5468)" } as React.CSSProperties
-                    }
-                  >
-                    <Settings size={20} strokeWidth={1.75} aria-hidden />
-                  </span>
-                  Settings
-                </Link>
+                {/* a phone's bar: Setup pinned at its right end, the rest scrolls under it */}
+                <span className="sticky right-0 flex shrink-0 items-center gap-3.5 bg-s1 shadow-[12px_0_0_var(--s1)] md:hidden">
+                  <span aria-hidden className="h-8 w-px shrink-0 bg-s4" />
+                  <SetupGear admin={admin} path={path} />
+                </span>
               </nav>
               {/* the status tile (docs/mock/ErrorStates.dc.html g): only while something is down; md+ only (a phone
                   gets the banner) */}
               <div className="hidden md:contents">
                 <StatusTile admin={admin} />
               </div>
+              {/* md+: Setup in its own panel pinned to the rail's foot; a window too short for it folds it into one gear
+                  tile (.rail-setup / .rail-gear in globals.css) */}
+              <nav
+                aria-label="Setup"
+                className={`rail-setup panel mt-auto w-[76px] shrink-0 flex-col items-center gap-3.5 rounded-[30px] px-1 py-3.5${admin ? " admin" : ""}`}
+              >
+                {admin && ADMIN_ITEMS.map((it) => <DockLink key={it.href} it={it} path={path} />)}
+                <DockLink it={SETTINGS} path={path} />
+              </nav>
+              {admin && (
+                <div className="rail-gear panel mt-auto w-[76px] shrink-0 justify-center rounded-[30px] px-1 py-3.5">
+                  <SetupGear admin path={path} />
+                </div>
+              )}
             </div>
             {/* md+: the window never scrolls (overflow-clip: not even a focus or scrollIntoView moves it; owner, alpha.5
                 item 9), the rail stays put. 60rem (the Mac app's narrowest window, 960 px) and up: the side panel sits

@@ -320,7 +320,7 @@ describe("the drawer", () => {
     expect(push).toHaveBeenCalledWith("/hub");
   });
 
-  it("the rail: anyone has the Assistant with ⌘J; Hub and System only for an admin, as a group", async () => {
+  it("the rail: anyone has the Assistant with ⌘J; Hub and System only for an admin, in the Setup panel", async () => {
     serve();
     const r = render(<AppShell user={user}>x</AppShell>);
     const chat = await screen.findByRole("button", { name: "Assistant" });
@@ -330,7 +330,7 @@ describe("the drawer", () => {
     expect(screen.queryByRole("link", { name: "Plugins" })).toBeNull();
     r.unmount();
     render(<AppShell user={{ ...user, roles: ["user", "admin"] }}>x</AppShell>);
-    const group = await screen.findByRole("group", { name: "Admin only" });
+    const group = await screen.findByRole("navigation", { name: "Setup" });
     expect(within(group).getByRole("link", { name: "Hub" }).getAttribute("href")).toBe("/hub");
     expect(within(group).getByRole("link", { name: "System" }).getAttribute("href")).toBe(
       "/system",
