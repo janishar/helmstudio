@@ -22,13 +22,21 @@ def wav() -> bytes:
 def test_listen_answers_with_a_transcript_and_never_as_a_use(api, anon):
     new_session(api, "Contract listen")  # an upload has no session: the caller's newest
     take = upload(api, anon, wav(), "line.wav", content_type="audio/wav", duration_s=1.0)
-    run = ok(api.post(f"{STUDIO}/takes/{take['id']}/listen", json={"question": "Does it end abruptly?"}), 202)
+    run = ok(
+        api.post(f"{STUDIO}/takes/{take['id']}/listen", json={"question": "Does it end abruptly?"}),
+        202,
+    )
     assert run["workflow_id"] == "echo-listen" and run["status"] in ("queued", "running")
     done = wait_run(api, run["id"])
     assert done["status"] == "succeeded", done.get("error")
     assert done["answer"]["text"] == "ECHO-LISTEN: Does it end abruptly?" and done["outputs"] == []
     assert done["resolved"]["texts"] == {"listen.transcript": "ECHO-TRANSCRIPT"}
-    quiet = ok(api.post(f"{STUDIO}/takes/{take['id']}/listen", json={"question": "Music?", "transcript": False}), 202)
+    quiet = ok(
+        api.post(
+            f"{STUDIO}/takes/{take['id']}/listen", json={"question": "Music?", "transcript": False}
+        ),
+        202,
+    )
     assert "texts" not in (wait_run(api, quiet["id"]).get("resolved") or {})
     uses = ok(api.get(f"{STUDIO}/takes/{take['id']}/uses"))["uses"]
     assert all(u["workflow_id"] != "echo-listen" for u in uses), uses
@@ -41,7 +49,11 @@ def test_listen_hears_a_video_take(api):
     run = ok(api.post(f"{STUDIO}/takes/{take_id}/listen", json={"question": "Any sound?"}), 202)
     assert run["session_id"] == session["id"]  # the take's own session
     done = wait_run(api, run["id"])
-    assert done["status"] == "succeeded", (done.get("error"), ok(api.get(f"{STUDIO}/takes/{take_id}"))["kind"], made["outputs"])
+    assert done["status"] == "succeeded", (
+        done.get("error"),
+        ok(api.get(f"{STUDIO}/takes/{take_id}"))["kind"],
+        made["outputs"],
+    )
     assert done["answer"]["text"] == "ECHO-LISTEN: Any sound?"
 
 
