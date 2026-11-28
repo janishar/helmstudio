@@ -271,11 +271,8 @@ def read_header(path: Path, ignore=()) -> tuple[dict, dict]:
 
 
 def sha256_file(path: Path) -> str:
-    h = hashlib.sha256()
     with path.open("rb") as f:
-        while chunk := f.read(1 << 22):
-            h.update(chunk)
-    return h.hexdigest()
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
 # --- the host's library
