@@ -1260,6 +1260,8 @@ const WORDS: Record<string, string> = {
 };
 export const say = (code: string) =>
   WORDS[code] ?? `The edit was refused (${code.replace(/_/g, " ")}).`;
+/** What the first of a refused edit's problems says. */
+export const sayProblems = (p: Problem[]) => say(p[0][0]);
 
 /** A docked form's Generate started: the sequence with the slot's placeholder, or why not. */
 export type Started = { error: string } | { timeline: S<"Timeline">; clip: string };
