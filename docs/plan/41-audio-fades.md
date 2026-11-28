@@ -38,6 +38,9 @@ docs/mock/AudioFades.dc.html (frames 1 to 4), with the owner's answers:
 7. **Crossfade badge in sky** ("Sky"), amber when it falls back to a dip; picture dissolves stay violet.
 8. **Handles under the title row** ("Move them down"): on the waveform at the top corners, so the clip's name stays
    readable; the curve still starts at the clip's edge.
+9. **Drag the playhead by its line** (owner, 2026-11-28: "we should be able to move the time line via its vertical bar
+   as well, when screen grows its not feasible to scroll up all the time"): in Magic and on the Timeline the playhead
+   is grabbed anywhere along its height, not only on the ruler (board frame 5). Board updated with 5 to 9 the same day.
 
 ## Next (was)
 

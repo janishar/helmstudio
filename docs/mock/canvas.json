@@ -594,7 +594,7 @@
     },
     "AudioFades.dc.html": {
       "expand": "fill",
-      "h": 5340,
+      "h": 6800,
       "is_interactive": true,
       "title": "Timeline and Magic \u00b7 audio fades: fade handles, crossfade between music blocks (a dip for older takes), ducking music under voice, the right-click rows (plan 41)",
       "w": 1440,
