@@ -78,6 +78,7 @@ import { useScreenTools } from "@/components/assistant/tools";
 import { HistoryChip, ProposalBar, magicTools, useProposal } from "@/components/magic/assistant";
 import { useApiBoard, type Board, type Snapshot } from "@/components/magic/use-board";
 import "./magic.css";
+import { Range } from "@/components/range";
 
 const PANEL = "magic-side-panel";
 /** What runs: image, video and voice blocks that are not dialogues (phase D), board frames (phase E), music and sound
@@ -748,14 +749,12 @@ function Editor({ board }: { board: Board }) {
                     <path d="M5 12h14" />
                   </svg>
                 </button>
-                <input
-                  type="range"
+                <Range
                   className="zr"
                   aria-label="Zoom"
                   min={0}
                   max={100}
                   value={zPct}
-                  style={{ "--z": `${zPct}%` } as React.CSSProperties}
                   onChange={(e) => setPps(clampZ(lo * (MAX_PPS / lo) ** (+e.target.value / 100)))}
                 />
                 <button

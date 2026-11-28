@@ -39,6 +39,7 @@ import {
 } from "@/lib/voices";
 import { fields as fieldsOf, isVoice, type Field, type Raw } from "@/lib/workflow";
 import { TextArea } from "@/components/expand-text";
+import { Range } from "@/components/range";
 
 type Item = S<"LibraryItem">;
 type Take = S<"Take">;
@@ -1523,8 +1524,7 @@ function Cloner({
           <div className="grid grid-cols-[1fr_1fr_auto] items-end gap-3">
             <label className={fieldClass}>
               In · {tenths(a)}
-              <input
-                type="range"
+              <Range
                 min={0}
                 max={d}
                 step={0.1}
@@ -1535,8 +1535,7 @@ function Cloner({
             </label>
             <label className={fieldClass}>
               Out · {tenths(b)}
-              <input
-                type="range"
+              <Range
                 min={0}
                 max={d}
                 step={0.1}

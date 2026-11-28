@@ -7,6 +7,7 @@ import { Pause, Play, Volume2, VolumeX } from "lucide-react";
 import { clock } from "@/lib/format";
 import { ErrorNote } from "@/components/kit";
 import type { S } from "@/lib/api";
+import { Range } from "@/components/range";
 
 /** How many bars the stage's waveform draws. */
 const BARS = 100;
@@ -259,9 +260,9 @@ export function WavePlayer({
         <label htmlFor="scrub" className="sr-only">
           Scrub the take
         </label>
-        <input
+        <Range
           id="scrub"
-          type="range"
+
           min={0}
           max={len || 0}
           step={0.01}

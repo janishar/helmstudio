@@ -34,6 +34,7 @@ import {
   type Raw,
 } from "@/lib/workflow";
 import { TextArea } from "@/components/expand-text";
+import { Range } from "@/components/range";
 
 type Workflow = S<"Workflow">;
 type Timeline = S<"Timeline">;
@@ -370,8 +371,7 @@ export function LineComposer({
                 {f.param.label ?? f.param.name}
                 <span className="mono">{String(raw(f))}</span>
               </span>
-              <input
-                type="range"
+              <Range
                 min={f.param.min}
                 max={f.param.max}
                 step={f.param.step ?? (f.param.type === "int" ? 1 : 0.05)}

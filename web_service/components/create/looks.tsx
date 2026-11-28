@@ -32,6 +32,7 @@ import {
   type Tile as TileName,
 } from "@/lib/looks";
 import { TextArea } from "@/components/expand-text";
+import { Range } from "@/components/range";
 
 type Item = S<"LibraryItem">;
 type Group = S<"LibraryGroup">;
@@ -707,8 +708,7 @@ function Editor({
                 </button>
               </span>
             </div>
-            <input
-              type="range"
+            <Range
               min={0}
               max={2}
               step={0.05}

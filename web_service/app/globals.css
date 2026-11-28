@@ -28,6 +28,40 @@
   html {
     @apply font-sans;
   }
+  /* every slider one design (the shared Range component sets --z): a 4 px track filled in t2 to the value, a 12 px t1 handle (owner, 2026-11-28:
+     "can this slide ui get better everywhere") */
+  input[type="range"] {
+    height: 16px;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+  }
+  input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--t2) var(--z, 0%), var(--s5) var(--z, 0%));
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    margin-top: -4px;
+    border-radius: 50%;
+    background: var(--t1);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--t1);
+  }
   /* every scrollbar the theme's: a 0.25rem square accent bar on no track. Chromium and Safari (the Mac app too) take
      the ::-webkit-scrollbar rules, which they ignore once scrollbar-width / -color are set, so those are Firefox's only */
   ::-webkit-scrollbar {
