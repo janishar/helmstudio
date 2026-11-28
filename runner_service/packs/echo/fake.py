@@ -1,11 +1,9 @@
 """Stage functions of the echo pack (runtime fake): see model.yaml."""
 
 import array
-import importlib.util
 import json
 import math
 import re
-import sys
 import tempfile
 import textwrap
 import time
@@ -17,12 +15,7 @@ from PIL import Image, ImageDraw, ImageFont
 from core import ask as asks
 from core import media
 from core.graph import RunError, auto_frames
-from packs.echo import loader, mp4
-
-# the tiny model's components load with core.loaders_<runtime> (core/pack.py ModelRef.load, main.residency_for):
-# for runtime fake that is packs/echo/loader.py, unless core grows its own core/loaders_fake.py
-if importlib.util.find_spec("core.loaders_fake") is None:
-    sys.modules["core.loaders_fake"] = loader
+from packs.echo import mp4
 
 SIZE = 512
 

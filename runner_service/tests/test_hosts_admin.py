@@ -99,11 +99,10 @@ async def test_a_runner_without_weights_answers_an_unload():
 
 
 def test_the_fake_runner_gets_a_residency_manager_and_a_cpu_device():
-    """The echo pack's loader (runtime fake) offers what residency_for and the hosts key call (M6)."""
+    """The fake loader (core/loaders_fake.py, runtime fake) offers what residency_for and the hosts key call (M6)."""
     import types
 
     import main
-    import packs.echo.fake  # noqa: F401  registers core.loaders_fake
 
     res, dev, loader = main.residency_for([types.SimpleNamespace(runtime="fake", spec={"components": {"x": {}}})])
     assert dev == "cpu" and res.total_gb == loader.total_gb() > 0

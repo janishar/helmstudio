@@ -1,6 +1,6 @@
 """The core loader interface for runtime fake (what core/loaders_<runtime>.py provides): a component "loads" as
 the SHA-256 of its files, so the fake runner has resident entries to unload, pin and refuse deletes for, with no GPU
-and no framework. fake.py registers it as core.loaders_fake while core has none of its own."""
+and no framework. The echo pack's tiny model loads through it."""
 
 import gc
 import hashlib
