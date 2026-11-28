@@ -45,7 +45,7 @@ a{color:inherit;text-decoration:none}
 .rpanel{position:relative;width:76px;border-radius:30px;padding:14px 4px;display:flex;flex-direction:column;align-items:center;gap:14px;background:var(--s1);background-image:linear-gradient(180deg,rgba(255,255,255,.045),rgba(255,255,255,0) 46%);box-shadow:inset 0 1px 0 rgba(255,255,255,.07),0 24px 40px -18px color-mix(in srgb,var(--shd) 80%,transparent)}
 .dock{position:relative;width:58px;height:64px;flex:0 0 auto;border-radius:16px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:10px;font-weight:500;color:var(--t2)}
 .dock[aria-current],.dock[aria-expanded="true"]{color:var(--t1)}
-.tile{width:36px;height:36px;flex:0 0 36px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--tile);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb,var(--shd) 35%,transparent),0 8px 14px -4px color-mix(in srgb,var(--shd) 70%,transparent);filter:saturate(.55) brightness(.8)}
+.tile{width:32px;height:32px;flex:0 0 32px;border-radius:11px;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--tile);box-shadow:inset 0 1px 0 rgba(255,255,255,.5),inset 0 -4px 6px color-mix(in srgb,var(--shd) 35%,transparent),0 8px 14px -4px color-mix(in srgb,var(--shd) 70%,transparent);filter:saturate(.55) brightness(.8)}
 .tile.lit{filter:none;outline:2px solid rgba(255,255,255,.85);outline-offset:2px}
 .tile.brand{filter:none;color:var(--on1);background:linear-gradient(155deg,var(--a1),var(--a2));border-radius:12px 12px 12px 5px}
 .tile.sm{width:28px;height:28px;flex-basis:28px;border-radius:9px;filter:none}.tile.sm svg{width:16px;height:16px}
@@ -124,7 +124,7 @@ kbd{font:11px 'JetBrains Mono',monospace;color:var(--t2);margin-left:4px}
 .cpt .rail{flex-basis:64px;gap:10px}
 .cpt .rpanel{width:64px;border-radius:26px;padding:10px 4px;gap:10px}
 .cpt .dock{width:56px;height:48px;gap:4px;border-radius:14px;line-height:12px}
-.cpt .tile{width:30px;height:30px;flex:0 0 30px;border-radius:10px}.cpt .tile svg{width:17px;height:17px}
+.cpt .tile{width:30px;height:30px;flex:0 0 30px;border-radius:10px}.tile svg{width:18px;height:18px}.cpt .tile svg{width:17px;height:17px}
 .cpt .tile.brand{border-radius:10px 10px 10px 4px}.cpt .tile.brand svg{width:20px;height:20px}
 .cpt .sep{width:28px}
 /* the status tile (globals.css .rail-health), compact */
@@ -151,7 +151,7 @@ kbd{font:11px 'JetBrains Mono',monospace;color:var(--t2);margin-left:4px}
 <header class="top">
 <div style="display:flex;flex-direction:column;gap:8px;max-width:1000px">
 <h1 class="d" style="font-size:36px">helmstudio · Rail (proposed)</h1>
-<p style="margin:0;color:var(--t1b);font-size:15px;line-height:22px">The left rail has ten items and fills a 900 px window. Owner's picks, 2026-11-28: <b>option 2</b>, the Assistant leaves the rail (a floating button, or an icon in the page header: two variants to choose from), and <b>option 4</b>, work at the top and setup at the bottom, folding to one gear on a short window. Owner, 2026-11-28: build option 4 only; <b>Assistant stays in the rail for now</b>. Option 4 is built.</p>
+<p style="margin:0;color:var(--t1b);font-size:15px;line-height:22px">The left rail has ten items and fills a 900 px window. Owner's picks, 2026-11-28: <b>option 2</b>, the Assistant leaves the rail (a floating button, or an icon in the page header: two variants to choose from), and <b>option 4</b>, work at the top and setup at the bottom, folding to one gear on a short window. Owner, 2026-11-28: build option 4 only; tiles 10% smaller (32 px, 18 px glyphs); <b>Assistant stays in the rail for now</b>. Option 4 is built.</p>
 </div>
 <div style="display:flex;align-items:center;gap:8px;padding:6px 6px 6px 14px;border-radius:999px;background:var(--s1)">
 <label for="theme" style="font-size:12px;color:var(--t2)">Theme</label>
