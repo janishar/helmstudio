@@ -3352,7 +3352,7 @@ root, never `~/GenAI/models`.
 ### Model folders (API 1.78; alpha.6 item 7, plan 40, board docs/mock/ModelFolders.dc.html; normative)
 
 A host may keep its weights in several folders (the Mac's `~/GenAI/models` and an external drive's
-`/Volumes/ALI T9/models`), in a priority order the admin sets (`PUT /v1/studio/admin/hosts/{host}/folders`).
+`/Volumes/T9/models`), in a priority order the admin sets (`PUT /v1/studio/admin/hosts/{host}/folders`).
 
 - **The list** is host settings (Hosts admin): studio's `host_settings.folders` and `downloads` are the truth, written to
   the KV `host_settings` value as `folders: [path]` and `downloads: <index>` **only when set** (an older runner keeps its
@@ -3362,7 +3362,7 @@ A host may keep its weights in several folders (the Mac's `~/GenAI/models` and a
   **Its name**: `/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name. Messages never carry a path: a job
   names folders by id (cmd.model.job `folder`, `folders`).
 - **Connected** = the path is a directory now. A folder not connected is skipped and **never created** (an unplugged
-  drive's `/Volumes/ALI T9` would otherwise appear on the system disk); downloads and deletes never `mkdir` a root.
+  drive's `/Volumes/T9` would otherwise appear on the system disk); downloads and deletes never `mkdir` a root.
 - **The resolver** (per model folder, the `dir` of a variant, add-on or component): the first connected folder of the
   list holding a complete copy (files and no unfinished download marker), else the first connected one holding some
   of it (partial), else the downloads folder. So a variant in T9 still loads the parts it shares from the Mac folder.

@@ -64,8 +64,8 @@
     },
     {
       "id": "a81d0e5c22f9",
-      "name": "ALI T9",
-      "root": "/Volumes/ALI T9/models",
+      "name": "T9",
+      "root": "/Volumes/T9/models",
       "connected": false,
       "writable": false,
       "downloads": false

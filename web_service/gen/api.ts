@@ -7914,7 +7914,7 @@ export interface components {
             /**
              * @description `/Volumes/<X>/…` → `X`, else `Mac` on macOS, else the host name
              * @example Mac
-             * @example ALI T9
+             * @example T9
              */
             name: string;
             /** @description its path with the home directory written `~` */
@@ -8231,7 +8231,7 @@ export interface components {
             folders: {
                 /**
                  * @example ~/GenAI/models
-                 * @example /Volumes/ALI T9/models
+                 * @example /Volumes/T9/models
                  */
                 path: string;
             }[];

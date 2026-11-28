@@ -5,7 +5,7 @@ const { localPath, tilde } = require('../src/folders');
 
 test('localPath: ~/ and absolute paths resolve; anything else is refused', () => {
   assert.strictEqual(localPath('~/GenAI/models/X', '/Users/a'), '/Users/a/GenAI/models/X');
-  assert.strictEqual(localPath('/Volumes/ALI T9/models', '/Users/a'), '/Volumes/ALI T9/models');
+  assert.strictEqual(localPath('/Volumes/T9/models', '/Users/a'), '/Volumes/T9/models');
   for (const bad of ['models', '~other/x', '/a/../etc', '~/..', '', 'x'.repeat(401), '/a\nb', 3, null])
     assert.strictEqual(localPath(bad, '/Users/a'), null, String(bad));
 });

@@ -271,15 +271,15 @@ describe("model folders (API 1.78, ModelFolders board)", async () => {
       note: null,
     });
     expect(m.copyNote(two, host({ folder: MAC, copies: [copy(MAC), copy(T9)] })).note).toBe(
-      "also on ALI T9",
+      "also on T9",
     );
     const away = host({ folder: MAC, copies: [copy(MAC), copy(T9, "unplugged")] });
-    expect(m.copyNote(two, away).note).toBe("ALI T9 not connected");
+    expect(m.copyNote(two, away).note).toBe("T9 not connected");
     // T9 first in the list and unplugged: it fell back to Mac
-    expect(m.copyNote(ordered(T9), away).note).toBe("ALI T9 not connected · using Mac");
+    expect(m.copyNote(ordered(T9), away).note).toBe("T9 not connected · using Mac");
     const only = host({ state: "unplugged", folder: null, copies: [copy(T9, "unplugged")] });
-    expect(m.copyNote(two, only)).toEqual({ tag: null, note: "ALI T9 not connected" });
-    expect(m.hostText(two, only)).toBe("ALI T9 not connected");
+    expect(m.copyNote(two, only)).toEqual({ tag: null, note: "T9 not connected" });
+    expect(m.hostText(two, only)).toBe("T9 not connected");
     expect(m.hostText(two, host({ folder: MAC, copies: [copy(MAC)] }))).toBe("present · Mac");
   });
 
@@ -309,7 +309,7 @@ describe("model folders (API 1.78, ModelFolders board)", async () => {
 
   it("folderOf: the folder its runs load from", () => {
     const v = { dir: "X", hosts: [host({ folder: T9 })] };
-    expect(m.folderOf(two, v, "mac")).toBe("/Volumes/ALI T9/models/X");
+    expect(m.folderOf(two, v, "mac")).toBe("/Volumes/T9/models/X");
     expect(m.folderOf(two, { dir: "X" }, "mac")).toBe("~/GenAI/models/X");
   });
 
@@ -318,7 +318,7 @@ describe("model folders (API 1.78, ModelFolders board)", async () => {
     expect(m.pathProblem("/a/../b", [])).toBe("paths must be absolute or start with ~/");
     expect(m.pathProblem("~/m/", ["~/m"])).toBe("~/m/ is listed twice");
     expect(m.pathProblem("/Volumes/T9/models", ["~/m"])).toBeNull();
-    expect(m.pathName("/Volumes/ALI T9/models", "mac")).toBe("ALI T9");
+    expect(m.pathName("/Volumes/T9/models", "mac")).toBe("T9");
     expect(m.pathName("/srv/models", "gpu1")).toBe("gpu1");
     expect([43e9, 1.8e12, 2e12, 640e6].map(m.diskText)).toEqual([
       "43 GB",

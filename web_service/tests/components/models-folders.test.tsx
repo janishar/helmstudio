@@ -140,7 +140,7 @@ describe("Model folders: the strip and the chips (frames 1, 3)", () => {
     const s = await strip();
     expect(s.textContent).toContain("Folders · mac");
     expect(s.textContent).toMatch(/1Mac~\/GenAI\/models43 GB freeDownloads/);
-    expect(s.textContent).toMatch(/2T9\/Volumes\/ALI T9\/models205 GB free/);
+    expect(s.textContent).toMatch(/2T9\/Volumes\/T9\/models205 GB free/);
     expect(screen.queryByRole("group", { name: "Folders on gpu1" })).toBeNull();
     const turbo = card("Turbo");
     expect(turbo.textContent).toContain("macMacalso on T9");
@@ -162,7 +162,7 @@ describe("Model folders: the strip and the chips (frames 1, 3)", () => {
     await waitFor(() => expect(side.textContent).toContain("present · Mac"));
     expect(within(side).getByRole("heading", { name: /^Copies on mac/ })).toBeTruthy();
     expect(side.textContent).toMatch(/1 · Macused~\/GenAI\/models\/Qwen-Image-2.1-Turbo/);
-    expect(side.textContent).toMatch(/2 · T9spare\/Volumes\/ALI T9\/models\/Qwen-Image-2.1-Turbo/);
+    expect(side.textContent).toMatch(/2 · T9spare\/Volumes\/T9\/models\/Qwen-Image-2.1-Turbo/);
   });
 });
 
@@ -202,7 +202,7 @@ describe("Model folders: Edit folders (frame 2) and the row menu (5a)", () => {
       params: { path: { host: "mac" } },
       body: {
         folders: [
-          { path: "/Volumes/ALI T9/models" },
+          { path: "/Volumes/T9/models" },
           { path: "~/GenAI/models" },
           { path: "/Volumes/Studio/models" },
         ],
@@ -260,11 +260,11 @@ describe("Model folders: Edit folders (frame 2) and the row menu (5a)", () => {
   it("the strip chip's Use for downloads saves at once", async () => {
     const { puts } = start(data());
     const s = await strip();
-    fireEvent.contextMenu(within(s).getByTitle("/Volumes/ALI T9/models"), { button: 2 });
+    fireEvent.contextMenu(within(s).getByTitle("/Volumes/T9/models"), { button: 2 });
     act(() => fireEvent.click(item("Use for downloads")));
     await waitFor(() => expect(puts).toHaveLength(1));
     expect(puts[0].body).toEqual({
-      folders: [{ path: "~/GenAI/models" }, { path: "/Volumes/ALI T9/models" }],
+      folders: [{ path: "~/GenAI/models" }, { path: "/Volumes/T9/models" }],
       downloads: 1,
     });
   });
@@ -284,7 +284,7 @@ describe("Model folders: Edit folders (frame 2) and the row menu (5a)", () => {
     expect(await within(dlg).findByRole("listitem", { name: "Studio" })).toBeTruthy();
     fireEvent.contextMenu(within(dlg).getByRole("listitem", { name: "T9" }), { button: 2 });
     act(() => fireEvent.click(item("Open in Finder")));
-    expect(reveal).toHaveBeenCalledWith("/Volumes/ALI T9/models");
+    expect(reveal).toHaveBeenCalledWith("/Volumes/T9/models");
   });
 });
 
@@ -307,7 +307,7 @@ describe("Model folders: Download's Folder (frame 4) and Delete's copy (frame 6)
     expect(pick.textContent).toMatch(/Mac~\/GenAI\/modelsDownloads43 GB free/);
     expect(dlg.textContent).toContain("~/GenAI/models/Qwen-Image-2.1");
     fireEvent.click(radios[1]);
-    expect(dlg.textContent).toContain("/Volumes/ALI T9/models/Qwen-Image-2.1");
+    expect(dlg.textContent).toContain("/Volumes/T9/models/Qwen-Image-2.1");
     fireEvent.click(within(dlg).getByRole("button", { name: "Download" }));
     await waitFor(() => expect(r.posts).toHaveLength(1));
     expect(r.posts[0].body).toMatchObject({ host: "mac", variant: "base", folder: T9 });
@@ -343,7 +343,7 @@ describe("Model folders: Download's Folder (frame 4) and Delete's copy (frame 6)
     });
     const pick = within(dlg).getByRole("radiogroup", { name: "Copy" });
     expect(pick.textContent).toMatch(/Mac~\/GenAI\/modelsused18.6 GB back · 62 GB free/);
-    expect(pick.textContent).toMatch(/T9\/Volumes\/ALI T9\/models40.9 GB back · 246 GB free/);
+    expect(pick.textContent).toMatch(/T9\/Volumes\/T9\/models40.9 GB back · 246 GB free/);
     expect(pick.textContent).toContain("Both59.5 GB back");
     expect(dlg.textContent).toContain("After this, mac loads Turbo from T9, the other copy.");
     expect(within(dlg).getByRole("button", { name: "Delete Mac copy" })).toBeTruthy();

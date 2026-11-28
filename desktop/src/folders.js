@@ -3,7 +3,7 @@
 // runner writes it).
 const path = require('node:path');
 
-/** A path the page sent ("~/GenAI/models/X", "/Volumes/ALI T9/models") → absolute, or null: absolute or ~/ only, at most
+/** A path the page sent ("~/GenAI/models/X", "/Volumes/T9/models") → absolute, or null: absolute or ~/ only, at most
  * 400 characters (the contract's limit), no `..`, no control characters. */
 function localPath(p, home) {
   if (typeof p !== 'string' || !p || p.length > 400 || /[\0-\x1f]/.test(p)) return null;

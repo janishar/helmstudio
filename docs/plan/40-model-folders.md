@@ -57,7 +57,7 @@ which copy.
 #### Contract (API 1.78.0; contracts first, `make contracts-check`, then `make gen` per service)
 
 - A folder's **id**: the first 12 hex of the SHA-256 of its path as stored (studio and runner compute it alike;
-  nothing to store). Its **name**: `/Volumes/<X>/…` → `X` (`ALI T9` shown as the volume name), else `Mac` on macOS,
+  nothing to store). Its **name**: `/Volumes/<X>/…` → `X` (`T9` shown as the volume name), else `Mac` on macOS,
   else the host name; the runner reports it.
 - `openapi.yaml`:
   - `PUT /v1/studio/admin/hosts/{host}/folders` (admin, like `/pins`): body `ModelFoldersPut {folders: [{path}]
@@ -96,7 +96,7 @@ which copy.
 - One resolver in `core/pack.py`: `models_root()` stays (= the downloads root, for writes), and `place(rel) -> Path`
   returns `<root>/<rel>` for the **first connected root that has a complete copy** of that folder (weights present,
   no download marker), else the downloads root. A root is connected when its path is an existing directory; a
-  missing one is skipped, **never created** (`/Volumes/ALI T9` would otherwise appear on the system disk). Resolution
+  missing one is skipped, **never created** (`/Volumes/T9` would otherwise appear on the system disk). Resolution
   is per model folder (`dir`), so a variant in T9 still loads parts it shares from the owner's folder on Mac.
 - Every read site above goes through `place`; downloads go to the chosen root (`folder` id, else downloads, else
   the next connected) and skip shared components already present in any connected root.
@@ -166,7 +166,7 @@ P2 and P3 run in parallel after P1; P4 needs P3; P5 is independent after P1.
 
 - Creating a root by accident on the system disk when a drive is unplugged: the resolver and download never
   `mkdir` a root, only folders under a connected one (a unit test).
-- The owner's live links into T9: tests never touch `~/GenAI/models` or `/Volumes/ALI T9`; after the build the
+- The owner's live links into T9: tests never touch `~/GenAI/models` or `/Volumes/T9`; after the build the
   owner adds T9 as a folder, then removes the links by hand.
 - A runner in a container sees only mounted paths: a folder not mounted shows not connected (NVIDIA hosts run
   native runners, so this is the Linux compose case only); noted in the guide.

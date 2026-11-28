@@ -17,12 +17,12 @@ import (
 
 var (
 	macID = studio.FolderID("~/GenAI/models")
-	t9ID  = studio.FolderID("/Volumes/ALI T9/models")
+	t9ID  = studio.FolderID("/Volumes/T9/models")
 )
 
 // macDisks is mac's models_disks: Mac (the downloads folder), then T9.
 func macDisks(t9Connected bool) map[string]any {
-	t9 := map[string]any{"id": t9ID, "name": "ALI T9", "root": "/Volumes/ALI T9/models", "connected": t9Connected,
+	t9 := map[string]any{"id": t9ID, "name": "T9", "root": "/Volumes/T9/models", "connected": t9Connected,
 		"writable": t9Connected, "downloads": false}
 	if t9Connected {
 		t9["free_bytes"], t9["total_bytes"] = 10, 20
@@ -82,7 +82,7 @@ func TestHostFolders(t *testing.T) {
 				Connected bool   `json:"connected"`
 				Writable  bool   `json:"writable"`
 				Drive     bool   `json:"drive"`
-			}{Path: p, Connected: p == "~/GenAI/models" || p == "/ro", Writable: p == "~/GenAI/models", Drive: p == "/Volumes/ALI T9/models"}
+			}{Path: p, Connected: p == "~/GenAI/models" || p == "/ro", Writable: p == "~/GenAI/models", Drive: p == "/Volumes/T9/models"}
 			out.Folders = append(out.Folders, f)
 		}
 		return out, nil
@@ -97,7 +97,7 @@ func TestHostFolders(t *testing.T) {
 		{body(0, "~/GenAI/models", "~/GenAI/models/"), "~/GenAI/models/ is listed twice"},
 		{body(2, "~/GenAI/models"), "downloads must be an index of folders"},
 		{body(0, "/nowhere"), "/nowhere is not a folder on mac"},
-		{body(1, "~/GenAI/models", "/Volumes/ALI T9/models"), "downloads must be a connected folder"},
+		{body(1, "~/GenAI/models", "/Volumes/T9/models"), "downloads must be a connected folder"},
 		{body(1, "~/GenAI/models", "/ro"), "/ro is not writable on mac"},
 	} {
 		if got := e.call(admin, "PUT", folders, c.body, 422); got["detail"] != c.detail {
@@ -109,13 +109,13 @@ func TestHostFolders(t *testing.T) {
 	if _, has := kv["folders"]; has || got["folders"] != nil || got["downloads"] != nil {
 		t.Fatal(got, kv)
 	}
-	got = e.call(admin, "PUT", folders, body(0, "~/GenAI/models", "/Volumes/ALI T9/models"), 200)
+	got = e.call(admin, "PUT", folders, body(0, "~/GenAI/models", "/Volumes/T9/models"), 200)
 	list := got["folders"].([]any)
 	if got["version"] != 2.0 || len(list) != 2 || list[1].(map[string]any)["id"] != t9ID || got["downloads"] != macID ||
-		got["after_run"] != "keep_warm" || !slices.Equal(asked, []string{"~/GenAI/models", "/Volumes/ALI T9/models"}) {
+		got["after_run"] != "keep_warm" || !slices.Equal(asked, []string{"~/GenAI/models", "/Volumes/T9/models"}) {
 		t.Fatal(got, asked)
 	}
-	if !slices.Equal(kv["folders"].([]any), []any{"~/GenAI/models", "/Volumes/ALI T9/models"}) || kv["downloads"] != 0.0 {
+	if !slices.Equal(kv["folders"].([]any), []any{"~/GenAI/models", "/Volumes/T9/models"}) || kv["downloads"] != 0.0 {
 		t.Fatal(kv)
 	}
 	// the settings PUT keeps the list
@@ -133,7 +133,7 @@ func TestModelFolderJobs(t *testing.T) {
 	list := e.call(admin, "GET", "/v1/studio/models", nil, 200)
 	dump(t, "ModelList", list)
 	mac := list["hosts"].([]any)[1].(map[string]any)
-	if f := mac["folders"].([]any); len(f) != 2 || f[1].(map[string]any)["name"] != "ALI T9" || f[1].(map[string]any)["free_bytes"] != 10.0 {
+	if f := mac["folders"].([]any); len(f) != 2 || f[1].(map[string]any)["name"] != "T9" || f[1].(map[string]any)["free_bytes"] != 10.0 {
 		t.Fatal(mac)
 	}
 	if fake := list["hosts"].([]any)[0].(map[string]any); len(fake["folders"].([]any)) != 0 {
@@ -190,11 +190,11 @@ func TestUnpluggedFolder(t *testing.T) {
 	e := setup(t)
 	e.foldersSetup(false)
 	if got := e.call(admin, "POST", "/v1/studio/admin/models/qwen-image-2.1/download", map[string]any{"host": "mac", "variant": "turbo",
-		"accept_licence": true, "folder": t9ID}, 409); got["detail"] != "ALI T9 is not connected on mac" {
+		"accept_licence": true, "folder": t9ID}, 409); got["detail"] != "T9 is not connected on mac" {
 		t.Fatal(got)
 	}
 	del := "/v1/studio/admin/models/qwen-image-2.1?host=mac&variant=base"
-	if got := e.call(admin, "DELETE", del+"&folder="+t9ID, nil, 409); got["detail"] != "ALI T9 is not connected on mac" {
+	if got := e.call(admin, "DELETE", del+"&folder="+t9ID, nil, 409); got["detail"] != "T9 is not connected on mac" {
 		t.Fatal(got)
 	}
 	var value map[string]any
@@ -209,7 +209,7 @@ func TestUnpluggedFolder(t *testing.T) {
 	if got := e.variantOn(userA, "qwen-image-2.1", "base", "mac"); got["state"] != "unplugged" || got["folder"] != nil {
 		t.Fatal(got)
 	}
-	if got := e.call(admin, "DELETE", del, nil, 409); got["detail"] != "ALI T9 is not connected on mac" {
+	if got := e.call(admin, "DELETE", del, nil, 409); got["detail"] != "T9 is not connected on mac" {
 		t.Fatal(got)
 	}
 }

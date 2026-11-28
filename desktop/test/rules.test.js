@@ -103,7 +103,7 @@ test('2c ports: a picked port reaches compose, the studio address, NATS, S3 and 
 test('2d: a models folder on a volume that is not mounted', () => {
   const mounted = new Set(['/Volumes/T9']);
   const exists = (p) => mounted.has(p);
-  assert.equal(r.missingVolume('/Volumes/ALI T9/models', exists), 'ALI T9');
+  assert.equal(r.missingVolume('/Volumes/Archive/models', exists), 'Archive');
   assert.equal(r.missingVolume('/Volumes/T9/helmstudio-models', exists), null);
   assert.equal(r.missingVolume('/Users/me/helmstudio-models', exists), null);
   assert.equal(r.missingVolume(undefined, exists), null);
