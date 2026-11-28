@@ -5,11 +5,21 @@ from the sessions list) that becomes a take on its block with the status done, a
 out of date, the run history, and user B 404 on another user's board's run and plan. Every JSON answer is checked
 against openapi.yaml with CONTRACT_SCHEMAS=1. No GPU."""
 
+import pytest
+from conftest import headers, make_client
 from helpers import STUDIO, ok, wait_for
 from test_magic import BOARDS
 
 KINDS = f"{STUDIO}/magic/kinds"
 SETTINGS = f"{STUDIO}/magic/settings"
+
+
+@pytest.fixture(scope="module")
+def ur(new_user):
+    """User R: no runs of echo-video before this module's, so a plan's rate is the pack's (user A's earlier runs
+    in the suite, test_listen's for one, would make it "yours")."""
+    with make_client(headers(new_user("R")["access_token"])) as c:
+        yield c
 
 
 def shot(bid: str, at: int, prompt: str) -> dict:
@@ -81,42 +91,40 @@ def test_kinds_and_settings(api):
     ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 5}))
 
 
-def test_a_block_runs_into_a_take(api, api_b):
-    b = ok(api.post(BOARDS, json={"name": "Runs", "doc": run_doc()}), 201)
+def test_a_block_runs_into_a_take(ur, api_b):
+    b = ok(ur.post(BOARDS, json={"name": "Runs", "doc": run_doc()}), 201)
     base = f"{BOARDS}/{b['id']}"
     assert b["session_id"] is None and b["status"]["s1"] == {"status": "draft"}
 
-    plan = ok(api.post(f"{base}/plan", json={"stale": True}))
+    plan = ok(ur.post(f"{base}/plan", json={"stale": True}))
     assert plan["order"] == ["s1", "m1"] and plan["limit_minutes"] == 5
     s1, m1 = plan["blocks"]
     assert s1["source"] == "pack" and s1["seconds"] == 0.5 and s1["host"]
     assert m1["reason"] == "its model ace-step-music is on no host"
     assert plan["ask"] is False and plan["ask_text"] == "1 shot, about 1 s"
 
-    r = api.post(f"{base}/run", json={"revision": 1, "blocks": ["m1"]})
+    r = ur.post(f"{base}/run", json={"revision": 1, "blocks": ["m1"]})
     assert (
         r.status_code == 422
         and r.json()["detail"] == "Cue 1: its model ace-step-music is on no host"
     )
-    assert api.post(f"{base}/run", json={"revision": 9, "blocks": ["s1"]}).status_code == 409
+    assert ur.post(f"{base}/run", json={"revision": 9, "blocks": ["s1"]}).status_code == 409
     for path, body in (("run", {"revision": 1, "stale": True}), ("plan", {"stale": True})):
         r = api_b.post(f"{base}/{path}", json=body)
         assert r.status_code == 404 and r.json() == {"detail": "not found"}
 
-    started = ok(api.post(f"{base}/run", json={"revision": 1, "lane": "shots"}), 202)
+    started = ok(ur.post(f"{base}/run", json={"revision": 1, "lane": "shots"}), 202)
     assert [s["block"] for s in started["started"]] == ["s1"] and started["skipped"] == []
     session = started["board"]["session_id"]
-    assert session and all(
-        s["id"] != session for s in ok(api.get(f"{STUDIO}/sessions"))["sessions"]
-    )
+    assert session and all(s["id"] != session for s in ok(ur.get(f"{STUDIO}/sessions"))["sessions"])
     run_id = started["started"][0]["run_id"]
-    run = ok(api.get(f"{STUDIO}/runs/{run_id}"))
+    run = ok(ur.get(f"{STUDIO}/runs/{run_id}"))
     assert run["workflow_id"] == "echo-video" and run["session_id"] == session
     assert run["inputs"]["prompt.text"] == "a fox in the rain"
     assert (run["inputs"]["canvas.width"], run["inputs"]["canvas.height"]) == (1024, 576)
 
     def done():
-        board = ok(api.get(base))
+        board = ok(ur.get(base))
         return board if board["status"]["s1"]["status"] == "done" else None
 
     board = wait_for(done, what="the shot's take")
@@ -129,7 +137,7 @@ def test_a_block_runs_into_a_take(api, api_b):
     # a request changed since: out of date, the take kept
     req = dict(board["doc"]["blocks"][0]["request"], prompt="a fox in heavier rain")
     edited = ok(
-        api.post(
+        ur.post(
             f"{base}/edits",
             json={
                 "base_revision": board["revision"],
@@ -139,7 +147,7 @@ def test_a_block_runs_into_a_take(api, api_b):
     )
     assert edited["board"]["status"]["s1"] == {"status": "out_of_date"}
     assert edited["board"]["runs"][0]["current"] is False
-    agent = ok(api.get(f"{base}?view=agent"))
+    agent = ok(ur.get(f"{base}?view=agent"))
     assert {x["id"]: x["status"] for x in agent["blocks"]} == {"s1": "out_of_date", "m1": "draft"}
 
 
