@@ -8,6 +8,7 @@ import (
 	"errors"
 	"math"
 	"net/http"
+	"reflect"
 	"slices"
 	"sync"
 	"time"
@@ -91,13 +92,23 @@ func (s *Service) tx(ctx context.Context, caller common.Caller, fn func(tx pgx.T
 // collect runs query and scans every row into T by position.
 func collect[T any](ctx context.Context, tx pgx.Tx, query string, args ...any) ([]T, error) {
 	rows, _ := tx.Query(ctx, query, args...)
-	return pgx.CollectRows(rows, pgx.RowToStructByPos[T])
+	return pgx.CollectRows(rows, rowTo[T]())
+}
+
+// rowTo scans a row into a struct by position, or a one-column row into a plain value (string, int, …):
+// RowToStructByPos panics on a value that is no struct.
+func rowTo[T any]() pgx.RowToFunc[T] {
+	var zero T
+	if reflect.TypeOf(&zero).Elem().Kind() == reflect.Struct {
+		return pgx.RowToStructByPos[T]
+	}
+	return pgx.RowTo[T]
 }
 
 // one runs query and scans its row into T; no row is errNotFound.
 func one[T any](ctx context.Context, tx pgx.Tx, query string, args ...any) (T, error) {
 	rows, _ := tx.Query(ctx, query, args...)
-	row, err := pgx.CollectExactlyOneRow(rows, pgx.RowToStructByPos[T])
+	row, err := pgx.CollectExactlyOneRow(rows, rowTo[T]())
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = errNotFound
 	}
