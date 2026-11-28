@@ -162,7 +162,7 @@ def consumer(js: FakeJS, **kw) -> Consumer:
     )
 
 
-README = Path(__file__).resolve().parents[2] / "packs" / "README.md"
+README = Path(__file__).resolve().parents[1] / "packs" / "README.md"
 
 
 def readme_model_yaml() -> dict:

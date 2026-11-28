@@ -18,8 +18,8 @@ helmstudio/
   studio_service/     Go: api/<feature>/{controller,service,dto,model,message} · messaging · dispatcher · migrations
   files_service/      Go
   pipelines_service/  Python: LangGraph graphs, consumers, migrations
-  runner_service/     Python: core (graph, schema, ctx, residency, loaders, lora) · envs/mlx · envs/torch
-  packs/              qwen_image/ · ltx/ · llm/   — model.yaml · torch.py / mlx.py · workflows/ · looks/ · GOTCHAS.md
+  runner_service/     Python: core (graph, schema, ctx, residency, loaders, lora) · envs/mlx · packs
+    packs/            README.md (the pack API) · qwen_image/ · ltx/ · llm/ … — model.yaml · torch.py / mlx.py · workflows/ · looks/ · GOTCHAS.md
   web_service/        Next.js app, BFF, generated API types
   cli/                Go: `helm` (login, run, import), an API client of studio_service
   deploy/             compose · postgres · nats · secrets · runner launch agents

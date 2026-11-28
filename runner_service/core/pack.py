@@ -1,5 +1,5 @@
 """Packs: a folder runner_service/packs/<name>/ with model.yaml, one python module per runtime (`fake.py`,
-`torch.py`) and workflows/*.json. The pack API is documented in packs/README.md (repo root); this module turns a
+`torch.py`) and workflows/*.json. The pack API is documented in packs/README.md (in runner_service); this module turns a
 pack into registry values (node schemas, workflows, the models entry) and node implementations.
 
 The core's own nodes (prompt, seed, canvas, image, output) are written in the same stage grammar in core/nodes.yaml."""
