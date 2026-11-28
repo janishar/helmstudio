@@ -746,6 +746,13 @@ def magic_done(c: dict, reply: dict) -> dict:
     return {"status": "done", "result": r, "line": line | {"status": status, "text": _short(text)}}
 
 
+def _provider(d: dict) -> tuple[dict, dict | None]:
+    """The assistant's model source and its provider settings (None when not set, or of another kind)."""
+    src = d["settings"]["source"]
+    p = d["settings"]["providers"].get(src["provider"])
+    return src, p if p and p["kind"] == src["kind"] else None
+
+
 class Assistant:
     """The graph and its server side: `tool` is studio.tools, `search` the web search call."""
 
@@ -820,9 +827,8 @@ class Assistant:
         caps, d = dict(s["caps"]), s["data"]
         if caps["model_calls"] >= MODEL_CALLS:
             return _end("cap_message", f"Stopped at {MODEL_CALLS} model calls for one message.")
-        src = d["settings"]["source"]
-        p = d["settings"]["providers"].get(src["provider"])
-        if not p or p["kind"] != src["kind"]:
+        src, p = _provider(d)
+        if not p:
             return _end("off", "The assistant's model provider is not set.")
         frozen = s.get("memory")
         at = await mem.changed(self.store, s["owner_id"])
@@ -877,20 +883,14 @@ class Assistant:
         text = _block("Your summary so far", s["digest"]) if s.get("digest") else ""
         req = {"model": src["model"], "system": FOLD_SYSTEM, "max_tokens": FOLD_TOKENS,
                "prompt": (text + "".join(map(_render, old)))[-room:]}  # fmt: skip
-        key = f"{s['thread_id']}:{s['msg']}:f{s['caps']['model_calls']}"
-        if err := await self.spend(s["owner_id"], key, "model", remote.bound(req), s["data"]["settings"]["limits"]):
-            return err
-        try:
-            got, _ = await self._call(s, providers.chat_retried(src["provider"], p, req))
-        except providers.CallError as e:
-            log.warning("assistant %s: no fold: %s", s["thread_id"], e)
+        got, why = await self._ask_model(s, f"{s['thread_id']}:{s['msg']}:f{s['caps']['model_calls']}", src, p, req)
+        if isinstance(why, dict):
+            return why
+        if isinstance(why, providers.CallError):
+            log.warning("assistant %s: no fold: %s", s["thread_id"], why)
             return {}
-        except asyncio.CancelledError:
-            if asyncio.current_task().cancelling():  # shutdown, not a Stop
-                raise
-            await self._spent(key, providers.estimate(FOLD_SYSTEM + req["prompt"]))
+        if why:
             return {"to": "steer"}
-        await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
         digest = got["text"].strip()[:DIGEST_MAX]
         if not digest:
             return {}
@@ -908,6 +908,26 @@ class Assistant:
         finally:
             if self.calls.get(tid, (0, "", None))[2] is call:
                 del self.calls[tid]
+
+    async def _ask_model(self, s: State, key: str, src: dict, p: dict, req: dict, pics: int = 0):
+        """One model call, its spend (`pics` tokens of pictures on top) counted first: (the reply, None), or (None,
+        why): the spend's refusal (a dict), a CallError, or "stop" (a Stop cancelled it; what was sent stays spent).
+        A shutdown raises."""
+        bound = remote.bound(req) + pics
+        if err := await self.spend(s["owner_id"], key, "model", bound, s["data"]["settings"]["limits"]):
+            return None, err
+        try:
+            got, _ = await self._call(s, providers.chat_retried(src["provider"], p, req))
+        except providers.CallError as e:
+            return None, e
+        except asyncio.CancelledError:
+            if asyncio.current_task().cancelling():  # the node itself is cancelled (shutdown), not a Stop
+                raise
+            # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
+            await self._spent(key, pics + providers.estimate(req["system"] + req["prompt"]))
+            return None, "stop"
+        await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
+        return got, None
 
     async def ask(self, s: State, caps, src, p, off, system, tools, room) -> State:
         """One model call and its answer checked."""
@@ -927,23 +947,15 @@ class Assistant:
                 caps["tool_calls"] += 1
         read = req["prompt"] + "\n" + "\n".join(prefs or [])  # what it was given, not the rules' [[take:<id>]]
         key = f"{s['thread_id']}:{s['msg']}:m{caps['model_calls']}"
-        pic_tokens = PICTURE_TOKENS * len(req.get("images") or [])  # the pictures count on Stop too
-        bound = remote.bound(req) + pic_tokens
-        if err := await self.spend(s["owner_id"], key, "model", bound, d["settings"]["limits"]):
-            return err | {"caps": caps}
-        caps["model_calls"] += 1
-        try:
-            got, _ = await self._call(s, providers.chat_retried(src["provider"], p, req))
-        except providers.CallError as e:
-            return _end("off" if e.kind == "off" else "provider", str(e), caps=caps)
-        except asyncio.CancelledError:
-            # the node itself is cancelled (shutdown), not a Stop
-            if asyncio.current_task().cancelling():
-                raise
-            # Stop (API 1.62): the call is gone, no answer kept; what was sent stays spent
-            await self._spent(key, pic_tokens + providers.estimate(system + req["prompt"]))
+        pics = PICTURE_TOKENS * len(req.get("images") or [])  # the pictures count on Stop too
+        got, why = await self._ask_model(s, key, src, p, req, pics)
+        if isinstance(why, dict):
+            return why | {"caps": caps}
+        caps["model_calls"] += 1  # counted once its spend is
+        if isinstance(why, providers.CallError):
+            return _end("off" if why.kind == "off" else "provider", str(why), caps=caps)
+        if why:
             return {"caps": caps, "to": "steer"}  # steer sees the Stop and ends the turn
-        await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
         calls, err = check(got, off, s)
         if err:
             if s.get("reask"):
@@ -971,6 +983,17 @@ class Assistant:
         q, chat, caps, lines = list(s["queue"]), list(s["chat"]), dict(s["caps"]), list(s["lines"])
         up: State = {"resumed": None, "pending": None}
         res, pend = s.get("resumed"), s.get("pending")
+
+        def took(c: dict, got: dict) -> None:
+            chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
+            lines.append(got["line"])
+
+        def park(queue: list, pending: dict) -> State:
+            return self._park(
+                s,
+                up | {"queue": queue, "chat": chat[-CHAT_KEEP:], "caps": caps, "lines": lines, "pending": pending},
+            )
+
         if res is not None and pend:
             inp = res.get("input") or {}
             if res.get("end"):  # a new message came first: what was pending never ran
@@ -994,8 +1017,7 @@ class Assistant:
                     if "end" in got:
                         chat.append(_entry(c, "failed", error=got["end"]["error"]["text"]))
                         return got["end"] | {"chat": chat[-CHAT_KEEP:], "queue": []} | up
-                    chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
-                    lines.append(got["line"])
+                    took(c, got)
                     _sees(up, s, got)
             else:
                 by = {r["id"]: r for r in inp.get("results") or []}
@@ -1030,13 +1052,11 @@ class Assistant:
                 acts = [{"id": x["id"], "name": x["name"], "args": x["args"]} for x in q[:n]]
                 acts, caps = await self.auto(s, acts, up.get("screen") or s.get("screen"), caps)
                 pending = {"actions": acts, "cards": [], "call": None}
-                return self._park(s, up | {"queue": q[n:], "chat": chat[-CHAT_KEEP:], "caps": caps,
-                                           "lines": lines, "pending": pending})  # fmt: skip
+                return park(q[n:], pending)
             q.pop(0)
             if c["kind"] == "plugin" and not self._asks(s, c):  # no risk flag (or gone): runs at once
                 got = await self.plugin_run(s, c)
-                chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
-                lines.append(got["line"])
+                took(c, got)
                 _sees(up, s, got)
                 continue
             if c["name"] == "look_at" and s["data"]["settings"].get("sees"):
@@ -1052,27 +1072,23 @@ class Assistant:
                 if "end" in got:
                     chat.append(_entry(c, "failed", error=got["end"]["error"]["text"]))
                     return got["end"] | {"chat": chat[-CHAT_KEEP:], "queue": []} | up
-                chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
-                lines.append(got["line"])
+                took(c, got)
                 continue
             if c["name"] in MAGIC_CARDS:
                 got = await self.magic_ask(s, c, caps)
                 if "card" not in got:
-                    chat.append(_entry(c, got["status"], got.get("result"), got.get("error")))
-                    lines.append(got["line"])
+                    took(c, got)
                     continue
                 lines += got["lines"]
                 if got.get("ran"):  # what started without asking: the model hears it whatever the answer
                     c = c | {"ran": got["ran"]}
                 pending = {"actions": [], "cards": [got["card"]], "call": c}
-                return self._park(s, up | {"queue": q, "chat": chat[-CHAT_KEEP:], "caps": caps,
-                                           "lines": lines, "pending": pending})  # fmt: skip
+                return park(q, pending)
             if c["name"] in CARDS or c["kind"] == "plugin":
                 card, error = await self.card_for(s, c)
                 if card:
                     pending = {"actions": [], "cards": [card], "call": c}
-                    return self._park(s, up | {"queue": q, "chat": chat[-CHAT_KEEP:], "caps": caps,
-                                               "lines": lines, "pending": pending})  # fmt: skip
+                    return park(q, pending)
                 chat.append(_entry(c, "failed", error=error))
                 continue
             label = step_label(c["name"])
@@ -1104,9 +1120,8 @@ class Assistant:
         talk = [e for e in s.get("chat") or [] if e["role"] in ("user", "assistant")]
         if not talk and not s.get("digest"):
             return {"to": "reply"}
-        src = d["settings"]["source"]
-        p = d["settings"]["providers"].get(src["provider"])
-        if not p or p["kind"] != src["kind"]:
+        src, p = _provider(d)
+        if not p:
             return _end("off", "The assistant's model provider is not set.")
         head = _block("Earlier in this chat (your summary)", s["digest"]) if s.get("digest") else ""
         room = int(FOLD_AT * (d["settings"].get("window_tokens") or WINDOW) * 4)
@@ -1117,14 +1132,13 @@ class Assistant:
             "prompt": text,
             "max_tokens": SUMMARY_TOKENS,
         }
-        key = f"{s['thread_id']}:{s['msg']}:m0"
-        if err := await self.spend(s["owner_id"], key, "model", remote.bound(req), d["settings"]["limits"]):
-            return err
-        try:
-            got, _ = await providers.chat_retried(src["provider"], p, req)
-        except providers.CallError as e:
-            return _end("off" if e.kind == "off" else "provider", str(e))
-        await self._spent(key, got["tokens_in"] + got["tokens_out"], src, got.get("cache"))
+        got, why = await self._ask_model(s, f"{s['thread_id']}:{s['msg']}:m0", src, p, req)
+        if isinstance(why, dict):
+            return why
+        if isinstance(why, providers.CallError):
+            return _end("off" if why.kind == "off" else "provider", str(why))
+        if why:  # a Stop: no summary
+            return {"to": "reply"}
         sid = mem.summary_id(s["thread_id"])
         if why := await mem.put(self.store, s["owner_id"], "summary", sid, got["text"], s["thread_id"]):
             log.warning("assistant %s: no summary: %s", s["thread_id"], why)
