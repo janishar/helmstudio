@@ -1554,9 +1554,9 @@ func blockUnits(d magic.Doc, b *magic.Block) float64 {
 	return magicUnits(b.Kind, w, h, float64(b.Length+magic.Tail(d, b))/float64(d.Target.FPS)) // API 1.106: and its tail
 }
 
-// askAbove is the caller's ask_above_gpu_minutes (5 without a row).
+// askAbove is the caller's ask_above_gpu_minutes (10 without a row; owner, 2026-11-28).
 func askAbove(ctx context.Context, tx pgx.Tx) (float64, error) {
-	v := 5.0
+	v := 10.0
 	err := tx.QueryRow(ctx, `SELECT ask_above_gpu_minutes FROM magic_settings`).Scan(&v)
 	if errors.Is(err, pgx.ErrNoRows) {
 		err = nil

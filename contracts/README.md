@@ -4330,7 +4330,7 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   variants, below); **the ask rule** `ask`: true when a run other than a
   board frame has no estimate or the total of those runs is above `ask_above_gpu_minutes` (from 1.88 board frames
   are left out of that total, as they never ask), with `ask_text` (`3 shots, about 6 min`). The Assistant asks with it (plan 39 §45.8); the page's own Generate is the user's click.
-- **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 5; `magic_settings`).
+- **Settings**: `GET/PUT /v1/studio/magic/settings {ask_above_gpu_minutes}` (0-600, default 10 from API 1.110, was 5; owner, 2026-11-28: "make it to 10 min limit"; `magic_settings`).
 
 ### Magic: variants (API 1.94; owner 2026-11-27, board MagicBoard frames 3 and 7; normative)
 
@@ -4560,7 +4560,7 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
 - **The ask rule** (plan 39 §45.8): `run_blocks` plans the pick first (`…/plan`). Its ask rule false: everything
   runs at once, no card, the final reply. True (a run above `ask_above_gpu_minutes`, or one with no estimate): the
   pick's board frames start at once (they never ask) and the `preview` is the plan with `frames` (what started, each
-  `{block, run_id, seconds}`); the card says `Run 3 shots, about 6 min?` with `Above your 5 min limit. Frame 4 ran on
+  `{block, run_id, seconds}`); the card says `Run 3 shots, about 6 min?` with `Above your 10 min limit. Frame 4 ran on
   its own (6 s).` (or `It has no estimate yet.`); its Yes runs the rest. A run is checked against the board's
   revision as the route does (409: read the board again).
 - **The proposal on the board** (frame 8): the `board_edit` card carries `board` {board_id, base_revision, ops} (a

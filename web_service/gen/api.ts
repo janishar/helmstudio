@@ -3476,7 +3476,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** From 1.81: the caller's Magic settings (default ask_above_gpu_minutes 5) */
+        /** From 1.81: the caller's Magic settings (default ask_above_gpu_minutes 10; 5 before 1.110) */
         get: operations["studioGetMagicSettings"];
         /** From 1.81: set the caller's Magic settings */
         put: operations["studioPutMagicSettings"];
@@ -10082,7 +10082,7 @@ export interface components {
             kinds: components["schemas"]["MagicKindInfo"][];
         };
         MagicSettings: {
-            /** @description runs whose estimate is above this ask first (default 5; 0: always ask) */
+            /** @description runs whose estimate is above this ask first (default 10, from 1.110; was 5; 0: always ask) */
             ask_above_gpu_minutes: number;
         };
         /** @description which blocks: `blocks` (in this order), or a `lane`'s, or (`stale`) every block that is not done; exactly one. From 1.82 a morph transition is picked as a block is: by its id in `blocks`, with its lane, and by `stale` */

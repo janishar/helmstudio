@@ -147,7 +147,7 @@ export function useApiBoard():
   const [error, setError] = useState("");
   const [kinds, setKinds] = useState<Kinds | null>(null);
   const [estimates, setEstimates] = useState<Record<string, Estimate>>({});
-  const [askAbove, setAskAboveState] = useState(5);
+  const [askAbove, setAskAboveState] = useState(10);
   const rev = useRef(0);
   const pending = useRef(0);
   const current = useRef("");

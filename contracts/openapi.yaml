@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: helmstudio — public API
-  version: 1.109.0
+  version: 1.110.0
   description: |
     Public HTTP contract of helmstudio (the paths behind Kong): `/v1/studio/*` is served by studio_service,
     `/files/*` by files_service, `/auth/*` by auth_service. contract_tests/ checks them against this file. Design:
@@ -3558,7 +3558,7 @@ paths:
     get:
       tags: [studio]
       operationId: studioGetMagicSettings
-      summary: 'From 1.81: the caller''s Magic settings (default ask_above_gpu_minutes 5)'
+      summary: 'From 1.81: the caller''s Magic settings (default ask_above_gpu_minutes 10; 5 before 1.110)'
       responses:
         '200': {description: the settings, content: {application/json: {schema: {$ref: '#/components/schemas/MagicSettings'}}}}
         '401': {$ref: '#/components/responses/Unauthorized'}
@@ -9542,7 +9542,7 @@ components:
       required: [ask_above_gpu_minutes]
       additionalProperties: false
       properties:
-        ask_above_gpu_minutes: {type: number, minimum: 0, maximum: 600, description: 'runs whose estimate is above this ask first (default 5; 0: always ask)'}
+        ask_above_gpu_minutes: {type: number, minimum: 0, maximum: 600, description: 'runs whose estimate is above this ask first (default 10, from 1.110; was 5; 0: always ask)'}
     MagicPick:
       type: object
       additionalProperties: false

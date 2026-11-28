@@ -61,12 +61,12 @@ func TestMagicRuns(t *testing.T) {
 	}
 
 	// settings: 5 by default, per user
-	if s := e.call(userA, "GET", "/v1/studio/magic/settings", nil, 200); s["ask_above_gpu_minutes"] != float64(5) {
+	if s := e.call(userA, "GET", "/v1/studio/magic/settings", nil, 200); s["ask_above_gpu_minutes"] != float64(10) {
 		t.Fatal(s)
 	}
 	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 601}, 422)
 	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 0.001}, 200)
-	if s := e.call(userB, "GET", "/v1/studio/magic/settings", nil, 200); s["ask_above_gpu_minutes"] != float64(5) {
+	if s := e.call(userB, "GET", "/v1/studio/magic/settings", nil, 200); s["ask_above_gpu_minutes"] != float64(10) {
 		t.Fatal(s)
 	}
 

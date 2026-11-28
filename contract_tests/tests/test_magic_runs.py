@@ -82,13 +82,13 @@ def test_kinds_and_settings(api):
     assert [m["workflow_id"] for m in kinds["voice"]["models"]] == ["echo-voice-over"]
     assert [m["workflow_id"] for m in kinds["music"]["models"]] == ["echo-music"]
     assert "off" not in kinds["music"]
-    assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 5}
+    assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 10}
     assert ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 2.5})) == {
         "ask_above_gpu_minutes": 2.5
     }
     assert ok(api.get(SETTINGS)) == {"ask_above_gpu_minutes": 2.5}
     assert api.put(SETTINGS, json={"ask_above_gpu_minutes": -1}).status_code == 422
-    ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 5}))
+    ok(api.put(SETTINGS, json={"ask_above_gpu_minutes": 10}))
 
 
 def test_a_block_runs_into_a_take(ur, api_b):
@@ -97,7 +97,7 @@ def test_a_block_runs_into_a_take(ur, api_b):
     assert b["session_id"] is None and b["status"]["s1"] == {"status": "draft"}
 
     plan = ok(ur.post(f"{base}/plan", json={"stale": True}))
-    assert plan["order"] == ["s1", "m1"] and plan["limit_minutes"] == 5
+    assert plan["order"] == ["s1", "m1"] and plan["limit_minutes"] == 10
     s1, m1 = plan["blocks"]
     assert s1["source"] == "pack" and s1["seconds"] == 0.5 and s1["host"]
     assert m1["reason"] == "its model ace-step-music is on no host"
