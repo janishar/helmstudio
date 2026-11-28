@@ -4048,27 +4048,17 @@ def canon(x):
     return x
 
 
-def check_edit_replay() -> None:
-    """The three implementations of the edits (README, Timeline rules; plan 24 28.9): every fixtures/timelines/
-    edits.json case through check.py's t_apply, studio's edit.go Apply (go test TestEditReplay) and the web's
-    lib/timeline.ts apply (node, its types stripped), compared as canonical JSON, byte for byte."""
-    root, name = HERE.parent, "fixtures/timelines/edits.json"
+def replay(name: str, want: list, against: str, env: str, runs: dict) -> None:
+    """Every case of fixtures/<name> through each of `runs` (who → (cmd, cwd, its output file under `env`)), each
+    answer compared with `want` (canonical JSON) case by case."""
     fx = json.loads((HERE / name).read_text())
-    want = [canon(t_apply(c["document"], c["op"], fx.get("takes", {}) | c.get("takes", {}))) for c in fx["cases"]]
     with tempfile.TemporaryDirectory() as tmp:
-        runs = {
-            "studio_service (edit.go)": (["go", "test", "-count=1", "-run", "^TestEditReplay$", "./api/timeline/"],
-                                         root / "studio_service", f"{tmp}/go.json"),
-            "web_service (lib/timeline.ts)": (["node", "--no-warnings", str(HERE / "replay_edits.mjs"),
-                                               str(root / "web_service" / "lib" / "timeline.ts"), str(HERE / name)],
-                                              root, f"{tmp}/ts.json"),
-        }
         for who, (cmd, cwd, out) in runs.items():
+            out = f"{tmp}/{out}"
             if not shutil.which(cmd[0]):
                 fail(f"{name} replay: {cmd[0]} is not on PATH ({who})")
                 continue
-            r = subprocess.run(cmd, cwd=cwd, env=os.environ | {"TIMELINE_REPLAY_OUT": out}, capture_output=True,
-                               text=True, timeout=600)
+            r = subprocess.run(cmd, cwd=cwd, env=os.environ | {env: out}, capture_output=True, text=True, timeout=600)
             if r.returncode != 0 or not Path(out).exists():
                 fail(f"{name} replay: {who} failed: {(r.stdout + r.stderr).strip()[-800:]}")
                 continue
@@ -4078,7 +4068,23 @@ def check_edit_replay() -> None:
                 continue
             for c, g, w in zip(fx["cases"], got, want):
                 if json.dumps(canon(g), sort_keys=True) != json.dumps(w, sort_keys=True):
-                    fail(f"{name} replay {c['description']!r}: {who} differs from check.py: {json.dumps(canon(g))}")
+                    fail(f"{name} replay {c['description']!r}: {who} differs from {against}: {json.dumps(canon(g))[:600]}")
+
+
+def check_edit_replay() -> None:
+    """The three implementations of the edits (README, Timeline rules; plan 24 28.9): every fixtures/timelines/
+    edits.json case through check.py's t_apply, studio's edit.go Apply (go test TestEditReplay) and the web's
+    lib/timeline.ts apply (node, its types stripped), compared as canonical JSON, byte for byte."""
+    root, name = HERE.parent, "fixtures/timelines/edits.json"
+    fx = json.loads((HERE / name).read_text())
+    want = [canon(t_apply(c["document"], c["op"], fx.get("takes", {}) | c.get("takes", {}))) for c in fx["cases"]]
+    replay(name, want, "check.py", "TIMELINE_REPLAY_OUT", {
+        "studio_service (edit.go)": (["go", "test", "-count=1", "-run", "^TestEditReplay$", "./api/timeline/"],
+                                     root / "studio_service", "go.json"),
+        "web_service (lib/timeline.ts)": (["node", "--no-warnings", str(HERE / "replay_edits.mjs"),
+                                           str(root / "web_service" / "lib" / "timeline.ts"), str(HERE / name)],
+                                          root, "ts.json"),
+    })
     print(f"ok   {name} replayed through check.py, edit.go and lib/timeline.ts")
 
 
@@ -4088,31 +4094,13 @@ def check_magic_replay(registry: Registry) -> None:
     compared with the case's `expect` as canonical JSON."""
     root, name = HERE.parent, "fixtures/magic/edits.json"
     fx = json.loads((HERE / name).read_text())
-    want = [canon(c["expect"]) for c in fx["cases"]]
-    with tempfile.TemporaryDirectory() as tmp:
-        runs = {
-            "studio_service (api/magic)": (["go", "test", "-count=1", "-run", "^TestMagicReplay$", "./api/magic/"],
-                                           root / "studio_service", f"{tmp}/go.json"),
-            "web_service (lib/magic.ts)": (["node", "--no-warnings", str(HERE / "replay_magic.mjs"),
-                                            str(root / "web_service" / "lib" / "magic.ts"), str(HERE / name)],
-                                           root, f"{tmp}/ts.json"),
-        }
-        for who, (cmd, cwd, out) in runs.items():
-            if not shutil.which(cmd[0]):
-                fail(f"{name} replay: {cmd[0]} is not on PATH ({who})")
-                continue
-            r = subprocess.run(cmd, cwd=cwd, env=os.environ | {"MAGIC_REPLAY_OUT": out}, capture_output=True,
-                               text=True, timeout=600)
-            if r.returncode != 0 or not Path(out).exists():
-                fail(f"{name} replay: {who} failed: {(r.stdout + r.stderr).strip()[-800:]}")
-                continue
-            got = json.loads(Path(out).read_text())
-            if len(got) != len(want):
-                fail(f"{name} replay: {who} answered {len(got)} cases, not {len(want)}")
-                continue
-            for c, g, w in zip(fx["cases"], got, want):
-                if json.dumps(canon(g), sort_keys=True) != json.dumps(w, sort_keys=True):
-                    fail(f"{name} replay {c['description']!r}: {who} differs from expect: {json.dumps(canon(g))[:600]}")
+    replay(name, [canon(c["expect"]) for c in fx["cases"]], "expect", "MAGIC_REPLAY_OUT", {
+        "studio_service (api/magic)": (["go", "test", "-count=1", "-run", "^TestMagicReplay$", "./api/magic/"],
+                                       root / "studio_service", "go.json"),
+        "web_service (lib/magic.ts)": (["node", "--no-warnings", str(HERE / "replay_magic.mjs"),
+                                        str(root / "web_service" / "lib" / "magic.ts"), str(HERE / name)],
+                                       root, "ts.json"),
+    })
     magic_doc = Draft202012Validator({"$ref": f"{OPENAPI}#/components/schemas/MagicDoc"}, registry=registry,
                                      format_checker=FormatChecker())
     for c in [{"description": "documents." + k, "expect": v} for k, v in fx["documents"].items()] + fx["cases"]:
