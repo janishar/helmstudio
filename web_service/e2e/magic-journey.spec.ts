@@ -48,7 +48,7 @@ test("Magic opens from the rail on a new board; the sample board is one pick awa
 
 test("Add's From Gallery opens the Gallery for the point", async () => {
   const lane = page.getByRole("group", { name: "Lane Lane 7" });
-  await lane.getByText("Empty · click to add").click({ position: { x: 4, y: 10 } });
+  await lane.getByText("Empty · click to add").click({ position: { x: 7, y: 10 } });
   const add = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
   await add.getByRole("button", { name: "From Gallery" }).click();
   await expect(add).toBeHidden();
@@ -60,7 +60,7 @@ test("Add's From Gallery opens the Gallery for the point", async () => {
 
 test("add a shot at a point on the empty lane and generate it", async () => {
   const lane = page.getByRole("group", { name: "Lane Lane 7" });
-  await lane.getByText("Empty · click to add").click({ position: { x: 4, y: 10 } });
+  await lane.getByText("Empty · click to add").click({ position: { x: 7, y: 10 } });
   let dlg = page.getByRole("dialog", { name: /Add at 0:00 · Lane 7/ });
   await expect(dlg.getByRole("button", { name: /Music/ })).toBeEnabled(); // phase H: Echo music serves it
   await dlg.getByRole("button", { name: "5 s" }).click();
@@ -131,7 +131,7 @@ test("tie Line 2 to Shot 3, then undo back to Shot 2", async () => {
 test("Run board, then Stop runs (N): a running block's menu has Stop; the toolbar's asks first, then all stop", async () => {
   // owner, 2026-11-27: "yes build it" (Stop on a running block, Stop runs (N) with a confirm); MagicBoard frame 10
   await page.getByRole("button", { name: "Run board" }).click();
-  const ask = page.getByRole("alert").filter({ hasText: "Run the board?" });
+  const ask = page.getByRole("alertdialog", { name: "Run the board?" });
   if (await ask.isVisible().catch(() => false))
     await ask.getByRole("button", { name: "Run" }).click();
   const stopAll = page.getByRole("button", { name: /^Stop runs \(\d+\)$/ });
@@ -141,7 +141,7 @@ test("Run board, then Stop runs (N): a running block's menu has Stop; the toolba
   await expect(page.getByRole("menuitem", { name: /^Stop/ })).toBeVisible();
   await page.keyboard.press("Escape");
   await stopAll.click();
-  const confirm = page.getByRole("alert").filter({ hasText: /Stop \d+ runs?\?/ });
+  const confirm = page.getByRole("alertdialog", { name: "Stop runs?" });
   await expect(confirm).toBeVisible();
   await page.screenshot({ path: `${SHOTS}/4-stop-runs.png` });
   await confirm.getByRole("button", { name: "Stop runs" }).click();

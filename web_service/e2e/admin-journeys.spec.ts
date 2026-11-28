@@ -320,7 +320,13 @@ test("a06 add a user who signs in and sees only their own work", async ({ browse
     .toBe("succeeded");
   await op.context().close();
 
-  await dock(admin).getByRole("link", { name: "System" }).click();
+  // the rail folds Setup into one gear on a short window (Rail.dc.html frames 4, 5): System is in its menu
+  const sys = dock(admin).getByRole("link", { name: "System" });
+  if (await sys.isVisible()) await sys.click();
+  else {
+    await dock(admin).getByRole("button", { name: "Setup" }).click();
+    await admin.getByRole("menuitemcheckbox", { name: "System" }).click();
+  }
   await expect(admin).toHaveURL(/\/system$/);
   const add = admin.getByRole("complementary", { name: "Add a user" });
   person = { name: `Rita ${t}`, email: `rita-${t}@example.com`, password: "" };
