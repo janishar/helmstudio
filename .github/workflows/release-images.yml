@@ -162,7 +162,8 @@ jobs:
   mac:
     needs: meta
     if: needs.meta.outputs.on_main == 'true'
-    runs-on: macos-15
+    # macOS 26's Xcode: h3 checks MTLGPUFamilyMetal4, which macOS 15's SDK (Xcode 16.4) does not have (alpha.7)
+    runs-on: macos-26
     env:
       VERSION: ${{ needs.meta.outputs.version }}
     steps:
