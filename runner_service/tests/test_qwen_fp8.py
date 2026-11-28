@@ -5,6 +5,7 @@ models entry. The real files' layout is in docs/reference-notes/nvidia-quantized
 import types
 
 import pytest
+from conftest import e4m3
 
 torch = pytest.importorskip("torch")
 import accelerate
@@ -25,11 +26,6 @@ BF16 = {
     "time_text_embed.timestep_embedder.linear_1",
 }  # kept bf16 in the real file
 TRANSFORMER = "unsloth_prequant_transformer_state_dict_v1"
-
-
-def e4m3(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
-    return (w.float() / scale).to(torch.float8_e4m3fn), scale
 
 
 def test_rename_maps_torchao_keys_to_the_core_fp8_linear():

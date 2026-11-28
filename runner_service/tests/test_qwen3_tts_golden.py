@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import snr
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -44,13 +45,6 @@ PREVIEW_SEED, PREVIEW_MAX_S = 1, 4.0
 def samples(wav: bytes) -> np.ndarray:
     with wave.open(io.BytesIO(wav)) as w:
         return np.frombuffer(w.readframes(w.getnframes()), "<i2").astype(np.float64)
-
-
-def snr(want: np.ndarray, got: np.ndarray) -> float:
-    if len(want) != len(got):
-        return float("-inf")
-    noise = np.sum((want - got) ** 2)
-    return float("inf") if noise == 0 else 10 * np.log10(np.sum(want**2) / noise)
 
 
 class TTSBench(Bench):

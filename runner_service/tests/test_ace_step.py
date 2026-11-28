@@ -26,15 +26,8 @@ def fixture(key: str) -> dict:
     return json.loads((FIXTURES / f"ace-step.{key}.valid.json").read_text())
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_models_match_the_fixture(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "ace-step"]
+def test_models_match_the_fixture(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "ace-step"]
     (want,) = fixture("models")["models"]
     top = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got.get(k) for k in top} == {k: want.get(k) for k in top}

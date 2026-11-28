@@ -5,7 +5,7 @@ import time
 import types
 
 import pytest
-from conftest import FakeQwen
+from conftest import FakeQwen, e4m3
 
 torch = pytest.importorskip("torch")
 import torch.nn.functional as F
@@ -306,12 +306,6 @@ def test_int8_kernel_is_used_only_where_torch_has_it():
 
 
 # --- API 1.33: community FP8 and int8 ConvRot weights
-
-
-def e4m3(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Per-row FP8 as the community files store it: qweight e4m3 [out, in], scale fp32 [out, 1]."""
-    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
-    return (w.float() / scale).to(torch.float8_e4m3fn), scale
 
 
 def test_fp8_linear_dequantizes_to_its_bf16_reference():

@@ -17,15 +17,8 @@ def fixture(key: str) -> dict:
     return json.loads((FIXTURES / f"qwen3-tts.{key}.valid.json").read_text())
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_models_and_voices_match_the_fixtures(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "qwen3-tts"]
+def test_models_and_voices_match_the_fixtures(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "qwen3-tts"]
     (want,) = fixture("models")["models"]
     keys = ("id", "title", "precisions", "source", "dir")
     assert {k: got[k] for k in ("id", "family", "title", "media", "runtimes")} == {
@@ -34,7 +27,7 @@ def test_models_and_voices_match_the_fixtures(values):
     for g, w in zip(got["variants"], want["variants"], strict=True):
         if g["presence"] == "present":  # on a host with the weights: the same sizes and memory plans
             assert (g["components"], g["memory"]) == (w["components"], w["memory"])
-    assert [v for v in values["voices"]["voices"] if v["family"] == "qwen3-tts"] == fixture("voices")["voices"]
+    assert [v for v in torch_values["voices"]["voices"] if v["family"] == "qwen3-tts"] == fixture("voices")["voices"]
 
 
 def model(variant: str):

@@ -22,15 +22,8 @@ import torch
 FIXTURES = CONTRACTS / "fixtures/registry"
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_models_entry_matches_the_fixture(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "stable-audio-3"]
+def test_models_entry_matches_the_fixture(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "stable-audio-3"]
     (want,) = json.loads((FIXTURES / "stable-audio-3.models.valid.json").read_text())["models"]
     keys = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got[k] for k in keys} == {k: want[k] for k in keys}

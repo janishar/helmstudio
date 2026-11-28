@@ -25,15 +25,8 @@ def fixture(key: str) -> dict:
     return json.loads((FIXTURES / f"minimax-music3.{key}.valid.json").read_text())
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_models_entry_matches_the_fixture(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "minimax-music3"]
+def test_models_entry_matches_the_fixture(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "minimax-music3"]
     (want,) = fixture("models")["models"]
     keys = ("id", "family", "title", "media", "runtimes", "sound", "licences")
     assert {k: got.get(k) for k in keys} == {k: want.get(k) for k in keys}

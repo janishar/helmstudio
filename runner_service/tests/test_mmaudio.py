@@ -20,15 +20,8 @@ from core.graph import RunError
 mm = pytest.importorskip("packs.mmaudio.torch", reason="the torch env")
 
 
-@pytest.fixture(scope="module")
-def values():
-    from core import registry
-
-    return registry.build("torch")[0]
-
-
-def test_the_models_entry_matches_the_fixture(values):
-    (got,) = [m for m in values["models"]["models"] if m["family"] == "mmaudio"]
+def test_the_models_entry_matches_the_fixture(torch_values):
+    (got,) = [m for m in torch_values["models"]["models"] if m["family"] == "mmaudio"]
     (want,) = json.loads((CONTRACTS / "fixtures/registry/mmaudio.models.valid.json").read_text())["models"]
     top = ("id", "family", "title", "media", "runtimes", "sound")
     assert {k: got[k] for k in top} == {k: want[k] for k in top}

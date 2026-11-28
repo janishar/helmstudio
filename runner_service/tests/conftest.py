@@ -5,6 +5,7 @@ import asyncio
 import json
 from pathlib import Path
 
+import pytest
 from nats.js.errors import KeyNotFoundError
 
 from consumer import Consumer
@@ -270,3 +271,32 @@ class FakeQwen:
     def ran(self) -> list[str]:
         out, self.calls = [c for c, _ in self.calls], []
         return out
+
+
+# --- the torch tests' shared helpers
+
+
+@pytest.fixture(scope="session")
+def torch_values():
+    """The torch runner's registry values, built once (read only)."""
+    return registry.build("torch")[0]
+
+
+def snr(want, got) -> float:
+    """The golden tests' signal-to-noise ratio in dB of numpy arrays: -inf when the shapes differ, inf when equal."""
+    import numpy as np
+
+    if want.shape != got.shape:
+        return float("-inf")
+    noise = np.sum((want - got) ** 2)
+    return float("inf") if noise == 0 else float(10 * np.log10(np.sum(want**2) / noise))
+
+
+def e4m3(w):
+    """Per-row FP8 as the community files store it: qweight e4m3 [out, in], scale fp32 [out, 1]."""
+    import torch
+
+    from core import loaders_torch as lt
+
+    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
+    return (w.float() / scale).to(torch.float8_e4m3fn), scale

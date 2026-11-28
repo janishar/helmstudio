@@ -9,6 +9,7 @@ import os
 import types
 
 import pytest
+from conftest import e4m3
 
 torch = pytest.importorskip("torch")
 import accelerate
@@ -27,11 +28,6 @@ FP8 = lambda files: types.SimpleNamespace(precision_of=lambda c: "fp8", files=la
 CFG = {"num_attention_heads": 2, "attention_head_dim": 16, "hidden_size": 32, "num_layers": 1,
        "num_refiner_layers": 1, "ffn_dim": 64, "in_channels": 4, "text_dim": 24, "freq_dim": 16,
        "time_embed_hidden_dim": 16, "time_embed_dim": mm.CURVE[1], "rope_freq_dim": 2, "num_pdd_heads": 2}  # fmt: skip
-
-
-def e4m3(w: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    scale = w.abs().amax(1, keepdim=True).float() / lt.E4M3_MAX
-    return (w.float() / scale).to(torch.float8_e4m3fn), scale
 
 
 def test_the_curve_table_is_read_linearly_at_t():

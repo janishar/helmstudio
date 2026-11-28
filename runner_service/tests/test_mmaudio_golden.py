@@ -22,6 +22,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from conftest import snr
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -45,13 +46,6 @@ def samples(wav: bytes) -> tuple[np.ndarray, int, int]:
     with wave.open(io.BytesIO(wav)) as w:
         x = np.frombuffer(w.readframes(w.getnframes()), "<i2").astype(np.float64) / 32768
         return x, w.getframerate(), w.getnchannels()
-
-
-def snr(want: np.ndarray, got: np.ndarray) -> float:
-    if len(want) != len(got):
-        return float("-inf")
-    noise = np.sum((want - got) ** 2)
-    return float("inf") if noise == 0 else float(10 * np.log10(np.sum(want**2) / noise))
 
 
 class SoundBench(Bench):
