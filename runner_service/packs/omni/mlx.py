@@ -3,7 +3,7 @@ llama-server, a server child (core.child.start) that the residency manager holds
 stays loaded between runs (keep_warm) and is stopped when the component goes (Server.evicted). The ASR component is
 Qwen3-ASR-1.7B through mlx-audio, in this process.
 
-A video take goes to the server whole (llama-server samples its frames with ffmpeg, VIDEO_FPS a second) with its
+A video take's in..out part goes to the server (llama-server samples its frames with ffmpeg, VIDEO_FPS a second) with its
 sound as a second part (16 kHz mono WAV); an audio take as the WAV alone. One greedy answer (temperature 0, seed 0),
 no schema; the answer record (defs `answer`) has no `seen` (nothing is stored). The transcript is the stage's
 reported `transcript` output (resolved.texts `listen.transcript`)."""
@@ -108,6 +108,20 @@ def b64(data: bytes) -> str:
     return base64.b64encode(data).decode()
 
 
+def part(path: Path, info: dict, src: dict) -> bytes:
+    """The take's in..out (studio fills out = min(length, max_s 120)): the file as it is when that is all of it, else
+    that part cut by ffmpeg (a video's picture copied from the keyframe before `in`, an audio take as a WAV)."""
+    start, end = float(src.get("in") or 0), src.get("out")
+    if end is None or (start <= 0 and float(end) >= info["seconds"] - 0.05):
+        return src["data"]
+    out = path.with_suffix(".mp4" if info["video"] is not None else ".wav")
+    codecs = ["-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy", "-c:a", "aac", "-f", "mp4"] if info["video"] is not None \
+        else ["-map", "0:a:0", "-c:a", "pcm_s16le", "-f", "wav"]  # fmt: skip
+    media.ffmpeg(["-ss", f"{start:.6f}", "-t", f"{float(end) - start:.6f}", "-protocol_whitelist", "file",
+                  "-i", str(path), *codecs, str(out)])  # fmt: skip
+    return out.read_bytes()
+
+
 def listen(ctx, params: dict, inputs: dict) -> dict:
     src, model = params["source"], inputs["model"]
     question = params["question"].strip()
@@ -122,12 +136,13 @@ def listen(ctx, params: dict, inputs: dict) -> dict:
         path.write_bytes(src["data"])
         try:
             info = media.probe(path)
-            wav = media.wav(media.pcm(src["data"], RATE, 1), RATE, 1) if info["audio"] else None
+            data = part(path, info, src)
+            wav = media.wav(media.pcm(data, RATE, 1), RATE, 1) if info["audio"] else None
         except MediaError as e:
             raise RunError(f"{ctx.node}.source: not a readable video or audio take") from e
         content = []
         if info["video"] is not None:
-            content.append({"type": "video_url", "video_url": {"url": "data:video/mp4;base64," + b64(src["data"])}})
+            content.append({"type": "video_url", "video_url": {"url": "data:video/mp4;base64," + b64(data)}})
         if wav:
             content.append({"type": "input_audio", "input_audio": {"data": b64(wav), "format": "wav"}})
         content.append({"type": "text", "text": question if wav else f"(The take has no sound.)\n\n{question}"})

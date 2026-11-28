@@ -3,6 +3,7 @@ llama-server argv, a listen run against a stand-in server (a video's picture and
 transcript, a stopped server started again) and the residency manager stopping a resident server it drops.
 The real model: packs/omni/model.yaml has the numbers measured on the Mac."""
 
+import base64
 import json
 from pathlib import Path
 from types import SimpleNamespace
@@ -105,6 +106,23 @@ def test_a_video_goes_whole_with_its_sound_and_a_transcript(tmp_path):
     assert out["answer"] == "It ends abruptly." and out["transcript"] == "Good morning."
     assert out["answer"].record == {"tries": [{"text": "It ends abruptly.", "error": None}], "seen": [],
                                     "tokens_in": 120, "tokens_out": 5, "seconds": out["answer"].record["seconds"]}  # fmt: skip
+
+
+@needs_ffmpeg
+def test_only_the_part_in_to_out_is_heard(tmp_path):
+    out = tmp_path / "long.mp4"
+    media.ffmpeg(["-f", "lavfi", "-i", "color=c=red:s=64x64:d=3:r=24", "-f", "lavfi", "-i",
+                  "sine=frequency=440:duration=3", "-shortest", "-pix_fmt", "yuv420p", str(out)])  # fmt: skip
+    server = Stand()
+    ctx, inputs = ctx_for(server)
+    omni.listen(ctx, PARAMS | {"source": {"data": out.read_bytes(), "in": 1.0, "out": 2.0}}, inputs)
+    (content,) = server.sent
+    sent = tmp_path / "sent.mp4"
+    sent.write_bytes(base64.b64decode(content[0]["video_url"]["url"].split(",", 1)[1]))
+    assert media.probe(sent)["seconds"] < 2.5
+    sound = tmp_path / "sound.wav"
+    sound.write_bytes(base64.b64decode(content[1]["input_audio"]["data"]))
+    assert abs(media.probe(sound)["seconds"] - 1.0) < 0.1
 
 
 @needs_ffmpeg
