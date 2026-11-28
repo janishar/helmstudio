@@ -1,14 +1,14 @@
 "use client";
 // The studio's and the runners' state on every page (docs/mock/ErrorStates.dc.html a1, a2, g1, g2): the banner at the
-// top of the page column while the studio isn't answering, and the status tile under the rail with its popover while
-// something is down. Hidden when all is well.
+// top of the page column while the studio isn't answering, and the rail logo's badge with its popover while something
+// is down (owner, 2026-11-28: "logo willl reflect this error"; the separate status tile is gone). Nothing when all is well.
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Boxes, CircleCheck, LoaderCircle, RefreshCw, Activity, Server } from "lucide-react";
+import { Boxes, CircleCheck, LoaderCircle, RefreshCw, Server } from "lucide-react";
 import { openMenu, type Item } from "@/components/context-menu";
 import { useHosts } from "@/components/create/memory-chip";
-import { arm, retryNow, statusOf, useHealth, type StatusRow } from "@/lib/health";
+import { arm, retryNow, statusOf, useHealth, type StatusRow, type TileWord } from "@/lib/health";
 
 /** The banner: "Studio isn't answering. Retrying… next try in 8 s" with Retry now, then "Back online" for 3 s. */
 export function Banner() {
@@ -54,8 +54,16 @@ type Mac = {
 };
 const mac = () => (globalThis as { helmDesktop?: Mac }).helmDesktop;
 
-/** The status tile under the rail and its popover: Studio, each runner per host, each NVIDIA host. */
-export function StatusTile({ admin }: { admin: boolean }) {
+/** The rail logo's status: `children(word)` draws the logo (word is null when all is well, and the logo links home);
+ * while something is down it gets a red dot on its corner, and a click (or Enter) opens the popover: Studio, each
+ * runner per host, each NVIDIA host. Esc closes it (popover="auto"). */
+export function StatusLogo({
+  admin,
+  children,
+}: {
+  admin: boolean;
+  children: (word: TileWord | null) => React.ReactNode;
+}) {
   const down = useHealth().down;
   const hosts = useHosts();
   const router = useRouter();
@@ -68,7 +76,7 @@ export function StatusTile({ admin }: { admin: boolean }) {
   const [mark, setMark] = useState<{ h: unknown; at: number }>({ h: null, at: 0 });
   if (hosts && now && mark.h !== hosts) setMark({ h: hosts, at: now });
   const { tile, rows } = statusOf(hosts, down, now || Date.parse("2000-01-01"));
-  if (!tile || !now) return null;
+  if (!tile || !now) return <>{children(null)}</>;
   const d = mac();
   const ago = mark.at ? Math.max(0, Math.round((now - mark.at) / 1000)) : null;
   const rowMenu = (e: React.MouseEvent, r: StatusRow) => {
@@ -92,17 +100,10 @@ export function StatusTile({ admin }: { admin: boolean }) {
   };
   return (
     <>
-      <button
-        type="button"
-        popoverTarget="status"
-        className={`rail-health ${tile === "Studio down" || tile === "Runner down" || tile === "No runner" ? "bad" : ""}`}
-        title={`Status: ${tile}`}
-        style={{ anchorName: "--status" } as React.CSSProperties}
-      >
-        <span className="hdot" aria-hidden />
-        <Activity aria-hidden />
-        <span className="hl">{tile}</span>
-      </button>
+      <span className="relative" style={{ anchorName: "--status" } as React.CSSProperties}>
+        {children(tile)}
+        <span className="logo-dot" aria-hidden />
+      </span>
       <div
         id="status"
         popover="auto"
@@ -112,7 +113,7 @@ export function StatusTile({ admin }: { admin: boolean }) {
         style={
           {
             positionAnchor: "--status",
-            positionArea: "right span-top",
+            positionArea: "right span-bottom",
             marginLeft: 10,
           } as React.CSSProperties
         }

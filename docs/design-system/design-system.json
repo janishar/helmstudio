@@ -891,8 +891,8 @@
  },
  "lastChange": {
   "by": "owner",
-  "at": "2026-11-28T10:00:00Z",
+  "at": "2026-11-28T12:00:00Z",
   "via": "Claude Code",
-  "note": "Rail: the tools and the Assistant at the top, Hub, System and Settings in a Setup panel at the foot that folds to one Setup gear on a short window; the phone bar pins the gear at its right end (owner, 2026-11-28: \"2 and 4\", \"keep assitant in rail right now\")"
+  "note": "StatusTile, Rail: the status tile under the rail is gone; the logo carries the state (a red dot, \"helmstudio · Runner down\", a click opens the status popover); same tile sizes (owner, 2026-11-28: \"let go with this option same size, shut down item merge on the brand logo\")"
  }
 }

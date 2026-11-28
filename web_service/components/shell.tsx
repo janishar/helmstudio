@@ -24,7 +24,7 @@ import {
 import { ToolsContext } from "@/components/assistant/tools";
 import { openMenu } from "@/components/context-menu";
 import { MarkPaths } from "@/components/kit";
-import { Banner, StatusTile } from "@/components/status";
+import { Banner, StatusLogo } from "@/components/status";
 import { ApiError, api, ok, type S } from "@/lib/api";
 
 /** The signed-in user (null when auth can't be reached). */
@@ -208,27 +208,39 @@ export function AppShell({
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}
             <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
-                <Link
-                  href="/"
-                  aria-label="helmstudio, home (Create)"
-                  title="helmstudio"
-                  // on Create a click is a no-op, so a double-click never navigates twice
-                  onClick={(e) => path === "/" && e.preventDefault()}
-                  onDoubleClick={() =>
-                    void import("@/components/cats").then((m) => (cats.current = m).play())
-                  }
-                  className="tile text-on1"
-                  style={
-                    {
-                      "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
-                      borderRadius: "12px 12px 12px 5px",
-                    } as React.CSSProperties
-                  }
-                >
-                  <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
-                    <MarkPaths />
-                  </svg>
-                </Link>
+                {/* the logo carries the studio's state: a dot and its popover while something is down */}
+                <StatusLogo admin={admin}>
+                  {(word) => (
+                    <Link
+                      href="/"
+                      aria-label={word ? `helmstudio · ${word}` : "helmstudio, home (Create)"}
+                      title={word ? `helmstudio · ${word}` : "helmstudio"}
+                      aria-haspopup={word ? "dialog" : undefined}
+                      // something down: a click opens the status popover; else on Create a click is a no-op, so a double-click never
+                      // navigates twice
+                      onClick={(e) => {
+                        if (word) {
+                          e.preventDefault();
+                          document.getElementById("status")?.togglePopover?.(true);
+                        } else if (path === "/") e.preventDefault();
+                      }}
+                      onDoubleClick={() =>
+                        void import("@/components/cats").then((m) => (cats.current = m).play())
+                      }
+                      className="tile text-on1"
+                      style={
+                        {
+                          "--tile": "linear-gradient(155deg, var(--a1), var(--a2))",
+                          borderRadius: "12px 12px 12px 5px",
+                        } as React.CSSProperties
+                      }
+                    >
+                      <svg width={24} height={24} viewBox="0 0 24 24" aria-hidden>
+                        <MarkPaths />
+                      </svg>
+                    </Link>
+                  )}
+                </StatusLogo>
               </div>
               <nav
                 ref={nav}
@@ -269,11 +281,6 @@ export function AppShell({
                   <SetupGear admin={admin} path={path} />
                 </span>
               </nav>
-              {/* the status tile (docs/mock/ErrorStates.dc.html g): only while something is down; md+ only (a phone
-                  gets the banner) */}
-              <div className="hidden md:contents">
-                <StatusTile admin={admin} />
-              </div>
               {/* md+: Setup in its own panel pinned to the rail's foot; a window too short for it folds it into one gear
                   tile (.rail-setup / .rail-gear in globals.css) */}
               <nav

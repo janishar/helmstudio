@@ -2,14 +2,14 @@
 // The error states on the page (docs/mock/ErrorStates.dc.html): the banner and Back online (a1, a2) with a page's own
 // note held back, Create's no-runner line and greyed Generate (b1), trying again (c1), the failed run's plain words,
 // Show details and Retry with its right-click rows (c2), Live updates paused (d), Waiting · N ahead (e), the
-// unplugged drive (f), the status tile and its popover (g), and the Timeline's Make shot with no runner (b3).
+// unplugged drive (f), the rail logo's status dot and its popover (g), and the Timeline's Make shot with no runner (b3).
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import coreNodes from "../../../contracts/fixtures/registry/nodes.valid.json";
 import h3Nodes from "../../../contracts/fixtures/registry/minimax-h3.nodes.valid.json";
 import h3Workflows from "../../../contracts/fixtures/registry/minimax-h3.workflows.valid.json";
 import { Create } from "@/components/create/create";
-import { Banner, StatusTile } from "@/components/status";
+import { Banner, StatusLogo } from "@/components/status";
 import { ErrorNote } from "@/components/kit";
 import { ShotComposer } from "@/components/timeline/shot";
 import { useHosts } from "@/components/create/memory-chip";
@@ -278,19 +278,26 @@ describe("f · model on an unplugged drive", () => {
   });
 });
 
-describe("g · the status tile", () => {
-  it("hidden when all is well; Runner down with its popover, the browser's hint and Open Models", async () => {
+describe("g · the logo's status", () => {
+  it("a plain logo when all is well; Runner down: a dot, the label, a click opens the popover", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let hosts = [host("mac", "idle")];
     answer("GET", { "/v1/studio/hosts": () => ({ data: { hosts } }) });
-    const { unmount } = render(<StatusTile admin />);
+    const logo = () => (
+      <StatusLogo admin>
+        {(w) => <button type="button">{w ? `helmstudio · ${w}` : "helmstudio"}</button>}
+      </StatusLogo>
+    );
+    const { unmount } = render(logo());
     await act(() => vi.advanceTimersByTimeAsync(1500));
-    expect(screen.queryByRole("button", { name: /Runner down/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "helmstudio" })).toBeTruthy();
+    expect(document.querySelector(".logo-dot")).toBeNull();
     unmount();
     hosts = [host("mac", "offline"), host("mac", "idle", { env: "torch" })];
-    render(<StatusTile admin />);
+    render(logo());
     await act(() => vi.advanceTimersByTimeAsync(1500));
-    expect(screen.getByRole("button", { name: /Runner down/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "helmstudio · Runner down" })).toBeTruthy();
+    expect(document.querySelector(".logo-dot")).toBeTruthy();
     const pop = document.getElementById("status")!;
     expect(
       within(pop)

@@ -2308,7 +2308,8 @@
   }
   /* Setup at the rail's foot (Rail.dc.html option 4): an admin's three tiles need the whole rail 943 px tall (14 + logo
      64 + 14 + tools and Assistant 575 + 14 + Setup 248 + 14); shorter, they fold into one gear tile (787 px, as a
-     non-admin's Settings-only panel). ponytail: fixed heights; the status tile, when shown, is not counted */
+     non-admin's Settings-only panel). ponytail: fixed heights (the studio's state rides on the logo, so nothing else
+     joins the rail) */
   .rail-setup,
   .rail-gear {
     display: none;
@@ -3422,52 +3423,18 @@
   font-size: 12px;
   font-weight: 500;
 }
-/* g: the status tile under the rail, its own small panel like the logo's, and its popover */
-.rail-health {
-  position: relative;
-  width: 76px;
-  padding: 12px 4px 10px;
-  border: 0;
-  border-radius: 24px 24px 24px 10px;
-  background: var(--s1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 12px;
-  text-align: center;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.07),
-    0 24px 40px -18px color-mix(in srgb, var(--shd) 80%, transparent);
-}
-.rail-health > svg {
-  width: 36px;
-  height: 36px;
-  padding: 8px;
-  border-radius: 12px;
-  color: #fff;
-  background: linear-gradient(155deg, #ffb0a8, #d6453a);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.5),
-    0 8px 14px -4px color-mix(in srgb, var(--shd) 70%, transparent);
-}
-.rail-health.bad {
-  color: var(--bad);
-}
-.rail-health .hdot {
+/* g: the rail logo's dot while something is down (owner, 2026-11-28: the separate status tile is gone), and its
+   popover */
+.logo-dot {
   position: absolute;
-  right: 16px;
-  top: 9px;
-  width: 9px;
-  height: 9px;
+  right: -3px;
+  top: -3px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--bad);
   box-shadow: 0 0 0 2px var(--s1);
-}
-.rail-health .hl {
-  max-width: 64px;
+  pointer-events: none;
 }
 .hpop {
   width: 400px;
