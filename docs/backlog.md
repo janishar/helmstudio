@@ -192,3 +192,13 @@ From docs/review/code-optimisation-2026-11-28.md; the rest of that review is mer
 - The rest of the contract_tests helpers (about 850 lines that need renames).
 - The Python copy of the Timeline edit rules in contracts/check*.py: drop it once the 16 contract tests that use it
   check against the fixtures' `expect` instead.
+
+## Mac app: the window closes after an update relaunch (owner, 2026-11-29: "put in backlog")
+
+Owner: "the update mac os has weird behavior it launches the main program then closes it"; asked what closes:
+"Window opens, then quits". Seen on the alpha.5 → alpha.6 update (2026-11-28 23:29 IST). update.log says the app
+was installed; app.log shows the relaunched app ran every update step (VM, images, services, runners, old images
+removed) and then logs nothing more; the runners stayed up; no crash report. Suspects to check: install-update.sh's
+`exec open -n` starting a second instance that hits `requestSingleInstanceLock` and exits, macOS state restoration
+reopening the app too, and main.js opening the studio window only when the setup window was visible at the end of the
+run. Reproduce with the update check's fake-release test mode; fix with a desktop test that fails before it.

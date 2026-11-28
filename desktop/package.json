@@ -1,7 +1,7 @@
 {
   "name": "helmstudio",
   "productName": "helmstudio",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "private": true,
   "description": "helmstudio for Mac: the stack in its own VM, the studio in a window (docs/plan/31-mac-app.md)",
   "main": "src/main.js",

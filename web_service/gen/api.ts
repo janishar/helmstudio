@@ -9977,6 +9977,7 @@ export interface components {
         };
         /** @description from 1.102: design_voice's input (contracts/tools/catalog.json) with the asset in the path */
         MagicVoiceDesign: {
+            /** @description the board's current revision (409 when stale; from 1.111 not when every revision since only added a run's take) */
             revision: number;
             design: string;
             line: string;
@@ -10013,7 +10014,7 @@ export interface components {
             summary: string;
         };
         MagicViewsCreate: {
-            /** @description the board's current revision (409 when stale) */
+            /** @description the board's current revision (409 when stale; from 1.111 not when every revision since only added a run's take) */
             revision: number;
             /** @description the views to make, one run each ("Front", "Side", "Back") */
             views: string[];
@@ -10094,7 +10095,7 @@ export interface components {
         };
         /** @description MagicPick with the revision it was made on */
         MagicRunCreate: {
-            /** @description the board's current revision, as the caller has it (409 when stale) */
+            /** @description the board's current revision, as the caller has it (409 when stale; from 1.111 not when every revision since only added a run's take) */
             revision: number;
             blocks?: components["schemas"]["MagicId"][];
             lane?: components["schemas"]["MagicId"];

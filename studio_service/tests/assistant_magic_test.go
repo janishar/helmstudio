@@ -316,3 +316,65 @@ func TestAssistantMagic(t *testing.T) {
 		}
 	}
 }
+
+// API 1.111: design_voice and run_blocks (its preview and the run) take a revision stale only by run takes (a run or
+// Make views finishing); a user's edit since keeps the conflict.
+func TestAssistantStaleByTakes(t *testing.T) {
+	e := setup(t)
+	e.voices()
+	e.assistantOn()
+	thread := e.call(userA, "POST", "/v1/studio/assistant/threads", map[string]any{"client_id": tabA}, 201)["id"].(string)
+	shot := e.clipTake(userA, 2, true, nil)
+	b := e.call(userA, "POST", "/v1/studio/magic/boards", map[string]any{"name": "Rain", "doc": magicRunBoard(shot)}, 201)
+	id := b["id"].(string)
+	base := "/v1/studio/magic/boards/" + id
+	revision := func() float64 { return e.call(userA, "GET", base, nil, 200)["revision"].(float64) }
+	e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 1, "ops": []any{map[string]any{"op": "asset_add",
+		"asset": map[string]any{"id": "mara", "kind": "character", "handle": "mara", "name": "Mara"}}}}, 200)
+	started := e.call(userA, "POST", base+"/run", map[string]any{"revision": 2, "blocks": []string{"s2"}}, 202)
+	runID := started["started"].([]any)[0].(map[string]any)["run_id"].(string)
+	session := started["board"].(map[string]any)["session_id"].(string)
+	e.relay()
+	e.takeOf(userA, session, runID)
+	e.emit(userA, session, runID, "status", 3, map[string]any{"status": "succeeded"})
+	if r := revision(); r != 3 {
+		t.Fatal(r)
+	}
+
+	n := 0
+	ask := func(call, tool string, confirmed bool, args map[string]any) message.ToolsReply {
+		raw, _ := json.Marshal(args)
+		return e.service.Tool(context.Background(), &message.ToolsRequest{OwnerID: userA, ThreadID: thread,
+			CallID: thread + ":1:" + call, Tool: tool, Args: raw, Confirmed: confirmed})
+	}
+	fresh := func() string { n++; return fmt.Sprint(n) }
+	voice := func(rev int) map[string]any {
+		return map[string]any{"board_id": id, "revision": rev, "asset": "mara", "design": "low and warm", "line": "Hello there."}
+	}
+	pick := func(rev int) map[string]any {
+		return map[string]any{"board_id": id, "revision": rev, "blocks": []string{"v1"}}
+	}
+	// at 2, only the run's take since (3): the voice is designed and the preview and the run go ahead
+	if r := ask(fresh(), "design_voice", true, voice(2)); r.Code != "" || r.Result == nil {
+		t.Fatal(r)
+	}
+	e.call(userA, "PUT", "/v1/studio/magic/settings", map[string]any{"ask_above_gpu_minutes": 0}, 200)
+	call := fresh()
+	if r := ask(call, "run_blocks", false, pick(2)); r.Code != "" || r.Preview == nil {
+		t.Fatal(r)
+	}
+	if r := ask(call, "run_blocks", true, pick(2)); r.Code != "" || r.Result == nil {
+		t.Fatal(r)
+	}
+	// a user's edit since (4): both still refuse, as the route does
+	e.call(userA, "POST", base+"/edits", map[string]any{"base_revision": 3, "ops": []any{
+		map[string]any{"op": "block", "id": "s2", "set": map[string]any{"name": "Rain"}}}}, 200)
+	stale := "board changed since you opened it (now revision 4)"
+	if r := ask(fresh(), "design_voice", true, voice(3)); r.Code != "conflict" || r.Error != stale {
+		t.Fatal(r)
+	}
+	if r := ask(fresh(), "run_blocks", false, pick(3)); r.Code != "conflict" || r.Error != stale {
+		t.Fatal(r)
+	}
+	e.call(userA, "POST", base+"/run", map[string]any{"revision": 3, "blocks": []string{"s1"}}, 409)
+}

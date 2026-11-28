@@ -182,7 +182,19 @@ jobs:
             const s = JSON.parse(fs.readFileSync("stack.json")); s.composeEnv.IMAGE_TAG = v;
             s.images = s.images.map((i) => i.startsWith(process.env.REGISTRY) ? i.replace(/:[^:]+$/, ":" + v) : i); put("stack.json", s);
           ' "$VERSION"
+      # the native packs' binaries the app ships (MiniMax H3, ZONOS3); resources refuses a dmg without them
+      - run: |
+          curl -fsSL https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain 1.88.0
+          echo "$HOME/.cargo/bin" >>"$GITHUB_PATH"
+      - run: make -C runner_service h3 zonos3
       - run: make -C desktop test lint dmg
+      - name: the native binaries are in the app
+        run: |
+          r=desktop/dist.noindex/helmstudio.app/Contents/Resources/runner/runner_service
+          for b in vendor/h3c/h3 vendor/zonos3/build/zonos3-server; do
+            test -x "$r/$b" || { echo "missing $b"; exit 1; }
+            otool -L "$r/$b" | tail -n +2 | grep -v -e '/System/Library/' -e '/usr/lib/' && { echo "$b links outside the system"; exit 1; } || true
+          done
       - run: mkdir dmg && mv desktop/dist.noindex/helmstudio.dmg "dmg/helmstudio-$VERSION.dmg" && ls -l dmg
       - uses: actions/upload-artifact@v4
         with:

@@ -1231,8 +1231,8 @@ func (s *Service) RunMagicBoard(ctx context.Context, caller common.Caller, id st
 		if err != nil {
 			return err
 		}
-		if body.Revision != row.Revision {
-			return staleBoard(row)
+		if err := boardAt(ctx, tx, row, body.Revision); err != nil {
+			return err
 		}
 		d := row.doc()
 		runs, err := boardRuns(ctx, tx, row.ID)

@@ -193,7 +193,7 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 		return orRefused(call(http.MethodPost, base+"/restore", map[string]any{"revision": a.Revision, "to": a.To}, &board),
 			map[string]any{"revision": board.Revision})
 	case "run_blocks":
-		return s.magicRun(call, base, a, pick, req.Confirmed, req.Ask, asked)
+		return s.magicRun(ctx, caller, call, base, a, pick, req.Confirmed, req.Ask, asked)
 	case "make_views":
 		return s.magicViews(ctx, caller, call, base, a, req.Confirmed, req.Ask)
 	case "design_voice":
@@ -372,7 +372,7 @@ func assetLane(d magic.Doc, diff magic.Diff) bool {
 
 // magicRun is run_blocks: the plan first; within the limit everything runs at once (the final reply); above it, the
 // board frames start and the preview is the plan with them; after the Yes the rest runs.
-func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[string]any, confirmed, ask bool, asked *message.ToolsReply) message.ToolsReply {
+func (s *Service) magicRun(ctx context.Context, caller common.Caller, call magicCall, base string, a magicArgs, pick map[string]any, confirmed, ask bool, asked *message.ToolsReply) message.ToolsReply {
 	run := func(p map[string]any) (dto.MagicRunStarted, *message.ToolsReply) {
 		body := map[string]any{"revision": a.Revision}
 		for k, v := range p {
@@ -433,8 +433,8 @@ func (s *Service) magicRun(call magicCall, base string, a magicArgs, pick map[st
 	if refused := call(http.MethodGet, base+"?view=agent", nil, &view); refused != nil {
 		return *refused
 	}
-	if view.Revision != a.Revision {
-		return toolErr("conflict", "board changed since you opened it (now revision %d)", view.Revision)
+	if err := s.boardSince(ctx, caller, a.BoardID, a.Revision); err != nil {
+		return apiRefused(err, "run_blocks")
 	}
 	frames := []magicFramePreview{}
 	var ids, rest, names, kinds []string

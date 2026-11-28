@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.1.0-alpha.7 (2026-11-29)
+
+A short fix release.
+
+### Fixes
+
+- **The Mac app now includes the MiniMax H3 and ZONOS3 programs.** In alpha.6's .dmg those two packs failed with
+  "the h3 binary is not built".
+- **The Assistant no longer fails to design a voice or run blocks while other runs finish** ("board changed since
+  you opened it").
+
+### Known limits
+
+Same as 0.1.0-alpha.6 (the Windows, NVIDIA and Turbo LoRA items moved to 0.1.0-alpha.8).
+
 ## 0.1.0-alpha.6 (2026-11-28)
 
 Magic, a board for making a short film; music and sound in Create; audio fades; and an Assistant that watches and

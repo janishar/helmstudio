@@ -117,8 +117,8 @@ func (s *Service) designVoice(ctx context.Context, caller common.Caller, call ma
 	if refused := call(http.MethodGet, base+"?view=agent", nil, &view); refused != nil {
 		return *refused
 	}
-	if view.Revision != a.Revision {
-		return toolErr("conflict", "board changed since you opened it (now revision %d)", view.Revision)
+	if err := s.boardSince(ctx, caller, a.BoardID, a.Revision); err != nil {
+		return apiRefused(err, "design_voice")
 	}
 	ai := slices.IndexFunc(view.Assets, func(x magic.AgentAsset) bool { return x.ID == a.Asset })
 	if ai < 0 {
@@ -260,8 +260,8 @@ func (s *Service) voiceRun(ctx context.Context, caller common.Caller, id string,
 		if err != nil {
 			return err
 		}
-		if revision != row.Revision {
-			return staleBoard(row)
+		if err := boardAt(ctx, tx, row, revision); err != nil {
+			return err
 		}
 		session, err := boardSession(ctx, tx, &row)
 		if err != nil {
