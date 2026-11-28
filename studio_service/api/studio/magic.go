@@ -55,6 +55,7 @@ type MagicEditError struct {
 }
 
 func (e *MagicEditError) Error() string { return e.Detail }
+func (*MagicEditError) unprocessable()  {}
 
 // readBoard reads one live board (lock: FOR UPDATE); unknown, malformed, deleted or another user's is 404.
 func readBoard(ctx context.Context, tx pgx.Tx, id string, lock bool) (boardRow, error) {

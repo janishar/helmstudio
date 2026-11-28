@@ -2,7 +2,6 @@ package studio
 
 import (
 	"context"
-	"errors"
 	"math"
 	"net/http"
 	"strconv"
@@ -32,7 +31,7 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		if err == nil {
 			out, err = c.service.CreateTimeline(ctx.Request.Context(), common.MustCaller(ctx), body)
 		}
-		replyTimeline(ctx, http.StatusCreated, out, err)
+		reply(ctx, http.StatusCreated, out, err)
 	})
 	group.GET("/timelines/:id", func(ctx *gin.Context) {
 		switch view, ok := ctx.GetQuery("view"); {
@@ -46,16 +45,12 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 			reply(ctx, http.StatusOK, out, err)
 		}
 	})
-	group.PUT("/timelines/:id", timelineIDBody(c.service.UpdateTimeline, http.StatusOK))
-	group.PATCH("/timelines/:id", timelineIDBody(c.service.PatchTimeline, http.StatusOK))
+	group.PUT("/timelines/:id", idBody(c.service.UpdateTimeline, http.StatusOK))
+	group.PATCH("/timelines/:id", idBody(c.service.PatchTimeline, http.StatusOK))
 	group.DELETE("/timelines/:id", func(ctx *gin.Context) {
-		if err := c.service.DeleteTimeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")); err != nil {
-			network.SendMixedError(ctx, err)
-			return
-		}
-		network.SendNoContent(ctx)
+		noContent(ctx, c.service.DeleteTimeline(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id")))
 	})
-	group.POST("/timelines/:id/clips", timelineIDBody(c.service.AddTimelineClips, http.StatusOK))
+	group.POST("/timelines/:id/clips", idBody(c.service.AddTimelineClips, http.StatusOK))
 	group.GET("/timelines/:id/clips/:clip_id/actions", func(ctx *gin.Context) {
 		var bounds [2]*float64
 		for i, name := range []string{"start", "end"} {
@@ -72,7 +67,7 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 			bounds[0], bounds[1])
 		reply(ctx, http.StatusOK, out, err)
 	})
-	group.POST("/timelines/:id/edits", timelineIDBody(c.service.EditTimeline, http.StatusOK)) // API 1.49
+	group.POST("/timelines/:id/edits", idBody(c.service.EditTimeline, http.StatusOK)) // API 1.49
 	group.GET("/timelines/:id/revisions", func(ctx *gin.Context) {
 		var before *int
 		limit := 20
@@ -99,13 +94,13 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		}
 		reply(ctx, http.StatusOK, out, err)
 	})
-	group.POST("/timelines/:id/restore", timelineIDBody(c.service.RestoreTimeline, http.StatusOK))
-	group.POST("/timelines/:id/frame", timelineIDBody(c.service.TimelineFrame, http.StatusOK))
-	group.POST("/timelines/:id/undo", timelineIDBody(c.service.UndoTimeline, http.StatusOK))
-	group.POST("/timelines/:id/redo", timelineIDBody(c.service.RedoTimeline, http.StatusOK))
-	group.POST("/timelines/:id/shots", timelineIDBody(c.service.CreateShot, http.StatusAccepted))
-	group.POST("/timelines/:id/lines", timelineIDBody(c.service.CreateLine, http.StatusAccepted))
-	group.POST("/timelines/:id/rerender", timelineIDBody(c.service.RerenderTimeline, http.StatusAccepted))
+	group.POST("/timelines/:id/restore", idBody(c.service.RestoreTimeline, http.StatusOK))
+	group.POST("/timelines/:id/frame", idBody(c.service.TimelineFrame, http.StatusOK))
+	group.POST("/timelines/:id/undo", idBody(c.service.UndoTimeline, http.StatusOK))
+	group.POST("/timelines/:id/redo", idBody(c.service.RedoTimeline, http.StatusOK))
+	group.POST("/timelines/:id/shots", idBody(c.service.CreateShot, http.StatusAccepted))
+	group.POST("/timelines/:id/lines", idBody(c.service.CreateLine, http.StatusAccepted))
+	group.POST("/timelines/:id/rerender", idBody(c.service.RerenderTimeline, http.StatusAccepted))
 	group.POST("/timelines/:id/export/plan", func(ctx *gin.Context) {
 		body, err := optionalBody[dto.TimelineExportCreate](ctx)
 		var out dto.ExportPlan
@@ -114,7 +109,7 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 		}
 		reply(ctx, http.StatusOK, out, err)
 	})
-	group.POST("/timelines/:id/export", timelineIDBody(c.service.ExportTimeline, http.StatusAccepted))
+	group.POST("/timelines/:id/export", idBody(c.service.ExportTimeline, http.StatusAccepted))
 	group.GET("/timelines/:id/exports", func(ctx *gin.Context) {
 		out, err := c.service.ListExports(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"))
 		reply(ctx, http.StatusOK, out, err)
@@ -149,30 +144,14 @@ func (c *controller) mountTimelines(group *gin.RouterGroup) {
 	})
 }
 
-// timelineIDBody decodes a strict body and answers fn(:id) with status; a broken timeline rule is the 422 with
-// problems.
-func timelineIDBody[B, T any](fn func(ctx context.Context, caller common.Caller, id string, body *B) (T, error), status int) gin.HandlerFunc {
+// idBody decodes a strict body and answers fn(:id) with status.
+func idBody[B, T any](fn func(ctx context.Context, caller common.Caller, id string, body *B) (T, error), status int) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
 		body, err := strictBody[B](ctx, false)
 		var out T
 		if err == nil {
 			out, err = fn(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 		}
-		replyTimeline(ctx, status, out, err)
+		reply(ctx, status, out, err)
 	}
-}
-
-// replyTimeline answers out, a TimelineError as its 422 body, or the error.
-func replyTimeline[T any](ctx *gin.Context, status int, out T, err error) {
-	var problems *TimelineError
-	if errors.As(err, &problems) {
-		network.SendJSON(ctx, http.StatusUnprocessableEntity, problems)
-		return
-	}
-	var failed *TimelineEditError // API 1.49: an op of /edits
-	if errors.As(err, &failed) {
-		network.SendJSON(ctx, http.StatusUnprocessableEntity, failed)
-		return
-	}
-	reply(ctx, status, out, err)
 }

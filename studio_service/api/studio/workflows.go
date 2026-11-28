@@ -36,6 +36,7 @@ type WorkflowError struct {
 }
 
 func (e *WorkflowError) Error() string { return e.Detail }
+func (*WorkflowError) unprocessable()  {}
 
 var (
 	errStarting = network.NewServiceUnavailableError("studio is starting; try again", nil)
