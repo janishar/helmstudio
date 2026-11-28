@@ -4,11 +4,13 @@ arguments, and the check of studio's argument list (placeholders substituted, ev
 blocking: callers run them in a thread."""
 
 import hashlib
+import io
 import json
 import re
 import shutil
 import subprocess
 import sys
+import wave
 from decimal import ROUND_HALF_UP, Decimal
 from pathlib import Path
 
@@ -275,6 +277,23 @@ def pieces(text: str, limit: int) -> list[str]:
 def rnd(x: float) -> int:
     """Round half away from zero, exactly (contracts check.py rnd)."""
     return int(Decimal(x).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+
+
+def pcm16(samples) -> bytes:
+    """Float samples in [-1, 1] (a numpy array: (n,) mono or (n, channels), so stereo comes out interleaved) as PCM
+    signed 16-bit little-endian, clipped, then rounded half to even."""
+    return (samples.clip(-1, 1) * 32767).round().astype("<i2").tobytes()
+
+
+def wav(pcm: bytes, rate: int, channels: int) -> bytes:
+    """PCM 16-bit samples (interleaved when stereo) as a RIFF WAVE file."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(channels)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(pcm)
+    return buf.getvalue()
 
 
 def stitch(lines: list[dict], spoken: list[bytes], rate: int) -> tuple[bytes, list[dict]]:

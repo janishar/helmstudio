@@ -90,7 +90,7 @@ def main() -> None:
             for x in case["lines"]:
                 speaker, instruct = tts.voice_args(name, x["voice"], x["style"], synth._speaker_ids)
                 language = tts.language_of(case["language"], x["voice"])
-                spoken.append(tts.pcm16(synth.speak(x["text"], speaker, language, instruct)))
+                spoken.append(media.pcm16(synth.speak(x["text"], speaker, language, instruct)))
             pcm, cues = media.stitch(case["lines"], spoken, tts.SAMPLE_RATE)
         else:
             if variant == "custom_voice":
@@ -102,7 +102,7 @@ def main() -> None:
                 voice = {"source": "design", "text": case["design"]}
             speaker, instruct = tts.voice_args(name, voice, case.get("style", ""), synth._speaker_ids)
             language = tts.language_of(case["language"], voice)
-            pcm, cues = tts.pcm16(synth.speak(case["text"], speaker, language, instruct)), None
+            pcm, cues = media.pcm16(synth.speak(case["text"], speaker, language, instruct)), None
             np.save(OUT / f"{name}{suffix}.codes.npy", torch.stack(codes).cpu().numpy())
         del synth.talker.frames
         speak_s = time.monotonic() - t1

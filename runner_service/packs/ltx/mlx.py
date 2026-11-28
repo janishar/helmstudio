@@ -25,7 +25,6 @@ import math
 import subprocess
 import sys
 import tempfile
-import wave
 from dataclasses import dataclass, replace
 from pathlib import Path
 
@@ -730,11 +729,7 @@ def _save_wav(waveform: mx.array, path: Path) -> None:
     wav = waveform[0].T
     pcm = mx.contiguous((mx.clip(wav.astype(mx.float32), -1.0, 1.0) * 32767).astype(mx.int16))
     mx.eval(pcm)
-    with wave.open(str(path), "w") as wf:
-        wf.setnchannels(wav.shape[1])
-        wf.setsampwidth(2)
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(memoryview(pcm))
+    path.write_bytes(media.wav(bytes(memoryview(pcm)), SAMPLE_RATE, wav.shape[1]))
 
 
 def decode(ctx, params: dict, inputs: dict) -> dict:

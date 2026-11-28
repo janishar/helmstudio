@@ -323,9 +323,8 @@ def sample(
 
 
 def take(wave: torch.Tensor) -> dict:
-    """A stereo Audio value (PCM 16-bit interleaved) of float (2, n), levels as the model gives them."""
-    pcm = (wave.T.numpy() * 32767).round().astype("<i2").tobytes()
-    return {"audio": {"wav": pcm, "sample_rate": SAMPLE_RATE, "channels": 2,
+    """A stereo Audio value (PCM 16-bit interleaved) of float (2, n), levels as the model gives them (sample clamps them to [-1, 1])."""
+    return {"audio": {"wav": media.pcm16(wave.T.numpy()), "sample_rate": SAMPLE_RATE, "channels": 2,
                       "duration_s": wave.shape[-1] / SAMPLE_RATE}}  # fmt: skip
 
 

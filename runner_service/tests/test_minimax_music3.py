@@ -11,7 +11,7 @@ from conftest import CONTRACTS
 from fake_hub import FakeHub, Repo
 
 import config
-from core import download, models
+from core import download, media, models
 from core import pack as packs
 from core.download import Progress
 from core.graph import Cancelled, RunError
@@ -171,7 +171,7 @@ def test_the_stages_give_the_one_call_pipelines_audio(parts, monkeypatch):
     pipe.update_components(tokenizer=Tokens(), scheduler=mm.scheduler(folder), **comps)
     want = pipe(prompt="pop", lyrics="[verse]\nla la", audio_duration=2.0,
                 generator=torch.Generator("cpu").manual_seed(3), output="audios")[0]  # fmt: skip
-    assert audio["wav"] == mm.pcm16(want) and audio["channels"] == 2 and audio["sample_rate"] == 44100
+    assert audio["wav"] == media.pcm16(want.T) and audio["channels"] == 2 and audio["sample_rate"] == 44100
     assert audio["duration_s"] == want.shape[-1] / 44100 and len(audio["wav"]) == want.shape[-1] * 4
     phases = [s[2] for s in steps]
     assert phases.count("composing") >= 2 and "flow matching" in phases and phases[-1] == "decoding"

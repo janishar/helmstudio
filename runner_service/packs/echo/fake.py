@@ -2,7 +2,6 @@
 
 import array
 import importlib.util
-import io
 import json
 import math
 import re
@@ -10,7 +9,6 @@ import sys
 import tempfile
 import textwrap
 import time
-import wave
 import zlib
 from pathlib import Path
 
@@ -335,14 +333,8 @@ def foley(ctx, params: dict, inputs: dict) -> dict:
     _steps(ctx, params)
     pcm = _stereo(src["duration_s"], SOUND_RATE, _pitch(inputs["text"], params["seed"]))
     out = _audio(pcm, SOUND_RATE)
-    wav = io.BytesIO()
-    with wave.open(wav, "wb") as w:
-        w.setnchannels(2)
-        w.setsampwidth(2)
-        w.setframerate(SOUND_RATE)
-        w.writeframes(pcm)
     poster = draw(f"{inputs['text']} [sound]", src["width"], src["height"])
-    clip = _clip(poster, src["frames"], round(src["fps"]), media.mux(src["data"], wav.getvalue()))
+    clip = _clip(poster, src["frames"], round(src["fps"]), media.mux(src["data"], media.wav(pcm, SOUND_RATE, 2)))
     clip["video"].pop("source_map")
     return out | clip
 

@@ -181,10 +181,6 @@ def utter(ctx, tts, text: str, speaker: str, language: str, instruct: str, seed:
     return np.concatenate(audio)
 
 
-def pcm16(samples: np.ndarray) -> bytes:
-    return (np.clip(samples, -1, 1) * 32767).round().astype("<i2").tobytes()
-
-
 def speak(ctx, params: dict, inputs: dict) -> dict:
     model, text = inputs["model"], inputs["text"].strip()
     if not text:
@@ -201,7 +197,7 @@ def speak(ctx, params: dict, inputs: dict) -> dict:
     ctx.progress(planned, planned, "speaking")
     return {
         "audio": {
-            "wav": pcm16(samples),
+            "wav": media.pcm16(samples),
             "sample_rate": SAMPLE_RATE,
             "duration_s": len(samples) / SAMPLE_RATE,
         }
@@ -239,7 +235,7 @@ def dialogue(ctx, params: dict, inputs: dict) -> dict:
             raise RunError(f"{where}.voice: a Qwen3-TTS dialogue speaks preset voices only")
         speaker, instruct = voice_args(where, row["voice"], row.get("style", ""), tts._speaker_ids)
         language = language_of(params["language"], row["voice"])
-        spoken.append(pcm16(utter(ctx, tts, text, speaker, language, instruct, inputs["seed"], on_frame)))
+        spoken.append(media.pcm16(utter(ctx, tts, text, speaker, language, instruct, inputs["seed"], on_frame)))
     ctx.progress(planned, planned, "speaking")
     wav, cues = media.stitch(lines, spoken, SAMPLE_RATE)
     return {"audio": {"wav": wav, "sample_rate": SAMPLE_RATE, "duration_s": len(wav) / 2 / SAMPLE_RATE, "cues": cues}}

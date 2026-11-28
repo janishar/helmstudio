@@ -29,7 +29,6 @@ import math
 import subprocess
 import sys
 import tempfile
-import wave
 from dataclasses import dataclass, replace
 from fractions import Fraction
 from pathlib import Path
@@ -756,11 +755,7 @@ def upscale(ctx, params: dict, inputs: dict) -> dict:
 def _save_wav(waveform: np.ndarray, path: Path) -> None:
     """(channels, samples) float → 16-bit PCM WAV at 48 kHz."""
     pcm = np.ascontiguousarray((np.clip(waveform.T, -1.0, 1.0) * 32767).astype(np.int16))
-    with wave.open(str(path), "w") as wf:
-        wf.setnchannels(pcm.shape[1])
-        wf.setsampwidth(2)
-        wf.setframerate(SAMPLE_RATE)
-        wf.writeframes(pcm.tobytes())
+    path.write_bytes(media.wav(pcm.tobytes(), SAMPLE_RATE, pcm.shape[1]))  # truncated, not media.pcm16's rounding
 
 
 def _pcm(path: Path, rate: int, start: float = 0.0, seconds: float | None = None) -> np.ndarray | None:

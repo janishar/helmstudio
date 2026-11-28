@@ -542,7 +542,7 @@ def decode(ctx, params: dict, inputs: dict) -> dict:
     if latent.keep is not None:
         wav = splice(wav, latent.keep, latent.window)
     wav = level(wav)
-    pcm = (np.clip(wav, -1, 1) * 32767).round().astype("<i2").T.tobytes()
+    pcm = media.pcm16(wav.T)
     audio = {
         "wav": pcm,
         "sample_rate": SAMPLE_RATE,

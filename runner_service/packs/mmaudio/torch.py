@@ -15,7 +15,6 @@ import dataclasses
 import subprocess
 import sys
 import tempfile
-import wave
 from pathlib import Path
 
 import accelerate
@@ -269,8 +268,7 @@ def generate(ctx, comps: dict, text: str, avoid: str, seconds: float, seed: int,
 
 
 def _audio(samples: np.ndarray) -> dict:
-    pcm = (np.clip(samples, -1, 1) * 32767).round().astype("<i2").tobytes()
-    return {"wav": pcm, "sample_rate": RATE, "duration_s": len(samples) / RATE}
+    return {"wav": media.pcm16(samples), "sample_rate": RATE, "duration_s": len(samples) / RATE}
 
 
 def _comps(ctx, model, names) -> dict:
@@ -321,11 +319,7 @@ def foley(ctx, params: dict, inputs: dict) -> dict:
         else:
             picture = src["data"]
         wav = tmp / "sound.wav"
-        with wave.open(str(wav), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(RATE)
-            w.writeframes(audio["wav"])
+        wav.write_bytes(media.wav(audio["wav"], RATE, 1))
         (tmp / "out.mp4").write_bytes(media.mux(picture, wav.read_bytes()))
         info = media.probe(tmp / "out.mp4")
         num, den = (int(x) for x in info["stream"]["frame_rate"].split("/"))
