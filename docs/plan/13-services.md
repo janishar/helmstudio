@@ -196,7 +196,7 @@ Rules carried over from the reference:
   data`). The envelope's `type` is the kind of message, never the routing
   subject: `cmd.run.execute` travels on `cmd.run.<host>.<env>`. Host names are
   lower-case letters and digits.
-- `Nats-Msg-Id` of `job:attempt` for commands and `job:seq` for events;
+- `Nats-Msg-Id` of `job:attempt` for commands and `<run_id>:<attempt>:<seq>` for run events;
   durable pull consumers created in code; an `in_progress` heartbeat under a
   short `ack_wait`; inbox de-duplication; errors classed as transient, final
   or invalid, with dead letters.
