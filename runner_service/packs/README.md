@@ -309,6 +309,7 @@ One function per stage, named after it, plus the component hooks. All of them ru
 thread, one at a time, off the event loop (heartbeats, cancel and progress keep flowing); the module is
 imported only by its env, so it may import torch at the top.
 
+<!-- fmt:off -->
 ```python
 def encode(ctx, params: dict, inputs: dict) -> dict:     # returns {output port: value}
     te = ctx.component(inputs["model"], "text_encoder")   # a loaded nn.Module on ctx.device
@@ -336,6 +337,7 @@ def tensor_hook(component: str, model):                  # optional: None, or ho
 def rotated(component: str, model):                       # optional (API 1.33): None, or rotated(module name) ->
     return None                                           # its ConvRot group (256) or None, for int8 Linears
 ```
+<!-- fmt:on -->
 
 A Linear whose stored weight (after `rename`) is float8 loads as `Fp8Linear` (`qweight` e4m3 [out, in] as stored,
 `scale` fp32 [out, 1] from the key `<module>.scale`, ones when the file has none): rename a torchao file's
