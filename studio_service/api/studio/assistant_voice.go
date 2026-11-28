@@ -280,8 +280,7 @@ func (s *Service) voiceRun(ctx context.Context, caller common.Caller, id string,
 func apiRefused(err error, where string) message.ToolsReply {
 	var refused *network.APIError
 	if errors.As(err, &refused) && refused.Code < 500 {
-		code := map[int]string{http.StatusNotFound: "not_found", http.StatusConflict: "conflict"}[refused.Code]
-		return toolErr(cmp.Or(code, "invalid"), "%s", refused.Message)
+		return toolErr(cmp.Or(toolCodes[refused.Code], "invalid"), "%s", refused.Message)
 	}
 	log.Printf("studio.tools %s: %v", where, err)
 	return toolErr("internal", "internal error")
@@ -312,7 +311,5 @@ func toolAnswer(r message.ToolsReply) (any, error) {
 	if r.Error == "" {
 		return r.Result, nil
 	}
-	code := map[string]int{"invalid": http.StatusUnprocessableEntity, "not_found": http.StatusNotFound,
-		"conflict": http.StatusConflict, "forbidden": http.StatusForbidden, "cap": http.StatusConflict}[r.Code]
-	return nil, network.NewAPIError(cmp.Or(code, http.StatusInternalServerError), r.Error, nil)
+	return nil, network.NewAPIError(cmp.Or(toolStatuses[r.Code], http.StatusInternalServerError), r.Error, nil)
 }

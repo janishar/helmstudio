@@ -187,11 +187,11 @@ func (cl tlClip) describe(t timelineDoc) string {
 	var s string
 	switch {
 	case cl.TakeID == nil:
-		s = fmt.Sprintf("empty slot %.2fs", deref0f(cl.Hold))
+		s = fmt.Sprintf("empty slot %.2fs", deref(cl.Hold))
 	case cl.Hold != nil:
 		s = fmt.Sprintf("image %s hold %.2fs", *cl.TakeID, *cl.Hold)
 	default:
-		s = fmt.Sprintf("video %s %.2f-%.2fs", *cl.TakeID, deref0f(cl.In), deref0f(cl.Out))
+		s = fmt.Sprintf("video %s %.2f-%.2fs", *cl.TakeID, deref(cl.In), deref(cl.Out))
 	}
 	if cl.TakeID != nil {
 		if tk, ok := t.Takes[*cl.TakeID]; ok {

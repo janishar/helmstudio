@@ -87,7 +87,7 @@ func (s *Service) magicTool(ctx context.Context, caller common.Caller, req *mess
 	if refused := checkArgs(req.Tool, top); refused != nil {
 		return *refused
 	}
-	base := "/v1/studio/magic/boards/" + url.PathEscape(a.BoardID)
+	base := magicBase(a.BoardID)
 	call := s.magicCaller(ctx, caller)
 	pick := map[string]any{}
 	for key, v := range map[string]any{"blocks": a.Blocks, "lane": a.Lane, "stale": a.Stale} {

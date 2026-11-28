@@ -1,6 +1,7 @@
 package lora
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -296,17 +297,9 @@ func (s *Service) find(ctx context.Context, tx pgx.Tx, caller common.Caller, id 
 	}
 	rows, err := own(ctx, tx, caller.ID, []string{id})
 	if err != nil || len(rows) == 0 {
-		return Lora{}, cmpErr(err, errNotFound)
+		return Lora{}, cmp.Or[error](err, errNotFound)
 	}
 	return ownDTO(rows[0]), nil
-}
-
-// cmpErr is err, or fallback when err is nil.
-func cmpErr(err, fallback error) error {
-	if err != nil {
-		return err
-	}
-	return fallback
 }
 
 // uploadName is a file name's LoRA name: the base name without .safetensors (any case), control characters left out,

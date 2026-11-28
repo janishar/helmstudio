@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -336,7 +337,7 @@ func (s *Service) rowAttempt(ctx context.Context, tx pgx.Tx, batchID string, n, 
 	}
 	stored, isPipeline, err := readStoredPipeline(ctx, tx, batchID)
 	if err != nil || !isPipeline {
-		return stored, batch, row, nil, 0, cmpErr(err, errNotFound)
+		return stored, batch, row, nil, 0, cmp.Or[error](err, errNotFound)
 	}
 	row, err = one[model.BatchRow](ctx, tx, model.BatchRowFrom+`WHERE br.batch_id = $1 AND br.n = $2`, batchID, n)
 	if err != nil {
@@ -354,14 +355,6 @@ func (s *Service) rowAttempt(ctx context.Context, tx pgx.Tx, batchID string, n, 
 		return stored, batch, row, nil, 0, errNotFound
 	}
 	return stored, batch, row, retried, attempt, nil
-}
-
-// cmpErr is err, or fallback when err is nil.
-func cmpErr(err, fallback error) error {
-	if err != nil {
-		return err
-	}
-	return fallback
 }
 
 // stepStatus is a node's status after one of its steps, as the cells name it.

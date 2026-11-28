@@ -386,7 +386,7 @@ func hostsAdminCmd(args []string, stdout, stderr io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(stdout, "%s: after-run %s, idle %d min, reserve %s GB, version %d\n", host, s.AfterRun,
-			deref0(s.IdleUnloadMin), strconv.FormatFloat(deref0f(s.ReserveGB), 'f', -1, 64), s.Version)
+			deref(s.IdleUnloadMin), strconv.FormatFloat(deref(s.ReserveGB), 'f', -1, 64), s.Version)
 		return nil
 	}
 	return errors.New(hostsUse)
@@ -404,20 +404,6 @@ func parseMixed(fs *flag.FlagSet, args []string) ([]string, error) {
 		}
 		pos, args = append(pos, fs.Arg(0)), fs.Args()[1:]
 	}
-}
-
-func deref0(p *int) int {
-	if p == nil {
-		return 0
-	}
-	return *p
-}
-
-func deref0f(p *float64) float64 {
-	if p == nil {
-		return 0
-	}
-	return *p
 }
 
 // keysCmd: helm keys list | new <client> | revoke <id> (admin).

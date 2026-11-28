@@ -44,11 +44,11 @@ func TestExportRuns(t *testing.T) {
 	keys := map[string]string{"A": "u/o/a.mp4", "B": "u/o/b.mp4", "I": "u/o/i.png"}
 	id := func(s string) *string { return &s }
 	written := Doc{Target: Target{256, 128, 24, 48000}, Tracks: []Track{{Kind: "video", Clips: []Clip{
-		{ID: "a", TakeID: id("A"), In: f64(0), Out: f64(1.5)},
-		{ID: "b", TakeID: id("B"), In: f64(0.5), Out: f64(1.75), TransitionIn: &Dissolve{"dissolve", 12}},
-		{ID: "i", TakeID: id("I"), Hold: f64(0.5), TransitionIn: &Dissolve{"dissolve", 6}}, // into an image: no source time
-		{ID: "s", Hold: f64(0.5)},
-	}}, {Kind: "audio", Clips: []Clip{{ID: "m", TakeID: id("A"), In: f64(0), Out: f64(1), At: f64(0.25), GainDB: f64(-6)}}}}}
+		{ID: "a", TakeID: id("A"), In: new(0.0), Out: new(1.5)},
+		{ID: "b", TakeID: id("B"), In: new(0.5), Out: new(1.75), TransitionIn: &Dissolve{"dissolve", 12}},
+		{ID: "i", TakeID: id("I"), Hold: new(0.5), TransitionIn: &Dissolve{"dissolve", 6}}, // into an image: no source time
+		{ID: "s", Hold: new(0.5)},
+	}}, {Kind: "audio", Clips: []Clip{{ID: "m", TakeID: id("A"), In: new(0.0), Out: new(1.0), At: new(0.25), GainDB: new(-6.0)}}}}}
 	doc, probs := Normalize(written, takes, nil)
 	if probs != nil {
 		t.Fatal(probs)
@@ -99,7 +99,7 @@ func TestExportRuns(t *testing.T) {
 	}
 	export(*doc, "conform")
 	whole, probs := Normalize(Doc{Target: written.Target, Tracks: []Track{{Kind: "video", Clips: []Clip{
-		{ID: "a", TakeID: id("A")}, {ID: "b", TakeID: id("B"), GainDB: f64(3)}}}}}, takes, nil)
+		{ID: "a", TakeID: id("A")}, {ID: "b", TakeID: id("B"), GainDB: new(3.0)}}}}}, takes, nil)
 	if probs != nil {
 		t.Fatal(probs)
 	}

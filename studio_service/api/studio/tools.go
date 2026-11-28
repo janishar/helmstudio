@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"maps"
+	"net/http"
 	"regexp"
 	"slices"
 	"strings"
@@ -49,6 +50,14 @@ func toolErr(code, format string, args ...any) message.ToolsReply {
 	}
 	return message.ToolsReply{Error: text, Code: code}
 }
+
+// toolCodes are the tool codes of the API's refusals, and toolStatuses the statuses a tool's codes answer as a route.
+var (
+	toolCodes = map[int]string{http.StatusNotFound: "not_found", http.StatusUnprocessableEntity: "invalid",
+		http.StatusForbidden: "forbidden", http.StatusConflict: "conflict", http.StatusBadRequest: "invalid"}
+	toolStatuses = map[string]int{"invalid": http.StatusUnprocessableEntity, "not_found": http.StatusNotFound,
+		"conflict": http.StatusConflict, "forbidden": http.StatusForbidden, "cap": http.StatusConflict}
+)
 
 // strictArgs decodes a tool's args into out, closed (an unknown field is invalid).
 func strictArgs(raw json.RawMessage, out any) error {

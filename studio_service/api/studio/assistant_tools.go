@@ -154,8 +154,7 @@ func (s *Service) localCall(ctx context.Context, caller common.Caller, method, p
 	if failure.OpIndex != nil {
 		failure.Detail = fmt.Sprintf("ops[%d]: %s", *failure.OpIndex, failure.Detail)
 	}
-	code := map[int]string{http.StatusNotFound: "not_found", http.StatusUnprocessableEntity: "invalid", http.StatusForbidden: "forbidden",
-		http.StatusConflict: "conflict", http.StatusBadRequest: "invalid"}[recorder.Code]
+	code := toolCodes[recorder.Code]
 	if code == "" {
 		code, failure.Detail = "internal", "internal error"
 	}
@@ -315,7 +314,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("takes", fmt.Sprintf("/sessions/%s/takes?limit=%d", esc(args.SessionID), limit))
 		}
 	case "list_workflows":
-		return single(get("", "/workflows"), refused)
+		return orRefused(refused, get("", "/workflows"))
 	case "get_workflow":
 		body := get("workflow", "/workflows/"+esc(args.WorkflowID))
 		var wf struct {
@@ -346,13 +345,13 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			}
 		}
 	case "get_run":
-		return single(get("", "/runs/"+esc(args.RunID)), refused)
+		return orRefused(refused, get("", "/runs/"+esc(args.RunID)))
 	case "plan_run":
 		body, failed := s.localCall(ctx, caller, http.MethodPost, "/v1/studio/runs/plan",
-			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmpAny(args.Inputs, map[string]any{}), "host": args.Host})
-		return single(body, failed)
+			map[string]any{"workflow_id": *args.WorkflowID, "inputs": cmp.Or[any](args.Inputs, map[string]any{}), "host": args.Host})
+		return orRefused(failed, body)
 	case "models":
-		return single(get("", "/models"), refused)
+		return orRefused(refused, get("", "/models"))
 	case "hosts":
 		hosts := get("", "/hosts")
 		var list map[string][]map[string]any
@@ -374,7 +373,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 		if args.Starred != nil {
 			query.Set("starred", fmt.Sprint(*args.Starred))
 		}
-		return single(get("", "/takes?"+query.Encode()), refused)
+		return orRefused(refused, get("", "/takes?"+query.Encode()))
 	case "get_take":
 		get("take", "/takes/"+esc(args.TakeID))
 		get("uses", "/takes/"+esc(args.TakeID)+"/uses")
@@ -413,7 +412,7 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("chat", "/batches/"+id+"/chat")
 		}
 	case "list_timelines":
-		return single(get("", "/timelines"), refused)
+		return orRefused(refused, get("", "/timelines"))
 	case "show_timeline": // API 1.49: the agent view
 		get("timeline", "/timelines/"+esc(args.TimelineID)+"?view=agent")
 		get("exports", "/timelines/"+esc(args.TimelineID)+"/exports")
@@ -431,17 +430,17 @@ func (s *Service) readTool(ctx context.Context, caller common.Caller, name strin
 			get("revisions", fmt.Sprintf("%s?limit=%d", base, limit))
 		}
 	case "use_skill": // API 1.64
-		return single(get("", "/skills/"+esc(args.Skill)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)))
 	case "read_skill_file":
-		return single(get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)), refused)
+		return orRefused(refused, get("", "/skills/"+esc(args.Skill)+"/files/"+esc(args.File)))
 	case "read_model_guide": // API 1.71
-		return single(get("", "/model-guides/"+esc(args.Family)), refused)
+		return orRefused(refused, get("", "/model-guides/"+esc(args.Family)))
 	case "custom_nodes":
-		return single(get("", "/custom-nodes"), refused)
+		return orRefused(refused, get("", "/custom-nodes"))
 	case "model_sources":
-		return single(get("", "/model-sources"), refused)
+		return orRefused(refused, get("", "/model-sources"))
 	case "model_jobs":
-		return single(get("", "/admin/model-jobs"), refused)
+		return orRefused(refused, get("", "/admin/model-jobs"))
 	}
 	if refused != nil {
 		return *refused
@@ -472,22 +471,6 @@ func checkArgs(name string, top map[string]json.RawMessage) *message.ToolsReply 
 		}
 	}
 	return nil
-}
-
-// single is a tool whose output is one route's answer.
-func single(body json.RawMessage, refused *message.ToolsReply) message.ToolsReply {
-	if refused != nil {
-		return *refused
-	}
-	return message.ToolsReply{Result: body}
-}
-
-// cmpAny is v, or fallback when v is nil.
-func cmpAny(v, fallback any) any {
-	if v == nil {
-		return fallback
-	}
-	return v
 }
 
 // lookAt is look_at after the user's Yes: one interactive ask run of the takes (the owner's image and video takes, in

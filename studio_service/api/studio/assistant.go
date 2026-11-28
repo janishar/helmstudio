@@ -62,11 +62,9 @@ type AssistantLimits struct {
 	AutoGPUMinutesPerHour *int `json:"auto_gpu_minutes_per_hour"`
 }
 
-func intp(n int) *int { return &n }
-
 // defaultLimits are the caps before the admin sets any.
 func defaultLimits() AssistantLimits {
-	return AssistantLimits{intp(2000), intp(20000000), intp(200), intp(30), intp(8), intp(30)}
+	return AssistantLimits{new(2000), new(20000000), new(200), new(30), new(8), new(30)}
 }
 
 // orAuto fills the Auto caps a row or PUT left out from `from`.

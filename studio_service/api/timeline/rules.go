@@ -238,8 +238,6 @@ func (p Problem) MarshalJSON() ([]byte, error) {
 	return json.Marshal([]any{p.Code, null(p.Track), null(p.Clip)})
 }
 
-func f64(v float64) *float64 { return &v }
-func boolp(v bool) *bool     { return &v }
 func val(p *float64) float64 {
 	if p == nil {
 		return 0
@@ -381,7 +379,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				}
 				endS := c.Out
 				if endS == nil && has {
-					endS = f64(tk.DurationS)
+					endS = new(tk.DurationS)
 				}
 				if endS == nil {
 					add("out_required", name, cid)
@@ -392,7 +390,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 					if has && !(0 <= i && o-i >= 1 && o <= g.F(tk.DurationS)) {
 						add("trim", name, cid)
 					}
-					n.In, n.Out = f64(g.S(i)), f64(g.S(o))
+					n.In, n.Out = new(g.S(i)), new(g.S(o))
 				} else {
 					i, o := g.Smp(val(c.In)), g.Smp(*endS)
 					if has && !(0 <= i && i < o && o <= g.Smp(tk.DurationS)) {
@@ -405,7 +403,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 						add("at_required", name, cid)
 						continue
 					}
-					n.In, n.Out, n.At = f64(float64(i)/float64(g.sr)), f64(float64(o)/float64(g.sr)), f64(g.Snap(*c.At))
+					n.In, n.Out, n.At = new(float64(i)/float64(g.sr)), new(float64(o)/float64(g.sr)), new(g.Snap(*c.At))
 				}
 			case !video && !(kind == "slot" && c.Shot != nil): // 1.32: a New line placeholder is the exception
 				add("wrong_track", name, cid)
@@ -425,7 +423,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				if g.F(*c.Hold) < 1 {
 					add("hold", name, cid)
 				}
-				n.At, n.Hold = f64(g.Snap(*c.At)), f64(g.Snap(*c.Hold))
+				n.At, n.Hold = new(g.Snap(*c.At)), new(g.Snap(*c.Hold))
 			default:
 				if c.In != nil || c.Out != nil {
 					add("image_trim", name, cid)
@@ -437,9 +435,9 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				if g.F(*c.Hold) < 1 {
 					add("hold", name, cid)
 				}
-				n.Hold = f64(g.Snap(*c.Hold))
+				n.Hold = new(g.Snap(*c.Hold))
 			}
-			n.GainDB, n.Mute = f64(val(c.GainDB)), boolp(c.Mute != nil && *c.Mute)
+			n.GainDB, n.Mute = new(val(c.GainDB)), new(c.Mute != nil && *c.Mute)
 			if c.Link != nil { // 1.50: an audio-track clip linked to a V1 clip
 				if video {
 					add("link_track", name, cid)
@@ -486,7 +484,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 		if video {
 			pos := 0
 			for i := range clips {
-				clips[i].n.At = f64(g.S(pos))
+				clips[i].n.At = new(g.S(pos))
 				pos += Len(clips[i].n, clips[i].kind, g, false)
 			}
 			din := make([]int, len(clips)+1)
@@ -528,7 +526,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				ends = append(ends, end{name, c.n.ID, e})
 			}
 		}
-		nt := Track{Name: name, Kind: t.Kind, GainDB: f64(val(t.GainDB)), Mute: boolp(t.Mute != nil && *t.Mute), Clips: []Clip{}}
+		nt := Track{Name: name, Kind: t.Kind, GainDB: new(val(t.GainDB)), Mute: new(t.Mute != nil && *t.Mute), Clips: []Clip{}}
 		for _, c := range clips {
 			nt.Clips = append(nt.Clips, c.n)
 		}

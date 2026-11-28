@@ -351,7 +351,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 	var v1 []timeline.Clip
 	slot := func(id string, frames int) {
 		if frames > 0 {
-			v1 = append(v1, timeline.Clip{ID: id, Hold: f64(s(frames)), Alternatives: []string{}})
+			v1 = append(v1, timeline.Clip{ID: id, Hold: new(s(frames)), Alternatives: []string{}})
 		}
 	}
 	piece := func(p *v1Piece) {
@@ -364,7 +364,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 		}
 		n := min(p.frames, p.avail)
 		take := p.take
-		v1 = append(v1, timeline.Clip{ID: p.id, TakeID: &take, In: f64(0), Out: f64(s(n)), Alternatives: []string{}})
+		v1 = append(v1, timeline.Clip{ID: p.id, TakeID: &take, In: new(0.0), Out: new(s(n)), Alternatives: []string{}})
 		slot(p.id+"-rest", p.frames-n)
 	}
 	cursor := 0
@@ -384,7 +384,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			n := min(own, max(sh.avail-sh.srcOff-sh.head, 0))
 			if n > 0 {
 				take := sh.take
-				c := timeline.Clip{ID: sh.b.ID, TakeID: &take, In: f64(s(sh.srcOff + sh.head)), Out: f64(s(sh.srcOff + sh.head + n)),
+				c := timeline.Clip{ID: sh.b.ID, TakeID: &take, In: new(s(sh.srcOff + sh.head)), Out: new(s(sh.srcOff + sh.head + n)),
 					Alternatives: []string{}}
 				if sh.dissolve > 0 {
 					c.TransitionIn = &timeline.Dissolve{Type: "dissolve", Frames: sh.dissolve}
@@ -394,7 +394,7 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 			slot(sh.b.ID+map[bool]string{true: "-rest", false: ""}[n > 0], own-n)
 		case sh.kind == "image":
 			take := sh.take
-			v1 = append(v1, timeline.Clip{ID: sh.b.ID, TakeID: &take, Hold: f64(s(own)), Alternatives: []string{}})
+			v1 = append(v1, timeline.Clip{ID: sh.b.ID, TakeID: &take, Hold: new(s(own)), Alternatives: []string{}})
 		default:
 			slot(sh.b.ID, own)
 		}
@@ -483,9 +483,9 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 				if made > 0 {
 					cid = b.ID + "." + strconv.Itoa(made)
 				}
-				c := timeline.Clip{ID: cid, TakeID: &take, In: f64(0), Out: f64(s(n)), At: f64(s(at)), Alternatives: []string{}}
+				c := timeline.Clip{ID: cid, TakeID: &take, In: new(0.0), Out: new(s(n)), At: new(s(at)), Alternatives: []string{}}
 				if b.GainDB != nil { // API 1.101: the block's level is its clips' gain
-					c.GainDB = f64(*b.GainDB)
+					c.GainDB = new(*b.GainDB)
 				}
 				if to, ok := links[b.ID]; ok && made == 0 {
 					c.Link = &to
@@ -551,5 +551,3 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 	out.Doc = timeline.Doc{Target: target, Tracks: tracks}
 	return out
 }
-
-func f64(v float64) *float64 { return &v }

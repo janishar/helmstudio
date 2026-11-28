@@ -3,6 +3,7 @@ package studio
 import (
 	"archive/zip"
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -232,7 +233,7 @@ func writeEntry(f *zip.File, to string) error {
 		return err
 	}
 	_, err = io.Copy(w, io.LimitReader(r, zipUnpacked+1))
-	return cmpErr(err, w.Close())
+	return cmp.Or(err, w.Close())
 }
 
 // settling is how long a file of yours must stay unchanged before a scan reads it (a .zip or a folder being copied).

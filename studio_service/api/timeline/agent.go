@@ -263,7 +263,7 @@ func FrameAtTime(doc Doc, t float64, takes map[string]Take) FrameTime {
 			src, last := g.S(g.F(val(c.In))+f-a), g.S(g.F(takes[c.Take()].DurationS)-1)
 			out.T, out.Shown, out.ShownT = &src, str("last"), &last
 			if 2*g.F(src) <= g.F(last) {
-				out.Shown, out.ShownT = str("first"), f64(0)
+				out.Shown, out.ShownT = str("first"), new(0.0)
 			}
 		}
 		return out
