@@ -41,9 +41,8 @@ export function usePeaks(url?: string) {
       const p = cachedPeaks(url, url, 0);
       if (p || peaksFailed(url)) setGot({ url, p });
     };
-    const off = followDetail(read);
     queueMicrotask(read);
-    return off;
+    return followDetail(read);
   }, [url]);
   const mine = got && got.url === url ? got : null;
   const bars = useMemo(() => (mine?.p ? peaksOf(mine.p[0]) : null), [mine]);
