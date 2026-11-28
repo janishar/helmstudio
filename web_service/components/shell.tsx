@@ -14,6 +14,7 @@ import {
   Sparkles,
   WandSparkles,
   Workflow,
+  Wrench,
 } from "lucide-react";
 import {
   AssistantDrawer,
@@ -132,7 +133,8 @@ function SetupGear({ admin, path }: { admin: boolean; path: string }) {
       className="dock-item flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": SETTINGS.tile } as React.CSSProperties}>
-        <Settings size={18} strokeWidth={1.75} aria-hidden />
+        {/* a wrench, not the Settings gear its menu holds (owner, 2026-11-28: "chane icon of setup") */}
+        <Wrench size={18} strokeWidth={1.75} aria-hidden />
       </span>
       Setup
     </button>
