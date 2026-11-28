@@ -8,6 +8,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"github.com/helmstudio/studio_service/api/timeline"
 )
 
 // The board rules (contracts/README.md "Magic: the board rules"): what a whole document given to studio must hold,
@@ -135,6 +137,15 @@ func Check(d Doc) string {
 				return where + ": gain_db is -60 to 12"
 			}
 		}
+		for k, v := range map[string]*float64{"fade_in": b.FadeIn, "fade_out": b.FadeOut} { // API 1.106
+			switch {
+			case v == nil:
+			case !slices.Contains(AudioKinds, b.Kind):
+				return where + ": " + k + " is for voice, music and sound blocks"
+			case *v < 0 || *v > 10:
+				return where + ": " + k + " is 0 to 10 seconds"
+			}
+		}
 		if k, _ := b.Request["kind"].(string); !slices.Contains(Kinds, k) {
 			return where + ": request.kind must be one of " + strings.Join(Kinds, ", ")
 		}
@@ -172,7 +183,10 @@ func Check(d Doc) string {
 			return why
 		}
 		if !slices.Contains(TransitionKinds, t.Kind) || t.Kind == "cut" {
-			return where + ": kind must be dissolve, fade, wipe or morph (a cut is no transition)"
+			return where + ": kind must be dissolve, fade, wipe, morph or crossfade (a cut is no transition)"
+		}
+		if t.Kind == "crossfade" && !crossfades(&d, t.Between) { // API 1.106
+			return where + ": a crossfade joins two music or sound blocks"
 		}
 		if why := checkMorph(where, t); why != "" {
 			return why
@@ -194,6 +208,9 @@ func Check(d Doc) string {
 		} else if l := cmpOr(t.Start, t.End); d.lane(l) == nil {
 			return where + ": lane " + l + " is not on the board"
 		}
+	}
+	if k := d.Ducking; k != nil && (k.DB == nil || *k.DB < -24 || *k.DB > -3) { // API 1.106
+		return "ducking: db is -24 to -3"
 	}
 	assets := map[string]bool{}
 	for i, a := range d.Assets {
@@ -398,6 +415,8 @@ type AgentBlock struct {
 	Effects   []string     `json:"effects"`
 	FromFrame *string      `json:"from_frame,omitempty"`
 	GainDB    float64      `json:"gain_db,omitempty"` // API 1.101: an audio block's level
+	FadeIn    float64      `json:"fade_in,omitempty"` // API 1.106: an audio block's fades
+	FadeOut   float64      `json:"fade_out,omitempty"`
 	// Request is its standard request as stored (API 1.88): a block op's request replaces it whole, so an agent sends
 	// it back with its changes
 	Request map[string]any `json:"request"`
@@ -424,6 +443,8 @@ type AgentLane struct {
 type AgentTransition struct {
 	Transition
 	AtS float64 `json:"at_s"`
+	// Mode is a join of two sound blocks' (API 1.106): blend or dip (the caller fills it: it needs the takes' lengths)
+	Mode string `json:"mode,omitempty"`
 }
 
 // AgentAsset is an asset with the blocks it is used in.
@@ -455,6 +476,7 @@ type Agent struct {
 	Transitions []AgentTransition `json:"transitions"`
 	Assets      []AgentAsset      `json:"assets"`
 	Notes       []string          `json:"notes"`
+	Ducking     timeline.Ducking  `json:"ducking"` // API 1.106: as it plays (absent in the doc: on, -12)
 }
 
 // AgentView is what an agent reads of d: every block flat with its times in seconds and frames and its status
@@ -463,7 +485,7 @@ func AgentView(d Doc) Agent {
 	fps := float64(d.Target.FPS)
 	s := func(f int) float64 { return math.Round(float64(f)/fps*1000) / 1000 }
 	out := Agent{Target: d.Target, Frames: d.Duration(), DurationS: s(d.Duration()), Lanes: []AgentLane{},
-		Blocks: []AgentBlock{}, Transitions: []AgentTransition{}, Assets: []AgentAsset{}, Notes: d.Notes}
+		Blocks: []AgentBlock{}, Transitions: []AgentTransition{}, Assets: []AgentAsset{}, Notes: d.Notes, Ducking: d.Ducks()}
 	for _, l := range d.Lanes {
 		n := 0
 		for _, b := range d.Blocks {
@@ -497,6 +519,12 @@ func AgentView(d Doc) Agent {
 		}
 		if b.GainDB != nil {
 			ab.GainDB = *b.GainDB
+		}
+		if b.FadeIn != nil {
+			ab.FadeIn = *b.FadeIn
+		}
+		if b.FadeOut != nil {
+			ab.FadeOut = *b.FadeOut
 		}
 		for _, l := range d.Links {
 			if l.Block == b.ID {
@@ -695,4 +723,68 @@ func Describe(a, b Doc) string {
 	}
 	out := strings.Join(parts, "; ")
 	return strings.ToUpper(out[:1]) + out[1:]
+}
+
+// ------------------------------------------------------------------ sound joins (API 1.106)
+
+// SoundJoin is t's two blocks when it joins two voice, music or sound blocks that meet: every kind there plays and
+// sends as a crossfade of its length (contracts/README.md, Audio fades, crossfades and ducking); else nil, nil.
+func SoundJoin(d Doc, t *Transition) (*Block, *Block) {
+	if t == nil || t.Between == nil {
+		return nil, nil
+	}
+	a, b := d.block(t.Between[0]), d.block(t.Between[1])
+	if a == nil || b == nil || a.Lane != b.Lane || a.end() != b.At || !slices.Contains(AudioKinds, a.Kind) ||
+		!slices.Contains(AudioKinds, b.Kind) {
+		return nil, nil
+	}
+	return a, b
+}
+
+// Tail is the frames music or sound block b runs past its end for the sound join after it ("Make cues longer"), 0
+// without one; a voice block never gets one.
+func Tail(d Doc, b *Block) int {
+	if b == nil || (b.Kind != "music" && b.Kind != "sound") {
+		return 0
+	}
+	for _, t := range d.Transitions {
+		if a, _ := SoundJoin(d, t); a != nil && a.ID == b.ID {
+			return t.Length
+		}
+	}
+	return 0
+}
+
+// Blends is whether outgoing block a of a sound join of length frames, showing a take of dur seconds, blends: the take
+// is at least the block + the join long, one frame's slack.
+func Blends(d Doc, a *Block, length int, dur float64) bool {
+	return dur*float64(d.Target.FPS)+1+1e-6 >= float64(a.Length+length)
+}
+
+// JoinModes are each sound join's mode by its id, blend or dip, from its outgoing block's shown take (dur: a take's
+// seconds, false when unknown: a dip).
+func JoinModes(d Doc, dur func(take string) (float64, bool)) map[string]string {
+	out := map[string]string{}
+	for _, t := range d.Transitions {
+		if a, _ := SoundJoin(d, t); a != nil {
+			out[t.ID] = "dip"
+			if s, ok := dur(shown(a.Takes, a.Pinned)); ok && Blends(d, a, t.Length, s) {
+				out[t.ID] = "blend"
+			}
+		}
+	}
+	return out
+}
+
+// DipWarnings are the board's warnings of music and sound joins that dip because the outgoing block's take is too
+// short: `<block> was made before the crossfade: it dips instead.` (a voice block dips without one).
+func DipWarnings(d Doc, dur func(take string) (float64, bool)) []string {
+	out := []string{}
+	modes := JoinModes(d, dur)
+	for _, t := range d.Transitions {
+		if a, _ := SoundJoin(d, t); a != nil && modes[t.ID] == "dip" && a.Kind != "voice" && shown(a.Takes, a.Pinned) != "" {
+			out = append(out, short(a)+" was made before the crossfade: it dips instead.")
+		}
+	}
+	return out
 }

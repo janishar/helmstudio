@@ -58,6 +58,8 @@ def facts(take: dict) -> dict:
     if take["kind"] == "audio":  # API 1.32: audio takes are clips on the audio tracks
         out |= {"duration_s": take["audio"]["duration_s"], "has_audio": True,
                 "sample_rate": take["audio"].get("sample_rate")}  # fmt: skip
+        if take.get("sound"):  # 1.106: what ducking reads
+            out["sound"] = take["sound"]
     if "source_map" in take:  # API 1.19: fill places a retake, extend or a2v by its map
         out["source_map"] = take["source_map"]
     return out
@@ -67,8 +69,10 @@ def doc(tl: dict) -> dict:
     """The normalized document of a Timeline answer, without V1's shot numbers (1.29: studio's, not the rules'; a
     write without them keeps them, test_shot_numbers)."""
     d = {
-        k: tl[k] for k in ("target", "tracks", "duration_s", "frames", "markers") if k in tl
-    }  # markers: 1.50
+        k: tl[k]
+        for k in ("target", "tracks", "duration_s", "frames", "markers", "ducking")
+        if k in tl
+    }  # markers: 1.50; ducking: 1.106
     v1 = d["tracks"][0]
     return d | {"tracks": [v1 | {"clips": [{k: v for k, v in c.items() if k != "number"} for c in v1["clips"]]}]
                 + d["tracks"][1:]}  # fmt: skip
@@ -93,8 +97,8 @@ def get(client, tl: dict | str) -> dict:
 def put(client, tl: dict, written: dict, status: int = 200) -> dict:
     """PUT the written document (target, tracks and from 1.50 markers) on tl's revision."""
     body = {"revision": tl["revision"]} | {
-        k: written[k] for k in ("target", "tracks", "markers") if k in written
-    }
+        k: written[k] for k in ("target", "tracks", "markers", "ducking") if k in written
+    }  # ducking: 1.106
     return ok(client.put(f"{TL}/{tl['id']}", json=body), status)
 
 

@@ -108,6 +108,9 @@ type sendBuild struct {
 	shotsLane *Lane
 	shots     []*sendShot
 	byID      map[string]*sendShot
+	// API 1.106: each sound join's outgoing block → its length; each sound lane's fade in and out (board frames)
+	xfades    map[string]int
+	laneFades map[string][2]int
 }
 
 func (sb *sendBuild) warn(f string, a ...any) {
@@ -134,7 +137,8 @@ func shown(takes []string, pinned *string) string {
 // keep: a dissolve whose takes have the media past each cut goes as the Timeline's own (false: every dissolve is baked,
 // for when the Timeline's rules refuse one).
 func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, turns map[string][]string, keep bool) Send {
-	sb := &sendBuild{d: d, takes: takes, fps: float64(d.Target.FPS), out: Send{Goes: []SendGoes{}, Joins: []SendJoin{}, Effects: []SendEffect{}, Warnings: []string{}}}
+	sb := &sendBuild{d: d, takes: takes, fps: float64(d.Target.FPS), out: Send{Goes: []SendGoes{}, Joins: []SendJoin{}, Effects: []SendEffect{}, Warnings: []string{}},
+		xfades: map[string]int{}, laneFades: map[string][2]int{}}
 	out, warn, fps := &sb.out, sb.warn, sb.fps
 	target := timeline.Target{Width: d.Target.Width, Height: d.Target.Height, FPS: fps, SampleRate: d.Target.SampleRate}
 	if _, _, ok := timeline.Rate(fps); !ok {
@@ -193,8 +197,18 @@ func BuildSend(d Doc, takes map[string]timeline.Take, status map[string]string, 
 	for i := range out.Bakes {
 		out.Bakes[i].Clip = ids[out.Bakes[i].Clip]
 	}
-	out.Doc = timeline.Doc{Target: target, Tracks: tracks}
+	ducks := d.Ducks() // API 1.106: written out (on at -12 when the board has none)
+	ducks.DB = new(ducks.Amount())
+	out.Doc = timeline.Doc{Target: target, Tracks: tracks, Ducking: &ducks}
 	return *out
+}
+
+// val is p, 0 for none.
+func val(p *float64) float64 {
+	if p == nil {
+		return 0
+	}
+	return *p
 }
 
 // collectShots is V1: the first Shots lane's blocks in time, with what each shows.
@@ -288,7 +302,8 @@ func (sb *sendBuild) addBake(clip, kind, title string, frames int, sides ...Send
 	sb.out.Bakes = append(sb.out.Bakes, SendBake{Clip: clip, Kind: kind, Title: title, Frames: frames, Sides: sides})
 }
 
-// v1Transitions are the transitions on V1; a sound lane's are refused here (the Timeline has none).
+// v1Transitions are the transitions on V1. From API 1.106 a join of two sound blocks goes as the outgoing clip's
+// crossfade and a sound lane's fade in and out as its first and last block's clip fades (sound picks them up).
 func (sb *sendBuild) v1Transitions() []*Transition {
 	d, out, warn, byID, shotsLane := sb.d, &sb.out, sb.warn, sb.byID, sb.shotsLane
 	var v1Transitions []*Transition
@@ -297,6 +312,10 @@ func (sb *sendBuild) v1Transitions() []*Transition {
 		case t.Between != nil && byID[t.Between[0]] != nil && byID[t.Between[1]] != nil,
 			shotsLane != nil && (t.Start != nil && *t.Start == shotsLane.ID || t.End != nil && *t.End == shotsLane.ID):
 			v1Transitions = append(v1Transitions, t)
+		case t.Between != nil && func() bool { a, _ := SoundJoin(d, t); return a != nil }():
+			a, _ := SoundJoin(d, t)
+			sb.xfades[a.ID] = t.Length
+			out.Joins = append(out.Joins, SendJoin{Transition: t.ID, Kind: t.Kind, How: "crossfade"})
 		case t.Between != nil || t.Start != nil || t.End != nil:
 			lane := ""
 			if t.Between != nil {
@@ -307,14 +326,20 @@ func (sb *sendBuild) v1Transitions() []*Transition {
 				lane = cmpOr(t.Start, t.End)
 			}
 			if l := d.lane(lane); l != nil && slices.Contains([]string{"voice", "music", "sound"}, l.Role) {
-				kind := t.Kind
-				if t.Start != nil {
-					kind = "fade_in"
-				} else if t.End != nil {
-					kind = "fade_out"
+				kind, f := t.Kind, sb.laneFades[l.ID]
+				switch {
+				case t.Start != nil:
+					kind, f[0] = "fade_in", t.Length
+				case t.End != nil:
+					kind, f[1] = "fade_out", t.Length
+				}
+				if kind == "fade_in" || kind == "fade_out" {
+					sb.laneFades[l.ID] = f
+					out.Joins = append(out.Joins, SendJoin{Transition: t.ID, Kind: kind, How: "fades"})
+					continue
 				}
 				out.Joins = append(out.Joins, SendJoin{Transition: t.ID, Kind: kind, How: "skipped"})
-				warn("%s on %s isn't sent: the Timeline has no sound transitions", joinNames[kind], l.Name)
+				warn("%s on %s isn't sent: it joins blocks that aren't both sound", joinNames[kind], l.Name)
 			}
 		}
 	}
@@ -508,10 +533,14 @@ func (sb *sendBuild) sound(tracks []timeline.Track, turns map[string][]string, e
 		}
 		var clips []timeline.Clip
 		pictures, linked, blocks := 0, 0, 0
+		var mine []*Block
 		for _, b := range d.Blocks {
-			if b.Lane != l.ID {
-				continue
+			if b.Lane == l.ID {
+				mine = append(mine, b)
 			}
+		}
+		for bi, b := range mine {
+			first := len(clips)
 			// API 1.89: a dialogue's turns one after another, a Loop's take again and again, cut at the block's end
 			pieces, dialogue := turns[b.ID]
 			if !dialogue {
@@ -577,6 +606,25 @@ func (sb *sendBuild) sound(tracks []timeline.Track, turns map[string][]string, e
 			}
 			if made > 0 {
 				blocks++
+				// API 1.106: the block's fades on its first and last clip (a lane's fade in and out on its first and last
+				// block, the longer of the two), a sound join after it as its last clip's crossfade
+				in, out, f := val(b.FadeIn), val(b.FadeOut), sb.laneFades[l.ID]
+				if bi == 0 {
+					in = max(in, sb.s(f[0]))
+				}
+				if bi == len(mine)-1 {
+					out = max(out, sb.s(f[1]))
+				}
+				lastClip := &clips[len(clips)-1]
+				if in > 0 {
+					clips[first].FadeIn = new(in)
+				}
+				if out > 0 {
+					lastClip.FadeOut = new(out)
+				}
+				if n := sb.xfades[b.ID]; n > 0 {
+					lastClip.Crossfade = new(sb.s(n))
+				}
 			}
 		}
 		if pictures > 0 && slices.Contains([]string{"shots", "free"}, l.Role) {

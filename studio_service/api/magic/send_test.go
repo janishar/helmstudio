@@ -240,3 +240,48 @@ func TestBlockLevel(t *testing.T) {
 		}
 	}
 }
+
+// API 1.106: a music lane with a crossfade between its two cues, a lane fade out and block fades goes with its fades,
+// the outgoing clip's crossfade (a blend: its take ran with the tail) and the board's ducking; the tail and the dip
+// warning follow the takes' lengths.
+func TestSendSoundJoins(t *testing.T) {
+	str := func(s string) *string { return &s }
+	d := sendBoard()
+	d.Lanes = append(d.Lanes, &Lane{ID: "music", Name: "Music", Role: "music"})
+	d.Blocks = append(d.Blocks,
+		&Block{ID: "m1", Lane: "music", At: 0, Length: 96, Kind: "music", Name: "Soft rain theme", Takes: []string{tM}, FadeIn: new(0.5)},
+		&Block{ID: "m2", Lane: "music", At: 96, Length: 96, Kind: "music", Name: "Storm", Takes: []string{tV}})
+	d.Transitions = append(d.Transitions, &Transition{ID: "x1", Between: &[2]string{"m1", "m2"}, Kind: "crossfade", Length: 48},
+		&Transition{ID: "x2", End: str("music"), Kind: "fade", Length: 24})
+	d = d.filled()
+	for _, b := range d.Blocks {
+		b.Request = map[string]any{"kind": b.Kind}
+	}
+	if why := Check(d); why != "" {
+		t.Fatal(why)
+	}
+	if Tail(d, d.block("m1")) != 48 || Tail(d, d.block("m2")) != 0 || Tail(d, d.block("v1")) != 0 {
+		t.Fatal("tails")
+	}
+	takes := sendTakes()
+	takes[tM] = timeline.Take{Kind: "audio", DurationS: 6, HasAudio: true} // 96 + 48 frames at 24 fps
+	secs := func(id string) (float64, bool) { tk, ok := takes[id]; return tk.DurationS, ok }
+	if m := JoinModes(d, secs); m["x1"] != "blend" || len(DipWarnings(d, secs)) != 0 {
+		t.Fatalf("blend: %v %v", m, DipWarnings(d, secs))
+	}
+	out := BuildSend(d, takes, nil, nil, true)
+	music := out.Doc.Tracks[len(out.Doc.Tracks)-1].Clips
+	if len(music) != 2 || val(music[0].FadeIn) != 0.5 || val(music[0].Crossfade) != 2 || val(music[1].FadeOut) != 1 {
+		t.Fatalf("music clips: %+v", music)
+	}
+	if k := out.Doc.Ducking; k == nil || !k.On || k.Amount() != -12 {
+		t.Fatalf("ducking: %+v", k)
+	}
+	if !strings.Contains(fmt.Sprint(out.Joins), "{x1 crossfade crossfade}") || !strings.Contains(fmt.Sprint(out.Joins), "{x2 fade_out fades}") {
+		t.Fatalf("joins: %v", out.Joins)
+	}
+	takes[tM] = timeline.Take{Kind: "audio", DurationS: 4, HasAudio: true} // made before the crossfade
+	if w := DipWarnings(d, secs); len(w) != 1 || w[0] != "Soft rain theme was made before the crossfade: it dips instead." {
+		t.Fatalf("dip: %v", w)
+	}
+}

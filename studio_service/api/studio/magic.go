@@ -289,6 +289,14 @@ func (s *Service) GetMagicAgent(ctx context.Context, caller common.Caller, id st
 		}
 		d := row.doc()
 		out = dto.MagicAgentView{ID: row.ID, Name: row.Name, Revision: row.Revision, Agent: magic.AgentView(d)}
+		secs, err := takeSeconds(ctx, tx, row.OwnerID, d)
+		if err != nil {
+			return err
+		}
+		modes := magic.JoinModes(d, secs) // API 1.106: a sound join's blend or dip
+		for i := range out.Transitions {
+			out.Transitions[i].Mode = modes[out.Transitions[i].ID]
+		}
 		runs, err := boardRuns(ctx, tx, row.ID) // API 1.81: the derived status
 		status := blockStatuses(d, runs)
 		for i := range out.Blocks {
@@ -298,6 +306,15 @@ func (s *Service) GetMagicAgent(ctx context.Context, caller common.Caller, id st
 		return err
 	})
 	return out, err
+}
+
+// takeSeconds is a lookup of the seconds of d's takes (API 1.106: whether a sound join blends).
+func takeSeconds(ctx context.Context, tx pgx.Tx, ownerID string, d magic.Doc) (func(string) (float64, bool), error) {
+	rules, _, err := loadTakes(ctx, tx, ownerID, magic.TakeIDs(d))
+	return func(id string) (float64, bool) {
+		t, ok := rules[id]
+		return t.DurationS, ok && t.DurationS > 0
+	}, err
 }
 
 // editBoard runs fn on the locked board and answers it as it is then.
@@ -388,8 +405,12 @@ func (s *Service) EditMagicBoard(ctx context.Context, caller common.Caller, id s
 		if err := checkTakes(ctx, tx, row.OwnerID, before, doc); err != nil {
 			return err
 		}
+		secs, err := takeSeconds(ctx, tx, row.OwnerID, doc)
+		if err != nil {
+			return err
+		}
 		out = dto.MagicEditResult{Revision: row.Revision, DryRun: body.DryRun, Diff: magic.DiffDocs(before, doc),
-			Warnings: magic.Warnings(doc)}
+			Warnings: append(magic.Warnings(doc), magic.DipWarnings(doc, secs)...)}
 		if body.DryRun {
 			out.Board, err = s.boardDTO(ctx, tx, row)
 			out.Board.Doc = doc // what it would be: nothing is written

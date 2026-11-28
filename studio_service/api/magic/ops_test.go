@@ -76,6 +76,18 @@ func TestMagicReplay(t *testing.T) {
 	}
 }
 
+// TestMagicFadesReplay checks fixtures/magic/edits.fades.json (API 1.106: a sound block's fades, the crossfade kind,
+// ducking), kept apart from edits.json until every implementation reads them.
+func TestMagicFadesReplay(t *testing.T) {
+	t.Setenv("MAGIC_FIXTURE", filepath.Join("..", "..", "..", "contracts", "fixtures", "magic", "edits.fades.json"))
+	fx, out := replay(t)
+	for i, c := range fx.Cases {
+		if got, _ := json.Marshal(out[i]); !sameJSON(got, c.Expect) {
+			t.Errorf("%s:\n got %s\nwant %s", c.Description, got, c.Expect)
+		}
+	}
+}
+
 func sameJSON(a, b []byte) bool {
 	var x, y any
 	_ = json.Unmarshal(a, &x)

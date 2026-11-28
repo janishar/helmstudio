@@ -12,6 +12,8 @@ import (
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/helmstudio/studio_service/api/timeline"
 )
 
 // Target is a board's size and rates.
@@ -54,6 +56,9 @@ type Block struct {
 	FromFrame *string        `json:"from_frame,omitempty"`
 	// GainDB is an audio block's level (API 1.101; -60..12 dB, absent = 0), carried onto its Timeline clips
 	GainDB *float64 `json:"gain_db,omitempty"`
+	// FadeIn and FadeOut are an audio block's fades in seconds (API 1.106; 0..10, absent = none), sent onto its clips
+	FadeIn  *float64 `json:"fade_in,omitempty"`
+	FadeOut *float64 `json:"fade_out,omitempty"`
 }
 
 func (b *Block) end() int { return b.At + b.Length }
@@ -101,13 +106,28 @@ type Doc struct {
 	Transitions []*Transition `json:"transitions"`
 	Assets      []*Asset      `json:"assets"`
 	Notes       []string      `json:"notes"`
+	// Ducking is the board's Duck music (API 1.106): absent is on at -12 dB (BoardDucking)
+	Ducking *timeline.Ducking `json:"ducking,omitempty"`
+}
+
+// BoardDucking is a board's Duck music when its document has none (API 1.106), and a new board's.
+func BoardDucking() timeline.Ducking {
+	return timeline.Ducking{On: true, DB: new(float64(timeline.DuckDB))}
+}
+
+// Ducks is d's Duck music as it plays.
+func (d Doc) Ducks() timeline.Ducking {
+	if d.Ducking == nil {
+		return BoardDucking()
+	}
+	return *d.Ducking
 }
 
 // DefaultTarget is a new board's: 1280 × 720, 24 fps, 48000 Hz.
 var DefaultTarget = Target{Width: 1280, Height: 720, FPS: 24, SampleRate: 48000}
 
 // Empty is a board with nothing on it.
-func Empty(t Target) Doc { return Doc{Target: t}.filled() }
+func Empty(t Target) Doc { k := BoardDucking(); return Doc{Target: t, Ducking: &k}.filled() }
 
 // filled is d with every list non-nil (they answer as []).
 func (d Doc) filled() Doc {
@@ -488,6 +508,8 @@ type BlockNew struct {
 	Effects   []Effect       `json:"effects"`
 	FromFrame *string        `json:"from_frame"`
 	GainDB    *float64       `json:"gain_db"`
+	FadeIn    *float64       `json:"fade_in"`  // API 1.106
+	FadeOut   *float64       `json:"fade_out"` // API 1.106
 }
 
 // LaneNew is a lane as lane_add gives it.
@@ -524,6 +546,8 @@ type fields struct {
 	By      *int            `json:"by"`
 	Asset   json.RawMessage `json:"asset"`
 	Take    string          `json:"take"`
+	On      *bool           `json:"on"` // API 1.106: ducking's
+	DB      *float64        `json:"db"`
 }
 
 // opFields is each op's fields (MagicOp): the ones it takes, then the required ones.
@@ -548,6 +572,7 @@ var opFields = map[string][2][]string{
 	"asset_add":    {{"asset"}, {"asset"}}, // API 1.83: assets, a block's own picture
 	"asset":        {{"id", "set"}, {"id", "set"}},
 	"take_add":     {{"id", "take"}, {"id", "take"}},
+	"ducking":      {{"on", "db"}, {}}, // API 1.106: the board's Duck music
 }
 
 // AssetNew is an asset as asset_add gives it (its id optional).
@@ -748,10 +773,10 @@ func morphSet(t, was *Transition, f fields) string {
 }
 
 // TransitionKinds are a transition's kinds.
-var TransitionKinds = []string{"cut", "dissolve", "fade", "wipe", "morph"}
+var TransitionKinds = []string{"cut", "dissolve", "fade", "wipe", "morph", "crossfade"} // crossfade: API 1.106
 
 // DefaultLength is the seconds a new transition of each kind lasts.
-var DefaultLength = map[string]float64{"cut": 0, "dissolve": 0.5, "fade": 1, "wipe": 0.5, "morph": 1}
+var DefaultLength = map[string]float64{"cut": 0, "dissolve": 0.5, "fade": 1, "wipe": 0.5, "morph": 1, "crossfade": 2}
 
 // Applied is one op's result: the new document, or why it can't (the board's own words).
 type Applied struct {
@@ -810,6 +835,7 @@ var opApply = map[string]func(d *Doc, f fields, before map[string]Block) Applied
 	"asset_add":    opAssetAdd,
 	"asset":        opAsset,
 	"take_add":     opTakeAdd,
+	"ducking":      opDucking, // API 1.106
 }
 
 // picked is the blocks of ids still on d.
@@ -842,7 +868,8 @@ func opAdd(d *Doc, f fields, before map[string]Block) Applied {
 		return refused("That id is taken.")
 	}
 	b := Block{Lane: nb.Lane, At: nb.At, Length: nb.Length, Kind: nb.Kind, Name: nb.Name, Request: nb.Request,
-		Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame, GainDB: nb.GainDB}
+		Takes: nb.Takes, Pinned: nb.Pinned, Note: nb.Note, Effects: nb.Effects, FromFrame: nb.FromFrame, GainDB: nb.GainDB,
+		FadeIn: nonZero(nb.FadeIn), FadeOut: nonZero(nb.FadeOut)}
 	if nb.ID != nil {
 		b.ID = *nb.ID
 	} else {
@@ -1053,6 +1080,9 @@ func opTransition(d *Doc, f fields, before map[string]Block) Applied {
 			return refused("Those blocks don't meet.")
 		}
 	}
+	if f.Kind == "crossfade" && !crossfades(d, f.Between) { // API 1.106
+		return refused("A crossfade joins two music or sound blocks.")
+	}
 	if f.Kind != "cut" {
 		t := &Transition{Between: f.Between, Start: f.Start, End: f.End, Kind: f.Kind}
 		switch {
@@ -1121,6 +1151,8 @@ func opBlock(d *Doc, f fields, before map[string]Block) Applied {
 		Request *map[string]any `json:"request"`
 		Pinned  *string         `json:"pinned"`
 		GainDB  *float64        `json:"gain_db"`
+		FadeIn  *float64        `json:"fade_in"`  // API 1.106
+		FadeOut *float64        `json:"fade_out"` // API 1.106
 	}
 	if err := strict(f.Set, &set); err != nil {
 		return refused("set: " + err.Error())
@@ -1142,6 +1174,19 @@ func opBlock(d *Doc, f fields, before map[string]Block) Applied {
 			b.GainDB = nil
 		}
 	}
+	for _, k := range []struct { // API 1.106: 0 or null removes; another kind is refused
+		key  string
+		to   **float64
+		from *float64
+	}{{"fade_in", &b.FadeIn, set.FadeIn}, {"fade_out", &b.FadeOut, set.FadeOut}} {
+		if _, ok := keys[k.key]; !ok {
+			continue
+		}
+		if k.from != nil && *k.from != 0 && !slices.Contains(AudioKinds, b.Kind) {
+			return refused(k.key + " is for voice, music and sound blocks")
+		}
+		*k.to = nonZero(k.from)
+	}
 	if _, ok := keys["pinned"]; ok { // null or "" unpins
 		b.Pinned = set.Pinned
 		if set.Pinned != nil && *set.Pinned == "" {
@@ -1149,6 +1194,41 @@ func opBlock(d *Doc, f fields, before map[string]Block) Applied {
 		}
 	}
 	return Applied{Doc: *d}
+}
+
+// opDucking applies the ducking op to d (API 1.106): the board's Duck music, absent fields kept.
+func opDucking(d *Doc, f fields, before map[string]Block) Applied {
+	k := d.Ducks()
+	k.DB = new(k.Amount())
+	if f.On != nil {
+		k.On = *f.On
+	}
+	if f.DB != nil {
+		k.DB = new(*f.DB)
+	}
+	d.Ducking = &k
+	return Applied{Doc: *d}
+}
+
+// nonZero is p, nil for 0.
+func nonZero(p *float64) *float64 {
+	if p == nil || *p == 0 {
+		return nil
+	}
+	return new(*p)
+}
+
+// crossfades is whether between names two music or sound blocks (API 1.106: what a crossfade joins).
+func crossfades(d *Doc, between *[2]string) bool {
+	if between == nil {
+		return false
+	}
+	for _, id := range between {
+		if b := d.block(id); b == nil || (b.Kind != "music" && b.Kind != "sound") {
+			return false
+		}
+	}
+	return true
 }
 
 // opLaneAdd applies the lane_add op to d.

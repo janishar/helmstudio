@@ -131,6 +131,12 @@ Magic boards:
   a block op's set.pinned. A failed block has its error; a dialogue each turn's status.
 - From the Gallery: search_takes, then an add op whose block has takes [id] and pinned id.
 - A morph is a transition of kind morph with request.prompt (and its model); it runs as a block (run_blocks).
+- Sound fades and ducking: a voice, music or sound block's set.fade_in / set.fade_out (seconds, 0 to 10; 0 or null
+  takes it off); a crossfade (transition kind crossfade, 2 s) joins two music or sound blocks that meet, and the
+  outgoing one runs that much longer (run it again after adding one, else it dips: a warning says so); any join of two
+  sound blocks plays as a crossfade. The ducking op {on?, db? −24 to −3} sets Duck music (a board: on at −12). On the
+  Timeline the same: a set op's fade_in, fade_out and (an audio-track clip) crossfade into the clip touching it, and a
+  ducking op (a sequence: off until set); a crossfade_dip warning means the clip has no sound past its cut.
 - Effects: only Grade (temperature, contrast), Slow (rate) and Stabilize bake into the shot on Send; others are
   badges on the board only.
 - Make views: make_views {asset, views ["Front", "Side"]} runs one image each onto the asset's sheet, under the same

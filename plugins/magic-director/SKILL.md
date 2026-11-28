@@ -143,6 +143,15 @@ Once the user says yes:
 - LTX shots come with sound; keep it for effects, or make the block's own sound when you want to replace it.
 - Levels: keep music and ambience under the voices (e.g. music −8 dB, ambience −12 dB under dialogue); set them
   with a block op's `gain_db` (`{"op": "block", "id": "m1", "set": {"gain_db": -8}}`).
+- Fades: a cue or ambience fades in and out instead of starting or stopping dead: a block op's `fade_in` and
+  `fade_out` in seconds (`{"op": "block", "id": "m1", "set": {"fade_in": 1, "fade_out": 2}}`; 0 or null takes one
+  off; voice, music and sound blocks only). A sound lane's start or end fade becomes its first or last block's fade.
+- Two cues that meet: a `crossfade` between them (`{"op": "transition", "between": ["m1", "m2"], "kind":
+  "crossfade"}`, 2 s unless you give `length`). Run the outgoing cue after you add it: it runs that much longer so the
+  two overlap; a take made before dips instead (the edit warns "… was made before the crossfade"). Any join between
+  two sound blocks plays as a crossfade; a morph there never runs.
+- Ducking: music dips under voice by itself (on at −12 dB on a new board). Change it with `{"op": "ducking", "db":
+  -18}` (−24 to −3) or turn it off with `{"op": "ducking", "on": false}`; it goes to the Timeline on Send.
 
 ## 9. Review like a director
 

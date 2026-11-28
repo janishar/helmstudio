@@ -1,6 +1,7 @@
 package dto
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -141,7 +142,7 @@ func checkOp(op timeline.Op) string {
 		if err := json.Unmarshal(raw, &k); err != nil || string(op.Set["on"]) == "null" || string(op.Set["db"]) == "null" {
 			return "on and db have the wrong type"
 		}
-		if d := CheckDucking(&timeline.Ducking{DB: k.DB}); d != "" {
+		if d := CheckDucking(&timeline.Ducking{DB: cmp.Or(k.DB, new(float64(timeline.DuckDB)))}); d != "" { // absent: kept
 			return d[1:]
 		}
 	}

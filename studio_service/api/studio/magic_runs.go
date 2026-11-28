@@ -301,6 +301,11 @@ func magicModel(ws []registry.Workflow, kind string, req map[string]any) (regist
 
 // whyNot is why block b of d cannot run ("" when it can): its kind, a dialogue, no model, a pick its model needs.
 func whyNot(ws []registry.Workflow, d magic.Doc, b *magic.Block) string {
+	if t := findMorph(d, b.ID); t != nil { // API 1.106: a morph between sound blocks plays as a crossfade
+		if a, _ := magic.SoundJoin(d, t); a != nil {
+			return "A morph is for shots."
+		}
+	}
 	if isDialogue(b) { // API 1.89: each turn runs as a line
 		turns := dialogueTurns(b)
 		if len(turns) == 0 {
@@ -658,17 +663,18 @@ func standardInputs(w registry.Workflow, d magic.Doc, b *magic.Block, pics magic
 			inputs[pw], inputs[ph] = fitSize(wd, hd, w1, h1)
 		}
 	}
-	// the clip's length in the workflow's frames (its fps param's value), on the frames param's grid
-	frames, fps := 0.0, float64(target.FPS)
+	// the clip's length in the workflow's frames (its fps param's value), on the frames param's grid; API 1.106: a
+	// music or sound block with a crossfade after it runs that much longer (its tail)
+	frames, fps, length := 0.0, float64(target.FPS), b.Length+magic.Tail(d, b)
 	if path, p, ok := param("length"); ok && p.Type != "frames" { // API 1.85: a float param is the block's seconds
-		inputs[path] = onGrid(float64(b.Length)/float64(target.FPS), p)
+		inputs[path] = onGrid(float64(length)/float64(target.FPS), p)
 	} else if ok {
 		nodeID, _, _ := strings.Cut(path, ".")
 		node := w.Nodes[nodeID]
 		if v, ok := number(merged(w.NodeSchemas[node.Kind], node.Params)[p.FPS]); ok && v > 0 {
 			fps = v
 		}
-		frames = onGrid(math.Round(float64(b.Length)/float64(target.FPS)*fps), p)
+		frames = onGrid(math.Round(float64(length)/float64(target.FPS)*fps), p)
 		inputs[path] = frames
 	}
 	if path, p, ok := param("refs"); ok {
@@ -907,8 +913,10 @@ type magicRunRow struct {
 	Takes                    []string
 	TakeKinds                []string // each take's kind, in Takes' order
 	RenderS                  *float64
-	Turn                     *int    // API 1.89: a dialogue's turn
-	ModelKind, Variant       *string // API 1.94: its <family>/model node's kind and the variant it loaded
+	Turn                     *int      // API 1.89: a dialogue's turn
+	ModelKind, Variant       *string   // API 1.94: its <family>/model node's kind and the variant it loaded
+	Tail                     *float64  // API 1.106: seconds it ran past its block for a crossfade
+	TakeSeconds              []float64 // API 1.106: each take's seconds, in Takes' order (0 unknown)
 }
 
 // takeFits is whether a take of kind takeKind joins a block of kind (API 1.85): a voice, music or sound block takes
@@ -943,7 +951,9 @@ func boardRuns(ctx context.Context, tx pgx.Tx, boardID string) ([]magicRunRow, e
 			WHERE o.run_id = m.run_id ORDER BY o.idx LIMIT 1), m.turn,
 		(SELECT n.value->>'kind' FROM jsonb_each(r.nodes) n WHERE n.value->>'kind' LIKE '%/model' ORDER BY n.key LIMIT 1),
 		(SELECT n.value->'params'->>'variant' FROM jsonb_each(r.nodes) n WHERE n.value->>'kind' LIKE '%/model'
-			ORDER BY n.key LIMIT 1)
+			ORDER BY n.key LIMIT 1), m.tail::float8,
+		coalesce((SELECT array_agg(coalesce((coalesce(t.video, t.audio)->>'duration_s')::float8, 0) ORDER BY o.idx)
+			FROM run_outputs o JOIN takes t ON t.id = o.take_id AND t.deleted_at IS NULL WHERE o.run_id = m.run_id), '{}')
 		FROM (SELECT *, row_number() OVER (PARTITION BY block, turn ORDER BY created_at DESC) AS n FROM magic_runs
 			WHERE board_id = $1 AND asset IS NULL) m
 		JOIN runs r ON r.id = m.run_id AND r.deleted_at IS NULL
@@ -977,9 +987,24 @@ func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
 			out[b.ID] = dialogueStatus(d, b, mine)
 		} else {
 			out[b.ID] = runStatus(mine, shownTake(b), func(h string) bool { return sameInputs(d, b, h) })
+			if out[b.ID].Status == "done" && shortTail(d, b, mine) {
+				out[b.ID] = dto.MagicStatus{Status: "out_of_date"}
+			}
 		}
 	}
 	return out
+}
+
+// shortTail is whether block b's shown take came from a run made with a tail that is now too short for the
+// crossfade after it (API 1.106: its length grew past its tail); a take made with no tail stays done and dips.
+func shortTail(d magic.Doc, b *magic.Block, mine []magicRunRow) bool {
+	take, tail := shownTake(b), magic.Tail(d, b)
+	for _, r := range mine {
+		if i := slices.Index(r.Takes, take); i >= 0 && r.Tail != nil && *r.Tail > 0 && tail > 0 && i < len(r.TakeSeconds) {
+			return !magic.Blends(d, b, tail, r.TakeSeconds[i])
+		}
+	}
+	return false
 }
 
 // runStatus is the status of a block (or a dialogue's turn) with runs mine that shows take, its inputs hashed now.
@@ -1095,7 +1120,7 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,
 			Status: r.Status, Progress: runPercent(r.Progress), Error: r.Error, Takes: r.Takes, Seed: r.Seed,
 			Current: current, By: by, CreatedAt: r.CreatedAt, RenderS: r.RenderS, Style: r.Label, Turn: r.Turn,
-			Variant: s.variantTitle(r.ModelKind, r.Variant)})
+			Variant: s.variantTitle(r.ModelKind, r.Variant), Tail: r.Tail})
 		for _, t := range r.Takes {
 			byTake[t] = r.RunID
 		}
@@ -1324,6 +1349,10 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 		style := cmp.Or(reqString(b.Request, "style"), "film")
 		label = &style
 	}
+	var tail *float64 // API 1.106: the seconds it runs past its block for a crossfade
+	if n := magic.Tail(d, b); n > 0 {
+		tail = new(float64(n) / float64(d.Target.FPS))
+	}
 	var out []dto.Run
 	for i := range int(min(max(count, 1), 4)) {
 		runSeed := int64(-1)
@@ -1335,8 +1364,8 @@ func (s *Service) runBlock(ctx context.Context, tx pgx.Tx, caller common.Caller,
 		if err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via, label)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via, label); err != nil {
+		if _, err := tx.Exec(ctx, `INSERT INTO magic_runs (run_id, owner_id, board_id, block, inputs_hash, seed, via, label, tail)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, run.ID, row.OwnerID, row.ID, b.ID, hash, runSeed, via, label, tail); err != nil {
 			return nil, err
 		}
 		out = append(out, run)
@@ -1522,7 +1551,7 @@ func blockUnits(d magic.Doc, b *magic.Block) float64 {
 	if v, ok := reqNumber(b.Request, "height"); ok {
 		h = v
 	}
-	return magicUnits(b.Kind, w, h, float64(b.Length)/float64(d.Target.FPS))
+	return magicUnits(b.Kind, w, h, float64(b.Length+magic.Tail(d, b))/float64(d.Target.FPS)) // API 1.106: and its tail
 }
 
 // askAbove is the caller's ask_above_gpu_minutes (5 without a row).

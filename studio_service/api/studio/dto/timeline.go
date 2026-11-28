@@ -197,9 +197,9 @@ func (b *TimelineUpdate) Validate() string {
 // fade is a fade's range (1.106): absent, or 0 to 10 seconds.
 func fade(p *float64) bool { return p == nil || (*p >= 0 && *p <= 10) }
 
-// CheckDucking checks a Ducking's range (1.106): db -24 to -3; the detail starts with the field.
+// CheckDucking checks a written Ducking (1.106): db -24 to -3 (required); the detail starts with the field.
 func CheckDucking(k *timeline.Ducking) string {
-	if k != nil && k.DB != nil && (*k.DB < -24 || *k.DB > -3) {
+	if k != nil && (k.DB == nil || *k.DB < -24 || *k.DB > -3) {
 		return ".db must be from -24 to -3"
 	}
 	return ""

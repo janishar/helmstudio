@@ -137,6 +137,8 @@ type MagicBlockRun struct {
 	Turn *int `json:"turn,omitempty"`
 	// API 1.94: the model variant it ran on, its title ("Turbo")
 	Variant *string `json:"variant,omitempty"`
+	// Tail is the seconds a music or sound block's run went past its block for a crossfade (API 1.106)
+	Tail *float64 `json:"tail,omitempty"`
 }
 
 // MagicParam is one Advanced field of a model.
