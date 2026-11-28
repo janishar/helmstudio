@@ -43,10 +43,9 @@ def verdict(req: dict) -> dict:
     if err or "error" in v:
         return {"error": (err or v["error"])[:2000], "code": "answer"}
     takes = [
-        {"take_id": t, "checks": a["checks"], "reason": a["reason"], "passes": v["passes"][i],
-         "rank": v["ranks"][i]}
+        {"take_id": t, "checks": a["checks"], "reason": a["reason"], "passes": v["passes"][i], "rank": v["ranks"][i]}
         for i, (t, a) in enumerate(zip(cands, value["takes"]))
-    ]  # fmt: skip
+    ]
     return {
         "verdict": v["verdict"],
         "first_failed": v["first_failed"],

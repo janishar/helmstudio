@@ -186,11 +186,7 @@ class Executor:
             cmd = json.loads(msg.data)
         except ValueError:
             cmd = None
-        if (
-            not isinstance(cmd, dict)
-            or schemas.message_errors(cmd)
-            or cmd.get("type") != "cmd.run.execute"
-        ):
+        if not isinstance(cmd, dict) or schemas.message_errors(cmd) or cmd.get("type") != "cmd.run.execute":
             log.error("rejecting %s: not a cmd.run.execute", msg.subject)
             await msg.term()
             return
@@ -203,9 +199,7 @@ class Executor:
                 return
             await self._status(cmd, 1, {"status": "running", "host": self.host})
             status, error, answer = await execute(self.pool, cmd)
-            if await self._cancelled(
-                d["run_id"]
-            ):  # ponytail: checked around the call, not during it
+            if await self._cancelled(d["run_id"]):  # ponytail: checked around the call, not during it
                 status, error = "cancelled", None
             data = {"status": status, "error": error} | ({"answer": answer} if answer else {})
             await self._status(cmd, 2, data)

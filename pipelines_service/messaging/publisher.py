@@ -21,11 +21,7 @@ def now() -> str:
 
 def build(kind: str, batch: dict, data: dict) -> dict:
     """evt.pipeline.<kind> for `batch` ({batch_id, owner_id, trace}); ValueError when off-contract."""
-    trace = {
-        k: v
-        for k, v in batch["trace"].items()
-        if k in ("traceparent", "tracestate", "correlation_id")
-    }
+    trace = {k: v for k, v in batch["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")}
     msg = {
         "type": f"evt.pipeline.{kind}",
         "version": 1,

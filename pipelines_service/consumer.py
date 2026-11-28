@@ -13,10 +13,7 @@ from messaging import schemas
 
 log = logging.getLogger(__name__)
 
-TYPES = {
-    f"cmd.pipeline.{k}"
-    for k in ("submit", "resume", "pause", "stop", "retry", "pick", "chat", "name")
-}
+TYPES = {f"cmd.pipeline.{k}" for k in ("submit", "resume", "pause", "stop", "retry", "pick", "chat", "name")}
 ACK_WAIT = 60  # seconds
 RETRY_DELAY = 5  # seconds before a failed delivery comes back
 
@@ -34,9 +31,7 @@ class Commands:
             cmd = None
         errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
         if errs or cmd["type"] not in self.types:
-            log.error(
-                "rejecting %s: %s", msg.subject, "; ".join(errs[:3]) or "not a pipeline command"
-            )
+            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]) or "not a pipeline command")
             try:
                 await self.js.publish(f"dlq.{msg.subject}", msg.data)
             except Exception:
@@ -63,9 +58,7 @@ class Commands:
         if kind == "submit":
             await self.engine.submit(cmd)
         elif kind == "retry":
-            await self.engine.retry(
-                d["batch_id"], d["row"], d["attempt"], d.get("from_step"), d.get("checkpoint_id")
-            )
+            await self.engine.retry(d["batch_id"], d["row"], d["attempt"], d.get("from_step"), d.get("checkpoint_id"))
         elif kind == "chat":
             await self.engine.chat(d)
         elif kind == "pick":
@@ -81,6 +74,4 @@ class Commands:
 
     async def _mark(self, msg_id: str) -> None:
         async with self.pool.connection() as conn:
-            await conn.execute(
-                "INSERT INTO inbox (msg_id) VALUES (%s) ON CONFLICT DO NOTHING", (msg_id,)
-            )
+            await conn.execute("INSERT INTO inbox (msg_id) VALUES (%s) ON CONFLICT DO NOTHING", (msg_id,))

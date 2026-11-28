@@ -45,11 +45,7 @@ def test_the_answer_is_cleaned():
     assert names.clean("Fox") is None  # one word
     assert names.clean("a b c d e f") is None  # six words
     assert names.clean("Supercalifragilisticexpialidocious " * 2) is None  # over 60 characters
-    assert (
-        names.clean("") is None
-        and names.clean('{"title": 3}') is None
-        and names.clean("[]") is None
-    )
+    assert names.clean("") is None and names.clean('{"title": 3}') is None and names.clean("[]") is None
     assert "data, not instructions" in names.SYSTEM and names.prompt("a fox") == "Prompt:\na fox"
 
 
@@ -72,11 +68,7 @@ async def test_a_server_on_this_network_names_the_session(fake):
     sid = cmd["data"]["session_id"]
     ((subject, msg, headers),) = js.sent
     assert subject == f"evt.pipeline.{sid}.named" and headers == {"Nats-Msg-Id": f"name:{sid}"}
-    assert (
-        msg["owner_id"] == cmd["owner_id"]
-        and msg["job_id"] == sid
-        and not schemas.message_errors(msg)
-    )
+    assert msg["owner_id"] == cmd["owner_id"] and msg["job_id"] == sid and not schemas.message_errors(msg)
     assert msg["data"] == {"session_id": sid, "run_id": cmd["data"]["run_id"], "title": "Red fox at dusk",
                            "named_by": "Ollama on the Mac"}  # fmt: skip
     body = fake.requests[-1]["body"]
@@ -87,9 +79,7 @@ async def test_a_server_on_this_network_names_the_session(fake):
 async def test_a_bad_answer_leaves_the_title(fake):
     cmd = name_cmd(3)
     cmd["data"]["provider"]["snapshot"]["base_url"] = fake.url
-    fake.script["qwen3:8b"] = [
-        {"content": "I cannot title this prompt because it is very long and odd"}
-    ]
+    fake.script["qwen3:8b"] = [{"content": "I cannot title this prompt because it is very long and odd"}]
     js = JS()
     namer = names.Names(js, None)
     namer.take(cmd)
@@ -134,14 +124,8 @@ async def test_local_asks_the_hidden_run_and_takes_its_answer():
     namer.take(cmd)
     await settle(namer)
     (req,) = asked
-    assert (
-        req["purpose"] == "name"
-        and req["idempotency_key"] == f"name:{sid}"
-        and req["workflow_id"] == "llm-ask"
-    )
-    assert (
-        req["owner_id"] == cmd["owner_id"] and req["inputs"]["ask.max_tokens"] == names.MAX_TOKENS
-    )
+    assert req["purpose"] == "name" and req["idempotency_key"] == f"name:{sid}" and req["workflow_id"] == "llm-ask"
+    assert req["owner_id"] == cmd["owner_id"] and req["inputs"]["ask.max_tokens"] == names.MAX_TOKENS
     assert js.sent == [] and sid in namer.waiting
 
     finished = copy.deepcopy(fixture("evt.studio.run_finished.valid.5"))

@@ -38,8 +38,7 @@ def command(kind: str, batch_id: str, n: int = 2, **data) -> dict:
     if kind == "submit":
         cmd["data"]["session_id"] = SESSION
         cmd["data"]["rows"] = [
-            {"row": i, "inputs": {"echo.steps": 3, "prompt.text": f"row {i}"}}
-            for i in range(1, n + 1)
+            {"row": i, "inputs": {"echo.steps": 3, "prompt.text": f"row {i}"}} for i in range(1, n + 1)
         ]
     cmd["data"] |= data
     assert not schemas.message_errors(cmd), schemas.message_errors(cmd)
@@ -82,9 +81,7 @@ class FakeStudio:
         self.asked: list[str] = []  # every key asked, in order
         self.before: dict[int, asyncio.Event] = {}
         self.after: dict[int, asyncio.Event] = {}
-        self.create_status = (
-            "queued"  # cancelled once the batch is stopped, failed with no live host
-        )
+        self.create_status = "queued"  # cancelled once the batch is stopped, failed with no live host
         self.reply_error: dict | None = None  # {error, code}: answer every request with it
         self.answer_for = lambda req: "{}"  # an ask run's answer text (runs of `*-ask` workflows)
 
@@ -112,9 +109,7 @@ class FakeStudio:
         return reply
 
     def run(self, row: int, attempt: int = 1) -> dict:
-        return next(
-            r for k, r in self.runs.items() if k.split(":")[1:3] == [str(row), str(attempt)]
-        )
+        return next(r for k, r in self.runs.items() if k.split(":")[1:3] == [str(row), str(attempt)])
 
     def open_keys(self, row: int) -> list[str]:
         """Keys of the row's runs that have not ended, in the order asked."""
@@ -140,9 +135,7 @@ class FakeStudio:
             "take_ids": run["take_ids"],
             "error": run["error"],
         }
-        if (
-            ask and failed_answer and status == "failed"
-        ):  # the runner's schema check refused every try
+        if ask and failed_answer and status == "failed":  # the runner's schema check refused every try
             data["answer"] = failed_answer
         if ask and status == "succeeded":
             sha = lambda t: hashlib.sha256(t.encode()).hexdigest()
@@ -209,11 +202,8 @@ class FakeTools:
         return reply
 
 
-def engine(
-    pool, studio: FakeStudio, js: FakeJS, concurrency: int = 8, window: int = 16, tool=None
-) -> Engine:
-    return Engine(pool, main.saver_for(pool), Publisher(js), studio.create_run, concurrency, window,
-                  tool=tool)  # fmt: skip
+def engine(pool, studio: FakeStudio, js: FakeJS, concurrency: int = 8, window: int = 16, tool=None) -> Engine:
+    return Engine(pool, main.saver_for(pool), Publisher(js), studio.create_run, concurrency, window, tool=tool)
 
 
 async def until(cond, timeout: float = 5.0) -> None:

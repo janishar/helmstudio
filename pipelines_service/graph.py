@@ -70,18 +70,14 @@ class Row(TypedDict, total=False):
     memread: dict  # memory read node → the item ids it read
     pos: dict  # step → each take's position <step>:<visit>:<seed index>:<seed> (the replay key's media)
     last_step: str  # the step visited last (a write's or decide's family model values)
-    fan: Annotated[
-        dict, lambda a, b: (a or {}) | (b or {})
-    ]  # "<step>:<visit>:<item>" → that branch's runs
+    fan: Annotated[dict, lambda a, b: (a or {}) | (b or {})]  # "<step>:<visit>:<item>" → that branch's runs
     branch: dict  # a fan-out branch's own input (Send): {i, item}
     items: dict  # list producer (a write or agent with `list`) → its items
     custom: dict  # custom node → its output fields
     # the director's thread (<batch>:director): the conversation, its wakes and what a wake read and wrote
     chat: list  # [{id, role: user | director | notice, text, at}]
     wake: int  # wakes so far
-    inbox: (
-        dict  # a wake's input: {messages: [{message_id, text, at}], rows: [{row, status, error}]}
-    )
+    inbox: dict  # a wake's input: {messages: [{message_id, text, at}], rows: [{row, status, error}]}
     woken: list  # the rows that ended since the last wake
     consumed: list  # the director_inbox ids the wake took (deleted after every invoke)
     outbox: list  # evt.pipeline.chat messages of the last wake
@@ -96,12 +92,8 @@ class Context:
     owner_id: str
     session_id: str
     replay: Callable[[str], Awaitable[dict | None]] | None = None  # replay key → stored decision
-    replay_batch: str | None = (
-        None  # whose decisions are reused: replay_from, else the batch itself
-    )
-    memory: list = field(
-        default_factory=list
-    )  # the batch's memory snapshot (memoryItems, newest first)
+    replay_batch: str | None = None  # whose decisions are reused: replay_from, else the batch itself
+    memory: list = field(default_factory=list)  # the batch's memory snapshot (memoryItems, newest first)
     put_note: Callable[[str, dict], Awaitable[str | None]] | None = (
         None  # item id, value → None when written, else why not (full, the pipeline deleted)
     )
@@ -110,17 +102,11 @@ class Context:
     remote: Callable[[str, int, dict], Awaitable[dict | None]] | None = (
         None  # queue a remote call (key, row, request) → its result when already known, else None (wait)
     )
-    memory_live: Callable[[], Awaitable[list]] | None = (
-        None  # the director's chat reads memory live
-    )
+    memory_live: Callable[[], Awaitable[list]] | None = None  # the director's chat reads memory live
     row_added: Callable[[dict], Awaitable[None]] | None = None  # rows.add / rows.edit stored a row
-    row_started: Callable[[int], Awaitable[bool]] | None = (
-        None  # rows.edit: has pipelines started that row?
-    )
+    row_started: Callable[[int], Awaitable[bool]] | None = None  # rows.edit: has pipelines started that row?
     next_row: Callable[[], Awaitable[int]] | None = None  # the number a row added now would get
-    row_lock: Callable[[int], object] | None = (
-        None  # rows.edit: the row's thread lock (async context manager)
-    )
+    row_lock: Callable[[int], object] | None = None  # rows.edit: the row's thread lock (async context manager)
     remote_enabled: bool = False  # the pipeline's remote switch (snapshot remote.enabled)
     counts: dict = field(default_factory=dict)  # the director's view of the batch: status → rows
 
@@ -294,9 +280,7 @@ def build(plan: dict) -> StateGraph:
         kind = spec["kind"]
         if kind == "inputs":
             add(nid, _inputs_node(plan, nid))
-        elif kind == "step" and nid in plan.get(
-            "fan", {}
-        ):  # fan → one Send per item → branch → wait
+        elif kind == "step" and nid in plan.get("fan", {}):  # fan → one Send per item → branch → wait
             fan, sends = _fan_node(plan, nid, spec)
             g.add_node(f"{nid}.fan", fan)
             g.add_node(f"{nid}.branch", _branch_node(plan, nid, spec))
@@ -371,9 +355,7 @@ def _inputs_node(plan, nid):
     return inputs
 
 
-async def _ask_runs(
-    plan, state, ctx, nid, spec, visit: int, inputs: dict, branch=None
-) -> list[dict]:
+async def _ask_runs(plan, state, ctx, nid, spec, visit: int, inputs: dict, branch=None) -> list[dict]:
     """One run per seed of a step visit (from 0), or of one fan-out branch (`branch` = the item index: key
     branch `<item>-<seed index>`); a terminal reply is that run's result already."""
     sp, n, runs = spec["seed_param"], spec["seeds"], []
@@ -467,12 +449,7 @@ def _fan_node(plan, nid, spec):
         # the parallel branches cannot write n or last: this step keeps the next n numbers for their records
         # (fan entries' `step`, published after it), so the step after the join follows them
         base = rec["n"]
-        return (
-            up
-            | {"to": f"{nid}.branch", "runs": []}
-            | rec
-            | {"n": base + n, "last": rec["last"] | {"step": base}}
-        )
+        return up | {"to": f"{nid}.branch", "runs": []} | rec | {"n": base + n, "last": rec["last"] | {"step": base}}
 
     def sends(state: Row):
         if state.get("to") != f"{nid}.branch":
@@ -495,25 +472,16 @@ def _branch_node(plan, nid, spec):
             fail = {"status": "failed", "take_ids": [], "error": error}
             runs = [{"run_id": None, "seed": None, "result": fail}]
         else:
-            runs = await _ask_runs(
-                plan, state, runtime.context, nid, spec, visit - 1, inputs, b["i"]
-            )
+            runs = await _ask_runs(plan, state, runtime.context, nid, spec, visit - 1, inputs, b["i"])
         ids = [r["run_id"] for r in runs if r["run_id"]]
         title, k = (
             plan["workflows"][spec["workflow"]]["title"],
             len(state["items"][plan["fan"][nid]]),
         )
-        what = (
-            error
-            or f"{len(ids)} run{'s' * (len(ids) != 1)} queued for {title} (shot {b['i'] + 1} of {k})"
-        )
+        what = error or f"{len(ids)} run{'s' * (len(ids) != 1)} queued for {title} (shot {b['i'] + 1} of {k})"
         rec = _step(state, nid, "submit", visit, "finished", what, changed=[f"fan.{nid}.{b['i']}"],
                     run_ids=ids, error=error, branch=b["i"])["last"] | {"step": b["step"]}  # fmt: skip
-        return {
-            "fan": {
-                f"{nid}:{visit}:{b['i']}": {"runs": runs, "step": rec, "attempt": state["attempt"]}
-            }
-        }
+        return {"fan": {f"{nid}:{visit}:{b['i']}": {"runs": runs, "step": rec, "attempt": state["attempt"]}}}
 
     return branch
 
@@ -579,8 +547,7 @@ def _wait_node(plan, nid):
         )
         how = "resumed" if pending else "finished"
         fanned = is_fan
-        cells = _branch_cells(state.get("cells", []), nid, visit, runs, brs if fanned else [None] * len(runs),
-                              results)  # fmt: skip
+        cells = _branch_cells(state.get("cells", []), nid, visit, runs, brs if fanned else [None] * len(runs), results)
         if status != "succeeded":
             error = next((r.get("error") for r in results if r["status"] == "failed"), None)
             error = (error or "the run failed") if status == "failed" else None
@@ -620,15 +587,11 @@ def _gate_node(plan, gid):
         info = _parked(plan, state, gid)
         if not info["candidates"]:
             error = f"no takes from {plan['nodes'][gid]['takes']} to review"
-            return _end("failed", error) | _step(
-                state, gid, "gate", info["visit"], "finished", error, error=error
-            )
+            return _end("failed", error) | _step(state, gid, "gate", info["visit"], "finished", error, error=error)
         pick = interrupt(info)
         k = len(pick.get("take_ids") or [])
         what = f"Parked, then resumed with a pick of {k}" if k else "Parked, then all rejected"
-        return {"pick": pick, "to": f"{gid}.route"} | _step(
-            state, gid, "gate", info["visit"], "resumed", what
-        )
+        return {"pick": pick, "to": f"{gid}.route"} | _step(state, gid, "gate", info["visit"], "resumed", what)
 
     return gate
 
@@ -660,9 +623,8 @@ def _route_node(plan, gid):
                 up
                 | _end("failed", error)
                 | {"rejected": True}
-                | _step(state, gid, "route", visit, "finished", f"Rejected all {n}; the row fails",
-                        error=error)
-            )  # fmt: skip
+                | _step(state, gid, "route", visit, "finished", f"Rejected all {n}; the row fails", error=error)
+            )
         turns = loops.get(gid, 0)
         if turns < br["max"]:
             loops[gid] = turns + 1
@@ -689,17 +651,13 @@ def _output_node(nid, spec):
         ids = _source(state, spec["from"]) or []
         visit = state.get("visits", {}).get(nid, 0) + 1
         coll = spec.get("collection")
-        what = f"Row ended with {len(ids)} take{'s' * (len(ids) != 1)}" + (
-            f" in {coll}" if coll else ""
-        )
+        what = f"Row ended with {len(ids)} take{'s' * (len(ids) != 1)}" + (f" in {coll}" if coll else "")
         return (
             _end("succeeded", None, ids)
             | {"visits": state.get("visits", {}) | {nid: visit}, "collection": coll}
-            | {"cells": _cell(state, nid, "output", {"visit": visit, "status": "succeeded",
-                                                       "take_ids": ids})}
-            | _step(state, nid, "output", visit, "finished", what,
-                    changed=[f"output = {len(ids)}"], take_ids=ids)
-        )  # fmt: skip
+            | {"cells": _cell(state, nid, "output", {"visit": visit, "status": "succeeded", "take_ids": ids})}
+            | _step(state, nid, "output", visit, "finished", what, changed=[f"output = {len(ids)}"], take_ids=ids)
+        )
 
     return output
 
@@ -732,9 +690,7 @@ def _with_source(spec: dict, inputs: dict, ask: str) -> dict:
 ASK_FIELDS = ("system", "prompt", "schema", "tools", "max_tokens")
 
 
-async def call_model(
-    ctx, state, spec: dict, inputs: dict, key: str
-) -> tuple[str | None, dict | None]:
+async def call_model(ctx, state, spec: dict, inputs: dict, key: str) -> tuple[str | None, dict | None]:
     """One model call: an ask run (local, or `server-ask` for a server: batch-lane queue items) or a queued
     remote call (pipelines' own, never a run). (run id or the remote call's key, its result when known)."""
     s = _src(spec)
@@ -746,9 +702,7 @@ async def call_model(
                 "error": "remote models are off on this deployment",
             }
         req = {k.split(".", 1)[1]: v for k, v in inputs.items() if k.split(".", 1)[1] in ASK_FIELDS}
-        return key, await ctx.remote(
-            key, state["row"], req | {"provider": s["provider"], "model": s["model"]}
-        )
+        return key, await ctx.remote(key, state["row"], req | {"provider": s["provider"], "model": s["model"]})
     reply = await ctx.create_run(
         {
             "owner_id": ctx.owner_id,
@@ -818,9 +772,7 @@ def _text(plan, state, src: str) -> str | None:
 def _brief(plan, state, step: str) -> str:
     """The step's prompt text as its runs had it (the judge's brief)."""
     inputs, _ = run_inputs(plan, state, plan["nodes"][step])
-    return next(
-        (v for k, v in (inputs or {}).items() if k.endswith(".text") and isinstance(v, str)), ""
-    )
+    return next((v for k, v in (inputs or {}).items() if k.endswith(".text") and isinstance(v, str)), "")
 
 
 def _decision_id(state, nid: str, visit: int) -> str:
@@ -890,16 +842,13 @@ def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str 
             own = [t for s, t in zip(spec["from"], texts) if s.startswith("$")]
             allowed = list(dict.fromkeys(h for t in own for h in agents.mentions(t)))
             if spec.get("form") == "script":  # write-script/v1: the mention rule does not apply
-                prompt = agents.script_prompt(
-                    spec["instruction"], list(zip(spec["from"], texts)), cast
-                )
+                prompt = agents.script_prompt(spec["instruction"], list(zip(spec["from"], texts)), cast)
                 schema, template = agents.SCRIPT_SCHEMA, agents.WRITE_SCRIPT
                 tokens = agents.WRITE_TOKENS
                 allowed = [line[1:].split(" ", 1)[0] for line in cast]
             elif "list" in spec:  # write-list/v1: a shot list a step fans out over
                 n = spec["list"]["max"]
-                prompt = agents.write_list_prompt(spec["instruction"], list(zip(spec["from"], texts)), n,
-                                                  allowed)  # fmt: skip
+                prompt = agents.write_list_prompt(spec["instruction"], list(zip(spec["from"], texts)), n, allowed)
                 schema, template = agents.list_schema(n), agents.WRITE_LIST
                 tokens = agents.LIST_TOKENS
             else:
@@ -908,18 +857,14 @@ def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str 
                 tokens = agents.WRITE_TOKENS
             extra = {"allowed": allowed}
         else:
-            prompt = agents.decide_prompt(
-                spec["question"], list(zip(spec["from"], texts)), spec["routes"]
-            )
+            prompt = agents.decide_prompt(spec["question"], list(zip(spec["from"], texts)), spec["routes"])
             schema, template = agents.decide_schema(list(spec["routes"])), agents.DECIDE
     inputs = {f"{ask}.system": agents.SYSTEM, f"{ask}.prompt": prompt}
     inputs |= {f"{ask}.schema": agents.compact(schema), f"{ask}.max_tokens": tokens}
     inputs |= _model_values(plan, wf, step)
     inputs = _with_source(spec, inputs, ask)
     hashed = dict(inputs)
-    if (
-        media
-    ):  # the takes by id to the run; by position <step>:<visit>:<seed index>:<seed> in the hash
+    if media:  # the takes by id to the run; by position <step>:<visit>:<seed index>:<seed> in the hash
         inputs[f"{ask}.media"], hashed[f"{ask}.media"] = media
     call = {"inputs": inputs, "hashed": hashed, "template": template, "memory_read": read[:32]}
     return call | extra, None
@@ -980,9 +925,7 @@ def _ask_submit_node(plan, nid, spec, check):
                 and not remote  # remote answers are never treated as reproducible
                 and await ctx.replay(f"{ctx.replay_batch}:{tail}")
             )
-            if (
-                stored
-            ):  # replayed: the stored answer is checked again against this visit's candidates
+            if stored:  # replayed: the stored answer is checked again against this visit's candidates
                 good = [a for a in stored["answers"] if a["error"] is None][-1:]
                 # the model saw nothing in this batch: the source decision (replayed_from) holds what it saw
                 answer = {"tries": good, "seen": [], "tokens_in": 0, "tokens_out": 0}
@@ -1017,9 +960,8 @@ def _ask_submit_node(plan, nid, spec, check):
             up
             | {"call": call, "run_id": (not remote and run) or state.get("run_id"), "to": f"{nid}.wait"}
             | {"cells": _cell(state, nid, kind, cell)}
-            | _step(state, nid, "submit", visit, "finished", what, changed=[f"call.{nid} = {branch}"],
-                    run_ids=ids)
-        )  # fmt: skip
+            | _step(state, nid, "submit", visit, "finished", what, changed=[f"call.{nid} = {branch}"], run_ids=ids)
+        )
 
     return submit
 
@@ -1055,9 +997,7 @@ def _checked(call: dict, check) -> tuple:
         "network_failures": call.get("network_failures", 0) + res.get("network_failures", 0),
     }
     value = err = failed = None
-    if (
-        res["status"] != "succeeded" and res.get("kind") == "answer"
-    ):  # a remote 4xx: stage A's re-ask
+    if res["status"] != "succeeded" and res.get("kind") == "answer":  # a remote 4xx: stage A's re-ask
         err = res.get("error") or "the answer was refused"
     elif res["status"] != "succeeded":
         failed = res.get("error") or res["status"]
@@ -1089,9 +1029,7 @@ def _decision(plan, state, spec, call, error=None, **result) -> dict:
             "attempt": state["attempt"],
             "replayed": bool(call["replayed_from"]),
             "replayed_from": call["replayed_from"],
-            "run_ids": call["run_ids"][
-                : 64 if spec["kind"] == "agent" else 2
-            ],  # an agent: one per turn and re-ask
+            "run_ids": call["run_ids"][: 64 if spec["kind"] == "agent" else 2],  # an agent: one per turn and re-ask
             "workflow": spec["workflow"],
             "model": _model_ref(wf, inp),
             "template": call["template"],
@@ -1140,9 +1078,8 @@ def _not_passed(plan, state, nid, spec, call, err, failed, part) -> Row | None:
     return (
         _end("failed", f"{nid}: {error}")
         | {"call": call, "cells": _cell(state, nid, kind, cell)}
-        | _step(state, nid, part, visit, "finished", f"Failed: {error}", error=error, run_ids=ids,
-                decision=dec)
-    )  # fmt: skip
+        | _step(state, nid, part, visit, "finished", f"Failed: {error}", error=error, run_ids=ids, decision=dec)
+    )
 
 
 def _judge_loop(br, turns: int, gave_up: bool) -> dict | None:
@@ -1163,9 +1100,7 @@ def _verdict_node(plan, nid, spec):
         def check(text):
             value, err = agents.parse(text, schema)
             v = value and agents.judge_verdict(value, crit, keep, cands)
-            return (
-                (None, err or v["error"]) if err or "error" in v else (value | {"derived": v}, None)
-            )
+            return (None, err or v["error"]) if err or "error" in v else (value | {"derived": v}, None)
 
         value, err, failed, call = _checked(call, check)
         if (out := _not_passed(plan, state, nid, spec, call, err, failed, "verdict")) is not None:
@@ -1187,15 +1122,9 @@ def _verdict_node(plan, nid, spec):
                                                                 "first_failed": v["first_failed"]})  # fmt: skip
         br, turns = plan["branch"].get(nid), (state.get("loops") or {}).get(nid, 0)
         retry = bool(br) and turns < br["max"]
-        ask = (
-            bool(br) and not retry and "then" not in br
-        )  # API 1.28 "Then: Ask me": park at the cap, Auto too
-        park = (mode == "suggest" and (v["verdict"] == "pass" or not retry)) or (
-            ask and v["verdict"] == "fail"
-        )
-        firsts = [
-            next((crit["must"][j] for j in range(m) if not a["checks"][j]), None) for a in answers
-        ]
+        ask = bool(br) and not retry and "then" not in br  # API 1.28 "Then: Ask me": park at the cap, Auto too
+        park = (mode == "suggest" and (v["verdict"] == "pass" or not retry)) or (ask and v["verdict"] == "fail")
+        firsts = [next((crit["must"][j] for j in range(m) if not a["checks"][j]), None) for a in answers]
         judged = {
             "verdict": v["verdict"],
             "picked": len(v["picked"]),
@@ -1232,7 +1161,7 @@ def _verdict_node(plan, nid, spec):
             if v["verdict"] == "pass"
             else f"{sum(v['passes'])} of {len(cands)} passed, {keep} needed"
             + (f"; first failed: {first}" if first else "")
-        ) + (" (suggested for review)" if park else "")  # fmt: skip
+        ) + (" (suggested for review)" if park else "")
         return {
             "call": call | {"derived": v, "park": info if park else None},
             "reasons": (state.get("reasons") or {}) | {nid: reasons},
@@ -1253,9 +1182,7 @@ def _judge_gate_node(nid):
         pick = interrupt(info)
         k = len(pick.get("take_ids") or [])
         what = f"Parked, then resumed with a pick of {k}" if k else "Parked, then all rejected"
-        return {"pick": pick, "to": f"{nid}.route"} | _step(
-            state, nid, "gate", info["visit"], "resumed", what
-        )
+        return {"pick": pick, "to": f"{nid}.route"} | _step(state, nid, "gate", info["visit"], "resumed", what)
 
     return gate
 
@@ -1303,9 +1230,8 @@ def _judge_route_node(plan, nid, spec):
             up
             | nxt
             | {"loops": loops, "cells": _cell(state, nid, "judge", att, loop)}
-            | _step(state, nid, "route", visit, "finished", what, changed=changed, edge=edge,
-                    take_ids=ids)
-        )  # fmt: skip
+            | _step(state, nid, "route", visit, "finished", what, changed=changed, edge=edge, take_ids=ids)
+        )
 
     return route
 
@@ -1365,12 +1291,7 @@ def _apply_list_node(plan, nid, spec):
 
         def check(text):
             value, err = agents.parse(text, agents.list_schema(n))
-            extra = [
-                h
-                for t in (value or {}).get("items", [])
-                for h in agents.mentions(t)
-                if h not in allowed
-            ]
+            extra = [h for t in (value or {}).get("items", []) for h in agents.mentions(t) if h not in allowed]
             if extra:
                 err = f"an item mentions @{extra[0]}, which the texts it is written from do not"
             return (None, err) if err else (value, None)
@@ -1404,9 +1325,7 @@ def _decide_node(plan, nid, spec):
         counts against `max`, and once used up `then` is taken whatever the answer (forced)."""
         call = state["call"]
         r = plan["routes"][nid]
-        value, err, failed, call = _checked(
-            call, lambda t: agents.parse(t, agents.decide_schema(labels))
-        )
+        value, err, failed, call = _checked(call, lambda t: agents.parse(t, agents.decide_schema(labels)))
         if (out := _not_passed(plan, state, nid, spec, call, err, failed, "route")) is not None:
             return out
         loops = dict(state.get("loops") or {})
@@ -1423,9 +1342,7 @@ def _decide_node(plan, nid, spec):
         cell = {"visit": call["visit"], "status": "succeeded", "run_ids": call["run_ids"]}
         cell |= {"decision_id": dec["id"], "route": {"label": label, "to": to}}
         loop = {"turns": loops.get(nid, 0), "max": r["max"], "then": r["routes"][r["then"]]}
-        what = f"Route {label}, on to {to}" + (
-            f" (forced: {r['max']} of {r['max']} turns used)" if forced else ""
-        )
+        what = f"Route {label}, on to {to}" + (f" (forced: {r['max']} of {r['max']} turns used)" if forced else "")
         changed = [f"loops.{nid} = {loops[nid]}"] if loops.get(nid, 0) != turns else []
         return (
             up
@@ -1472,11 +1389,7 @@ def _memory_node(plan, nid, spec):
         if None in texts:
             src = spec["from"][texts.index(None)]
             error = f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
-            return (
-                up
-                | _end("failed", error)
-                | _step(state, nid, "memory", visit, "finished", error, error=error)
-            )
+            return up | _end("failed", error) | _step(state, nid, "memory", visit, "finished", error, error=error)
         iid = memory_item_id(state["batch_id"], state["row"], nid, visit)
         source = {"kind": "node", "batch_id": state["batch_id"], "row": state["row"]}
         value = {"kind": "note", "key": spec.get("key"), "text": "\n".join(texts)[:2000]}
@@ -1518,17 +1431,8 @@ def _custom_node(plan, nid, spec):
                 break
             values[f] = v
         node = customs.NODES.get(spec["node"])
-        if (
-            not error
-            and node
-            and node.network
-            and not (config.REMOTE_MODELS and ctx.remote_enabled)
-        ):
-            error = (
-                "remote models are off"
-                if not config.REMOTE_MODELS
-                else "remote models are not enabled"
-            )
+        if not error and node and node.network and not (config.REMOTE_MODELS and ctx.remote_enabled):
+            error = "remote models are off" if not config.REMOTE_MODELS else "remote models are not enabled"
         out = None
         if not error:
             out, error = await customs.run(spec["node"], values, ctx)

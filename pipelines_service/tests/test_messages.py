@@ -159,9 +159,7 @@ def test_the_contract_copy_is_current():
         *(CONTRACTS / "tools").glob("*.json"),
         *(CONTRACTS / "plugins").glob("*.json"),
     ]:
-        assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), (
-            f"make gen: {p.name}"
-        )
+        assert (schemas.GEN / p.parent.name / p.name).read_text() == p.read_text(), f"make gen: {p.name}"
 
 
 def test_assistant_tool_calls_resolve_into_the_tools_copy():

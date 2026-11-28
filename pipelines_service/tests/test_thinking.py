@@ -84,9 +84,7 @@ async def test_json_schema_falls_back_first_and_keeps_the_fragment(fake):
     fake.script["m"] = [{"status": 400}, {"content": '{"title": "a b"}'}]
     await providers.chat("ds", p, REQ | {"schema": schema})
     last = fake.requests[-1]["body"]
-    assert last["response_format"]["type"] == "json_object" and last["thinking"] == {
-        "type": "disabled"
-    }
+    assert last["response_format"]["type"] == "json_object" and last["thinking"] == {"type": "disabled"}
     assert ("ds", "m") not in providers._NO_THINKING
 
 

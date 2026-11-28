@@ -58,10 +58,7 @@ async def put(store, owner_id, pipeline_id, item_id: str, value: dict) -> dict |
     space = ns(owner_id, pipeline_id)
     if await store.aget(_tomb(owner_id), str(pipeline_id)):
         return GONE
-    if (
-        not await store.aget(space, item_id)
-        and len(await items(store, owner_id, pipeline_id)) >= MAX_ITEMS
-    ):
+    if not await store.aget(space, item_id) and len(await items(store, owner_id, pipeline_id)) >= MAX_ITEMS:
         return FULL
     await store.aput(space, item_id, value, index=False)
     return None
@@ -70,9 +67,7 @@ async def put(store, owner_id, pipeline_id, item_id: str, value: dict) -> dict |
 def judge_example(batch_id, row: int, parked: dict, pick: dict) -> tuple[str, dict]:
     """A pick with a note at a judge, as an item (one per judge visit of a row: a pick delivered twice is one)."""
     kept = pick.get("take_ids") or []
-    iid = uuid.uuid5(
-        uuid.NAMESPACE_URL, f"helmstudio:pick:{batch_id}:{row}:{pick['gate']}:{pick['visit']}"
-    )
+    iid = uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:pick:{batch_id}:{row}:{pick['gate']}:{pick['visit']}")
     source = {"kind": "pick", "batch_id": str(batch_id), "row": row, "node": pick["gate"]}
     return str(iid), {
         "kind": "judge_example",

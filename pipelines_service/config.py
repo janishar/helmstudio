@@ -33,8 +33,6 @@ REMOTE_ALLOW_PRIVATE = os.environ.get("PIPELINES_REMOTE_ALLOW_PRIVATE", "").lowe
 # where a provider's key_secret file lives (compose secrets); the key is read at call time, never logged. API 1.51:
 # several folders joined by ":", searched in order (the dev stack: the admin's mount, read live, then the fake's).
 # API 1.52: a key the admin pastes in Admin › Model providers is written into the first folder only (when writable)
-PROVIDER_KEYS_DIRS = [
-    Path(d) for d in os.environ.get("PIPELINES_PROVIDER_KEYS_DIR", "/run/secrets").split(":") if d
-]
+PROVIDER_KEYS_DIRS = [Path(d) for d in os.environ.get("PIPELINES_PROVIDER_KEYS_DIR", "/run/secrets").split(":") if d]
 # GPU hosts this service is the `server` env runner of (local-server calls); empty: server models have no host
 SERVER_HOSTS = [h for h in os.environ.get("PIPELINES_SERVER_HOSTS", "").split(",") if h.strip()]

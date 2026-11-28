@@ -115,9 +115,7 @@ async def test_binds_seeds_and_a_gate_in_the_demo_pipeline():
     assert out["status"] == "succeeded" and out["take_ids"] == d["take_ids"]
     assert out["collection"] == "Fox at night" and out["picked"] == {"review": [pick]}
     assert [c["node"] for c in out["cells"]] == ["still", "review", "edit", "out"]
-    assert (
-        out["n"] == 8
-    )  # inputs, still.submit, still.wait, review.gate, review.route, edit ×2, out
+    assert out["n"] == 8  # inputs, still.submit, still.wait, review.gate, review.route, edit ×2, out
 
 
 def fx_problems(name, with_bounds=False):
@@ -129,11 +127,7 @@ def fx_problems(name, with_bounds=False):
 
 @pytest.mark.parametrize(
     "name",
-    sorted(
-        p.name
-        for p in (CONTRACTS / "fixtures/pipelines").glob("*.json")
-        if p.name != "workflows.json"
-    ),
+    sorted(p.name for p in (CONTRACTS / "fixtures/pipelines").glob("*.json") if p.name != "workflows.json"),
 )
 def test_pipeline_rules_match_the_fixtures(name):
     doc, want, bounds = fx_problems(name, with_bounds=True)
@@ -199,9 +193,7 @@ def test_rerender_row_bind_sends_a_frame_ref():
         "nothing from clip_a yet",
     )
     spec["bind"] = {"keyframes.images[3]": "clip_a.first_frame"}
-    assert graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1"]}}, spec)[1].endswith(
-        "no row 3"
-    )
+    assert graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1"]}}, spec)[1].endswith("no row 3")
 
 
 def test_rerender_image_param_bind_sends_a_frame_ref():
@@ -212,8 +204,6 @@ def test_rerender_image_param_bind_sends_a_frame_ref():
     }
     spec = {"workflow": "w", "inputs": {"first.image": {"take_id": "old"}},
             "bind": {"first.image": "clip_a.last_frame", "last.image": "clip_c.first_frame"}}  # fmt: skip
-    got, err = graph.run_inputs(
-        plan, {"inputs": {}, "takes": {"clip_a": ["t1"], "clip_c": ["t3"]}}, spec
-    )
+    got, err = graph.run_inputs(plan, {"inputs": {}, "takes": {"clip_a": ["t1"], "clip_c": ["t3"]}}, spec)
     assert err is None and got["first.image"] == {"frame_of": "t1", "at": "last"}
     assert got["last.image"] == {"frame_of": "t3", "at": "first"}

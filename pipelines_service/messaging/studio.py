@@ -120,10 +120,7 @@ async def plugin_pass(nc, request: dict) -> dict | None:
         try:
             msg = await nc.request(PASS, json.dumps(request).encode(), timeout=TIMEOUT)
             reply = json.loads(msg.data)
-            if (
-                not (errs := schemas.plugins_pass_errors("reply", reply))
-                and reply.get("code") != "internal"
-            ):
+            if not (errs := schemas.plugins_pass_errors("reply", reply)) and reply.get("code") != "internal":
                 return reply
             log.warning("%s %s: %s", PASS, request["call_id"], errs or reply)
         except (nats.errors.Error, OSError, ValueError) as e:
