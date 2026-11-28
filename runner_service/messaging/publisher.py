@@ -38,6 +38,29 @@ def now() -> str:
     return datetime.now(UTC).isoformat().replace("+00:00", "Z")
 
 
+def envelope(cmd: dict, type_: str, data: dict) -> dict:
+    """The `type_` event of the job `cmd` names, carrying `data`. ValueError when it is off-contract."""
+    msg = {
+        "type": type_,
+        "version": 1,
+        "id": str(uuid.uuid4()),
+        "job_id": cmd["job_id"],
+        "owner_id": cmd["owner_id"],
+        "occurred_at": now(),
+        "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
+        "data": data,
+    }
+    if errs := schemas.message_errors(msg):
+        raise ValueError(f"{type_} is off-contract: {'; '.join(errs[:3])}")
+    return msg
+
+
+async def send(js, subject: str, msg: dict, msg_id: str) -> None:
+    """Publish `msg` with Nats-Msg-Id `msg_id` and wait for the stream's ack, `retried`."""
+    body, headers = json.dumps(msg).encode(), {"Nats-Msg-Id": msg_id}
+    await retried(lambda: js.publish(subject, body, headers=headers))
+
+
 class RunEvents:
     """Builds and publishes the events of the run named by a cmd.run.execute command."""
 
@@ -48,19 +71,7 @@ class RunEvents:
         """The next evt.run.<kind> message, seq included. ValueError when it is off-contract (the
         seq is not used up)."""
         cmd, seq = self.cmd, self.seq + 1
-        trace = {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")}
-        msg = {
-            "type": f"evt.run.{kind}",
-            "version": 1,
-            "id": str(uuid.uuid4()),
-            "job_id": cmd["job_id"],
-            "owner_id": cmd["owner_id"],
-            "occurred_at": now(),
-            "trace": trace,
-            "data": {"seq": seq, "attempt": cmd["data"].get("attempt", 1)} | data,
-        }
-        if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.run.{kind} is off-contract: {'; '.join(errs[:3])}")
+        msg = envelope(cmd, f"evt.run.{kind}", {"seq": seq, "attempt": cmd["data"].get("attempt", 1)} | data)
         self.seq = seq
         return msg
 
@@ -68,11 +79,7 @@ class RunEvents:
         """Send evt.run.<kind> and wait for the stream's ack. Returns the message sent."""
         msg = self.build(kind, data)
         subject = f"evt.run.{HOST}.{self.cmd['data']['session_id']}.{kind}"
-        body, headers = (
-            json.dumps(msg).encode(),
-            {"Nats-Msg-Id": f"{msg['job_id']}:{msg['data']['attempt']}:{msg['data']['seq']}"},
-        )
-        await retried(lambda: self.js.publish(subject, body, headers=headers))
+        await send(self.js, subject, msg, f"{msg['job_id']}:{msg['data']['attempt']}:{msg['data']['seq']}")
         return msg
 
     async def status(

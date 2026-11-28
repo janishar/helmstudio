@@ -17,14 +17,13 @@ import json
 import logging
 import shutil
 import time
-import uuid
 
 from config import ENV, HOST
 from core import download, models
 from core import pack as packs
 from core.download import Cancelled, JobError
 from messaging import cancels, schemas
-from messaging.publisher import now, retried
+from messaging.publisher import envelope, send
 
 log = logging.getLogger("models")
 
@@ -48,16 +47,9 @@ class ModelEvents:
 
     async def publish(self, kind: str, data: dict) -> dict:
         cmd, seq = self.cmd, self.seq + 1
-        msg = {"type": f"evt.{self.KIND}.{kind}", "version": 1, "id": str(uuid.uuid4()), "job_id": cmd["job_id"],
-               "owner_id": cmd["owner_id"], "occurred_at": now(),
-               "trace": {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")},
-               "data": {"seq": seq, "delivery": self.delivery} | data}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            raise ValueError(f"evt.{self.KIND}.{kind} is off-contract: {'; '.join(errs[:3])}")
+        msg = envelope(cmd, f"evt.{self.KIND}.{kind}", {"seq": seq, "delivery": self.delivery} | data)
         self.seq = seq
-        body = json.dumps(msg).encode()
-        headers = {"Nats-Msg-Id": f"{cmd['job_id']}:{self.delivery}:{seq}"}
-        await retried(lambda: self.js.publish(f"evt.{self.KIND}.{HOST}.{kind}", body, headers=headers))
+        await send(self.js, f"evt.{self.KIND}.{HOST}.{kind}", msg, f"{cmd['job_id']}:{self.delivery}:{seq}")
         return msg
 
     async def status(self, status: str, failure: JobError | None = None, result: dict | None = None):
