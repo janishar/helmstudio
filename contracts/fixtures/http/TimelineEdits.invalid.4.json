@@ -1,0 +1,10 @@
+{
+ "base_revision": 7,
+ "ops": [
+  {
+   "op": "set",
+   "clip": "m",
+   "fade_in": 12
+  }
+ ]
+}

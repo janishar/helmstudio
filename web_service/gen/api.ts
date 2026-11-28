@@ -8344,6 +8344,12 @@ export interface components {
             offline?: boolean;
             /** @description From 1.50, an audio-track clip only: the V1 clip it is linked to (its sound clip: it follows that clip's ripples, goes when it goes and is cut with it; contracts/README.md, Timeline rules: linked clips) */
             link?: components["schemas"]["TimelineClipId"];
+            /** @description From 1.106, a clip with sound (an audio-track clip with a take, a V1 video clip; another is `fade_clip`): seconds its sound rises from silence, snapped to frames; normalize clamps it to the clip's length; 0 is stored as absent (contracts/README.md, Audio fades, crossfades and ducking) */
+            fade_in?: number;
+            /** @description From 1.106, as fade_in: seconds its sound falls to silence at its end, clamped to the length less fade_in; it does not play while the clip has a `crossfade` */
+            fade_out?: number;
+            /** @description From 1.106, an audio-track clip only (V1: `crossfade_track`): seconds of Crossfade into next, into the clip that starts on its end frame on its track (none touching: normalize drops it), snapped to frames and clamped to both clips' lengths. A true blend when its take has that much sound past `out` (it plays on under the next clip's head), else a dip (each side fades over half) with the warning `crossfade_dip`; this clip's fade_out and the next one's fade_in do not play while it is set */
+            crossfade?: number;
         };
         /**
          * @description a marker's colour, drawn with the theme's own shade
@@ -8361,6 +8367,15 @@ export interface components {
         };
         /** @enum {string} */
         TimelineTrackKind: "video" | "audio";
+        /** @description from 1.106: music dips by `db` wherever a voice plays, easing over 0.3 s each side, worked out from the voice clips' (blocks') times so the player and Export match (contracts/README.md, Audio fades, crossfades and ducking). A sequence without it: off; a board without it: on, -12 */
+        Ducking: {
+            on: boolean;
+            /**
+             * @description how far music dips; the picks -6, -9, -12 (default), -18 or typed
+             * @default -12
+             */
+            db: number;
+        };
         TimelineTrack: {
             /** @description answers only (ignored in a write): V1, then A2…A9 by position (A1 is V1's own sound, drawn under it) */
             name?: string;
@@ -8377,6 +8392,8 @@ export interface components {
             tracks: components["schemas"]["TimelineTrack"][];
             /** @description From 1.50: at most 200 (`too_many_markers`); absent = none; answers sort them by time, then id, and leave the list out when empty */
             markers?: components["schemas"]["TimelineMarker"][];
+            /** @description From 1.106: the sequence's Duck music (absent: off; set by the `ducking` op, or by Send from its board's) */
+            ducking?: components["schemas"]["Ducking"];
         };
         /** @description a document as studio stores and answers it: names, V1 `at`, defaults filled, every time snapped */
         TimelineNormalized: {
@@ -8417,6 +8434,8 @@ export interface components {
             tracks: components["schemas"]["TimelineDoc"]["tracks"];
             /** @description From 1.50: the whole list (absent = none) */
             markers?: components["schemas"]["TimelineDoc"]["markers"];
+            /** @description From 1.106: the sequence's Duck music (absent: off, as the whole document is written) */
+            ducking?: components["schemas"]["Ducking"];
         };
         TimelinePatch: {
             /** @description trimmed; blank = 422 */
@@ -8455,6 +8474,8 @@ export interface components {
             workflow_title: string | null;
             /** @description from 1.60: `made_with.render_s` (the clip inspector's "⏱ 3:12"; the sequence's total sums its clips' takes that have one); absent without one */
             render_s?: number;
+            /** @description from 1.106, kind audio only: its class (Take.sound): ducking dips music clips under voice clips */
+            sound?: components["schemas"]["SoundClass"];
         };
         TimelineProblem: {
             /**
@@ -8565,6 +8586,12 @@ export interface components {
             transition_in?: components["schemas"]["TimelineDissolve"] | null;
             /** @description from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks) */
             link?: components["schemas"]["TimelineClipId"] | null;
+            /** @description from 1.106: seconds (0 or null removes it) */
+            fade_in?: number | null;
+            /** @description from 1.106: seconds (0 or null removes it) */
+            fade_out?: number | null;
+            /** @description from 1.106, an audio-track clip: Crossfade into next, seconds (the menu's is 2; 0 or null removes it) */
+            crossfade?: number | null;
         } | {
             /** @constant */
             op: "add";
@@ -8654,6 +8681,11 @@ export interface components {
             /** @constant */
             op: "remove_marker";
             id: components["schemas"]["TimelineClipId"];
+        } | {
+            /** @constant */
+            op: "ducking";
+            on?: boolean;
+            db?: number;
         };
         TimelineEdits: {
             /** @description the revision the ops were planned on (409 when it is not the current one) */
@@ -8672,7 +8704,7 @@ export interface components {
             removed: components["schemas"]["TimelineClipId"][];
             changed: {
                 clip: components["schemas"]["TimelineClipId"];
-                /** @description field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track and (1.50) link (a V1 ripple shows as `at` changes) */
+                /** @description field → [before, after], among take_id, in, out, hold, at, gain_db, mute, transition_in, alternatives, shot, offline, track, (1.50) link and (1.106) fade_in, fade_out, crossfade (a V1 ripple shows as `at` changes) */
                 fields: {
                     [key: string]: unknown[];
                 };
@@ -8689,6 +8721,8 @@ export interface components {
             };
             /** @description [before, after] duration_s */
             duration: number[];
+            /** @description from 1.106, only when it changed: [before, after] (null: absent) */
+            ducking?: (components["schemas"]["Ducking"] | null)[];
             /** @description from 1.50: markers by id */
             markers: {
                 added: components["schemas"]["TimelineClipId"][];
@@ -8709,14 +8743,14 @@ export interface components {
             /** @description as GET …/{timeline_id} answers it (a dry run: what it would be) */
             timeline: components["schemas"]["Timeline"];
             diff: components["schemas"]["TimelineDiff"];
-            /** @description what studio changed beyond the ops (a time snapped to the frame grid); never a refusal */
+            /** @description what studio changed beyond the ops (a time snapped to the frame grid); never a refusal. From 1.106 a crossfade that dips reads `crossfade_dip: <clip> has no sound past its cut: it dips` (code first) */
             warnings: string[];
         };
         /** @description TimelineError plus the failing op: `ops[3]: split_edge`, or `ops[3]: timeline has 2 problems: …`; `{detail}` only when the body does not fit */
         TimelineEditError: {
             detail: string;
             op_index?: number;
-            /** @description the edit's error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem's code */
+            /** @description the edit's error code (unknown_op, unknown_clip, unknown_track, take_not_found, split_edge, split_none, split_shot, lift_track, video_track, too_many_tracks, not_alternative; from 1.50 roll_track, roll_first, least, slip_still, slide_track, slide_end, overwrite_track, overwrite_shot, range_empty, range_shot, ids_short, unknown_marker, link_start) or the first problem's code (from 1.106 fade_clip, crossfade_track) */
             code?: string;
             problems?: components["schemas"]["TimelineProblem"][];
         };
@@ -8784,6 +8818,19 @@ export interface components {
             offline: boolean;
             /** @description from 1.50, an audio-track clip: the V1 clip it is linked to */
             link: components["schemas"]["TimelineClipId"] | null;
+            /** @description from 1.106, a clip with a fade in only: seconds */
+            fade_in?: number;
+            /** @description from 1.106, a clip with a fade out only: seconds */
+            fade_out?: number;
+            /** @description from 1.106, a clip with Crossfade into next only: seconds */
+            crossfade?: number;
+            /**
+             * @description from 1.106, with crossfade: blend (its take has sound past its cut) or dip
+             * @enum {string}
+             */
+            crossfade_mode?: "blend" | "dip";
+            /** @description from 1.106, an audio take's clip only: music, sound or voice (what ducking reads) */
+            sound?: components["schemas"]["SoundClass"];
         };
         /** @description GET …/{timeline_id}?view=agent (check.py t_agent_view, plus id, name, revision and take titles): plain data, no signed links */
         TimelineAgentView: {
@@ -8807,6 +8854,8 @@ export interface components {
             links: {
                 [key: string]: components["schemas"]["TimelineClipId"][];
             };
+            /** @description from 1.106, when the sequence has it */
+            ducking?: components["schemas"]["Ducking"];
             /** @description from 1.50: the markers by time, `at_f` in frames */
             markers: {
                 id: components["schemas"]["TimelineClipId"];
@@ -9187,8 +9236,11 @@ export interface components {
          * @enum {string}
          */
         MagicRole: "storyboard" | "shots" | "voice" | "music" | "sound" | "free";
-        /** @enum {string} */
-        MagicTransitionKind: "cut" | "dissolve" | "fade" | "wipe" | "morph";
+        /**
+         * @description from 1.106 crossfade: between two music or sound blocks only; between sound blocks every kind plays and sends as a crossfade (contracts/README.md, Audio fades, crossfades and ducking)
+         * @enum {string}
+         */
+        MagicTransitionKind: "cut" | "dissolve" | "fade" | "wipe" | "morph" | "crossfade";
         /**
          * @description insert pushes what is after the point along (a move closes the gap it leaves); overwrite covers it
          * @enum {string}
@@ -9310,6 +9362,10 @@ export interface components {
              * @default 0
              */
             gain_db?: number;
+            /** @description from 1.106, a voice, music or sound block only (another kind: 422 `blocks[<i>]: fade_in is for voice, music and sound blocks`): seconds its sound rises from silence; Play applies it, Send puts it on its clip's `fade_in`; 0 is stored as absent */
+            fade_in?: number;
+            /** @description from 1.106, as fade_in, at its end (not played while a crossfade follows it) */
+            fade_out?: number;
         };
         /** @description a block on a lane (MagicBlockNew with its id) */
         MagicBlock: WithRequired<components["schemas"]["MagicBlockNew"], "id">;
@@ -9382,6 +9438,8 @@ export interface components {
             transitions: components["schemas"]["MagicTransition"][];
             assets: components["schemas"]["MagicAsset"][];
             notes: string[];
+            /** @description from 1.106: the board's Duck music (absent: on, -12; a new board stores it on); Play applies it, Send puts it on the sequence */
+            ducking?: components["schemas"]["Ducking"];
         };
         MagicBoard: {
             /** Format: uuid */
@@ -9523,6 +9581,10 @@ export interface components {
                 pinned?: string | null;
                 /** @description from 1.101, an audio block only: its level in dB; 0 or null takes it off */
                 gain_db?: number | null;
+                /** @description from 1.106, an audio block only: seconds; 0 or null takes it off */
+                fade_in?: number | null;
+                /** @description from 1.106, an audio block only: seconds; 0 or null takes it off */
+                fade_out?: number | null;
             };
         } | {
             /** @constant */
@@ -9585,6 +9647,11 @@ export interface components {
             id: components["schemas"]["MagicId"];
             /** Format: uuid */
             take: string;
+        } | {
+            /** @constant */
+            op: "ducking";
+            on?: boolean;
+            db?: number;
         };
         MagicIds: components["schemas"]["MagicId"][];
         MagicEdits: {
@@ -9617,7 +9684,7 @@ export interface components {
             /** @description as GET answers it (a dry run: what it would be) */
             board: components["schemas"]["MagicBoard"];
             diff: components["schemas"]["MagicDiff"];
-            /** @description what the board shows after it, never a refusal: `Line 1 runs 3 s past Shot 1` */
+            /** @description what the board shows after it, never a refusal: `Line 1 runs 3 s past Shot 1`; from 1.106 a music or sound join that dips: `Soft rain theme was made before the crossfade: it dips instead.` */
             warnings: string[];
         };
         /** @description the failing op: `detail` the reason as the board says it (`That lane is gone.`), `op_index` which; `{detail}` only when the body does not fit */
@@ -9699,12 +9766,12 @@ export interface components {
         MagicSendJoin: {
             transition: components["schemas"]["MagicId"];
             /** @enum {string} */
-            kind: "dissolve" | "fade" | "wipe" | "morph" | "fade_in" | "fade_out";
+            kind: "dissolve" | "fade" | "wipe" | "morph" | "fade_in" | "fade_out" | "crossfade";
             /**
-             * @description kept: the Timeline's own dissolve; baked: a bake job's clip; clip: a morph's take as its own clip; cut: sent as a cut (why in the warnings); skipped: not sent (a sound lane's fade)
+             * @description kept: the Timeline's own dissolve; baked: a bake job's clip; clip: a morph's take as its own clip; cut: sent as a cut (why in the warnings); skipped: not sent; from 1.106 crossfade: a join of two sound blocks as the outgoing clip's `crossfade`; fades: a sound lane's fade in or out as its first or last block's clip's fade
              * @enum {string}
              */
-            how: "kept" | "baked" | "clip" | "cut" | "skipped";
+            how: "kept" | "baked" | "clip" | "cut" | "skipped" | "crossfade" | "fades";
         };
         MagicSendPlan: {
             name: string;
@@ -9843,6 +9910,8 @@ export interface components {
             style?: "film" | "sketch" | "rough" | "full";
             /** @description from 1.94: the model variant it ran on, its title as the registry names it (`Turbo`; the id when no runner publishes the model); absent: its workflow has no model node (contracts/README.md, Magic: variants) */
             variant?: string;
+            /** @description from 1.106, a music or sound block with a crossfade after it: the seconds it ran past its block for the crossfade (absent: none) */
+            tail?: number;
             /** @description from 1.89: a dialogue's run of this turn (its index in `turns`); from 1.90 the turn it ran for while its inputs match that turn's, else the turn whose inputs it matches now (a line moved, or one before it removed), else the turn it ran for; `current` is against that turn */
             turn?: number;
         };
@@ -10064,6 +10133,10 @@ export interface components {
             request?: components["schemas"]["MagicRequest"];
             /** @description from 1.101, an audio block with a level only: its dB (a block op's `gain_db` sets it) */
             gain_db?: number;
+            /** @description from 1.106, an audio block with a fade in only: seconds (a block op's `fade_in` sets it) */
+            fade_in?: number;
+            /** @description from 1.106, an audio block with a fade out only: seconds */
+            fade_out?: number;
         };
         /** @description GET …/{board_id}?view=agent: what an agent reads to plan edits; no signed links */
         MagicAgentView: {
@@ -10093,6 +10166,11 @@ export interface components {
                 takes?: components["schemas"]["MagicTransition"]["takes"];
                 pinned?: components["schemas"]["MagicTransition"]["pinned"];
                 at_s: number;
+                /**
+                 * @description from 1.106, a join of two sound blocks: blend (the outgoing take has sound past the cut) or dip
+                 * @enum {string}
+                 */
+                mode?: "blend" | "dip";
             }[];
             assets: {
                 id: components["schemas"]["MagicId"];
@@ -10114,6 +10192,8 @@ export interface components {
                 /** @description the blocks that @-pick it, speak in its voice, from 1.93 also a dialogue's speaker or a first or last frame of it (lib/magic.ts usedIn: what the asset dialog says before a delete) */
                 used_in: components["schemas"]["MagicId"][];
             }[];
+            /** @description from 1.106: the board's Duck music as it plays (absent in the doc: on, -12) */
+            ducking?: components["schemas"]["Ducking"];
             notes: string[];
         };
         SigninRequest: {

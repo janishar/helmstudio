@@ -1547,6 +1547,33 @@
               }
              ],
              "description": "from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)"
+            },
+            "fade_in": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "seconds the clip's sound rises from silence (0 or null removes it)"
+            },
+            "fade_out": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "seconds its sound falls to silence at its end (0 or null removes it)"
+            },
+            "crossfade": {
+             "type": [
+              "number",
+              "null"
+             ],
+             "minimum": 0,
+             "maximum": 10,
+             "description": "an audio-track clip: Crossfade into next, seconds into the clip touching its end (2 is the menu's; a blend when its take has sound past its cut, else a dip; 0 or null removes it)"
             }
            }
           },
@@ -2030,6 +2057,29 @@
             "take_id": {
              "type": "string",
              "format": "uuid"
+            }
+           }
+          },
+          {
+           "title": "ducking",
+           "description": "the sequence's Duck music: on or off and how far (absent fields kept)",
+           "type": "object",
+           "required": [
+            "op"
+           ],
+           "additionalProperties": false,
+           "properties": {
+            "op": {
+             "const": "ducking"
+            },
+            "on": {
+             "type": "boolean"
+            },
+            "db": {
+             "type": "number",
+             "minimum": -24,
+             "maximum": -3,
+             "description": "how far music dips under voice clips, dB (-12 by default)"
             }
            }
           }

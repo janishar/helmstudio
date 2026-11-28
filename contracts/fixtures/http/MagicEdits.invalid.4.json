@@ -1,0 +1,12 @@
+{
+ "base_revision": 3,
+ "ops": [
+  {
+   "op": "block",
+   "id": "m1",
+   "set": {
+    "fade_out": 11
+   }
+  }
+ ]
+}

@@ -1,0 +1,38 @@
+{
+ "base_revision": 3,
+ "dry_run": true,
+ "ops": [
+  {
+   "op": "block",
+   "id": "m1",
+   "set": {
+    "fade_in": 1.5,
+    "fade_out": 2
+   }
+  },
+  {
+   "op": "block",
+   "id": "m2",
+   "set": {
+    "fade_in": null
+   }
+  },
+  {
+   "op": "transition",
+   "between": [
+    "m1",
+    "m2"
+   ],
+   "kind": "crossfade",
+   "length": 48
+  },
+  {
+   "op": "ducking",
+   "on": false
+  },
+  {
+   "op": "ducking",
+   "db": -18
+  }
+ ]
+}

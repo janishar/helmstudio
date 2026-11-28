@@ -3845,7 +3845,8 @@ New shot machinery (references `make_shot`, `t_edit` `place`, `rerender_steps`; 
   at most 4 unfinished media jobs (exports and frame jobs) per user, counted under a per-user lock (409).
   Studio builds the ffmpeg arguments (the one filter graph, ported from the old `internal/timeline` Build/EncodeArgs:
   conform chain per clip `trim, setpts, scale(in_color_matrix bt601 for untagged), pad, setsar=1, fps, format=yuv420p,
-  settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above; `-fflags +bitexact
+  settb=AVTB, setparams bt709`; cuts `concat`, dissolves `xfade` centred on the cut; sound as above (from 1.106 with its
+  fades, crossfades and ducking: Audio fades, crossfades and ducking); `-fflags +bitexact
   -map_metadata -1 -movflags +faststart`) and sends `cmd.media.job` kind `export` with the object keys, never URLs.
   A copy plan also carries `expect` (the facts it planned with) and `conform_args`: the runner re-probes the downloads
   and runs `conform_args` when any fact differs (`mode: conform`, `reason`).
@@ -3945,6 +3946,8 @@ Numbers in fixtures compare by value (1 = 1.0).
 | `too_many_markers` | (1.50) more than 200 markers (track and clip null) |
 | `duplicate_marker` | (1.50) a marker id twice (the clip field holds the marker's id, track null) |
 | `marker_past_end` | (1.50) a marker after the sequence's end, `frames(at) > frames` (with V1 clips; a marker on the end is fine) |
+| `fade_clip` | (1.106) a `fade_in` or `fade_out` on a clip without sound: an image, an empty slot or a line placeholder |
+| `crossfade_track` | (1.106) a `crossfade` on a V1 clip |
 
 - **Shot numbers** (from 1.29): a V1 clip's `number` (the board's "Shot 4 · birches"). Normalize keeps it as
   written on V1 and drops it on an audio track; studio alone gives numbers, when it stores a revision (every write,
@@ -3975,7 +3978,8 @@ Numbers in fixtures compare by value (1 = 1.0).
   hold, id, gap_id}` (Make shot); `add_track` (`too_many_tracks` past 8), `remove_track {track}` (audio only: `video_track`), `track
   {track, gain_db?, mute?}`. From 1.50 `remove {clip, ripple?}` (`ripple` on an audio-track clip: the later clips of
   its track, start frame at or after its start, move left by its length in frames; V1 always ripples), `split {…, ids?}`
-  (below: linked clips) and `set {…, link?}`, and the tools' ops below.
+  (below: linked clips) and `set {…, link?}`, and the tools' ops below. From 1.106 `set {…, fade_in?, fade_out?, crossfade?}` and
+  `ducking {on?, db?}` (Audio fades, crossfades and ducking).
 - **Tools' ops** (from 1.50; plan 23 27.2). Every bound is in frames on the target grid; `least` = max(1, d_in/2 +
   d_out/2) of the clip it applies to. The ops do not clamp: past a bound the op's code, or the problem normalize finds
   in the result (`trim` past a take's start or end, `dissolve_handles`), so a drag clamps in the web and an op sent
@@ -4038,8 +4042,77 @@ Numbers in fixtures compare by value (1 = 1.0).
   pictures bottom first `{clip, t (source seconds, null for an image), opacity}` (in a dissolve the incoming opacity =
   (f − (cut − d/2)) / d), an offline clip `{…, offline: true}`; sounds `{clip, t, gain_db = track gain + clip gain,
   fade}` for V1 video clips with sound and every audio-track clip, not muted (clip or track), with a dissolve's fades
-  (incoming = its opacity, outgoing = 1 − that). The old preview's bug (V1's track gain left out) is fixed here and the
+  (incoming = its opacity, outgoing = 1 − that; from 1.106 times its clip fades, crossfade and ducking: Audio fades,
+  crossfades and ducking). The old preview's bug (V1's track gain left out) is fixed here and the
   export applies the same gains. Gain above 0 dB needs Web Audio (a GainNode); `<video>.volume` stops at 1.
+
+## Audio fades, crossfades and ducking (API 1.106; plan 41, board docs/mock/AudioFades.dc.html; normative)
+
+Owner, 2026-11-28: "Per clip", "Make cues longer", "Auto, on in Magic", "Timeline too", "Keep these". Fades and ramps are
+**linear in amplitude** (ffmpeg `afade`'s default `tri`), so the player and Export sound the same.
+
+- **Fades** (`TimelineClip.fade_in` / `fade_out`, `MagicBlock.fade_in` / `fade_out`): seconds, 0 to 10 (0 is stored as
+  absent). On the Timeline a clip with sound has them: an audio-track clip with a take and a V1 video clip; an image, an
+  empty slot or a line placeholder with one is the problem `fade_clip`. Normalize snaps them to frames and clamps them:
+  `fade_in` ≤ the clip's length, `fade_out` ≤ the length − `fade_in` (never a refusal, so a trim never fails on a fade).
+  Edits: `set {clip, fade_in?, fade_out?}` (0 or null removes). In Magic a voice, music or sound block has them (another
+  kind is the board rules' 422 `blocks[<i>]: fade_in is for voice, music and sound blocks`), set by the `block` op's
+  `set.fade_in` / `set.fade_out`. The menu's Fade in… / Fade out… start at 1 s; quick picks 0.5, 1, 2, 4 s.
+- **Crossfade on the Timeline** (`TimelineClip.crossfade`, Crossfade into next): on an audio-track clip only (V1 keeps
+  its picture dissolves: `crossfade_track`), d seconds (the menu's 2 s, at most 10) into the clip of its track that starts
+  on its end frame. Normalize snaps d to frames, clamps it to both clips' lengths and **drops** it when no clip touches its
+  end any more (a move, a remove or a trim: the diff shows it). Set by `set {clip, crossfade}` (0 or null removes). It is
+  a **true blend** when the outgoing clip's take has d of sound past its `out` (in samples: `samples(out) + samples(d) ≤
+  samples(take length)`): the outgoing clip plays on past its end for d under the next clip's head, fading out over
+  [end, end + d) while the next fades in over the same span. Else a **dip**: the outgoing fades out over [end − d/2, end),
+  the next fades in over [start, start + d/2), and the edit's warnings carry `crossfade_dip: <clip> has no sound past
+  its cut: it dips` (code first); an offline take dips. While a clip has a crossfade its own `fade_out` and the next
+  clip's `fade_in` are kept but do not play. The agent view shows `crossfade` and `crossfade_mode` (blend | dip).
+- **Crossfade in Magic** (transition kind `crossfade`): `between` two music or sound blocks that meet (another pair,
+  or a lane's `start` / `end`: 422 `A crossfade joins two music or sound blocks.`); a new one is 2 s (in whole
+  frames). **Every kind between two sound blocks** (voice, music or sound; dissolve, fade, wipe, morph, crossfade) plays
+  and sends as a crossfade of its length, one rule for Play, Send and the Timeline; a morph there never runs (plan and run
+  skip it: `A morph is for shots.`). **Longer cues** ("Make cues longer"): a music or sound block with a crossfade-kind
+  join after it runs with that much extra: the resolver's `length` is the block's seconds + d, the run records `tail`
+  (`MagicBlockRun.tail`, seconds) and the plan's units count it. A blend when the outgoing block's shown take is at least
+  its block + d long (`MagicTake.duration_s`, one frame's slack), else a dip as on the Timeline, with the warning
+  `<block> was made before the crossfade: it dips instead.` (`MagicEditResult.warnings`, the FixList) and the agent
+  view's transition `mode` (blend | dip); a voice block never gets a tail and dips without a warning. A block's status
+  turns **out of date** only when its shown take came from a run with a `tail` and is now too short for the join's d
+  (the length grew past its tail); a take made with no tail stays done and dips. A sound lane's `start` / `end`
+  transition (any kind) is its first block's fade in / last block's fade out of that length (the longer of it and the
+  block's own).
+- **Ducking** (`Ducking {on, db}`: `TimelineDoc.ducking`, `MagicDoc.ducking`; `db` −24 to −3, the picks −6, −9, −12,
+  −18, default −12): a sequence without it is off, a board without it is on at −12 (a new board stores it on). Set by
+  the op `ducking {on?, db?}` (both documents; absent fields kept; one revision, undoable). **Music** dips under
+  **voice**: on the Timeline a music clip is an audio-track clip whose take is an audio take of class music, a voice clip
+  one of class voice (`TimelineTake.sound`; a video's sound and class sound are neither); in Magic music and voice
+  blocks (a dialogue is voice). Muted clips and clips on muted tracks are left out. Voice spans [a, b) are each voice
+  clip's sounding time (with its crossfade tail); the duck envelope at t is e(t) = max over spans of clamp(min((t − (a −
+  0.3)) / 0.3, (b + 0.3 − t) / 0.3), 0, 1), and a music clip's level is multiplied by 10^(db × e(t) / 20): it eases down
+  over the 0.3 s before a line, holds, and eases back over the 0.3 s after; spans closer than 0.6 s merge.
+- **Preview** (`frame_at`, Timeline rules: Preview): each sound's `fade` is the product of its dissolve fade (as
+  before), its clip fades (fade in: (f − start) / frames(fade_in) while under 1; fade out: (end − f) / frames(fade_out)),
+  its crossfade (blend: the outgoing sound is also listed during [end, end + d) with `t` = out + seconds(f − end) and
+  fade (end + d − f) / d, the incoming (f − start) / d; dip: over the halves) and, on a music clip, the duck factor
+  10^(db × e / 20). `gain_db` stays the track + clip gain. Magic's Play does the same with its blocks.
+- **Export** (Export, `cmd.media.job` kind `export`): each sound chain, after its trim and resample, gets `afade=t=in:
+  st=0:d=<fade_in>` and `afade=t=out:st=<length − fade_out>:d=<fade_out>`; a blend trims the outgoing clip to `out + d`
+  and fades it out over its last d (`afade=t=out:st=<length>:d=<d>`) while the incoming fades in over its first d: the
+  two **overlap** in the `amix` (each is placed with its own silence prefix, so no `acrossfade`, which would need them in
+  one stream and shorten it); a dip fades each side over d/2 the same way. Ducking is a **volume automation** on each
+  music chain after its placement, in sequence seconds: `volume=eval=frame:volume='pow(10,<db>*max(<span>,…)/20)'`, each
+  span `clip(min((t-(a-0.3))/0.3,(b+0.3-t)/0.3),0,1)` (none: no filter). Order in a chain: fades, dissolve fades, gain,
+  ducking. Send's bake jobs are unchanged.
+- **Send to Timeline** carries them: a voice, music or sound block's fades onto its clip's `fade_in` / `fade_out` (a
+  block cut at V1's end keeps them, clamped by normalize); a join of two sound blocks as the outgoing clip's `crossfade`
+  (seconds of its length; `MagicSendJoin` kind `crossfade` or its own kind, how `crossfade`); a sound lane's fade in and
+  out as its first and last block's clip's fades (how `fades`); the board's ducking as the sequence's `ducking`
+  (written out, on −12 when the board has none).
+- **The tools**: the Timeline ops (`set`'s `fade_in`, `fade_out`, `crossfade`; `ducking`) are in `try_timeline_edit`,
+  `edit_timeline` (helm mcp) and the in-app screen action `timeline.edit`; the Magic ops (`block` `set.fade_in` /
+  `set.fade_out`, transition kind `crossfade`, `ducking`) in `try_board_edit` and `edit_board` (the Assistant and helm
+  mcp). The agent views show clip and block fades, the crossfade's mode and the document's `ducking`.
 
 ## Magic (API 1.80; alpha.6 item 5, plan 39 phase C, board docs/mock/MagicBoard.dc.html; normative)
 
@@ -4102,10 +4175,12 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   block), `delete` (insert closes the gap), `duplicate` (copies after the group, unpinned, `<name> copy`), `split`
   (the join after it follows the second part), `link` / `unlink`, `transition` (exactly one of `between`, `start`,
   `end`; `cut` takes it away; a new one's length is 0.5 s for a dissolve or wipe and 1 s for a fade or morph, in whole
-  frames), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins; from
+  frames; from 1.106 2 s for a `crossfade`, between two music or sound blocks only), `effect` / `effect_set` (null takes it off), `block` (`set` name, note, request, `pinned`: null unpins; from
   1.101 `gain_db`, a voice, music or sound block's level, -60 to 12 dB as a Timeline clip's gain, 0 or null takes it off;
   another kind is the board rules' 422 `blocks[<i>]: gain_db is for voice, music and sound blocks`; Play applies it and
-  Send to Timeline puts it on the block's clips' `gain_db`; the agent view shows it),
+  Send to Timeline puts it on the block's clips' `gain_db`; the agent view shows it; from 1.106 `fade_in` and `fade_out`,
+  seconds, the same blocks only: Audio fades, crossfades and ducking), `ducking {on?, db?}` (from 1.106, the board's
+  Duck music),
   `lane_add` (after `after`, else last), `lane` (`set` name, role, hidden, kind), `lane_move` (`by` -1 or 1),
   `lane_delete` (its blocks go), `asset_delete` (its @ picks go: refs and, from 1.83, a first or last frame; its
   mentions in a prompt become its name), and from 1.83 `asset_add`, `asset` and `take_add` (Magic: assets and the
@@ -4249,7 +4324,8 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   warning). A block too short for both its ends' bakes sends its second join as a cut (a warning). Effects on a shot
   (badges that are not `off`): Grade (`temperature`, `contrast`), Slow (`rate` 0.5-2: the take slowed to fill the
   block) and Stabilize are baked into that shot's clip and into the joins that read it; any other is skipped (a
-  warning). A sound lane's fade is skipped (the Timeline has no sound fades).
+  warning). From 1.106 sound goes with its fades, crossfades and ducking (Audio fades, crossfades and ducking: Send);
+  before, a sound lane's fade was skipped.
 - **The bake job** (`cmd.media.job` kind `bake`, `bake {target, frames, samples, video_bitrate, args}`): studio's
   graph (`studio_service/api/timeline` `BuildBake`: the export's picture steps, xfade `fadeblack`, `wipeleft` or
   `fade`, `fade` in or out, the effects' filters, `tpad` for a held end, each side's sound faded across, silence where

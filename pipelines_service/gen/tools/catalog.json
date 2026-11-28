@@ -2082,6 +2082,33 @@
                         }
                       ],
                       "description": "from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)"
+                    },
+                    "fade_in": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "seconds the clip's sound rises from silence (0 or null removes it)"
+                    },
+                    "fade_out": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "seconds its sound falls to silence at its end (0 or null removes it)"
+                    },
+                    "crossfade": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "an audio-track clip: Crossfade into next, seconds into the clip touching its end (2 is the menu's; a blend when its take has sound past its cut, else a dip; 0 or null removes it)"
                     }
                   }
                 },
@@ -2525,6 +2552,28 @@
                       "type": "string",
                       "pattern": "^[a-z0-9]{1,16}$",
                       "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "ducking: the sequence's Duck music: music clips dip under voice clips, on or off and how far in dB (absent fields kept)",
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "ducking"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "number",
+                      "minimum": -24,
+                      "maximum": -3,
+                      "description": "how far music dips under voice clips, dB (-12 by default)"
                     }
                   }
                 }
@@ -2829,6 +2878,33 @@
                         }
                       ],
                       "description": "from 1.50, an audio-track clip: the V1 clip it is linked to (null unlinks)"
+                    },
+                    "fade_in": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "seconds the clip's sound rises from silence (0 or null removes it)"
+                    },
+                    "fade_out": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "seconds its sound falls to silence at its end (0 or null removes it)"
+                    },
+                    "crossfade": {
+                      "type": [
+                        "number",
+                        "null"
+                      ],
+                      "minimum": 0,
+                      "maximum": 10,
+                      "description": "an audio-track clip: Crossfade into next, seconds into the clip touching its end (2 is the menu's; a blend when its take has sound past its cut, else a dip; 0 or null removes it)"
                     }
                   }
                 },
@@ -3272,6 +3348,28 @@
                       "type": "string",
                       "pattern": "^[a-z0-9]{1,16}$",
                       "description": "a slot's id, stable across edits and revisions; the editor makes new ones (unique in the document)"
+                    }
+                  }
+                },
+                {
+                  "description": "ducking: the sequence's Duck music: music clips dip under voice clips, on or off and how far in dB (absent fields kept)",
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "op": {
+                      "const": "ducking"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "number",
+                      "minimum": -24,
+                      "maximum": -3,
+                      "description": "how far music dips under voice clips, dB (-12 by default)"
                     }
                   }
                 }
@@ -4050,7 +4148,7 @@
                     "kind"
                   ],
                   "additionalProperties": false,
-                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away",
+                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away; crossfade joins two music or sound blocks that meet (2 s by default: the outgoing one runs that much longer so it plays on under the next; a take made without it dips), and any kind between sound blocks plays as a crossfade",
                   "properties": {
                     "op": {
                       "const": "transition"
@@ -4079,7 +4177,8 @@
                         "dissolve",
                         "fade",
                         "wipe",
-                        "morph"
+                        "morph",
+                        "crossfade"
                       ]
                     },
                     "length": {
@@ -4273,11 +4372,37 @@
                             }
                           ],
                           "description": "a voice, music or sound block only: its level in dB, -60 to 12 (0 or null: none); keep music and ambience under the voices (music -8, ambience -12)"
+                        },
+                        "fade_in": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: seconds its sound rises from silence (0 or null: none)"
+                        },
+                        "fade_out": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: seconds its sound falls to silence at its end (0 or null: none)"
                         }
                       }
                     }
                   },
-                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) or an audio block's level (gain_db)"
+                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) an audio block's level (gain_db) or its fades (fade_in, fade_out)"
                 },
                 {
                   "type": "object",
@@ -4625,6 +4750,27 @@
                       "format": "uuid"
                     }
                   }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "description": "ducking: the board's Duck music: music blocks dip under voice blocks, on or off and how far in dB (on, -12 by default)",
+                  "properties": {
+                    "op": {
+                      "const": "ducking"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "number",
+                      "minimum": -24,
+                      "maximum": -3
+                    }
+                  }
                 }
               ]
             }
@@ -4668,7 +4814,7 @@
     },
     "edit_board": {
       "description": "Propose edits on a board: drawn on it with Apply and Discard; the user's Apply saves them as one revision (one undo step, by Assistant in History). Try them first with try_board_edit.",
-      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. A block op's gain_db sets an audio block's level. Try them first with try_board_edit.",
+      "mcp_description": "Apply edits to a board (all or nothing, one undo step, via mcp in History): the new revision, the diff (new ids in added), warnings and the summary, or the op that fails and why. Block ops set an audio block's gain_db and fades; ducking sets Duck music. Try them first with try_board_edit.",
       "surfaces": [
         "assistant",
         "mcp"
@@ -5046,7 +5192,7 @@
                     "kind"
                   ],
                   "additionalProperties": false,
-                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away",
+                  "description": "transition: a dissolve, fade, wipe or morph between two blocks that meet (`between`), or at a lane's `start` or `end`; kind cut takes it away; crossfade joins two music or sound blocks that meet (2 s by default: the outgoing one runs that much longer so it plays on under the next; a take made without it dips), and any kind between sound blocks plays as a crossfade",
                   "properties": {
                     "op": {
                       "const": "transition"
@@ -5075,7 +5221,8 @@
                         "dissolve",
                         "fade",
                         "wipe",
-                        "morph"
+                        "morph",
+                        "crossfade"
                       ]
                     },
                     "length": {
@@ -5269,11 +5416,37 @@
                             }
                           ],
                           "description": "a voice, music or sound block only: its level in dB, -60 to 12 (0 or null: none); keep music and ambience under the voices (music -8, ambience -12)"
+                        },
+                        "fade_in": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: seconds its sound rises from silence (0 or null: none)"
+                        },
+                        "fade_out": {
+                          "oneOf": [
+                            {
+                              "type": "number",
+                              "minimum": 0,
+                              "maximum": 10
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "a voice, music or sound block only: seconds its sound falls to silence at its end (0 or null: none)"
                         }
                       }
                     }
                   },
-                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) or an audio block's level (gain_db)"
+                  "description": "block: set a block's name, note, request (the standard request), pinned take (null unpins) an audio block's level (gain_db) or its fades (fade_in, fade_out)"
                 },
                 {
                   "type": "object",
@@ -5619,6 +5792,27 @@
                     "take": {
                       "type": "string",
                       "format": "uuid"
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "op"
+                  ],
+                  "additionalProperties": false,
+                  "description": "ducking: the board's Duck music: music blocks dip under voice blocks, on or off and how far in dB (on, -12 by default)",
+                  "properties": {
+                    "op": {
+                      "const": "ducking"
+                    },
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "db": {
+                      "type": "number",
+                      "minimum": -24,
+                      "maximum": -3
                     }
                   }
                 }

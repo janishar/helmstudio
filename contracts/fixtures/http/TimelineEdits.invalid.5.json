@@ -1,0 +1,10 @@
+{
+ "base_revision": 7,
+ "ops": [
+  {
+   "op": "ducking",
+   "on": true,
+   "db": -30
+  }
+ ]
+}
