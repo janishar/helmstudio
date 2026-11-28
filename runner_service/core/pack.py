@@ -655,9 +655,10 @@ def _nodes(stages: dict, family: str | None, code: str, pack: Pack | None, modul
         if unknown := set(unload) - set(uses):
             raise ValueError(f"{schema['kind']}: unload_after names components outside its uses {sorted(unknown)}")
         check = getattr(module, f"check_{name}", None)
-        node = Node(fn, uses, peak, stage.get("stall_s", STALL_S), code, pack, check, unload,
-                    bool(stage.get("alone")), dict(stage.get("sees") or {}), tuple(stage.get("reports", ())), cap,
-                    bool(stage.get("by_variant")))  # fmt: skip
+        node = Node(fn=fn, uses=uses, peak=peak, stall_s=stage.get("stall_s", STALL_S), code=code, pack=pack,
+                    check=check, unload_after=unload, alone=bool(stage.get("alone")),
+                    sees=dict(stage.get("sees") or {}), reports=tuple(stage.get("reports", ())), max_seconds=cap,
+                    by_variant=bool(stage.get("by_variant")))  # fmt: skip
         outs = {o["name"]: o["type"] for o in schema["outputs"]}
         if bad := [o for o in (*node.sees.values(), *node.reports) if outs.get(o) != "Text"]:
             raise ValueError(f"{schema['kind']}: sees / reports name outputs that are not Text: {bad}")
