@@ -125,3 +125,19 @@ func TestFactsJob(t *testing.T) {
 		t.Fatal("a failed job adds a try")
 	}
 }
+
+// The backfill measures only an owner's newest FactsNewest video and audio takes (owner, 2026-11-28).
+func TestFactsNewestOnly(t *testing.T) {
+	e := setup(t)
+	ctx := context.Background()
+	e.factsHost()
+	old := e.audioTake(userA, 2)
+	e.exec(`UPDATE takes SET created_at = clock_timestamp() - interval '1 day' WHERE id = $1`, old)
+	for range studio.FactsNewest {
+		e.audioTake(userA, 2)
+	}
+	e.exec(`UPDATE takes SET facts = '{}'::jsonb WHERE id <> $1`, old) // the newest are measured
+	if id, err := studio.QueueFacts(ctx, e.pool, e.registry); err != nil || id != "" {
+		t.Fatal("a take older than the newest 200 is not backfilled", id, err)
+	}
+}

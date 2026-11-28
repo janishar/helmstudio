@@ -28,13 +28,17 @@ const (
 	FactsPerJob     = 4
 	FactsTries      = 3
 	FactsMaxSeconds = 20 * 60
+	FactsNewest     = 200
 )
 
 // factsTodo selects, from takes aliased t, the ready, live video and audio takes still without facts, at most
-// FactsMaxSeconds long, whose file is under the owner's prefix.
+// FactsMaxSeconds long, whose file is under the owner's prefix, among the owner's FactsNewest video and audio takes (the
+// backfill measures only the newest 200; owner, 2026-11-28: "Newest 200, then new ones").
 const factsTodo = `t.facts IS NULL AND t.deleted_at IS NULL AND t.ready AND t.facts_tries < 3 -- FactsTries
 	AND t.kind IN ('video', 'audio') AND starts_with(t.key, 'u/' || t.owner_id::text || '/')
 	AND coalesce((coalesce(t.video, t.audio)->>'duration_s')::float8, 0) <= 1200 -- FactsMaxSeconds
+	AND t.id IN (SELECT n.id FROM takes n WHERE n.owner_id = t.owner_id AND n.kind IN ('video', 'audio')
+		AND n.deleted_at IS NULL ORDER BY n.created_at DESC, n.id LIMIT 200) -- FactsNewest
 `
 
 // QueueFacts sends one facts job (as System) for the newest takes without facts, of one owner, at most FactsPerJob,
