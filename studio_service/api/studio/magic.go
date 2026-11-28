@@ -1,6 +1,7 @@
 package studio
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -127,6 +128,29 @@ func takesSince(ctx context.Context, tx pgx.Tx, row boardRow, base int) ([]strin
 		}
 	}
 	return out, true, nil
+}
+
+// boardAt refuses a revision other than the board's (the 409) unless every revision since only added a run's take
+// (takesSince, API 1.111): a run, Make views or a voice design started on it is still what its caller saw.
+func boardAt(ctx context.Context, tx pgx.Tx, row boardRow, revision int) error {
+	if revision == row.Revision {
+		return nil
+	}
+	if _, ok, err := takesSince(ctx, tx, row, revision); err != nil || !ok {
+		return cmp.Or(err, staleBoard(row))
+	}
+	return nil
+}
+
+// boardSince is boardAt in a transaction of its own (the owner's), for the Assistant tools that read over HTTP.
+func (s *Service) boardSince(ctx context.Context, caller common.Caller, id string, revision int) error {
+	return s.tx(ctx, caller, func(tx pgx.Tx) error {
+		row, err := readBoard(ctx, tx, id, false)
+		if err != nil {
+			return err
+		}
+		return boardAt(ctx, tx, row, revision)
+	})
 }
 
 // boardPointers are a revision's undo_to and redo_to.

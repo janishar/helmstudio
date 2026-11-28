@@ -4310,7 +4310,11 @@ studio; from 1.81 the standard request per kind, runs and takes on blocks (phase
   all run (422 with why, `Shot 2: …`; 409 `Shot 2 is already running`); a `lane`'s or `stale`'s (every block not
   done) that cannot are `skipped` with why, also when refused on the way (`Shot 1 has no take yet`, a frame still
   being made, the run's own 4xx) while the others run. A frame a pick needs is made in a transaction of its own, so
-  its job outlives a refusal. 409 when `revision` is not the current one.
+  its job outlives a refusal. 409 when `revision` is not the current one, except (from 1.111) when every revision
+  since is studio's `take` (a run's, a view's or a morph's take added): the run goes ahead on the current board, as
+  an edit does (Magic: edits by ops). The same holds for Make views, `…/voice/design` and the Assistant's
+  `run_blocks` (its preview too), `make_views` and `design_voice`; a user's or the Assistant's edit since keeps the
+  409 (owner, 2026-11-28: design_voice failed while Make views runs were finishing).
 - **Takes** join their block as the projector stores them: a studio revision appends the take id to the block's
   `takes` (undo skips it, as the Timeline's fills); a block gone since leaves the take in the gallery. The board's
   session events (`GET /v1/studio/sessions/{session_id}/events`) carry every run's status, progress and outputs: the

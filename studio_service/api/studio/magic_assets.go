@@ -172,8 +172,8 @@ func (s *Service) MakeMagicViews(ctx context.Context, caller common.Caller, id, 
 		if err != nil {
 			return err
 		}
-		if body.Revision != row.Revision {
-			return staleBoard(row)
+		if err := boardAt(ctx, tx, row, body.Revision); err != nil {
+			return err
 		}
 		d := row.doc()
 		a := findAsset(d, assetID)
