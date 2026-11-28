@@ -251,15 +251,27 @@ def test_mcp_designs_a_voice_and_keeps_it_with_consent(mcp):
     assert {"design_voice", "save_voice"} <= set(tools)
     assert "consent" in tools["save_voice"]["inputSchema"]["properties"]
     bid = structured(mcp.tool("create_board", {"name": "Mcp voices"}))["board_id"]
-    add = {"op": "asset_add", "asset": {"id": "mara", "kind": "character", "handle": "mara", "name": "Mara"}}
-    rev = structured(mcp.tool("edit_board", {"board_id": bid, "base_revision": 1, "ops": [add]}))["revision"]
+    add = {
+        "op": "asset_add",
+        "asset": {"id": "mara", "kind": "character", "handle": "mara", "name": "Mara"},
+    }
+    rev = structured(mcp.tool("edit_board", {"board_id": bid, "base_revision": 1, "ops": [add]}))[
+        "revision"
+    ]
     line = "Hello, I am Mara, and I have walked these hills for sixty long years."
     made = structured(mcp.tool("design_voice", {"board_id": bid, "revision": rev, "asset": "mara",
                                                 "design": "Female, about 60, low and warm", "line": line}))  # fmt: skip
     assert made["voice_id"] and len(made["started"]) == 1, made
-    done = structured(mcp.tool("wait_run", {"run_id": made["started"][0]["run_id"], "timeout_s": 120}))
+    done = structured(
+        mcp.tool("wait_run", {"run_id": made["started"][0]["run_id"], "timeout_s": 120})
+    )
     assert done["run"]["status"] == "succeeded", done
-    keep = {"board_id": bid, "revision": rev, "asset": "mara", "take_id": done["run"]["outputs"][0]["take_id"]}
+    keep = {
+        "board_id": bid,
+        "revision": rev,
+        "asset": "mara",
+        "take_id": done["run"]["outputs"][0]["take_id"],
+    }
     refused = mcp.tool("save_voice", keep)
     assert refused.get("isError") and "consent" in refused["content"][0]["text"], refused
     kept = structured(mcp.tool("save_voice", keep | {"consent": True}))
