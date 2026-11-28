@@ -34,14 +34,6 @@ def caps(spec: dict) -> dict:
     return CAPS | spec.get("caps", {})
 
 
-def _sources(plan, state, spec) -> tuple[list | None, str | None]:
-    texts = [graph._text(plan, state, s) for s in spec.get("from", [])]
-    if None in texts:
-        src = spec["from"][texts.index(None)]
-        return None, f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
-    return list(zip(spec.get("from", []), texts)), None
-
-
 def _new_call(nid: str, visit: int, sources: list) -> dict:
     own = [t for s, t in sources if s.startswith("$")]  # only the user's texts bring mentions in
     return {
@@ -86,15 +78,9 @@ def submit_part(plan, nid, spec, chat: bool = False):
             else:
                 visit = state.get("visits", {}).get(nid, 0) + 1
                 up["visits"] = state.get("visits", {}) | {nid: visit}
-                sources, error = _sources(plan, state, spec)
+                sources, error = graph._sources(plan, state, spec)
                 if error:
-                    cell = {"visit": visit, "status": "failed", "error": error}
-                    return (
-                        up
-                        | graph._end("failed", f"{nid}: {error}")
-                        | {"cells": graph._cell(state, nid, "agent", cell)}
-                        | graph._step(state, nid, "submit", visit, "finished", error, error=error)
-                    )
+                    return graph._failed(state, up, nid, "agent", "submit", visit, error)
             call = _new_call(nid, visit, sources)
         call, visit, turn = dict(call), call["visit"], call["turn"]
         used = call["tokens_in"] + call["tokens_out"]

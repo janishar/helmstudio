@@ -178,6 +178,27 @@ def _end(status: str, error: str | None = None, take_ids=()) -> Row:
     return {"status": status, "error": error, "take_ids": list(take_ids), "to": None}
 
 
+def _failed(state, up, nid, kind, part, visit, error, named=True) -> Row:
+    """A visit that failed before its run: the row ends (with "<nid>: " first when `named`), its cell and step
+    say why."""
+    cell = {"visit": visit, "status": "failed", "error": error}
+    return (
+        up
+        | _end("failed", f"{nid}: {error}" if named else error)
+        | {"cells": _cell(state, nid, kind, cell)}
+        | _step(state, nid, part, visit, "finished", error, error=error)
+    )
+
+
+def _sources(plan, state, spec) -> tuple[list | None, str | None]:
+    """(source, text) for each of spec's `from`, or the error naming the first with nothing yet."""
+    texts = [_text(plan, state, s) for s in spec.get("from", [])]
+    if None in texts:
+        src = spec["from"][texts.index(None)]
+        return None, f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
+    return list(zip(spec.get("from", []), texts)), None
+
+
 def _go(plan, frm: str, to: str | None, via: str) -> tuple[Row, dict | None]:
     """The update and the edge for leaving `frm` to `to`; a missing edge fails the row."""
     if to is None:
@@ -398,13 +419,7 @@ def _submit_node(plan, nid, spec):
         up: Row = {"visits": state.get("visits", {}) | {nid: visit + 1}}
         inputs, error = run_inputs(plan, state, spec)
         if error:
-            cell = {"visit": visit + 1, "status": "failed", "error": error}
-            return (
-                up
-                | _end("failed", error)
-                | {"cells": _cell(state, nid, "step", cell)}
-                | _step(state, nid, "submit", visit + 1, "finished", error, error=error)
-            )
+            return _failed(state, up, nid, "step", "submit", visit + 1, error, named=False)
         runs, n = await _ask_runs(plan, state, ctx, nid, spec, visit, inputs), spec["seeds"]
         ids = [r["run_id"] for r in runs if r["run_id"]]
         seeds = [r["seed"] for r in runs if r["seed"] is not None]
@@ -436,13 +451,7 @@ def _fan_node(plan, nid, spec):
         elif len(items) > spec.get("fanout_max", 24):
             error = f"{prod} gave {len(items)} items, at most {spec.get('fanout_max', 24)}"
         if error:
-            cell = {"visit": visit, "status": "failed", "error": error}
-            return (
-                up
-                | _end("failed", error)
-                | {"cells": _cell(state, nid, "step", cell)}
-                | _step(state, nid, "submit", visit, "finished", error, error=error)
-            )
+            return _failed(state, up, nid, "step", "submit", visit, error, named=False)
         n = len(items)
         rec = _step(state, nid, "submit", visit, "finished",
                     f"Fanned out into {n} branch{'es' * (n != 1)} of {prod}'s list", changed=[f"fan.{nid} = {n}"])  # fmt: skip
@@ -829,10 +838,10 @@ def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str 
         template, extra = agents.JUDGE, {"candidates": cands}
         tokens = agents.judge_tokens(len(cands), len(crit["must"]) + len(crit["nice"]))
     else:
-        texts = [_text(plan, state, s) for s in spec["from"]]
-        if None in texts:
-            src = spec["from"][texts.index(None)]
-            return None, f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
+        pairs, error = _sources(plan, state, spec)
+        if error:
+            return None, error
+        texts = [t for _, t in pairs]
         step, context = state.get("last_step"), list(zip(spec["from"][1:], texts[1:]))
         memread = state.get("memread") or {}
         read = [i for s in spec["from"] if s.endswith(".notes") for i in memread.get(s[:-6], [])]
@@ -842,13 +851,13 @@ def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str 
             own = [t for s, t in zip(spec["from"], texts) if s.startswith("$")]
             allowed = list(dict.fromkeys(h for t in own for h in agents.mentions(t)))
             if spec.get("form") == "script":  # write-script/v1: the mention rule does not apply
-                prompt = agents.script_prompt(spec["instruction"], list(zip(spec["from"], texts)), cast)
+                prompt = agents.script_prompt(spec["instruction"], pairs, cast)
                 schema, template = agents.SCRIPT_SCHEMA, agents.WRITE_SCRIPT
                 tokens = agents.WRITE_TOKENS
                 allowed = [line[1:].split(" ", 1)[0] for line in cast]
             elif "list" in spec:  # write-list/v1: a shot list a step fans out over
                 n = spec["list"]["max"]
-                prompt = agents.write_list_prompt(spec["instruction"], list(zip(spec["from"], texts)), n, allowed)
+                prompt = agents.write_list_prompt(spec["instruction"], pairs, n, allowed)
                 schema, template = agents.list_schema(n), agents.WRITE_LIST
                 tokens = agents.LIST_TOKENS
             else:
@@ -857,7 +866,7 @@ def _ask_call(plan, state, ctx, nid, spec, cast=None) -> tuple[dict | None, str 
                 tokens = agents.WRITE_TOKENS
             extra = {"allowed": allowed}
         else:
-            prompt = agents.decide_prompt(spec["question"], list(zip(spec["from"], texts)), spec["routes"])
+            prompt = agents.decide_prompt(spec["question"], pairs, spec["routes"])
             schema, template = agents.decide_schema(list(spec["routes"])), agents.DECIDE
     inputs = {f"{ask}.system": agents.SYSTEM, f"{ask}.prompt": prompt}
     inputs |= {f"{ask}.schema": agents.compact(schema), f"{ask}.max_tokens": tokens}
@@ -893,13 +902,7 @@ def _ask_submit_node(plan, nid, spec, check):
                 cast, error = await _cast(state, ctx, nid, visit)
             built, error = (None, error) if error else _ask_call(plan, state, ctx, nid, spec, cast)
             if error:
-                cell = {"visit": visit, "status": "failed", "error": error}
-                return (
-                    up
-                    | _end("failed", f"{nid}: {error}")
-                    | {"cells": _cell(state, nid, kind, cell)}
-                    | _step(state, nid, "submit", visit, "finished", error, error=error)
-                )
+                return _failed(state, up, nid, kind, "submit", visit, error)
             call_in = {"workflow": spec["workflow"], "template": built["template"]}
             tail = f"{state['row']}:{nid}:{visit}:{agents.inputs_hash(call_in | {'inputs': built.pop('hashed')})}"
             call = built | {"node": nid, "visit": visit, "branch": 0, "run": None, "run_ids": []}
@@ -1385,14 +1388,12 @@ def _memory_node(plan, nid, spec):
                         changed=[f"notes.{nid} = {len(ids)}"], edge=edge,
                         memory={"read": ids, "wrote": []})
             )  # fmt: skip
-        texts = [_text(plan, state, s) for s in spec["from"]]
-        if None in texts:
-            src = spec["from"][texts.index(None)]
-            error = f"nothing from {src if src.startswith('$') else src.split('.')[0]} yet"
+        pairs, error = _sources(plan, state, spec)
+        if error:
             return up | _end("failed", error) | _step(state, nid, "memory", visit, "finished", error, error=error)
         iid = memory_item_id(state["batch_id"], state["row"], nid, visit)
         source = {"kind": "node", "batch_id": state["batch_id"], "row": state["row"]}
-        value = {"kind": "note", "key": spec.get("key"), "text": "\n".join(texts)[:2000]}
+        value = {"kind": "note", "key": spec.get("key"), "text": "\n".join(t for _, t in pairs)[:2000]}
         value |= {
             "kept": [],
             "rejected": [],
@@ -1437,13 +1438,7 @@ def _custom_node(plan, nid, spec):
         if not error:
             out, error = await customs.run(spec["node"], values, ctx)
         if error:
-            cell = {"visit": visit, "status": "failed", "error": error}
-            return (
-                up
-                | _end("failed", f"{nid}: {error}")
-                | {"cells": _cell(state, nid, "custom", cell)}
-                | _step(state, nid, "custom", visit, "finished", error, error=error)
-            )
+            return _failed(state, up, nid, "custom", "custom", visit, error)
         nxt, edge = _go(plan, nid, plan["next"].get(nid), "next")
         cell = {"visit": visit, "status": "succeeded"}
         return (
