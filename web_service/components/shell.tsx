@@ -122,6 +122,7 @@ function SetupGear({ admin, path }: { admin: boolean; path: string }) {
       onClick={(e) =>
         openMenu(e, {
           title: "Setup",
+          beside: true,
           items: setup.map((it) => ({
             label: it.label,
             icon: it.Icon,

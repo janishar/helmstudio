@@ -31,7 +31,9 @@ export type MenuItem = {
 };
 /** "-" is a separator; false / null / undefined are left out (`cond && {…}`). */
 export type Item = MenuItem | "-" | false | null | undefined;
-export type Menu = { title?: string; items: Item[] };
+/** `beside`: a click opens it to the right of the panel the button sits in, bottom-aligned with the button (the rail's
+ * Setup gear), not under the button over its neighbours */
+export type Menu = { title?: string; items: Item[]; beside?: boolean };
 export type MenuHandle = { update: (m: Menu) => void };
 
 type Open = {
@@ -93,8 +95,14 @@ export function openMenu(e: Ev, menu: Menu, keep = false): MenuHandle | null {
     el,
     back: document.activeElement,
     menu,
-    x: r ? r.left : e.clientX,
-    y: r ? r.bottom + 4 : e.clientY,
+    // beside: past the right edge of the button's panel; the bottom edge flips it up to sit level with the button
+    x: r
+      ? menu.beside
+        ? (target?.closest(".panel") ?? (e.currentTarget as Element)).getBoundingClientRect()
+            .right + 8
+        : r.left
+      : e.clientX,
+    y: r ? (menu.beside ? r.bottom : r.bottom + 4) : e.clientY,
     kbd,
   };
   open = o;
