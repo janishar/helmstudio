@@ -581,6 +581,16 @@
       "x": 0,
       "y": 7020,
       "page": "create-image"
+    },
+    "Rail.dc.html": {
+      "expand": "fill",
+      "h": 5463,
+      "is_interactive": true,
+      "title": "Rail (proposed) \u00b7 tools at the top, setup at the bottom, Assistant out of the rail (two variants), short window, phone",
+      "w": 1440,
+      "x": 3040,
+      "y": 0,
+      "page": "brand"
     }
   },
   "createdOnFiles": {
@@ -732,7 +742,8 @@
     "CatsEasterEgg.dc.html",
     "Desktop.dc.html",
     "ErrorStates.dc.html",
-    "Plugins.dc.html"
+    "Plugins.dc.html",
+    "Rail.dc.html"
   ],
   "pages": [
     {
