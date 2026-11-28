@@ -9,3 +9,5 @@ What to fix on a board (Magic, MagicBoard frames 11 and 5b): one warning icon at
 - A row (`fixr`, focusable, `s3` on hover or focus): the block's thumbnail (`fixt`, 40×26, the take's art, else its kind badge), its name over why ("failed: out of memory" in coral, "out of date" or "doesn't fit: runs 3 s past Shot 1" in amber), then its keys as small chips (28px): Retry and Open (failed); Run and Pin newest / Unpin / Pin take (out of date); Speed up, Trim, Unlink, Keep (doesn't fit). The name selects the block and scrolls to it; a right-click gives the block's own menu (ContextMenu, `blockMenu`).
 - The foot: "Run all (n)" (`chip on`) runs every failed or out-of-date block.
 - The block itself keeps its status badge ("Failed", "Out of date", "Doesn't fit").
+
+- A crossfade that dips (API 1.106, AudioFades frame 2): its row reads "made before the crossfade: it dips instead" in amber with Run again and Keep dip; the count includes it ("1 dip").

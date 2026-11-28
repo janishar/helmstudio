@@ -29,6 +29,20 @@ export type MenuItem = {
   bold?: boolean;
   /** a section's name inside the menu (ModelFolders 5c "Copies on mac"): not an item */
   heading?: boolean;
+  /** a length in seconds typed in a small popover beside the menu, with quick picks (AudioFades frame 4: Fade in…) */
+  seconds?: Seconds;
+};
+export type Seconds = {
+  title: string;
+  value: number;
+  picks: number[];
+  max: number;
+  /** default 0 */
+  min?: number;
+  /** default "s" (the Duck music amount: "dB") */
+  unit?: string;
+  note: string;
+  onSet: (s: number) => void;
 };
 /** "-" is a separator; false / null / undefined are left out (`cond && {…}`). */
 export type Item = MenuItem | "-" | false | null | undefined;
@@ -225,7 +239,7 @@ function List({
         else if (e.key === "ArrowUp") go(i < 0 ? -1 : i - 1);
         else if (e.key === "Home") go(0);
         else if (e.key === "End") go(-1);
-        else if (e.key === "ArrowRight" && it?.items && !it.off)
+        else if (e.key === "ArrowRight" && (it?.items || it?.seconds) && !it.off)
           setSub({ i: list.indexOf(it), focus: true });
         else if (e.key === "ArrowLeft" && onBack) onBack();
         else if (e.key === "Escape" || e.key === "Tab") closeMenu();
@@ -254,6 +268,7 @@ function List({
           );
         const Icon = x.icon;
         const on = sub?.i === n;
+        const nest = !!(x.items || x.seconds);
         return (
           <div key={n} className="relative">
             <button
@@ -261,19 +276,19 @@ function List({
               role={x.checked === undefined ? "menuitem" : "menuitemcheckbox"}
               aria-checked={x.checked}
               aria-disabled={x.off ? true : undefined}
-              aria-haspopup={x.items ? "menu" : undefined}
-              aria-expanded={x.items ? on : undefined}
+              aria-haspopup={x.items ? "menu" : x.seconds ? "dialog" : undefined}
+              aria-expanded={nest ? on : undefined}
               title={x.off}
               tabIndex={-1}
               data-lv={lv}
               className={`mi ${x.danger ? "danger" : ""} ${x.bold ? "font-bold" : ""} ${on ? "on" : ""}`}
               onMouseEnter={(e) => {
                 e.currentTarget.focus({ preventScroll: true });
-                setSub(x.items && !x.off ? { i: n, focus: false } : null);
+                setSub(nest && !x.off ? { i: n, focus: false } : null);
               }}
               onClick={() => {
                 if (x.off) return;
-                if (x.items) setSub({ i: n, focus: true });
+                if (nest) setSub({ i: n, focus: true });
                 else pick(x);
               }}
             >
@@ -283,6 +298,7 @@ function List({
               {x.keys && <kbd>{x.keys}</kbd>}
               {x.items && <span className="chev">›</span>}
             </button>
+            {on && x.seconds && <SecondsPanel s={x.seconds} focus={sub.focus} />}
             {on && x.items && (
               <List
                 items={x.items}
@@ -298,6 +314,67 @@ function List({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+const dbWord = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v)} dB`;
+
+/** A Seconds item's popover: the length (Enter sets it), the quick picks, the limits. */
+function SecondsPanel({ s, focus }: { s: Seconds; focus: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [v, setV] = useState(String(+s.value.toFixed(2)));
+  const [left, setLeft] = useState(false);
+  useLayoutEffect(() => {
+    const r = ref.current?.getBoundingClientRect();
+    if (r && r.right > innerWidth - 4) setLeft(true);
+    if (focus) ref.current?.querySelector("input")?.focus();
+  }, [focus]);
+  const unit = s.unit ?? "s";
+  const set = (x: number) => {
+    if (!Number.isFinite(x)) return;
+    closeMenu();
+    s.onSet(Math.max(s.min ?? 0, Math.min(s.max, x)));
+  };
+  return (
+    <div
+      ref={ref}
+      role="dialog"
+      aria-label={s.title}
+      className={`cm sub secs ${left ? "left" : ""}`}
+      onKeyDown={(e) => e.stopPropagation()}
+    >
+      <span className="hd">{s.title}</span>
+      <label className="secs-in">
+        <input
+          type="number"
+          inputMode="decimal"
+          min={s.min ?? 0}
+          max={s.max}
+          step={unit === "s" ? 0.1 : 1}
+          value={v}
+          aria-label={`${s.title} (${unit})`}
+          onChange={(e) => setV(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") set(parseFloat(v));
+            if (e.key === "Escape") closeMenu();
+          }}
+        />
+        <span>{unit}</span>
+      </label>
+      <div className="secs-picks">
+        {s.picks.map((p) => (
+          <button
+            key={p}
+            type="button"
+            className={`chip ${p === s.value ? "on" : ""}`}
+            onClick={() => set(p)}
+          >
+            {unit === "dB" ? dbWord(p) : `${p} s`}
+          </button>
+        ))}
+      </div>
+      <p className="secs-note">{s.note}</p>
     </div>
   );
 }

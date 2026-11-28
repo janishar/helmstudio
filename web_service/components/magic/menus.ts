@@ -55,14 +55,19 @@ import type { Item, MenuItem } from "@/components/context-menu";
 import type { S } from "@/lib/api";
 import { mod } from "@/components/context-menu";
 import {
+  CrossfadeIcon,
   CutIcon,
   DissolveIcon,
   FadeIcon,
+  FadeInIcon,
+  FadeOutIcon,
   KIND_ICON,
   MorphIcon,
+  NoFadeIcon,
   WipeIcon,
 } from "@/components/magic/icons";
 import {
+  DEFAULT_LENGTH,
   clock,
   dbText,
   end,
@@ -87,6 +92,7 @@ import {
   estText,
 } from "@/lib/magic";
 import { missingViews, viewName } from "@/lib/magic-assets";
+import { FADE_MAX, FADE_PICKS } from "@/lib/timeline";
 
 const RUNS_OFF = "Runs come with the standard request";
 
@@ -179,6 +185,73 @@ const gate = (a: Act, it: MenuItem): MenuItem =>
 const shotsOf = (d: Doc) =>
   d.lanes.filter((l) => l.role === "shots").flatMap((l) => inLane(d, l.id));
 const linkOf = (d: Doc, id: string) => d.links.find((l) => l.block === id);
+
+/** API 1.106 (AudioFades frame 4): a sound block's fades, Crossfade into next (music and sound) and Remove fades. */
+export function fadeItems(a: Act, b: Block): Item[] {
+  const d = a.doc;
+  const fps = d.target.fps;
+  const fade = (k: "fade_in" | "fade_out", label: string, icon: LucideIcon): MenuItem => ({
+    label,
+    icon,
+    keys: b[k] ? `${+b[k].toFixed(2)} s` : undefined,
+    seconds: {
+      title: label.replace("…", ""),
+      value: b[k] ?? 1,
+      picks: FADE_PICKS,
+      max: FADE_MAX,
+      note: "0 to 10 s. Enter sets it.",
+      onSet: (v) => a.edit({ op: "block", id: b.id, set: { [k]: v || null } }),
+    },
+  });
+  const next = inLane(d, b.lane).find((x) => x.at === end(b));
+  const join = next && d.transitions.find((t) => t.between?.join() === `${b.id},${next.id}`);
+  const xf = join?.kind === "crossfade" ? join : undefined;
+  const sound = (x?: Block) => !!x && (x.kind === "music" || x.kind === "sound");
+  const cross: Item = sound(b) && {
+    label: xf ? `Crossfade ${secs(xf.length, fps)}…` : "Crossfade into next",
+    icon: icon(CrossfadeIcon),
+    off: !next ? "No block after" : !sound(next) ? "Not into a voice block" : undefined,
+    keys: !next ? "No block after" : undefined,
+    ...(xf
+      ? {
+          seconds: {
+            title: "Crossfade",
+            value: xf.length / fps,
+            picks: [1, 2, 4],
+            max: FADE_MAX,
+            note: `Up to 10 s. ${b.name} runs ${secs(xf.length, fps)} longer.`,
+            onSet: (v: number) =>
+              a.edit({
+                op: "transition",
+                between: [b.id, next!.id],
+                kind: v ? "crossfade" : "cut",
+                ...(v ? { length: Math.max(1, Math.round(v * fps)) } : {}),
+              }),
+          },
+        }
+      : {
+          onPick: () => a.edit({ op: "transition", between: [b.id, next!.id], kind: "crossfade" }),
+        }),
+  };
+  const any = !!(b.fade_in || b.fade_out || xf);
+  return [
+    "-",
+    fade("fade_in", "Fade in…", icon(FadeInIcon)),
+    fade("fade_out", "Fade out…", icon(FadeOutIcon)),
+    cross,
+    {
+      label: "Remove fades",
+      icon: icon(NoFadeIcon),
+      off: any ? undefined : "No fades",
+      keys: any ? undefined : "No fades",
+      onPick: () =>
+        a.edit([
+          { op: "block", id: b.id, set: { fade_in: null, fade_out: null } },
+          ...(xf ? [{ op: "transition" as const, between: xf.between, kind: "cut" as const }] : []),
+        ]),
+    },
+  ];
+}
 
 /** "Tie to ›": each shot; music also the run of every shot. */
 function tieItems(a: Act, b: Block): Item[] {
@@ -290,6 +363,7 @@ export function blockMenu(a: Act, b: Block): { title: string; items: Item[] } {
       onPick: gain(Math.max(-60, db - 3)),
     },
     { label: "Reset level", icon: RotateCcw, off: db ? undefined : "At 0 dB", onPick: gain(0) },
+    ...fadeItems(a, b),
   ];
   if (b.kind === "voice")
     return {
@@ -950,14 +1024,8 @@ const JOIN_KINDS: { kind: TransitionKind; label: string; icon: LucideIcon; note?
   { kind: "fade", label: "Fade", icon: icon(FadeIcon) },
   { kind: "wipe", label: "Wipe", icon: icon(WipeIcon) },
   { kind: "morph", label: "Morph", icon: icon(MorphIcon), note: "generated" },
+  { kind: "crossfade", label: "Crossfade", icon: icon(CrossfadeIcon) },
 ];
-const DEFAULT_S: Record<TransitionKind, number> = {
-  cut: 0,
-  dissolve: 0.5,
-  fade: 1,
-  wipe: 0.5,
-  morph: 1,
-};
 
 /** A join's name: "Join · Shot 2 → Shot 3", "Start · Shots". */
 export function joinTitle(d: Doc, j: Join): string {
@@ -1033,7 +1101,15 @@ export function joinMenu(a: Act, j: Join): { title: string; items: Item[] } {
   const where = j.between ? { between: j.between } : j.start ? { start: j.start } : { end: j.end };
   const set = (kind: TransitionKind, length?: number) =>
     a.edit({ op: "transition", ...where, kind, ...(length ? { length } : {}) });
-  const kinds = j.between ? JOIN_KINDS : JOIN_KINDS.filter((k) => k.kind === "fade");
+  // API 1.106: two music or sound blocks join by a cut or a crossfade; pictures never by a crossfade
+  const sounds = j.between?.every((id) =>
+    ["music", "sound"].includes(blockById(a.doc, id)?.kind ?? ""),
+  );
+  const kinds = sounds
+    ? JOIN_KINDS.filter((k) => k.kind === "cut" || k.kind === "crossfade")
+    : j.between
+      ? JOIN_KINDS.filter((k) => k.kind !== "crossfade")
+      : JOIN_KINDS.filter((k) => k.kind === "fade");
   return {
     title: joinTitle(a.doc, j),
     items: [
@@ -1044,7 +1120,7 @@ export function joinMenu(a: Act, j: Join): { title: string; items: Item[] } {
         keys:
           k.kind === "cut"
             ? undefined
-            : (k.note ?? secs(j.kind === k.kind ? j.length : DEFAULT_S[k.kind] * fps, fps)),
+            : (k.note ?? secs(j.kind === k.kind ? j.length : DEFAULT_LENGTH[k.kind] * fps, fps)),
         onPick: () => set(k.kind),
       })),
       ...(j.kind === "morph" && j.between ? morphItems(a, j) : []),

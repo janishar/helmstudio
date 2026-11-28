@@ -39,6 +39,7 @@ import {
 import { GalleryPicker } from "@/components/gallery/picker";
 import { useVoices } from "@/lib/library";
 import { KIND_NAME, LinkGlyph } from "@/components/magic/icons";
+import { DipWarn, DuckRow } from "@/components/fades";
 import { SoundMark, soundLook } from "@/components/magic/sound-mark";
 import { AssetsRow, Lanes, StatusChip, refText } from "@/components/magic/lanes";
 import {
@@ -53,6 +54,8 @@ import {
 } from "@/components/magic/menus";
 import { Player, type PlayerApi } from "@/components/magic/player";
 import {
+  BOARD_DUCKING,
+  xfadeMode,
   apply,
   clock,
   duration,
@@ -466,6 +469,10 @@ function Editor({ board }: { board: Board }) {
   };
   const hiddenLanes = doc.lanes.filter((l) => l.hidden);
   const over = overruns(doc).filter((o) => !kept.includes(o.block));
+  // API 1.106 (AudioFades frame 2): a crossfade whose outgoing take was made before it dips (Keep dip hides it)
+  const dips = doc.blocks.filter(
+    (b) => !kept.includes(`dip:${b.id}`) && xfadeMode(doc, b, takes) === "dip",
+  );
   const one = sel.length === 1 ? doc.blocks.find((b) => b.id === sel[0]) : undefined;
 
   const snapshots = board.snapshots;
@@ -863,6 +870,11 @@ function Editor({ board }: { board: Board }) {
             {proposed.card && (
               <ProposalBar card={proposed.card} why={proposed.why} onAnswer={proposed.answer} />
             )}
+            <DipBars
+              dips={dips.filter((b) => sel.includes(b.id))}
+              act={act}
+              onKeep={(id) => setKept((k) => [...k, `dip:${id}`])}
+            />
             {/* bottom left (MagicBoard frame 11): a fixed slot under the lane heads, so the icon showing moves nothing */}
             <div className="flex items-center self-start">
               <span className="flex" style={{ width: phone ? 64 : 120 }}>
@@ -871,6 +883,7 @@ function Editor({ board }: { board: Board }) {
                   takes={takes}
                   act={act}
                   over={over}
+                  dips={dips}
                   onKeep={(id) => setKept((k) => [...k, id])}
                 />
               </span>
@@ -1093,6 +1106,7 @@ function Editor({ board }: { board: Board }) {
               onDelete={board.deleteSnapshot}
               askAbove={board.askAbove}
               onAskAbove={board.setAskAbove}
+              onDuck={(x) => edit({ op: "ducking", ...x })}
             />
           )}
         </aside>
@@ -1235,6 +1249,27 @@ function AskPop({
   );
 }
 
+/** API 1.106 (AudioFades frame 2): a selected block's crossfade that dips, with Run again (the longer take) and Keep
+ * dip. */
+function DipBars({ dips, act, onKeep }: { dips: Block[]; act: Act; onKeep: (id: string) => void }) {
+  return dips.map((b) => (
+    <DipWarn key={b.id} text={`${b.name} was made before the crossfade: it dips instead.`}>
+      <button
+        type="button"
+        className="chip"
+        disabled={!!act.runOff}
+        title={act.runOff}
+        onClick={() => act.run([b.id])}
+      >
+        Run again
+      </button>
+      <button type="button" className="ghost h-[30px]" onClick={() => onKeep(b.id)}>
+        Keep dip
+      </button>
+    </DipWarn>
+  ));
+}
+
 /** What to fix on the board (frame 11): one warning icon at the board's bottom left with a count (amber; red once
  * any failed), hidden when there is none. It opens the list upward: every failed, out-of-date or overrunning block
  * with its fix, and Run all. A row's name selects the block; a right-click gives the block's menu. */
@@ -1243,12 +1278,15 @@ function FixButton({
   takes,
   act,
   over,
+  dips = [],
   onKeep,
 }: {
   doc: Doc;
   takes: Takes;
   act: Act;
   over: ReturnType<typeof overruns>;
+  /** API 1.106: blocks whose crossfade dips (an older take) */
+  dips?: Block[];
   onKeep: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -1265,11 +1303,12 @@ function FixButton({
     .filter((x) => x.st.s === "failed" || x.st.s === "old")
     .sort((x, y) => Number(y.st.s === "failed") - Number(x.st.s === "failed"));
   const failed = rows.filter((x) => x.st.s === "failed").length;
-  const n = rows.length + over.length;
+  const n = rows.length + over.length + dips.length;
   const why = [
     failed && `${failed} failed`,
     rows.length - failed && `${rows.length - failed} out of date`,
     over.length && `${over.length} doesn't fit`,
+    dips.length && `${dips.length} dip${dips.length > 1 ? "s" : ""}`,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -1429,6 +1468,17 @@ function FixButton({
                   </>,
                 );
               })}
+              {dips.map((b) =>
+                row(
+                  b,
+                  "made before the crossfade: it dips instead",
+                  false,
+                  <>
+                    {chip("Run again", () => act.run([b.id]), { disabled: !!act.runOff })}
+                    {chip("Keep dip", () => onKeep(`dip:${b.id}`))}
+                  </>,
+                ),
+              )}
             </div>
             {rows.length > 0 && (
               <div className="mt-1 flex items-center justify-end border-t border-s4 px-1.5 pt-1.5">
@@ -1689,7 +1739,10 @@ function BoardPanel({
   onDelete,
   askAbove,
   onAskAbove,
+  onDuck,
 }: {
+  /** API 1.106: Duck music changed */
+  onDuck: (d: { on?: boolean; db?: number }) => void;
   d: Doc;
   takes: Takes;
   snapshots: Snapshot[];
@@ -1752,6 +1805,12 @@ function BoardPanel({
           GPU min
         </label>
       )}
+      {/* API 1.106 (AudioFades frame 3): on for a board until set */}
+      <DuckRow
+        on={(d.ducking ?? BOARD_DUCKING).on}
+        db={(d.ducking ?? BOARD_DUCKING).db}
+        onSet={onDuck}
+      />
       <div className="flex items-center gap-2">
         <h3 className="mr-auto">
           Snapshots <small className="mono text-t2">{snapshots.length}</small>

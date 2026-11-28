@@ -10,3 +10,5 @@ Built in Magic (alpha.6; owner picked B, the bowtie set): how a join between two
 The consumer gives the kind and the length. Each marker has its right-click menu (ContextMenu).
 
 Source: board `docs/mock/Magic.dc.html` (`.jn`, `.jn.cut`, `.jl.fi`).
+
+- **Crossfade** (API 1.106, AudioFades): a join of two music or sound blocks plays as a crossfade, its chip sky `#86cdea` (`tj xf`) with the bowtie and the length; amber `#f2c14e` with the warning glyph (`tj dip`) when the outgoing take was made before it. A click opens the length popover (1, 2, 4 s or typed, Remove). Its menu offers Cut and Crossfade only. Joins sit above the playhead (z 9).

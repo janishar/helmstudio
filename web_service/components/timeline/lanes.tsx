@@ -17,10 +17,14 @@ import { clock, safeUrl } from "@/lib/format";
 import { actionShot } from "@/components/timeline/actions";
 import { MagnetIcon, ToolIcon } from "@/components/timeline/tools";
 import { Filmstrip, RulerCanvas, Waveform } from "@/components/timeline/detail";
+import { DuckShades, FadeCurve, FadeHandles, XfadeBadge, sText, spansIn } from "@/components/fades";
 import {
   Grid,
   cuts,
   dropIndex,
+  duckOf,
+  into,
+  xfade,
   kindOf,
   lenOf,
   shortTime,
@@ -289,6 +293,15 @@ export function Lanes({
   const scroller = useRef<HTMLDivElement>(null);
   const end = g.s(doc.frames);
   const width = Math.max(end * pps + 160, 600);
+  // 1.106: Duck music's spans, and a fade handle's drag (the curve follows it)
+  const duck = duckOf(doc, facts);
+  // the playhead held by its line: the pointer's y in the lanes (its readout's place), null when not held
+  const [phY, setPhY] = useState<number | null>(null);
+  const [fadeDraft, setFadeDraft] = useState<{
+    id: string;
+    fade_in: number;
+    fade_out: number;
+  } | null>(null);
   const v1 = doc.tracks[0];
   const markers = doc.markers ?? [];
   // the visible track width and the virtual window (track px; not laid out yet: everything)
@@ -656,6 +669,22 @@ export function Lanes({
     const menu = audio && !!c.take_id && !c.offline && !!onContext && !tiny;
     const failedLine = audio && !c.take_id && c.shot?.status === "failed";
     const linked = audio && c.link !== undefined;
+    // 1.106 (AudioFades): an audio clip with a take has fades (a crossfade's ends replace them), handles, a badge
+    const fades = audio && !!c.take_id && !c.offline && !c.shot;
+    const lenS = g.s(lenOf(c, "video", g, true));
+    const x = fades ? xfade(doc, c, facts) : null;
+    const pre = fades ? into(doc, doc.tracks[ti], c, facts) : null;
+    const fd = fadeDraft?.id === c.id ? fadeDraft : null;
+    const fin = pre
+      ? g.s(pre.mode === "blend" ? pre.frames : pre.frames / 2)
+      : (fd?.fade_in ?? c.fade_in ?? 0);
+    const fout = x
+      ? x.mode === "blend"
+        ? 0
+        : g.s(x.frames / 2)
+      : (fd?.fade_out ?? c.fade_out ?? 0);
+    const dipped = x?.mode === "dip" || pre?.mode === "dip";
+    const music = fades && facts[c.take_id!]?.sound === "music" && duck;
     const button = (
       <button
         key={c.id}
@@ -686,7 +715,7 @@ export function Lanes({
           if (tool === "blade") return blade(e, ti === 0 ? "V1" : doc.tracks[ti].name!);
           onSelect(c.id, e.shiftKey || e.metaKey || e.ctrlKey, e.altKey);
         }}
-        className={`tl-clip absolute top-0 ${film ? "fs" : ""} ${wave ? "wv" : ""} ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
+        className={`tl-clip absolute top-0 ${fades ? "fhost" : ""} ${film ? "fs" : ""} ${wave ? "wv" : ""} ${failedLine ? "border border-bad bg-s2" : audio && c.shot && !c.take_id ? "border border-[#86cdea] bg-s2" : look} ${on ? "border-2! border-t1!" : ""} ${shift?.id === c.id ? "z-10 opacity-80" : ""}`}
         style={{
           left: c.at! * pps,
           width: Math.max(w, 6),
@@ -773,6 +802,17 @@ export function Lanes({
             {height > 40 ? line : `${title === "Clip" ? "" : title} · ${line}`}
           </small>
         )}
+        {fades && (
+          <FadeCurve
+            w={Math.max(w, 6)}
+            fin={fin * pps}
+            fout={fout * pps}
+            color={dipped ? "#f2c14e" : undefined}
+          />
+        )}
+        {music && (
+          <DuckShades spans={spansIn(duck.spans, c.at!, c.at! + lenS)} pps={pps} db={duck.db} />
+        )}
         {!shotBusy(c) && tool === "select" && (
           <>
             <span aria-hidden className="tl-edge left-0" />
@@ -781,10 +821,73 @@ export function Lanes({
         )}
       </button>
     );
-    if (!menu) return button;
+    const extra = fades && (
+      <>
+        {tool === "select" && !tiny && (
+          <span
+            className={`fhs ${on ? "fsel" : ""}`}
+            style={{ left: c.at! * pps, width: Math.max(w, 6), height }}
+          >
+            <FadeHandles
+              len={lenS}
+              pps={pps}
+              fadeIn={pre ? 0 : (c.fade_in ?? 0)}
+              fadeOut={x ? 0 : (c.fade_out ?? 0)}
+              snap={(p) => snapTo(c.at! + p, points(doc, c.id), pps, g, snap).t - c.at!}
+              onDraft={(f) => setFadeDraft(f && { id: c.id, ...f })}
+              onSet={(k, v) => onCommit({ op: "set", clip: c.id, [k]: v || null })}
+            />
+          </span>
+        )}
+        {x?.mode === "blend" && (
+          <span
+            className="tl-ext"
+            title={`${sText(g.s(x.frames))} extra, under the next clip's head`}
+            style={{
+              left: (c.at! + lenS) * pps,
+              width: g.s(x.frames) * pps,
+              top: 0,
+              bottom: "auto",
+              height,
+            }}
+          >
+            <FadeCurve w={g.s(x.frames) * pps} fin={0} fout={g.s(x.frames) * pps} />
+          </span>
+        )}
+        {x && (
+          <XfadeBadge
+            left={(c.at! + lenS) * pps}
+            seconds={g.s(x.frames)}
+            dip={x.mode === "dip"}
+            className="tlx"
+            title={
+              x.mode === "dip"
+                ? `Dip ${sText(g.s(x.frames))}: ${title} has no sound past its cut`
+                : `Crossfade ${sText(g.s(x.frames))} · the next clip fades in under it`
+            }
+            note={
+              x.mode === "dip"
+                ? `Up to 10 s. ${title} has no sound past its cut: it dips.`
+                : `Up to 10 s. ${title} plays on ${sText(g.s(x.frames))} under the next clip.`
+            }
+            onSet={(v) => onCommit({ op: "set", clip: c.id, crossfade: v })}
+          />
+        )}
+      </>
+    );
+    if (!menu)
+      return extra ? (
+        <span key={c.id}>
+          {button}
+          {extra}
+        </span>
+      ) : (
+        button
+      );
     return (
       <span key={c.id}>
         {button}
+        {extra}
         <button
           type="button"
           aria-label="Clip menu"
@@ -1104,15 +1207,41 @@ export function Lanes({
             </span>
           )}
           <span
-            aria-hidden
-            className="tl-ph"
+            className={`tl-ph ${phY !== null ? "grab" : ""}`}
             style={
               {
                 left: HEAD + g.s(frame) * pps - 1,
                 "--x": `${HEAD + g.s(frame) * pps - 1}px`,
               } as React.CSSProperties
             }
-          />
+          >
+            {/* AudioFades frame 5: the line is a handle along its whole height (4 px each side), snapping as drags do */}
+            <span
+              aria-hidden
+              data-playhead
+              className={`phg ${phY !== null ? "on" : ""}`}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                setPhY(e.clientY - (content.current?.getBoundingClientRect().top ?? 0));
+              }}
+              onPointerMove={(e) => {
+                if (phY === null || !(e.buttons & 1)) return;
+                const t = snapTo(timeAt(e.clientX), points(doc), pps, g, snapOn(e)).t;
+                setPhY(e.clientY - (content.current?.getBoundingClientRect().top ?? 0));
+                onSeek(g.f(Math.min(t, end)));
+              }}
+              onPointerUp={() => setPhY(null)}
+              onPointerCancel={() => setPhY(null)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {phY !== null && (
+              <span className="phr" style={{ top: Math.max(TOP, phY - 24) }} role="status">
+                {timecode(g.s(frame))}
+              </span>
+            )}
+          </span>
           {overlay}
           {snapLine && (
             <>

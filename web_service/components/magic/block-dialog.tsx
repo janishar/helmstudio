@@ -278,6 +278,42 @@ function Level({ a, b }: { a: Act; b: Block }) {
   );
 }
 
+/** API 1.106 (AudioFades frame 1): a sound block's fade in and out, typed in seconds (0 to 10; 0 removes), under
+ * Level. */
+function Fades({ a, b }: { a: Act; b: Block }) {
+  const field = (k: "fade_in" | "fade_out", label: string) => (
+    <label className="flex items-center gap-1.5 text-[13px]">
+      {label}
+      <input
+        key={`${k}:${b[k] ?? 0}`}
+        type="number"
+        aria-label={`${label}, s`}
+        className="in mono w-14 px-1.5 py-0.5 text-right"
+        min={0}
+        max={10}
+        step={0.1}
+        defaultValue={b[k] ?? 0}
+        onBlur={(e) => {
+          const n = Math.min(10, Math.max(0, Number(e.target.value) || 0));
+          if (Math.abs(n - (b[k] ?? 0)) > 1e-6)
+            a.edit({ op: "block", id: b.id, set: { [k]: n || null } });
+        }}
+        onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+      />
+      <span className="mono text-t2">s</span>
+    </label>
+  );
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h3 className="m-0 text-[13px]">Fades</h3>
+      <div className="flex flex-wrap items-center gap-4">
+        {field("fade_in", "Fade in")}
+        {field("fade_out", "Fade out")}
+      </div>
+    </div>
+  );
+}
+
 function Body({
   act: a,
   b,
@@ -419,6 +455,7 @@ function Body({
             />
           </div>
           {AUDIO_KINDS.includes(b.kind) && <Level a={a} b={b} />}
+          {AUDIO_KINDS.includes(b.kind) && <Fades a={a} b={b} />}
           <div className="flex flex-col gap-1.5">
             <h3 className="m-0 text-[13px]">Run history</h3>
             {runs.length ? (

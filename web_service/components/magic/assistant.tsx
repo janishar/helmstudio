@@ -162,6 +162,7 @@ const OP_WORDS: Record<string, string> = {
   asset: "Changed an asset",
   asset_add: "Added an asset",
   asset_delete: "Deleted an asset",
+  ducking: "Changed Duck music",
 };
 const opWords = (s: string) => capital(OP_WORDS[s] ?? s.replace(/_/g, " "));
 

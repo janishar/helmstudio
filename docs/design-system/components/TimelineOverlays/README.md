@@ -10,3 +10,5 @@ What the Timeline draws while you trim, snap, blade or slip (timeline/lanes.tsx,
 - Slip source `tl-src`: the clip's In and Out frames (`tl-pv`, 150px 16:9, dashed `dash`) either side of the take's bar (`tl-take`, 16px, striped `s3`/`s2`) with the used part `tl-used` (2px `a2` border on an 18% `a2` wash), on `in`, 16 / 8 corners.
 
 All overlays ignore the pointer and sit above the clips (z 20; the ghost z 5). The consumer places them in lane pixels.
+
+The playhead (`tl-ph`) is a handle along its whole height (API 1.106, AudioFades frame 5): a 10px grab band (`phg`), the glow while held (`grab`) and a yellow readout (`phr`); see AudioFades.

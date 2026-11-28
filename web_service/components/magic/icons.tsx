@@ -57,12 +57,36 @@ export const MorphIcon = (p: P) => (
   </Svg>
 );
 
+/** API 1.106 (AudioFades): a sound's fade in (a ramp up), fade out (down), crossfade (the open bowtie) and Remove
+ * fades (the bowtie crossed out); shared with the Timeline. */
+export const FadeInIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 19h18V5z" />
+  </Svg>
+);
+export const FadeOutIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M21 19H3V5z" />
+  </Svg>
+);
+export const CrossfadeIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 5v14l9-7zM21 5v14l-9-7z" />
+  </Svg>
+);
+export const NoFadeIcon = (p: P) => (
+  <Svg {...p}>
+    <path d="M3 5l18 14M3 19 21 5" />
+  </Svg>
+);
+
 export const JOIN_ICON: Record<TransitionKind, (p: P) => React.ReactNode> = {
   cut: CutIcon,
   dissolve: DissolveIcon,
   fade: FadeIcon,
   wipe: WipeIcon,
   morph: MorphIcon,
+  crossfade: CrossfadeIcon,
 };
 
 /** A kind's glyph (Dialogue is a Voice block with turns, its own glyph in Add). */

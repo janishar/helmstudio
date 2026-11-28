@@ -1257,3 +1257,41 @@
 :is(.mg, .mg-side) .fp.fp-max .vid {
   background-size: contain;
 }
+
+/* API 1.106 (AudioFades): a block's fade handles sit on the waveform, under the title row; joins (crossfade badges
+   among them) and handles above the playhead's line */
+:is(.mg, .mg-side) .fhs {
+  top: 5px;
+  bottom: 5px;
+  z-index: 9;
+}
+:is(.mg, .mg-side) .fhs .fh-h {
+  top: 27px;
+}
+:is(.mg, .mg-side) .tj {
+  z-index: 9;
+}
+/* the playhead's grab band and readout (AudioFades frame 5), not its time label */
+:is(.mg, .mg-side) .ph > .phg {
+  top: 26px;
+  bottom: 0;
+  left: -4px;
+  width: 10px;
+  height: auto;
+  border-radius: 0;
+  background: transparent;
+}
+:is(.mg, .mg-side) .ph > .phg:hover,
+:is(.mg, .mg-side) .ph > .phg.on {
+  background: color-mix(in srgb, var(--t1) 9%, transparent);
+}
+:is(.mg, .mg-side) .ph > .phr {
+  left: 10px;
+  width: auto;
+  height: auto;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-mono);
+}

@@ -27,3 +27,5 @@ The Magic board's block dialog and the small parts the gaps work added (built, a
 - **Level** (alpha.6, API 1.101, owner 2026-11-28: "Yes, add it"): on a voice, music or sound block, a "Level" field in the left column after Notes: a range slider (-60 to 12 dB, 1 dB steps, `grow`) and its number (`in mono`, 56px, 0.5 dB steps) with "dB" after it, saved when let go (the block op's `gain_db`). Play and Send to Timeline use it. A level that is not 0 shows on the block's foot as a mono 10px `t2` badge with a true minus, "−6 dB" / "+3 dB".
 
 The consumer provides every label, the hints and the greying reasons.
+
+- **Fades** (alpha.6, API 1.106, AudioFades): on a voice, music or sound block, under Level: "Fades" with Fade in and Fade out, each a 56px `in mono` number (0 to 10 s, 0.1 s steps) with "s" after it, saved on blur or Enter (0 removes).

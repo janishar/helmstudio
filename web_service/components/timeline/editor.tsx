@@ -41,6 +41,7 @@ import {
   ZoomOut,
 } from "lucide-react";
 import { mod, openMenu, type Item } from "@/components/context-menu";
+import { DipWarn, DuckRow, clipFadeItems, sText } from "@/components/fades";
 import { ErrorNote, Info, Modal } from "@/components/kit";
 import { ActionsNote, ClipActions } from "@/components/timeline/actions";
 import { timelineTools } from "@/components/timeline/assistant";
@@ -78,6 +79,8 @@ import { failWords, followSession, renderTime } from "@/lib/runs";
 import { firstHint } from "@/components/create/sessions";
 import { Preview } from "@/lib/timeline-preview";
 import {
+  DUCK_DB,
+  FADE_MAX,
   Grid,
   apply,
   clipAt,
@@ -86,6 +89,7 @@ import {
   frameAt,
   kindOf,
   newId,
+  xfade,
   shortTime,
   span,
   timecode,
@@ -988,6 +992,7 @@ export function TimelineEditor({ id }: { id?: string }) {
           checked: !!c.mute,
           onPick: () => commit({ op: "set", clip: c.id, mute: !c.mute }),
         },
+        ...(take && !c.offline ? clipFadeItems(doc, ti, c, commit, off) : []),
         "-",
         ...edit,
       ];
@@ -1632,6 +1637,12 @@ export function TimelineEditor({ id }: { id?: string }) {
                 step a frame, [ ] trim, Alt+← → move, S splits, M adds a marker, Delete removes; ?
                 lists them all.
               </span>
+              {/* 1.106 (AudioFades frame 3): off for a sequence until set */}
+              <DuckRow
+                on={!!doc.ducking?.on}
+                db={doc.ducking?.db ?? DUCK_DB}
+                onSet={(d) => commit({ op: "ducking", ...d })}
+              />
               {v1.some((c) => c.take_id && !c.offline) && (
                 <button type="button" className="act" onClick={() => setDialog("rerender")}>
                   Re-render the sequence…
@@ -2024,6 +2035,16 @@ function ClipPanel({
             </div>
           </Cell>
         )}
+        {(kind === "video" || kind === "audio") && !!c.take_id && !c.offline && (
+          // 1.106 (AudioFades frame 1): the clip's sound fades, typed in seconds
+          <>
+            <FadeCell label="Fade in" clip={c} k="fade_in" onCommit={onCommit} disabled={busy} />
+            <FadeCell label="Fade out" clip={c} k="fade_out" onCommit={onCommit} disabled={busy} />
+            <span className="col-span-2 text-[12px] text-t2">
+              0 to 10 s each.{ti > 0 ? " Drag a top corner of the clip, or type here." : ""}
+            </span>
+          </>
+        )}
         {ti > 0 && (
           // 1.50, linked sound (plan 23 §27.5): a sound clip that follows a V1 clip's edits
           <Cell label="Linked to">
@@ -2046,6 +2067,27 @@ function ClipPanel({
           </Cell>
         )}
       </div>
+
+      {(() => {
+        // 1.106 (AudioFades frame 2): a crossfade with no sound past the cut dips
+        const x = ti > 0 ? xfade(doc, c, facts) : null;
+        if (x?.mode !== "dip") return null;
+        const dur = take?.audio?.duration_s ?? take?.video?.duration_s;
+        const short = dur !== undefined ? (c.out ?? 0) + g.s(x.frames) - dur : 0;
+        return (
+          <DipWarn
+            text={`${title} has no sound past its cut: it dips instead.${short > 0 ? ` Trim it ${sText(short)} shorter for a blend.` : ""}`}
+          >
+            <button
+              type="button"
+              className="chip h-7 rounded-lg px-2 text-[12px] text-bad"
+              onClick={() => onCommit({ op: "set", clip: c.id, crossfade: null })}
+            >
+              Remove
+            </button>
+          </DipWarn>
+        );
+      })()}
 
       {ti > 0 && (
         <AudioClip
@@ -2545,6 +2587,47 @@ function MarkerPanel({
         Remove marker
       </button>
     </div>
+  );
+}
+
+/** 1.106: a Fade in / Fade out tile, typed in seconds (0 to 10; 0 removes). */
+function FadeCell({
+  label,
+  clip: c,
+  k,
+  onCommit,
+  disabled,
+}: {
+  label: string;
+  clip: Clip;
+  k: "fade_in" | "fade_out";
+  onCommit: (op: Op) => void;
+  disabled?: boolean;
+}) {
+  const [v, setV] = useDraft(String(+(c[k] ?? 0).toFixed(2)));
+  const set = () => {
+    const n = Math.max(0, Math.min(FADE_MAX, Number(v)));
+    if (Number.isFinite(n) && Math.abs(n - (c[k] ?? 0)) > 1e-6)
+      onCommit({ op: "set", clip: c.id, [k]: n || null });
+    else setV(String(+(c[k] ?? 0).toFixed(2)));
+  };
+  return (
+    <Cell label={label}>
+      <span className="mono flex items-baseline gap-1 font-medium">
+        <input
+          aria-label={`${label} in seconds`}
+          className="mono min-w-0 bg-transparent font-medium text-t1 outline-0"
+          size={Math.max(1, v.length)}
+          inputMode="decimal"
+          value={v}
+          disabled={disabled}
+          onChange={(e) => setV(e.target.value)}
+          onBlur={set}
+          onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
+        />
+        s
+      </span>
+    </Cell>
   );
 }
 

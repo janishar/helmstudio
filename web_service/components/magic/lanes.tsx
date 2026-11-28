@@ -21,6 +21,7 @@ import {
   type Act,
 } from "@/components/magic/menus";
 import {
+  BOARD_DUCKING,
   apply,
   clock,
   type Role,
@@ -44,6 +45,8 @@ import {
   type Takes,
 } from "@/lib/magic";
 import { wheelZoom, zoomAbout } from "@/lib/timeline-tools";
+import { blockFades, soundJoin, voiceSpans } from "@/lib/magic-play";
+import { DuckShades, FadeCurve, FadeHandles, XfadeBadge, sText, spansIn } from "@/components/fades";
 import { SoundMark, soundLook, type SoundLook } from "@/components/magic/sound-mark";
 
 /** The wave's colour under each look's mark. */
@@ -207,6 +210,8 @@ export function Lanes({
   const scroller = useRef<HTMLDivElement>(null);
   const drag = useRef<Drag | null>(null);
   const [pv, setPv] = useState<Preview | null>(null);
+  // the playhead held by its line: the pointer's y down the line (its readout's place), null when not held
+  const [phY, setPhY] = useState<number | null>(null);
   const [view, setView] = useState(0);
 
   // the board drawn while dragging: the op applied (a refused op keeps the last one that worked)
@@ -214,6 +219,9 @@ export function Lanes({
   const shownDoc = proposal ? proposal.doc : draft && "doc" in draft ? draft.doc : doc;
   const moved = new Set(pv ? ("ids" in pv.op ? pv.op.ids : "id" in pv.op ? [pv.op.id] : []) : []);
   const lastFrame = Math.max(0, ...shownDoc.blocks.map(end), ...doc.blocks.map(end));
+  // API 1.106: Duck music (a board without the setting: on, −12 dB)
+  const ducking = shownDoc.ducking ?? BOARD_DUCKING;
+  const duck = ducking.on ? { db: ducking.db ?? -12, spans: voiceSpans(shownDoc, takes) } : null;
   const trackW = Math.max(view - head, (lastFrame + 8 * fps) * pf);
 
   // the visible width, for Fit and the span in view
@@ -508,13 +516,64 @@ export function Lanes({
                       mark={proposal?.marks[b.id]}
                       onMarkMenu={onProposalMenu}
                       onDown={down}
+                      duck={b.kind === "music" ? duck : null}
                     />
                   ))}
+                  {/* API 1.106: a blend's tail, the outgoing take running on under the next block's head */}
+                  {bs.map((b) => {
+                    const x = soundJoin(shownDoc, b, takes);
+                    if (x?.mode !== "blend") return null;
+                    return (
+                      <span
+                        key={`x${b.id}`}
+                        className="tl-ext"
+                        title={`${sText(x.frames / fps)} extra, made for the crossfade`}
+                        style={
+                          {
+                            left: end(b) * pf,
+                            width: x.frames * pf,
+                            "--xk": b.kind === "music" ? "#d59bf6" : "#86cdea",
+                          } as React.CSSProperties
+                        }
+                      >
+                        <FadeCurve w={x.frames * pf} fin={0} fout={x.frames * pf} />
+                      </span>
+                    );
+                  })}
                   <MorphBlocks act={act} lane={lane} pf={pf} />
                   {joins(shownDoc, lane.id)
                     // a cut is drawn on a Shots lane only (where the picture cuts); elsewhere only a set transition
                     .filter((j) => j.kind !== "cut" || lane.role === "shots")
                     .map((j) => {
+                      // API 1.106: a join of two sound blocks plays as a crossfade: the sky badge (amber: a dip)
+                      const [pa, pb] = (j.between ?? []).map((id) =>
+                        shownDoc.blocks.find((x) => x.id === id),
+                      );
+                      const sj =
+                        pa && pb && j.kind !== "cut" ? soundJoin(shownDoc, pa, takes) : null;
+                      if (sj && pa && pb)
+                        return (
+                          <XfadeBadge
+                            key={j.key}
+                            left={j.at * pf}
+                            seconds={j.length / fps}
+                            dip={sj.mode === "dip"}
+                            title={
+                              sj.mode === "dip"
+                                ? `Dip ${secs(j.length, fps)}: ${pa.name} was made before the crossfade`
+                                : `Crossfade ${secs(j.length, fps)} · ${pb.name} fades in under it`
+                            }
+                            note={`Up to 10 s. ${pa.name} runs ${secs(j.length, fps)} longer.`}
+                            onSet={(v) =>
+                              act.edit({
+                                op: "transition",
+                                between: j.between!,
+                                kind: v ? "crossfade" : "cut",
+                                ...(v ? { length: Math.max(1, Math.round(v * fps)) } : {}),
+                              })
+                            }
+                          />
+                        );
                       const Icon = JOIN_ICON[j.kind];
                       const left = j.start ? j.at * pf + 22 : j.end ? j.at * pf - 22 : j.at * pf;
                       const name = `${j.kind[0].toUpperCase()}${j.kind.slice(1)}${j.kind === "cut" ? "" : ` ${secs(j.length, fps)}`}`;
@@ -539,7 +598,7 @@ export function Lanes({
             );
           })}
           <span
-            className="ph"
+            className={`ph ${phY !== null ? "grab" : ""}`}
             style={
               {
                 left: head + frame * pf,
@@ -547,9 +606,35 @@ export function Lanes({
                 "--x": `${head + frame * pf}px`,
               } as React.CSSProperties
             }
-            aria-hidden
           >
-            <span>{clock(frame, fps)}</span>
+            <span aria-hidden>{clock(frame, fps)}</span>
+            {/* AudioFades frame 5: the line is a handle along its whole height (4 px each side), to frames */}
+            <span
+              aria-hidden
+              data-playhead
+              className={`phg ${phY !== null ? "on" : ""}`}
+              style={{ top: 26 }}
+              onPointerDown={(e) => {
+                if (e.button !== 0) return;
+                e.stopPropagation();
+                e.currentTarget.setPointerCapture?.(e.pointerId);
+                setPhY(e.clientY - e.currentTarget.getBoundingClientRect().top);
+              }}
+              onPointerMove={(e) => {
+                if (phY === null || !(e.buttons & 1)) return;
+                const r = e.currentTarget.getBoundingClientRect();
+                setPhY(e.clientY - r.top);
+                onSeek(frameAt(e.clientX));
+              }}
+              onPointerUp={() => setPhY(null)}
+              onPointerCancel={() => setPhY(null)}
+              onClick={(e) => e.stopPropagation()}
+            />
+            {phY !== null && (
+              <span className="phr" style={{ top: 26 + Math.max(0, phY - 12) }} role="status">
+                {clock(frame, fps)}
+              </span>
+            )}
           </span>
           {pv?.snapped && (
             <span className="snapl" style={{ left: head + pv.snapped.t * pf }} aria-hidden>
@@ -622,7 +707,10 @@ function BlockView({
   mark,
   onMarkMenu,
   onDown,
+  duck,
 }: {
+  /** API 1.106, a music block: Duck music's amount and voice spans (s), null when off */
+  duck?: { db: number; spans: [number, number][] } | null;
   d: Doc;
   b: Block;
   takes: Takes;
@@ -714,6 +802,22 @@ function BlockView({
       </span>,
     );
   const status = <StatusChip d={d} b={b} takes={takes} />;
+  // API 1.106 (AudioFades frame 1): a voice, music or sound block's fades: the curve, the handles, the ducked stretches
+  const sound = b.kind === "voice" || b.kind === "music" || b.kind === "sound";
+  const [fd, setFd] = useState<{ fade_in: number; fade_out: number } | null>(null);
+  const bf = sound ? blockFades(d, b) : null;
+  const x = sound ? soundJoin(d, b, takes) : null;
+  const prev = sound ? inLane(d, b.lane).find((p) => end(p) === b.at) : undefined;
+  const pre = prev ? soundJoin(d, prev, takes) : null;
+  const fin = pre
+    ? (pre.mode === "blend" ? pre.frames : pre.frames / 2) / fps
+    : (fd?.fade_in ?? bf?.fade_in ?? 0);
+  const fout = x
+    ? x.mode === "blend"
+      ? 0
+      : x.frames / 2 / fps
+    : (fd?.fade_out ?? bf?.fade_out ?? 0);
+  const pps = pf * fps;
   const art = take?.art;
   const look = soundLook(b, take);
   const audioRow = (orb: React.ReactNode, color: string) => (
@@ -723,122 +827,165 @@ function BlockView({
     </div>
   );
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      data-block={b.id}
-      aria-label={`${KIND_NAME[b.kind]} block ${b.name}, ${secs(b.length, fps)}`}
-      aria-pressed={cls.includes("sel")}
-      className={["blk", st.s === "old" && "old", st.s === "failed" && "fl", ...cls]
-        .filter(Boolean)
-        .join(" ")}
-      style={{ left: b.at * pf + 2, width }}
-      onPointerDown={(e) => onDown(e, b, "move")}
-      onDoubleClick={() => act.open(b.id)}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          act.open(b.id);
-        }
-      }}
-      onContextMenu={(e) => {
-        if (mark && onMarkMenu) return onMarkMenu(e);
-        if (!act.sel.includes(b.id)) act.select([b.id]);
-        openMenu(e, blockMenu({ ...act, sel: act.sel.includes(b.id) ? act.sel : [b.id] }, b));
-      }}
-    >
-      <div className="bh">
-        <span className={`kb k-${b.kind}`}>{KIND_NAME[b.kind]}</span>
-        <b>{b.name}</b>
-        <span className="len">{secs(b.length, fps)}</span>
+    <>
+      <div
+        role="button"
+        tabIndex={0}
+        data-block={b.id}
+        aria-label={`${KIND_NAME[b.kind]} block ${b.name}, ${secs(b.length, fps)}`}
+        aria-pressed={cls.includes("sel")}
+        className={[
+          "blk",
+          sound && "fhost",
+          st.s === "old" && "old",
+          st.s === "failed" && "fl",
+          ...cls,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={{ left: b.at * pf + 2, width }}
+        onPointerDown={(e) => onDown(e, b, "move")}
+        onDoubleClick={() => act.open(b.id)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            act.open(b.id);
+          }
+        }}
+        onContextMenu={(e) => {
+          if (mark && onMarkMenu) return onMarkMenu(e);
+          if (!act.sel.includes(b.id)) act.select([b.id]);
+          openMenu(e, blockMenu({ ...act, sel: act.sel.includes(b.id) ? act.sel : [b.id] }, b));
+        }}
+      >
+        <div className="bh">
+          <span className={`kb k-${b.kind}`}>{KIND_NAME[b.kind]}</span>
+          <b>{b.name}</b>
+          <span className="len">{secs(b.length, fps)}</span>
+        </div>
+        {b.kind === "frame" && (
+          <div
+            className={`art sk ${b.request.style === "rough" ? "rough" : ""} ${art ? "" : "none"}`}
+            style={{ backgroundImage: art }}
+          />
+        )}
+        {(b.kind === "video" || b.kind === "image") && (
+          <div className={`art fs ${art ? "" : "none"}`} style={{ backgroundImage: art }} />
+        )}
+        {b.kind === "voice" && (
+          <span className="scr">
+            {b.request.turns?.length
+              ? `${b.request.turns.length} turns`
+              : b.request.line
+                ? `"${b.request.line}"`
+                : "No line yet"}
+          </span>
+        )}
+        {/* plan 39 phase H: the cover or orb by the shown take's class (a sound placed on the Music lane is an orb) */}
+        {look && audioRow(<SoundMark look={look} art={art} />, WAVE[look])}
+        {/* API 1.89: a song's sections as markers (a click puts the playhead there) */}
+        {b.kind === "music" && (
+          <div
+            className="pointer-events-none absolute inset-x-0 top-[22px] z-[1] h-3.5"
+            role="group"
+            aria-label="Sections"
+          >
+            {sectionsOf(b, take, b.length / fps)
+              .filter((c) => c.start_s * fps < b.length)
+              .map((c, i) => {
+                const at = b.at + Math.round(c.start_s * fps);
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    className="pointer-events-auto absolute top-0 h-3.5 max-w-[80px] truncate border-l-2 pl-1 text-left text-[9px] leading-[14px] text-t1"
+                    style={{ left: c.start_s * fps * pf, borderLeftColor: sectionColor(c.label) }}
+                    title={c.guess ? `${c.label} · about here (from the lyrics)` : c.label}
+                    aria-label={`${c.label} at ${clock(at, fps)}`}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      act.seek(at);
+                    }}
+                    onContextMenu={(e) => {
+                      e.stopPropagation();
+                      openMenu(e, sectionMenu(act, b, c.label, at));
+                    }}
+                  >
+                    {c.label}
+                  </button>
+                );
+              })}
+          </div>
+        )}
+        <div className="bf">
+          {b.kind === "voice" || b.kind === "music" ? null : chips}
+          {fx}
+          {(b.kind === "voice" || b.kind === "music" || b.kind === "sound") && tieMark}
+          {/* API 1.101: a level that is not 0 dB */}
+          {!!b.gain_db && (
+            <span className="mono text-[10px] text-t2" title="Level">
+              {dbText(b.gain_db)}
+            </span>
+          )}
+          {(b.kind === "music" || (b.kind === "sound" && b.request.model)) && (
+            <span className="text-[10px] text-t2">
+              {act.modelName?.(b.kind, b.request.model) ?? b.request.model}
+            </span>
+          )}
+          <span className="grow" />
+          {mark && (
+            <span
+              className={`rounded-[5px] px-1.5 text-[10px] leading-[15px] font-semibold ${MARK[mark][1]}`}
+            >
+              {MARK[mark][2]}
+            </span>
+          )}
+          {b.pinned && (
+            <span className="pin" title="Pinned take">
+              <Pin size={10} aria-hidden />
+            </span>
+          )}
+          {status}
+        </div>
+        {sound && (
+          <FadeCurve
+            w={width}
+            fin={fin * pps}
+            fout={fout * pps}
+            color={x?.mode === "dip" || pre?.mode === "dip" ? "#f2c14e" : undefined}
+          />
+        )}
+        {duck && (
+          <DuckShades
+            spans={spansIn(duck.spans, b.at / fps, end(b) / fps)}
+            pps={pps}
+            db={duck.db}
+          />
+        )}
+        <span className="redge" aria-hidden onPointerDown={(e) => onDown(e, b, "trim")} />
       </div>
-      {b.kind === "frame" && (
-        <div
-          className={`art sk ${b.request.style === "rough" ? "rough" : ""} ${art ? "" : "none"}`}
-          style={{ backgroundImage: art }}
-        />
-      )}
-      {(b.kind === "video" || b.kind === "image") && (
-        <div className={`art fs ${art ? "" : "none"}`} style={{ backgroundImage: art }} />
-      )}
-      {b.kind === "voice" && (
-        <span className="scr">
-          {b.request.turns?.length
-            ? `${b.request.turns.length} turns`
-            : b.request.line
-              ? `"${b.request.line}"`
-              : "No line yet"}
+      {sound && (
+        <span
+          className={`fhs ${cls.includes("sel") ? "fsel" : ""}`}
+          style={{ left: b.at * pf + 2, width }}
+        >
+          <FadeHandles
+            len={b.length / fps}
+            pps={pps}
+            fadeIn={pre ? 0 : (b.fade_in ?? 0)}
+            fadeOut={x ? 0 : (b.fade_out ?? 0)}
+            snap={(p) => {
+              const t = b.at + p * fps;
+              const s = snap(d, t, 6 / pf, act.playhead, new Set([b.id]));
+              return s && s.kind !== "ruler" ? (s.t - b.at) / fps : p;
+            }}
+            onDraft={setFd}
+            onSet={(k, v) => act.edit({ op: "block", id: b.id, set: { [k]: v || null } })}
+          />
         </span>
       )}
-      {/* plan 39 phase H: the cover or orb by the shown take's class (a sound placed on the Music lane is an orb) */}
-      {look && audioRow(<SoundMark look={look} art={art} />, WAVE[look])}
-      {/* API 1.89: a song's sections as markers (a click puts the playhead there) */}
-      {b.kind === "music" && (
-        <div
-          className="pointer-events-none absolute inset-x-0 top-[22px] z-[1] h-3.5"
-          role="group"
-          aria-label="Sections"
-        >
-          {sectionsOf(b, take, b.length / fps)
-            .filter((c) => c.start_s * fps < b.length)
-            .map((c, i) => {
-              const at = b.at + Math.round(c.start_s * fps);
-              return (
-                <button
-                  key={i}
-                  type="button"
-                  className="pointer-events-auto absolute top-0 h-3.5 max-w-[80px] truncate border-l-2 pl-1 text-left text-[9px] leading-[14px] text-t1"
-                  style={{ left: c.start_s * fps * pf, borderLeftColor: sectionColor(c.label) }}
-                  title={c.guess ? `${c.label} · about here (from the lyrics)` : c.label}
-                  aria-label={`${c.label} at ${clock(at, fps)}`}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    act.seek(at);
-                  }}
-                  onContextMenu={(e) => {
-                    e.stopPropagation();
-                    openMenu(e, sectionMenu(act, b, c.label, at));
-                  }}
-                >
-                  {c.label}
-                </button>
-              );
-            })}
-        </div>
-      )}
-      <div className="bf">
-        {b.kind === "voice" || b.kind === "music" ? null : chips}
-        {fx}
-        {(b.kind === "voice" || b.kind === "music" || b.kind === "sound") && tieMark}
-        {/* API 1.101: a level that is not 0 dB */}
-        {!!b.gain_db && (
-          <span className="mono text-[10px] text-t2" title="Level">
-            {dbText(b.gain_db)}
-          </span>
-        )}
-        {(b.kind === "music" || (b.kind === "sound" && b.request.model)) && (
-          <span className="text-[10px] text-t2">
-            {act.modelName?.(b.kind, b.request.model) ?? b.request.model}
-          </span>
-        )}
-        <span className="grow" />
-        {mark && (
-          <span
-            className={`rounded-[5px] px-1.5 text-[10px] leading-[15px] font-semibold ${MARK[mark][1]}`}
-          >
-            {MARK[mark][2]}
-          </span>
-        )}
-        {b.pinned && (
-          <span className="pin" title="Pinned take">
-            <Pin size={10} aria-hidden />
-          </span>
-        )}
-        {status}
-      </div>
-      <span className="redge" aria-hidden onPointerDown={(e) => onDown(e, b, "trim")} />
-    </div>
+    </>
   );
 }
 

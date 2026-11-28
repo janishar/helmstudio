@@ -85,6 +85,7 @@ const VERB: Record<Op["op"], [string, string]> = {
   lift_range: ["Lifted", "range"],
   marker: ["Set", "marker"],
   remove_marker: ["Removed", "marker"],
+  ducking: ["Set", "music ducking"],
 };
 
 /** The edits in words, like the board's "Placed shots 5, 6, 7 at 0:12": runs of one kind, joined by " · ". */

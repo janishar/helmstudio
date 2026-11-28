@@ -3099,3 +3099,303 @@ mark {
 .sf-older .oh { padding: 2px 10px; font-size: 12px; font-weight: 600; letter-spacing: 0.04em; color: var(--t2); }
 .sf-none { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; }
 .sf-none p { margin: 0; font-size: 13px; color: var(--t2); }
+
+/* a length typed beside the menu (AudioFades frame 4: Fade in…): the seconds, the quick picks, the limits */
+.cm.sub.secs {
+  gap: 8px;
+  padding: 8px 10px 10px;
+  border-radius: 16px;
+}
+.cm .secs-in {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 10px;
+  background: var(--s3);
+  font-family: var(--font-mono);
+  color: var(--t2);
+}
+.cm .secs-in input {
+  width: 100%;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  font: 600 14px var(--font-mono);
+  color: var(--t1);
+  outline: none;
+}
+.cm .secs-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cm .secs-note {
+  margin: 0;
+  font-size: 12px;
+  color: var(--t2);
+}
+
+/* Audio fades, crossfades and ducking (plan 41, docs/mock/AudioFades.dc.html; components/fades.tsx), shared by the
+   Timeline and Magic: the curve over the waveform, the handles under the title row, the crossfade badge (sky; amber
+   for a dip), the dip warning, the ducked stretches (sky), the Duck music row, the playhead grabbed by its line */
+.fov {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 3;
+  pointer-events: none;
+  overflow: visible;
+}
+.fh-h {
+  position: absolute;
+  top: 17px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  box-sizing: border-box;
+  border-radius: 4px;
+  background: var(--s1);
+  box-shadow:
+    inset 0 0 0 2px var(--t1),
+    0 0 0 2px var(--g);
+  z-index: 20;
+  cursor: ew-resize;
+  touch-action: none;
+  opacity: 0;
+}
+/* the Timeline's handles beside their clip's button (no control inside a button) */
+.fhs {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+.fhs .fh-h {
+  pointer-events: auto;
+}
+/* hollow on hover; filled when the clip is selected */
+.fhost:hover .fh-h,
+.fhost:hover + .fhs .fh-h,
+.fhs:hover .fh-h,
+.fh-h.drag {
+  opacity: 1;
+}
+.fsel .fh-h {
+  opacity: 1;
+  background: var(--t1);
+  box-shadow:
+    0 0 0 2px var(--g),
+    0 3px 6px rgba(0, 0, 0, 0.6);
+}
+.fh-h.drag,
+.fsel .fh-h.drag {
+  background: #ffe07a;
+  box-shadow:
+    0 0 0 2px var(--g),
+    0 0 0 5px color-mix(in srgb, #ffe07a 35%, transparent);
+}
+.fh-rd {
+  position: absolute;
+  top: -22px;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-sans, Inter, sans-serif);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.5);
+}
+.fh-rd .mono {
+  color: #2a2000;
+}
+/* a blend's tail: the outgoing sound running on under the next clip's head */
+.tl-ext {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  box-sizing: border-box;
+  border-radius: 0 11px 11px 0;
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--xk, #86cdea) 26%, transparent) 0 5px,
+    transparent 5px 10px
+  );
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--xk, #86cdea) 70%, transparent);
+  z-index: 4;
+  pointer-events: none;
+}
+/* the Timeline's crossfade badge (Magic's joins have their own .tj) */
+.tlx {
+  position: absolute;
+  top: 50%;
+  z-index: 21;
+  height: 26px;
+  min-width: 26px;
+  margin-top: -13px;
+  transform: translateX(-50%);
+  box-sizing: border-box;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--s2);
+  border: 1.5px solid var(--k);
+  box-shadow:
+    0 0 0 3px var(--s1),
+    0 4px 10px rgba(0, 0, 0, 0.6);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--t1);
+}
+.tlx svg {
+  width: 14px;
+  height: 14px;
+}
+.tj.xf,
+.tlx.xf {
+  --k: #86cdea;
+}
+.tj.dip,
+.tlx.dip {
+  --k: #f2c14e;
+  color: #f2c14e;
+}
+.xpop {
+  position: fixed;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 220px;
+  padding: 8px 10px 10px;
+}
+.xpop-rm {
+  align-self: flex-start;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  color: var(--bad);
+  font-size: 13px;
+  font-weight: 600;
+}
+.dipw {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, #e8c468 18%, var(--s2));
+  box-shadow: inset 0 0 0 1px #e8c468;
+  font-size: 12px;
+  color: var(--t1);
+}
+.duck {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: linear-gradient(180deg, color-mix(in srgb, #7cc7f2 20%, transparent), transparent 70%);
+  border-left: 1px dashed #7cc7f2;
+  border-right: 1px dashed #7cc7f2;
+}
+.duck > span {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 5px;
+  border-radius: 5px;
+  background: #7cc7f2;
+  color: #06202e;
+  font: 600 9px/14px var(--font-mono);
+  white-space: nowrap;
+}
+.srow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--s2);
+  font-size: 13px;
+  min-width: 0;
+}
+.srow small {
+  font-size: 11px;
+  color: var(--t2);
+}
+.dk-tog {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  flex: 0 0 34px;
+  padding: 0;
+  border-radius: 999px;
+  background: var(--s5);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+.dk-tog::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--t2);
+}
+.dk-tog[aria-checked="true"] {
+  background: var(--a1);
+}
+.dk-tog[aria-checked="true"]::after {
+  left: 17px;
+  background: var(--on1);
+}
+.dbc {
+  height: 28px;
+  padding: 0 9px;
+  border-radius: 9px;
+  background: var(--s4);
+  font: 500 12px/28px var(--font-mono);
+  color: var(--t1);
+}
+/* the playhead grabbed by its line (frame 5): a 4 px band each side, ↔, brighter while held; a yellow readout */
+.phg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 10px;
+  pointer-events: auto;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.phg:hover,
+.phg.on {
+  background: color-mix(in srgb, var(--t1) 9%, transparent);
+}
+.grab {
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--t1) 30%, transparent),
+    0 0 12px color-mix(in srgb, var(--t1) 45%, transparent);
+}
+.phr {
+  position: absolute;
+  left: 10px;
+  z-index: 30;
+  padding: 2px 8px;
+  border-radius: 7px;
+  background: #ffe07a;
+  color: #2a2000;
+  font: 600 11px/15px var(--font-mono);
+  white-space: nowrap;
+  pointer-events: none;
+}

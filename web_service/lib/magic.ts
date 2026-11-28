@@ -5,7 +5,7 @@
 
 export type Kind = "frame" | "image" | "video" | "voice" | "music" | "sound";
 export type Role = "storyboard" | "shots" | "voice" | "music" | "sound" | "free";
-export type TransitionKind = "cut" | "dissolve" | "fade" | "wipe" | "morph";
+export type TransitionKind = "cut" | "dissolve" | "fade" | "wipe" | "morph" | "crossfade";
 
 export type Target = { width: number; height: number; fps: number; sample_rate: number };
 /** A lane; its place in `lanes` is its order. `kind`: the kind Add picks first (any kind goes on any lane). */
@@ -77,7 +77,13 @@ export type Block = {
   from_frame?: string;
   /** an audio block's level in dB (API 1.101; -60..12, absent = 0), sent onto its Timeline clips */
   gain_db?: number;
+  /** API 1.106, a voice, music or sound block: seconds its sound rises from / falls to silence (absent = 0) */
+  fade_in?: number;
+  fade_out?: number;
 };
+/** API 1.106: Duck music under voice (a board without it: on at −12 dB). */
+export type Ducking = { on: boolean; db?: number };
+export const BOARD_DUCKING: Ducking = { on: true, db: -12 };
 /** A voice or music block tied to a shot, or to a run of shots (music stretches with the run). */
 export type Link = { block: string; to: string[] };
 export type Transition = {
@@ -113,6 +119,8 @@ export type Doc = {
   transitions: Transition[];
   assets: Asset[];
   notes: string[];
+  /** API 1.106: absent = on at −12 dB */
+  ducking?: Ducking;
 };
 
 /** Insert pushes what is after the point along (and a move closes the gap it leaves); Overwrite covers it. */
@@ -147,8 +155,13 @@ export type Op =
       set: Partial<Pick<Block, "name" | "note" | "request">> & {
         pinned?: string | null;
         gain_db?: number | null;
+        /** API 1.106: 0 or null removes */
+        fade_in?: number | null;
+        fade_out?: number | null;
       };
     }
+  /** API 1.106: Duck music (absent fields kept) */
+  | { op: "ducking"; on?: boolean; db?: number }
   | { op: "lane_add"; lane: Omit<Lane, "id"> & { id?: string }; after?: string }
   | { op: "lane"; id: string; set: Partial<Omit<Lane, "id">> }
   | { op: "lane_move"; id: string; by: -1 | 1 }
@@ -459,6 +472,12 @@ export function apply(doc: Doc, op: Op): Applied {
         if (!a || !b || a.lane !== b.lane || end(a) !== b.at)
           return { error: "Those blocks don't meet." };
       }
+      // API 1.106: a crossfade joins two music or sound blocks that meet
+      if (
+        op.kind === "crossfade" &&
+        !op.between?.every((id) => ["music", "sound"].includes(get(id)!.kind))
+      )
+        return { error: "A crossfade joins two music or sound blocks." };
       // a cut between two blocks is no transition; at a lane's start or end, a cut is none either
       if (op.kind !== "cut") {
         const t: Transition = {
@@ -494,6 +513,17 @@ export function apply(doc: Doc, op: Op): Applied {
       Object.assign(b, structuredClone(op.set));
       if ("pinned" in op.set && !op.set.pinned) delete b.pinned;
       if ("gain_db" in op.set && !op.set.gain_db) delete b.gain_db; // 0 or null: no level
+      for (const k of ["fade_in", "fade_out"] as const) {
+        if (!(k in op.set)) continue;
+        if (op.set[k] && !AUDIO_KINDS.includes(b.kind))
+          return { error: `${k} is for voice, music and sound blocks` };
+        if (!op.set[k]) delete b[k]; // API 1.106: 0 or null removes
+      }
+      return { doc: d };
+    }
+    case "ducking": {
+      const was = d.ducking ?? BOARD_DUCKING;
+      d.ducking = { on: op.on ?? was.on, db: op.db ?? was.db ?? -12 };
       return { doc: d };
     }
     case "lane_add": {
@@ -634,6 +664,7 @@ export const DEFAULT_LENGTH: Record<TransitionKind, number> = {
   fade: 1,
   wipe: 0.5,
   morph: 1,
+  crossfade: 2,
 };
 
 // ------------------------------------------------------------------------------------------------ snapping
@@ -785,6 +816,8 @@ export type TakeInfo = {
   turn?: number;
   /** API 1.94: the model variant its run loaded, its title ("Turbo") */
   variant?: string;
+  /** API 1.106: seconds its run went past its block for a crossfade */
+  tail?: number;
 };
 export type Takes = Record<string, TakeInfo>;
 
@@ -918,6 +951,25 @@ export function sectionsOf(
   });
 }
 
+/** API 1.106: the frames of the crossfade-kind join after a music or sound block (0: none). */
+export function xfadeAfter(d: Doc, b: Block): number {
+  if (b.kind !== "music" && b.kind !== "sound") return 0;
+  const t = d.transitions.find((x) => x.between?.[0] === b.id && x.kind === "crossfade");
+  return t?.length ?? 0;
+}
+
+/** API 1.106: whether a music or sound block's crossfade into the next dips (its shown take is shorter than the block
+ * and the crossfade, one frame's slack), else blends; null without one. */
+export function xfadeMode(d: Doc, b: Block, takes: Takes): "blend" | "dip" | null {
+  const n = xfadeAfter(d, b);
+  if (!n) return null;
+  const t = shown(b, takes);
+  const fps = d.target.fps;
+  return t?.duration !== undefined && t.duration + 1 / fps >= (b.length + n) / fps
+    ? "blend"
+    : "dip";
+}
+
 /** Derived, never stored (§45.7): running when a run of it is going, failed when its last run failed and nothing is
  * done, draft with no take, out of date when its inputs changed after the take shown was made, else done; a
  * dialogue's from its turns' (API 1.89). */
@@ -937,7 +989,14 @@ export function statusOf(d: Doc, b: Block, takes: Takes): Status {
       ? { s: "failed", error: last.error ?? "failed" }
       : { s: "draft" };
   }
-  return t.inputs === inputsOf(d, b, takes) ? { s: "done" } : { s: "old" };
+  if (t.inputs !== inputsOf(d, b, takes)) return { s: "old" };
+  // API 1.106: a take made with a crossfade's tail is out of date once the join needs more than it has
+  if (t.tail && t.duration !== undefined) {
+    const need = xfadeAfter(d, b);
+    if (need && t.duration + 1 / d.target.fps < (b.length + need) / d.target.fps)
+      return { s: "old" };
+  }
+  return { s: "done" };
 }
 
 // ------------------------------------------------------------------------------------------------ undo

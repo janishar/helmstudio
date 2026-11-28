@@ -1,7 +1,63 @@
 // The board as a sequence for the Timeline's player (plan 39 §45.6; kept out of lib/magic.ts so that one has no runtime
 // imports).
 import { normalize, type Doc as SeqDoc, type Norm, type Takes as SeqTakes } from "@/lib/timeline";
-import { end, inLane, shown, turnTakes, type Block, type Doc, type Takes } from "@/lib/magic";
+import {
+  BOARD_DUCKING,
+  end,
+  inLane,
+  shown,
+  turnTakes,
+  type Block,
+  type Doc,
+  type Takes,
+} from "@/lib/magic";
+
+/** API 1.106: a block's sound fades as played and sent: its own, a lane's start or end transition on its first or last
+ * block (the longer), and the crossfade into the next block of its lane (any kind of join between two sound blocks). */
+export function blockFades(d: Doc, b: Block) {
+  const fps = d.target.fps;
+  const bs = inLane(d, b.lane);
+  const i = bs.indexOf(b);
+  const sound = (x?: Block) =>
+    !!x && (x.kind === "voice" || x.kind === "music" || x.kind === "sound");
+  const lane = (k: "start" | "end") => d.transitions.find((t) => t[k] === b.lane)?.length ?? 0;
+  let fade_in = b.fade_in ?? 0;
+  let fade_out = b.fade_out ?? 0;
+  if (i === 0) fade_in = Math.max(fade_in, lane("start") / fps);
+  if (i === bs.length - 1) fade_out = Math.max(fade_out, lane("end") / fps);
+  const next = bs[i + 1];
+  const j =
+    next && sound(b) && sound(next) && end(b) === next.at
+      ? d.transitions.find((t) => t.between?.[0] === b.id && t.between?.[1] === next.id)
+      : undefined;
+  return { fade_in, fade_out, crossfade: j ? j.length / fps : 0 };
+}
+
+/** API 1.106: the crossfade a sound block plays into the next block of its lane (frames), and whether it blends (its
+ * shown take runs at least the block plus the crossfade, one frame's slack) or dips; null without one. */
+export function soundJoin(
+  d: Doc,
+  b: Block,
+  takes: Takes,
+): { frames: number; mode: "blend" | "dip" } | null {
+  const fps = d.target.fps;
+  const n = Math.round(blockFades(d, b).crossfade * fps);
+  if (!n) return null;
+  const t = shown(b, takes);
+  const blend = t?.duration !== undefined && t.duration + 1 / fps >= (b.length + n) / fps;
+  return { frames: n, mode: blend ? "blend" : "dip" };
+}
+
+/** API 1.106: Duck music's voice spans on the board (s): each voice block's time, a blend's tail in. */
+export function voiceSpans(d: Doc, takes: Takes): [number, number][] {
+  const fps = d.target.fps;
+  return d.blocks
+    .filter((b) => b.kind === "voice")
+    .map((b) => {
+      const x = soundJoin(d, b, takes);
+      return [b.at / fps, (end(b) + (x?.mode === "blend" ? x.frames : 0)) / fps];
+    });
+}
 
 /** A sound block's clips: its take over the block; a dialogue's turns one after another, a Loop's take again and
  * again, each its own length, the last cut at the block's end (API 1.89, as studio's Send). */
@@ -16,6 +72,9 @@ export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
     out: number;
     at: number;
     gain_db?: number;
+    fade_in?: number;
+    fade_out?: number;
+    crossfade?: number;
   }[] = [];
   // the block's level is each clip's gain, as studio's Send (API 1.101)
   const gain = b.gain_db ? { gain_db: b.gain_db } : {};
@@ -37,6 +96,13 @@ export function soundClips(b: Block, takes: Takes, fps: number, d?: Doc) {
     });
     at += n;
     if (loop && out.length < 100) i = -1; // ponytail: 100 clips a block, as studio's Send
+  }
+  // API 1.106: the fades on its first and last clip, the crossfade on its last
+  if (d && out.length) {
+    const f = blockFades(d, b);
+    if (f.fade_in) out[0].fade_in = f.fade_in;
+    if (f.fade_out) out.at(-1)!.fade_out = f.fade_out;
+    if (f.crossfade) out.at(-1)!.crossfade = f.crossfade;
   }
   return out;
 }
@@ -93,7 +159,13 @@ export function toSequence(d: Doc, takes: Takes, dissolves = true) {
           ? [
               [
                 take.id,
-                { kind, duration_s: Math.max(s(b.length), take.duration ?? 0), has_audio: false },
+                {
+                  kind,
+                  duration_s: Math.max(s(b.length), take.duration ?? 0),
+                  has_audio: false,
+                  // API 1.106: what ducking reads (a dialogue is voice)
+                  ...(kind === "audio" ? { sound: b.kind } : {}),
+                },
               ],
             ]
           : [],
@@ -101,7 +173,11 @@ export function toSequence(d: Doc, takes: Takes, dissolves = true) {
     }),
   );
   return {
-    doc: { target: d.target, tracks: [{ kind: "video" as const, clips: v1 }, ...audio] },
+    doc: {
+      target: d.target,
+      tracks: [{ kind: "video" as const, clips: v1 }, ...audio],
+      ducking: d.ducking ?? BOARD_DUCKING,
+    },
     facts,
   };
 }

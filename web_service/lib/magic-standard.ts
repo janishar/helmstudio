@@ -165,6 +165,7 @@ export function takesOf(doc: Doc, runs: BlockRun[], takes: Record<string, S<"Mag
         seed: r.seed ?? undefined,
         turn: r.turn ?? undefined,
         variant: r.variant,
+        ...(r.tail ? { tail: r.tail } : {}),
       };
     if (r.takes.length) continue;
     if (r.status === "queued" || r.status === "running")

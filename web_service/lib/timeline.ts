@@ -30,7 +30,14 @@ export type Clip = {
   offline?: boolean;
   /** 1.50, an audio-track clip: the V1 clip it is linked to (its sound) */
   link?: string;
+  /** 1.106: seconds its sound rises from silence / falls to silence (a clip with sound) */
+  fade_in?: number;
+  fade_out?: number;
+  /** 1.106, an audio-track clip: seconds of Crossfade into next */
+  crossfade?: number;
 };
+/** 1.106: Duck music under voice (a sequence without it: off). */
+export type Ducking = { on: boolean; db?: number };
 export type MarkerColor = "red" | "orange" | "yellow" | "green" | "blue" | "purple";
 /** 1.50: a named point on the sequence. */
 export type Marker = { id: string; at: number; name?: string; color?: MarkerColor };
@@ -48,6 +55,8 @@ export type Doc = {
   frames?: number;
   /** 1.50: absent = none */
   markers?: Marker[];
+  /** 1.106: absent = off */
+  ducking?: Ducking;
 };
 /** A normalized document: names, V1 `at`, defaults filled, every time snapped. */
 export type Norm = Doc & { duration_s: number; frames: number };
@@ -58,6 +67,8 @@ export type Facts = {
   duration_s?: number;
   has_audio?: boolean;
   source_map?: SourceMap;
+  /** 1.106, an audio take: music, sound or voice (what ducking reads) */
+  sound?: string;
 };
 export type Takes = Record<string, Facts>;
 export type Problem = [string, string | null, string | null];
@@ -78,6 +89,14 @@ export const RATES: [number, number, number][] = [
 export const MAGNET_PX = 6;
 export const IMAGE_HOLD_S = 3;
 export const MAX_AUDIO_TRACKS = 8;
+/** 1.106: ducking's default amount, its picks, the ease each side of a line (s) */
+export const DUCK_DB = -12;
+export const DUCK_PICKS = [-6, -9, -12, -18];
+export const DUCK_EASE = 0.3;
+/** 1.106: a fade's quick picks and its limit (s); a new crossfade's length */
+export const FADE_PICKS = [0.5, 1, 2, 4];
+export const FADE_MAX = 10;
+export const XFADE_S = 2;
 const MAX_CLIPS = 1000;
 const MAX_BYTES = 262144;
 const MAX_ALTERNATIVES = 32;
@@ -253,6 +272,14 @@ export function normalize(
         if (video) n.transition_in = c.transition_in;
         else add("dissolve_track", name, cid);
       }
+      // 1.106: fades on a clip with sound; a crossfade on an audio-track clip with a take
+      const sounding = kind === "video" || kind === "audio";
+      for (const k of ["fade_in", "fade_out", "crossfade"] as const) {
+        if (!c[k]) continue;
+        if (k === "crossfade" && video) add("crossfade_track", name, cid);
+        else if (!sounding) add("fade_clip", name, cid);
+        else n[k] = c[k];
+      }
       const alts = [...new Set([...(c.alternatives ?? []), ...(tid ? [tid] : [])])];
       while (alts.length > MAX_ALTERNATIVES)
         alts.splice(
@@ -270,6 +297,7 @@ export function normalize(
       for (const [n, kind] of clips) {
         n.at = g.s(pos);
         pos += lenOf(n, kind, g);
+        clampFades(n, lenOf(n, kind, g), g);
       }
       const din = [...clips.map(([n]) => n.transition_in?.frames ?? 0), 0];
       clips.forEach(([n, kind], k) => {
@@ -298,6 +326,16 @@ export function normalize(
         if (prevEnd !== null && a < prevEnd) add("overlap", name, n.id);
         prevEnd = Math.max(e, prevEnd ?? 0);
         ends.push([name, n.id, e]);
+      }
+      for (const [n] of clips) {
+        const ln = lenOf(n, "video", g, true);
+        clampFades(n, ln, g);
+        if (n.crossfade === undefined) continue;
+        // 1.106: into the clip that starts on its end frame, clamped to both lengths; none touching: dropped
+        const nx = clips.find(([m]) => m !== n && g.f(m.at!) === g.f(n.at!) + ln)?.[0];
+        const d = nx ? Math.min(g.f(n.crossfade), ln, lenOf(nx, "video", g, true)) : 0;
+        if (d > 0) n.crossfade = g.s(d);
+        else delete n.crossfade;
       }
     }
     out.push({
@@ -339,9 +377,20 @@ export function normalize(
     };
   }
   const res: Norm = { target: doc.target, tracks: out, duration_s: g.s(frames), frames };
+  if (doc.ducking) res.ducking = doc.ducking;
   if (marks.length)
     res.markers = marks.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { document: res };
+}
+
+/** 1.106: fades snapped to frames and clamped (fade_in ≤ the length, fade_out ≤ the length − fade_in); 0 is absent. */
+function clampFades(n: Clip, len: number, g: Grid) {
+  const fi = Math.min(g.f(n.fade_in ?? 0), len);
+  const fo = Math.min(g.f(n.fade_out ?? 0), len - fi);
+  if (fi > 0) n.fade_in = g.s(fi);
+  else delete n.fade_in;
+  if (fo > 0) n.fade_out = g.s(fo);
+  else delete n.fade_out;
 }
 
 /** An edit (contracts/README.md, Timeline rules: Edits). `delta` and every time are seconds. */
@@ -360,7 +409,11 @@ export type Op =
       hold?: number | null;
       transition_in?: Dissolve | null;
       link?: string | null;
+      fade_in?: number | null;
+      fade_out?: number | null;
+      crossfade?: number | null;
     }
+  | { op: "ducking"; on?: boolean; db?: number }
   | { op: "add"; take_ids: string[]; track?: string; ids: string[] }
   | { op: "insert"; at: number; hold: number; id: string }
   | { op: "place"; at: number; hold: number; id: string; gap_id: string }
@@ -680,6 +733,12 @@ function editOp(doc: Doc, op: Op, takes: Takes): Doc | string {
     d.markers = d.markers!.filter((x) => x.id !== op.id);
     return d;
   }
+  if (op.op === "ducking") {
+    // 1.106: absent fields kept
+    const was = d.ducking ?? { on: false, db: DUCK_DB };
+    d.ducking = { on: op.on ?? was.on, db: op.db ?? was.db ?? DUCK_DB };
+    return d;
+  }
 
   const t = d.tracks.find((x) => x.clips.some((c) => c.id === op.clip));
   if (!t) return "clip_not_found";
@@ -801,10 +860,19 @@ function editOp(doc: Doc, op: Op, takes: Takes): Doc | string {
     }
     c.take_id = op.take_id;
   } else if (op.op === "set") {
-    for (const k of ["gain_db", "mute", "hold", "transition_in", "link"] as const)
-      // link: 1.50
+    for (const k of [
+      "gain_db",
+      "mute",
+      "hold",
+      "transition_in",
+      "link",
+      "fade_in",
+      "fade_out",
+      "crossfade",
+    ] as const)
+      // link: 1.50; fades and crossfade: 1.106 (0 removes too)
       if (k in op) {
-        if (op[k] === null) delete c[k];
+        if (op[k] === null || (op[k] === 0 && k.includes("fade"))) delete c[k];
         else (c as Record<string, unknown>)[k] = op[k];
       }
   } else if (op.op === "fill") {
@@ -1119,28 +1187,111 @@ export function frameAt(
         clip: c.id,
         t: src!,
         gain_db: (v1t.gain_db ?? 0) + (c.gain_db ?? 0),
-        fade: mixIn < 1 ? mixIn : 1 - mixOut,
+        fade: (mixIn < 1 ? mixIn : 1 - mixOut) * ramp(f, a, a + ln, c, g),
       });
   });
+  const duck = duckOf(doc, takes);
   for (const t of doc.tracks.slice(1))
     for (const c of t.clips) {
+      if (!c.take_id || c.offline || c.mute || t.mute) continue;
       const a = g.f(c.at!);
-      if (
-        c.take_id &&
-        a <= f &&
-        f < a + lenOf(c, "video", g, true) &&
-        !c.offline &&
-        !c.mute &&
-        !t.mute
-      )
-        sounds.push({
-          clip: c.id,
-          t: c.in! + g.s(f - a),
-          gain_db: (t.gain_db ?? 0) + (c.gain_db ?? 0),
-          fade: 1,
-        });
+      const end = a + lenOf(c, "video", g, true);
+      const x = xfade(doc, c, takes);
+      const prev = into(doc, t, c, takes);
+      const stop = x?.mode === "blend" ? end + x.frames : end;
+      if (!(a <= f && f < stop)) continue;
+      let fade = 1;
+      if (prev) {
+        const h = prev.mode === "blend" ? prev.frames : prev.frames / 2;
+        if (f < a + h) fade = (f - a) / h;
+      } else fade = ramp(f, a, end, { fade_in: c.fade_in }, g);
+      if (x?.mode === "blend") {
+        if (f >= end) fade *= (end + x.frames - f) / x.frames;
+      } else if (x) {
+        if (f >= end - x.frames / 2) fade *= (end - f) / (x.frames / 2);
+      } else fade *= ramp(f, a, end, { fade_out: c.fade_out }, g);
+      if (duck && takes[c.take_id]?.sound === "music")
+        fade *= duckGain(g.s(f), duck.spans, duck.db);
+      sounds.push({
+        clip: c.id,
+        t: f < end ? c.in! + g.s(f - a) : c.out! + g.s(f - end),
+        gain_db: (t.gain_db ?? 0) + (c.gain_db ?? 0),
+        fade,
+      });
     }
   return { pictures: pics, sounds };
+}
+
+/** 1.106: a clip's own fade in and out at frame f over [a, end): linear in amplitude. */
+function ramp(f: number, a: number, end: number, c: Pick<Clip, "fade_in" | "fade_out">, g: Grid) {
+  const fi = c.fade_in ? g.f(c.fade_in) : 0;
+  const fo = c.fade_out ? g.f(c.fade_out) : 0;
+  let k = 1;
+  // never below 0: a dissolve's handle before a or after end is silent under a fade
+  if (fi && f < a + fi) k *= Math.max(0, (f - a) / fi);
+  if (fo && f >= end - fo) k *= Math.max(0, (end - f) / fo);
+  return k;
+}
+
+/** 1.106: an audio-track clip's Crossfade into next, in frames, and whether it blends (its take has that much sound
+ * past `out`, in samples) or dips; null without one. */
+export function xfade(
+  doc: Doc,
+  c: Clip,
+  takes: Takes,
+): { frames: number; mode: "blend" | "dip" } | null {
+  if (!c.crossfade || !c.take_id || "hold" in c) return null;
+  const g = new Grid(doc.target);
+  const take = c.offline ? undefined : takes[c.take_id];
+  const blend = !!take?.duration_s && g.smp(c.out!) + g.smp(c.crossfade) <= g.smp(take.duration_s);
+  return { frames: g.f(c.crossfade), mode: blend ? "blend" : "dip" };
+}
+
+/** 1.106: the crossfade of the clip on track t that ends on c's start frame, if it has one. */
+export function into(doc: Doc, t: Track, c: Clip, takes: Takes) {
+  const g = new Grid(doc.target);
+  const a = g.f(c.at!);
+  const p = t.clips.find(
+    (x) => x !== c && x.crossfade && g.f(x.at!) + lenOf(x, "video", g, true) === a,
+  );
+  return p ? xfade(doc, p, takes) : null;
+}
+
+/** 1.106: the duck envelope at t (seconds) over the voice spans [a, b): 0 away from them, 1 inside, linear over
+ * DUCK_EASE each side. */
+export function duckEnvelope(t: number, spans: [number, number][]): number {
+  let e = 0;
+  for (const [a, b] of spans)
+    e = Math.max(
+      e,
+      Math.min(
+        1,
+        Math.max(0, Math.min((t - (a - DUCK_EASE)) / DUCK_EASE, (b + DUCK_EASE - t) / DUCK_EASE)),
+      ),
+    );
+  return e;
+}
+
+/** 1.106: a music sound's level factor at t: 10^(db × e(t) / 20). */
+export const duckGain = (t: number, spans: [number, number][], db: number) =>
+  10 ** ((db * duckEnvelope(t, spans)) / 20);
+
+/** 1.106: the sequence's ducking when on (its amount and the voice clips' sounding spans, crossfade tails in), else
+ * null. */
+export function duckOf(doc: Doc, takes: Takes): { db: number; spans: [number, number][] } | null {
+  if (!doc.ducking?.on) return null;
+  const g = new Grid(doc.target);
+  const spans: [number, number][] = [];
+  for (const t of doc.tracks.slice(1))
+    for (const c of t.clips) {
+      if (t.mute || c.mute || c.offline || !c.take_id) continue;
+      if (takes[c.take_id]?.sound !== "voice") continue;
+      const x = xfade(doc, c, takes);
+      const a = g.f(c.at!);
+      const end = a + lenOf(c, "video", g, true) + (x?.mode === "blend" ? x.frames : 0);
+      spans.push([g.s(a), g.s(end)]);
+    }
+  return { db: doc.ducking.db ?? DUCK_DB, spans };
 }
 
 // ---------------------------------------------------------------- editor helpers (not in check.py)
@@ -1154,6 +1305,7 @@ export function factsOf(takes: Record<string, S<"TimelineTake">>): Takes {
         kind: t.kind,
         duration_s: t.video?.duration_s ?? t.audio?.duration_s,
         has_audio: t.kind === "audio" || (t.video?.has_audio ?? false),
+        ...(t.sound ? { sound: t.sound } : {}),
       },
     ]),
   );
