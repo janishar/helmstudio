@@ -204,7 +204,7 @@ export function AppShell({
             // only while docked: a floating drawer leaves the page its full width (plan 36 §40)
             data-drawer={(a.ready && a.open && !a.floating) || undefined}
           >
-            {/* the rail (md+): the logo in its own panel, 14 px above the menu, Setup pinned at the foot; a phone's bar has no logo. A window too short
+            {/* the rail (md+): the logo in its own panel, 14 px above the menu, Setup at the menu panel's foot; a phone's bar has no logo. A window too short
                 for every item scrolls the whole rail, logo and menu (owner, 2026-11-25: "make it scoll insted") */}
             <div className="rail-wrap contents md:z-10 md:flex md:shrink-0 md:flex-col md:gap-3.5">
               <div className="rail-logo panel hidden w-[76px] justify-center rounded-[30px] px-1 py-3.5 md:flex">
@@ -245,7 +245,7 @@ export function AppShell({
               <nav
                 ref={nav}
                 aria-label="Sections"
-                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-col md:self-start md:overflow-visible md:px-1 md:py-3.5"
+                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-1 md:flex-col md:overflow-visible md:px-1 md:py-3.5"
               >
                 {ITEMS.map((it) => (
                   <DockLink key={it.href} it={it} path={path} />
@@ -280,21 +280,24 @@ export function AppShell({
                   <span aria-hidden className="h-8 w-px shrink-0 bg-s4" />
                   <SetupGear admin={admin} path={path} />
                 </span>
-              </nav>
-              {/* md+: Setup in its own panel pinned to the rail's foot; a window too short for it folds it into one gear
-                  tile (.rail-setup / .rail-gear in globals.css) */}
-              <nav
-                aria-label="Setup"
-                className={`rail-setup panel mt-auto w-[76px] shrink-0 flex-col items-center gap-3.5 rounded-[30px] px-1 py-3.5${admin ? " admin" : ""}`}
-              >
-                {admin && ADMIN_ITEMS.map((it) => <DockLink key={it.href} it={it} path={path} />)}
-                <DockLink it={SETTINGS} path={path} />
-              </nav>
-              {admin && (
-                <div className="rail-gear panel mt-auto w-[76px] shrink-0 justify-center rounded-[30px] px-1 py-3.5">
-                  <SetupGear admin path={path} />
+                {/* md+: Setup at the foot of the same panel, under a rule the free space pushes down (one panel, owner
+                    2026-11-28: "rail is broken in two parts"); a window too short for it folds it into one gear tile
+                    (.rail-setup / .rail-gear in globals.css) */}
+                <span aria-hidden className="hidden h-px w-8 shrink-0 bg-s4 md:mt-auto md:block" />
+                <div
+                  role="group"
+                  aria-label="Setup"
+                  className={`rail-setup flex-col items-center gap-3.5${admin ? " admin" : ""}`}
+                >
+                  {admin && ADMIN_ITEMS.map((it) => <DockLink key={it.href} it={it} path={path} />)}
+                  <DockLink it={SETTINGS} path={path} />
                 </div>
-              )}
+                {admin && (
+                  <div className="rail-gear justify-center">
+                    <SetupGear admin path={path} />
+                  </div>
+                )}
+              </nav>
             </div>
             {/* md+: the window never scrolls (overflow-clip: not even a focus or scrollIntoView moves it; owner, alpha.5
                 item 9), the rail stays put. 60rem (the Mac app's narrowest window, 960 px) and up: the side panel sits

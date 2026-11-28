@@ -78,14 +78,16 @@ describe("rail logo", () => {
 });
 
 describe("rail setup (Rail.dc.html option 4)", () => {
-  it("keeps the tools and the Assistant on top, Hub, System and Settings in their own panel at the foot", () => {
+  it("keeps the tools and the Assistant on top, Hub, System and Settings at the same panel's foot", () => {
     render(<AppShell user={admin}>page</AppShell>);
     const top = screen.getByRole("navigation", { name: "Sections" });
+    // one panel (owner: "Yes, one panel"): the tools first, Setup's links at the same panel's foot
     const names = within(top)
       .getAllByRole("link")
+      .filter((l) => !l.closest('[aria-label="Setup"]'))
       .map((l) => l.textContent);
     expect(names).toEqual(["Create", "Magic", "Gallery", "Timeline", "Pipelines", "Models"]);
-    const setup = screen.getByRole("navigation", { name: "Setup" });
+    const setup = screen.getByRole("group", { name: "Setup" });
     expect(
       within(setup)
         .getAllByRole("link")
@@ -102,7 +104,7 @@ describe("rail setup (Rail.dc.html option 4)", () => {
     cleanup();
     render(<AppShell user={{ ...admin, roles: [] }}>page</AppShell>);
     expect(screen.queryByRole("button", { name: "Setup" })).toBeNull();
-    const setup = screen.getByRole("navigation", { name: "Setup" });
+    const setup = screen.getByRole("group", { name: "Setup" });
     expect(
       within(setup)
         .getAllByRole("link")

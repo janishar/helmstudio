@@ -12,3 +12,4 @@ The app's left rail (shell.tsx `AppShell`): floating panels, the logo above the 
 
 The consumer provides the current path; labels are one word.
 - Size (owner, 2026-11-28: "just reduce the size by 10%", "icon"): the rail's tiles are 32px (11px corners), 10% under the shared 36px tile, with 18px glyphs; the items' boxes and gaps are unchanged, so the fold heights stay.
+- One panel (owner, 2026-11-28: "rail is broken in two parts", "Yes, one panel"): the logo panel, then ONE menu panel from the tools down to the window's foot: the tools, the rule and the Assistant at its top, a thin rule pushed to its foot, then Hub, System and Settings (or the Setup gear on a window under 930 px).

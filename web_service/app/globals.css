@@ -2306,7 +2306,7 @@
       margin: 14px 0 14px 14px;
     }
   }
-  /* Setup at the rail's foot (Rail.dc.html option 4): an admin's three tiles need the whole rail 943 px tall (14 + logo
+  /* Setup at the menu panel's foot (one panel since 2026-11-28; was 943 px with two): an admin's three tiles need the whole rail 930 px tall (14 + logo
      64 + 14 + tools and Assistant 575 + 14 + Setup 248 + 14); shorter, they fold into one gear tile (787 px, as a
      non-admin's Settings-only panel). ponytail: fixed heights (the studio's state rides on the logo, so nothing else
      joins the rail) */
@@ -2319,7 +2319,7 @@
       display: flex;
     }
   }
-  @media (min-width: 48rem) and (max-height: 943px) {
+  @media (min-width: 48rem) and (max-height: 930px) {
     .rail-setup.admin {
       display: none;
     }

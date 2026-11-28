@@ -330,7 +330,7 @@ describe("the drawer", () => {
     expect(screen.queryByRole("link", { name: "Plugins" })).toBeNull();
     r.unmount();
     render(<AppShell user={{ ...user, roles: ["user", "admin"] }}>x</AppShell>);
-    const group = await screen.findByRole("navigation", { name: "Setup" });
+    const group = await screen.findByRole("group", { name: "Setup" });
     expect(within(group).getByRole("link", { name: "Hub" }).getAttribute("href")).toBe("/hub");
     expect(within(group).getByRole("link", { name: "System" }).getAttribute("href")).toBe(
       "/system",
