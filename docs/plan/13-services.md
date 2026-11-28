@@ -55,12 +55,13 @@ outbox → `CMD` → worker → `EVT` → projector → event stream.
    releases it (section 17.5).
 3. The worker does the work, reads and writes media in the object store, and
    publishes events carrying a per-job sequence number.
-4. Studio's projector runs three durable consumers on `EVT` (`evt.run.>`,
-   `evt.pipeline.>`, `evt.media.>`), each with the reference's settings (one
-   message at a time, in order). It runs as `System`, drops events whose owner
-   does not own the session or whose attempt is not the run's current one,
-   de-duplicates on `(job_id, seq)`, applies them, and appends to the
-   session's event log.
+4. Studio's projector runs five durable consumers on `EVT` (`evt.run.>`,
+   `evt.pipeline.>`, `evt.model.>`, `evt.media.>`, `evt.assistant.>`; see
+   `studio_service/messaging/projector.go`), each with the reference's settings
+   (one message at a time, in order). It runs as `System`, drops events whose
+   owner does not own the session or whose attempt is not the run's current
+   one, de-duplicates on `(job_id, attempt, seq)`, applies them, and appends to
+   the session's event log.
 5. The UI follows `GET …/events` (SSE, resumable from the last event id).
 
 **Short calls** use core NATS request/reply with a timeout that becomes a
@@ -185,20 +186,9 @@ decides what goes out.
 
 ### 17.6 Messaging
 
-| Kind | Subjects | Producer → consumer |
-|---|---|---|
-| Commands, stream `CMD` (work queue) | `cmd.run.<host>.<env>`, `cmd.media.<host>`, `cmd.pipeline.submit`, `cmd.pipeline.resume` | studio outbox relay → runner / pipelines |
-| Events, stream `EVT` (7 days) | `evt.run.<session>.{status,step,take,usage}`, `evt.media.<session>.*`, `evt.pipeline.<session>.{status,item,decision}` | workers → studio's projector |
-| | `evt.studio.<session>.run_finished` | studio → pipelines. Published after any terminal run status, including ones studio decides itself (cancelled, lease lost, no eligible host), so a parked thread always wakes. |
-| Dead letters, stream `DLQ` (30 days) | `dlq.cmd.>` | workers |
-| Request/reply (core) | `auth.validate.token`, `auth.validate.role` | studio → auth |
-| | `runner.<host>.<env>.evict` | studio → runner |
-| | `pipelines.state.get` | studio → pipelines: one row's state at a checkpoint, for its owner (section 16.8) |
-| | `studio.runs.create` | pipelines → studio. Idempotent on batch, row, node, loop and branch; the owner and lane are taken from the batch, never from the request. |
-| Revocation (core) | `evt.auth.revoked` | auth → every Go service's token cache |
-| Broadcast (core) | `pipelines.cancel` | studio → pipelines: stops remote calls and parks the batch |
-| Live (core, not stored) | `live.<owner>.<session>` | runner → studio's SSE handler |
-| KV | `registry` (keys `<host>.<env>.<kind>`: models present, node schemas with pack hash, templates, looks), `hosts` (key `<host>.<env>`), `cancels` | each runner writes only its own keys; studio and pipelines read; studio writes `cancels` |
+The subjects, streams, KV buckets and who publishes and consumes each are kept in one place: the
+[`## NATS` section of contracts/README.md](../../contracts/README.md#nats), the contract. This section keeps only
+the rules.
 
 Rules carried over from the reference:
 
