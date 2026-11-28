@@ -1,7 +1,7 @@
-"""omni/listen on the mlx runner (plan 42 step 2): Qwen3-Omni-30B-A3B (GGUF Q8_0 + its Q8_0 projector) in llama.cpp's
-llama-server, a server child (core.child.start) that the residency manager holds as the component `model`: it
-stays loaded between runs (keep_warm) and is stopped when the component goes (Server.evicted). The ASR component is
-Qwen3-ASR-1.7B through mlx-audio, in this process.
+"""omni/listen on the mlx runner (plan 42 step 2): Qwen3-Omni-30B-A3B (variant q8), or the fallback Qwen2.5-Omni-3B
+(variant 3b), each a GGUF Q8_0 + its Q8_0 projector, in llama.cpp's llama-server, a server child (core.child.start)
+that the residency manager holds as the component `model`: it stays loaded between runs (keep_warm) and is stopped
+when the component goes (Server.evicted). The ASR component is Qwen3-ASR-1.7B through mlx-audio, in this process.
 
 A video take's in..out part goes to the server (llama-server samples its frames with ffmpeg, VIDEO_FPS a second) with its
 sound as a second part (16 kHz mono WAV); an audio take as the WAV alone. One greedy answer (temperature 0, seed 0),

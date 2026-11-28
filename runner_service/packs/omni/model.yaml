@@ -5,20 +5,25 @@
 # RUNNER_IDLE_UNLOAD_S passes, 600 s by default) and stops it when it goes. Transcripts from Qwen3-ASR-1.7B through
 # mlx-audio (the mlx env), in this process. Measured 2026-11-28 on the owner's Mac, weights on the T9: about 60 s cold
 # load, then 1-5 s per answer warm (a 2 s voice line, a 5 s clip with its sound); llama-server's footprint 34.2 GB
-# after the load. Generates exactly contracts/fixtures/registry/omni.{nodes,workflows}.valid.json.
+# after the load. The fallback (owner 2026-11-28: "Qwen3-Omni, 3B fallback", "use GGUF"): variant `3b`, Qwen2.5-Omni-3B
+# GGUF Q8_0 with its Q8_0 projector (ggml-org) on the same llama-server path, workflow omni-listen-3b, which studio
+# runs when omni-listen cannot (the T9 unplugged). Measured 2026-11-28 on the Mac's own disk: about 1 s load,
+# llama-server's footprint 6.4 GB with the 32k slot, under 1 s per answer on a 2 s voice line, about 4 s on a 5 s clip
+# with its sound (right but terse). Generates exactly contracts/fixtures/registry/omni.{nodes,workflows}.valid.json.
 id: qwen3-omni-30b-a3b
 family: omni
-title: Qwen3-Omni 30B
+title: Qwen Omni
 runtimes:
   mlx: {env: mlx}
 model:
-  help: "Qwen3-Omni 30B (A3B, GGUF Q8_0) hears and watches a take; Qwen3-ASR 1.7B writes down its speech."
+  help: "Qwen3-Omni 30B (A3B, GGUF Q8_0), or the smaller Qwen2.5-Omni 3B, hears and watches a take; Qwen3-ASR 1.7B writes down its speech."
   variant: {label: Variant}
   precision:
     label: Precision
     help: "Stored Q8_0; loaded as it is. Not a choice."
 licences:
   apache-2.0: {title: Apache License 2.0, url: https://www.apache.org/licenses/LICENSE-2.0}
+  qwen-research-omni: {title: Qwen Research License Agreement, url: https://huggingface.co/Qwen/Qwen2.5-Omni-3B}
 variants:
   q8:
     dir: Qwen3-Omni-30B-A3B-Instruct-GGUF
@@ -30,10 +35,22 @@ variants:
     sources:
       - {repo: Qwen/Qwen3-ASR-1.7B, revision: 7278e1e70fe206f11671096ffdd38061171dd6e5, dir: Qwen3-ASR-1.7B,
          allow_patterns: ["*.json", merges.txt, vocab.json, "model-*.safetensors"], gated: false}
+  3b:                                # the fallback: on the Mac's own disk, about 5.1 GB with its projector
+    dir: Qwen2.5-Omni-3B-GGUF
+    title: 3B Q8_0
+    precision: [int8]
+    files: {model: [Qwen2.5-Omni-3B-Q8_0.gguf, mmproj-Qwen2.5-Omni-3B-Q8_0.gguf]}
+    source: {repo: ggml-org/Qwen2.5-Omni-3B-GGUF, revision: 75f1b73b657a50f5092502799457ccb4a4a1f9df,
+             allow_patterns: [Qwen2.5-Omni-3B-Q8_0.gguf, mmproj-Qwen2.5-Omni-3B-Q8_0.gguf],
+             licence: qwen-research-omni, must_accept: true, gated: false}
+    sources:
+      - {repo: Qwen/Qwen3-ASR-1.7B, revision: 7278e1e70fe206f11671096ffdd38061171dd6e5, dir: Qwen3-ASR-1.7B,
+         allow_patterns: ["*.json", merges.txt, vocab.json, "model-*.safetensors"], gated: false}
 plan_media:                      # the memory plan's take: the longest video (its peak does not depend on it)
   video: {width: 1280, height: 720, frames: 2880, fps: 24, duration_s: 120.0, has_audio: true}
 components:
-  # the language model and its projector, one llama-server (mlx.py): presence, bytes and the memory it holds
+  # the language model and its projector (the variant's own files), one llama-server (mlx.py): presence, bytes and the
+  # memory it holds
   model: {files: [Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf, mmproj-Qwen3-Omni-30B-A3B-Instruct-Q8_0.gguf],
           dtype: stored, precision: [int8]}
   asr: {dir: Qwen3-ASR-1.7B, files: "model-*.safetensors", dtype: stored, precision: [bf16]}
@@ -53,7 +70,7 @@ stages:
       transcript: {type: bool, label: Transcript, default: true,
                    help: "Also write down the speech (Qwen3-ASR); empty when the take has no sound."}
       max_tokens: {type: int, label: Max tokens, default: 600, min: 16, max: 2048}
-    # above the 33.6 GB model and 4.7 GB ASR components: llama-server's one 32k-token slot (3.1 GB of KV) and Metal buffers, and
+    # above the 33.6 GB model (the 3B: 5.1 GB) and 4.7 GB ASR components: llama-server's one 32k-token slot (3.1 GB of KV) and Metal buffers, and
     # the ASR's activations (a bound, not measured)
     peak_gb: "4.5"
 

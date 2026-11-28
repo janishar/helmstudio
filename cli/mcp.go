@@ -386,7 +386,8 @@ func (s *mcpServer) getWorkflow(ctx context.Context, in args) (any, error) {
 	return map[string]any{"workflow": wf, "nodes": nodes}, nil
 }
 
-// listen (API 1.107) posts the take's listen run, waits for it as wait_run does, and adds its answer and transcript.
+// listen (API 1.107) posts the take's listen run, waits for it as wait_run does, and adds its answer and transcript
+// (from 1.109 the reply's note when the smaller model answered).
 func (s *mcpServer) listen(ctx context.Context, req *mcp.CallToolRequest, in args) (any, []mcp.Content, error) {
 	raw, err := s.send(ctx, http.MethodPost, "/takes/"+in.esc("take_id")+"/listen", in.pick("question", "transcript"), http.StatusAccepted)
 	if err != nil {
@@ -398,12 +399,16 @@ func (s *mcpServer) listen(ctx context.Context, req *mcp.CallToolRequest, in arg
 		WorkflowID string  `json:"workflow_id"`
 		Host       *string `json:"host"`
 		Position   *int    `json:"position"`
+		Note       string  `json:"note"`
 	}
 	if err := json.Unmarshal(raw, &r); err != nil {
 		return nil, nil, err
 	}
 	out := map[string]any{"run_id": r.ID, "session_id": r.SessionID, "workflow_id": r.WorkflowID, "host": r.Host,
 		"position": r.Position, "answer": nil, "transcript": nil}
+	if r.Note != "" {
+		out["note"] = r.Note // API 1.109: the smaller listen model answered, and why
+	}
 	waited, _, err := s.waitRun(ctx, req, args{"run_id": r.ID})
 	if err != nil {
 		return nil, nil, err

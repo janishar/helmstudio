@@ -19,6 +19,13 @@ tools that turn them into facts, pictures and words.
 3. **Qwen3-Omni first, Qwen2.5-Omni-3B as the fallback** ("Qwen3-Omni, 3B fallback"): Qwen3-Omni when it is there
    and passes a first test on the Mac; the 3B when it is missing or the T9 is unplugged. Built in alpha.6, in
    parallel with plan 41.
+   The fallback is built (alpha.6 row 99, contract 1.109; owner: "Yes, build it", "use GGUF"): Qwen2.5-Omni-3B GGUF
+   Q8_0 with its Q8_0 projector (ggml-org) on the Mac's own disk, omni variant `3b` and workflow omni-listen-3b on
+   the same llama-server path; studio runs it when omni-listen cannot (T9 unplugged, not downloaded, no room) and the
+   reply's note says so. First test on the Mac (llama.cpp 0.9.0): about 1 s load, 6.4 GB footprint with the 32k
+   slot; a 2 s voice line in under 1 s ("clear, neutral" male voice), a 5 s fox-in-snow clip in about 4 s ("a fox
+   walking in the snow"); right but terse, and with sampling on (llama-mtmd-cli, temperature 0.2) it can loop on a
+   long answer, so the runner's greedy decoding stays.
 
 4. **Facts on demand, then kept** ("can it not do on fly it want the fact and it does not exists", then "Only on
    demand"): no background facts loop. A take is measured the first time the Assistant or helm mcp asks for its

@@ -1053,35 +1053,46 @@ The Assistant and helm mcp ask a local model that hears one question about a vid
 
 - **Route** `POST /v1/studio/takes/{take_id}/listen` `{question 1-500, transcript = true}` → 202 Run: one
   interactive run of the listen workflow that can run now (a template with a node whose kind ends in `/listen` and an
-  `answer` sink; `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest.
+  `answer` sink; `omni-listen` first, from 1.109 then the smaller `omni-listen-3b`, else the fake `echo-listen`) in
+  the take's session, else the caller's newest.
   The node gets `source` `{take_id}` (a media param accepting `[video, audio]`, `max_s` 120), `question` and
   `transcript`. Refusals: 404 (the take unknown, another user's, deleted or not ready); 409 when no listen workflow
   can run now, from 1.108 in plain words with what to do (the first listen workflow's dispatch reason, `omni-listen`
   first): `Can't listen: no runner that can listen is on; start the Mac's runner and ask again.` (no live host for
-  its env, or none publishes a listen workflow), `Can't listen: Qwen3-Omni is on the T9 drive, which is not
-  connected; connect the T9 and ask again.` (a host lists its variant `unplugged`), `Can't listen: Qwen3-Omni is not
-  on this Mac (connect the T9 drive that holds it, or download it in Models) and ask again.` (no host has it), else
-  `Can't listen now: <reason>.`; `open Create once first: listening needs a session`; 422
+  its env, or none publishes a listen workflow); from 1.109, as neither Qwen3-Omni nor the 3B is present:
+  `Can't listen: Qwen3-Omni is on the T9 drive, which is not connected, and the smaller Qwen2.5-Omni-3B is not on
+  this Mac; connect the T9 or download the 3B in Models, and ask again.` (a host lists `q8` `unplugged`), `Can't
+  listen: neither Qwen3-Omni nor the smaller Qwen2.5-Omni-3B is on this Mac; download one in Models (or connect the
+  drive that holds it) and ask again.` (no host has either), else `Can't listen now: <reason>.`; `open Create once first: listening needs a session`; 422
   `question must be 1-500 characters`, `take <id> is <kind>; listen hears video and audio takes (look_at sees
   images)`.
 - **Result**: the run's `answer` (defs `answer`: one try, `seen` empty) is the answer; `resolved.texts`
   `listen.transcript` the speech written down (the node's `reports`; absent with no speech, no sound or `transcript`
   false).
+- **The smaller model** (from 1.109; owner, 2026-11-28: "Qwen3-Omni, 3B fallback", "use GGUF"): when `omni-listen`
+  cannot run and `omni-listen-3b` can, the 202 (`ListenRun`) and the tool's reply carry `note`, which model answers
+  and why, for the Assistant to tell the owner: `Answered by the smaller listen model (Qwen2.5-Omni-3B): the T9 with
+  Qwen3-Omni is not connected.` (q8 `unplugged`), `…: Qwen3-Omni is not on this Mac.` (missing), else `…: Qwen3-Omni
+  can't run now (<reason>).`. Absent when Qwen3-Omni (or the fake) answers. Studio places and plans the run as any:
+  the 3B's `model` component is its own files (about 5.1 GB, against 33.6 GB).
 - **Use in…** (`take_uses`): a text workflow (`media` text: `echo-listen`, `omni-listen`, the ask workflows) is never
   a use, though its media param accepts the take.
 - **Tool** `listen` (tools/catalog.json; surfaces assistant and mcp, no card): the Assistant gets the run to await (as
   look_at) and, from 1.108, is offered it only while a listen workflow can run now (offered_tools `listen`), so it
   never offers to listen when it cannot; helm mcp always lists it and gets the 409's words; helm mcp posts the route, waits for the run (at
-  most 10 minutes) and answers `{run_id, session_id, workflow_id, host, position, status, answer, transcript}`.
-- **The omni family** (`fixtures/registry/omni.{nodes,workflows}.valid.json`, the mlx runner's `packs/omni`):
-  `omni/model` variant `q8` (dir `Qwen3-Omni-30B-A3B-Instruct-GGUF`, ggml-org at 6e35a28f, Apache-2.0; components
-  `model` = the Q8_0 GGUF and its Q8_0 mmproj, stored; `asr` = Qwen3-ASR-1.7B in its own folder, bf16), precision
-  `int8` only. `omni/listen` (Model → answer: Text, transcript: Text; `reports [transcript]`; uses both components;
+  most 10 minutes) and answers `{run_id, session_id, workflow_id, host, position, status, answer, transcript}`, from
+  1.109 with `note` when the smaller model answered (the Assistant's reply carries it too).
+- **The omni family** (`fixtures/registry/omni.{nodes,workflows}.valid.json`, the mlx runner's `packs/omni`, title
+  `Qwen Omni` from 1.109): `omni/model` variant `q8` (dir `Qwen3-Omni-30B-A3B-Instruct-GGUF`, ggml-org at 6e35a28f,
+  Apache-2.0; components `model` = the Q8_0 GGUF and its Q8_0 mmproj, stored; `asr` = Qwen3-ASR-1.7B in its own
+  folder, bf16) and, from 1.109, `3b` (dir `Qwen2.5-Omni-3B-GGUF`, ggml-org at 75f1b73b, Qwen Research License;
+  its `model` files are `Qwen2.5-Omni-3B-Q8_0.gguf` and its Q8_0 mmproj; the same `asr`), precision `int8` only. `omni/listen` (Model → answer: Text, transcript: Text; `reports [transcript]`; uses both components;
   `peak_gb` 4.5): the model runs in llama.cpp's `llama-server` (one 32k slot, Metal, video sampled at 2 frames a
   second), a server child the residency manager holds as the `model` component, so it stays loaded between runs
   (keep_warm) and is stopped when the component is unloaded; a video goes whole plus its sound as 16 kHz mono WAV,
   an audio take as the WAV; greedy (temperature 0, seed 0). The transcript is Qwen3-ASR through mlx-audio. Workflow
-  `omni-listen` (`Listen (Qwen3-Omni)`, media text). The 3B fallback (Qwen2.5-Omni-3B) is not built.
+  `omni-listen` (`Listen (Qwen3-Omni)`, media text) and, from 1.109, `omni-listen-3b` (`Listen (Qwen2.5-Omni-3B)`,
+  variant `3b`, the same path and `peak_gb`).
 - **The fake** `echo/listen` (workflow `echo-listen`, `Listen (fake)`): answers `ECHO-LISTEN: <question>` and the
   transcript `ECHO-TRANSCRIPT` when `transcript` is true; the take is read, not heard.
 

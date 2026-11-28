@@ -1,5 +1,5 @@
 """The omni pack (plan 42 step 2) without the model: its values equal the canonical fixtures (the mlx env), the
-llama-server argv, a listen run against a stand-in server (a video's picture and sound, an audio take, the
+fallback (the 3B present and loaded when Qwen3-Omni's drive is unplugged), the llama-server argv, a listen run against a stand-in server (a video's picture and sound, an audio take, the
 transcript, a stopped server started again) and the residency manager stopping a resident server it drops.
 The real model: packs/omni/model.yaml has the numbers measured on the Mac."""
 
@@ -11,7 +11,9 @@ from types import SimpleNamespace
 import pytest
 from conftest import CONTRACTS
 
-from core import media, registry
+import config
+from core import child, media, models, registry
+from core import pack as packs
 from core.graph import RunError
 from core.residency import Residency
 from packs.omni import mlx as omni
@@ -32,6 +34,35 @@ def test_omni_pack_publishes_the_canonical_fixtures():
             got = [w for w in got if w["family"] == "omni"]
         assert got == want
     assert impls["omni/listen"].uses == ("model", "asr") and impls["omni/listen"].reports == ("transcript",)
+
+
+SMALL = ["Qwen2.5-Omni-3B-Q8_0.gguf", "mmproj-Qwen2.5-Omni-3B-Q8_0.gguf"]
+
+
+def test_the_3b_is_present_and_loaded_when_the_omni_drive_is_unplugged(tmp_path, monkeypatch):
+    mac, t9 = tmp_path / "Mac", tmp_path / "Volumes/T9/models"
+    for name in SMALL:
+        (mac / "Qwen2.5-Omni-3B-GGUF").mkdir(parents=True, exist_ok=True)
+        (mac / "Qwen2.5-Omni-3B-GGUF" / name).write_bytes(b"GGUF")
+    (mac / "Qwen3-ASR-1.7B").mkdir()
+    (mac / "Qwen3-ASR-1.7B/model-00001-of-00001.safetensors").write_bytes(b"\2\0\0\0\0\0\0\0{}")
+    monkeypatch.setattr(config, "MODELS", mac)
+    monkeypatch.setattr(config, "ROOTS", [str(mac), str(t9)])
+    monkeypatch.setattr(config, "DOWNLOADS", 0)
+    monkeypatch.setattr(config, "CACHE", tmp_path / "cache")
+    monkeypatch.setattr(models, "hashes", models.Hashes())
+    monkeypatch.setattr(models, "seen", {packs.folder_id(str(t9)): ["Qwen3-Omni-30B-A3B-Instruct-GGUF"]})
+    pack, _ = packs.load(packs.PACKS / "omni", "mlx")
+    assert {v["id"]: v["presence"] for v in models.entry(pack)["variants"]} == {"q8": "unplugged", "3b": "present"}
+    started = []
+    monkeypatch.setattr(child, "start", lambda ctx, argv, **kw: (started.append(argv), (SimpleNamespace(), 1))[1])
+    monkeypatch.setattr(omni, "binary", lambda: Path("/bin/sh"))
+    ctx = SimpleNamespace(node="listen")
+    omni.load_component("model", packs.ModelRef(pack, "3b", "int8"), ctx)
+    (argv,) = started
+    assert [Path(argv[2]).name, Path(argv[4]).name] == SMALL
+    with pytest.raises(RunError, match="the Q8_0 GGUF or its mmproj is missing"):
+        omni.load_component("model", packs.ModelRef(pack, "q8", "int8"), ctx)
 
 
 def test_the_server_is_one_slot_on_metal_with_a_free_port():
@@ -167,7 +198,6 @@ def test_child_start_returns_a_live_server_and_its_port(tmp_path):
     script = tmp_path / "srv.sh"
     script.write_text("#!/bin/sh\necho 'listening on http://127.0.0.1:4321' >&2\nsleep 30\n")
     script.chmod(0o755)
-    from core import child
 
     ctx = SimpleNamespace(node="listen", check=lambda: None)
     c, port = child.start(ctx, [str(script)], cwd=tmp_path, name="llama", ready=omni.READY, ready_s=10)

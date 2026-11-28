@@ -966,6 +966,11 @@
           "status": {
             "$ref": "../openapi.yaml#/components/schemas/RunStatus",
             "description": "helm mcp: the run's status when the wait ended"
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "description": "from API 1.109, only when the smaller model answers (Qwen2.5-Omni-3B, omni-listen-3b): which model and why in plain words, to tell the owner; absent otherwise"
           }
         },
         "required": [

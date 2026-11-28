@@ -1275,6 +1275,12 @@ type ListenRequest struct {
 	Transcript *bool  `json:"transcript"`
 }
 
+// ListenRun is the 202 of POST /takes/{id}/listen (API 1.109): the run, and when the smaller model answers, why.
+type ListenRun struct {
+	Run
+	Note string `json:"note,omitempty"`
+}
+
 // Validate wants a question of 1-500 characters.
 func (b *ListenRequest) Validate() string {
 	if strings.TrimSpace(b.Question) == "" || utf8.RuneCountInString(b.Question) > 500 {

@@ -5,6 +5,8 @@ Qwen3-Omni 30B is the local model that hears: the listen tool asks it one questi
 (the sound, and a video's picture at 4 frames a second) and Qwen3-ASR 1.7B writes down the speech. Use it when sound
 matters: an abrupt end, a voice's clarity, music against the picture. It costs a model run: about a minute the first
 time (the weights load), then a few seconds while it stays loaded.
+When Qwen3-Omni cannot run (the T9 drive unplugged), the smaller Qwen2.5-Omni-3B answers instead: quicker, but
+terser and less sure; the listen reply's `note` says so, so tell the owner which model answered.
 
 ## Good at
 - Hearing: voice clarity and tone, an abrupt or clipped end, music mood, sound that does not match the picture. [pack]

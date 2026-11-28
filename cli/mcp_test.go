@@ -750,13 +750,14 @@ func TestMCPCancelRuns(t *testing.T) {
 	}
 }
 
-func TestMCPListenWaitsForTheAnswerAndTranscript(t *testing.T) { // API 1.107
+func TestMCPListenWaitsForTheAnswerAndTranscript(t *testing.T) { // API 1.107; 1.109: the smaller model's note
 	f, cs, _ := mcpSession(t, "succeeded")
 	var body map[string]any
 	f.extra["POST /v1/studio/takes/t7/listen"] = func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		w.WriteHeader(http.StatusAccepted)
-		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"echo-listen","status":"queued","host":null,"position":1}`)
+		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"omni-listen-3b","status":"queued","host":null,"position":1,
+			"note":"Answered by the smaller listen model (Qwen2.5-Omni-3B): Qwen3-Omni is not on this Mac."}`)
 	}
 	f.extra["GET /v1/studio/runs/r9"] = func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, `{"id":"r9","session_id":"s1","workflow_id":"echo-listen","status":"succeeded","outputs":[],
@@ -765,7 +766,8 @@ func TestMCPListenWaitsForTheAnswerAndTranscript(t *testing.T) { // API 1.107
 	}
 	res, out := call(t, cs, "listen", map[string]any{"take_id": "t7", "question": "abrupt?", "transcript": true})
 	if res.IsError || out["run_id"] != "r9" || out["status"] != "succeeded" || out["answer"] != "ECHO-LISTEN: abrupt?" ||
-		out["transcript"] != "ECHO-TRANSCRIPT" || fmt.Sprint(body) != "map[question:abrupt? transcript:true]" {
+		out["transcript"] != "ECHO-TRANSCRIPT" || fmt.Sprint(body) != "map[question:abrupt? transcript:true]" ||
+		out["note"] != "Answered by the smaller listen model (Qwen2.5-Omni-3B): Qwen3-Omni is not on this Mac." {
 		t.Fatalf("listen %v %s (sent %v)", out, text(res), body)
 	}
 }

@@ -813,7 +813,7 @@ func (c *controller) deletePipelineHandler(ctx *gin.Context) {
 // listenHandler: POST /takes/{id}/listen — 202 with the listen run (API 1.107).
 func (c *controller) listenHandler(ctx *gin.Context) {
 	body, err := strictBody[dto.ListenRequest](ctx, false)
-	var out dto.Run
+	var out dto.ListenRun
 	if err == nil { // strict: an unknown key is a 422; Validate ran
 		out, err = c.service.Listen(ctx.Request.Context(), common.MustCaller(ctx), ctx.Param("id"), body)
 	}

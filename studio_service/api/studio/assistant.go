@@ -1011,7 +1011,7 @@ func (s *Service) PostAssistant(ctx context.Context, caller common.Caller, id st
 		if _, ok := s.askWorkflow(); ok && *status.Limits.LookAtPerHour > 0 {
 			lookAt = true
 		}
-		_, noListen := s.listenWorkflow() // API 1.108: listen is offered only when a listen workflow can run now
+		_, _, noListen := s.listenWorkflow() // API 1.108: listen is offered only when a listen workflow can run now
 		listen := noListen == ""
 		input := map[string]any{"kind": body.Kind}
 		set := `turn = $2, state = 'working', client_id = $3, pending = NULL, roles = $4, actions = $5, updated_at = clock_timestamp()`

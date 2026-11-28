@@ -1041,12 +1041,13 @@ export interface paths {
         /**
          * Listen: ask the local model that hears a question about one video or audio take
          * @description From 1.107 (contracts/README.md, The listen tool): one interactive run of the listen workflow that can run now
-         *     (Qwen3-Omni's `omni-listen` first, else the fake `echo-listen`) in the take's session, else the caller's newest:
-         *     its listen node gets `source` {take_id}, `question` and `transcript` (default true). The run's `answer` is the
-         *     answer, `resolved.texts["listen.transcript"]` the speech written down (absent without speech or when not
-         *     asked). 404 for a take that is unknown, another user's, deleted or not ready. 409 `no listen workflow can run
-         *     now: download Qwen3-Omni or start its machine`, `open Create once first: listening needs a session`, or the
-         *     open-runs cap. 422 `question must be 1-500 characters`, `take <id> is image; listen hears video and audio
+         *     (Qwen3-Omni's `omni-listen` first, from 1.109 then the smaller Qwen2.5-Omni-3B's `omni-listen-3b`, else the
+         *     fake `echo-listen`) in the take's session, else the caller's newest: its listen node gets `source` {take_id},
+         *     `question` and `transcript` (default true). The run's `answer` is the answer, `resolved.texts["listen.transcript"]`
+         *     the speech written down (absent without speech or when not asked); from 1.109 `note` says when the smaller
+         *     model answers and why. 404 for a take that is unknown, another user's, deleted or not ready. 409 in plain
+         *     words why no listen workflow can run now (contracts/README.md, The listen tool), `open Create once first:
+         *     listening needs a session`, or the open-runs cap. 422 `question must be 1-500 characters`, `take <id> is image; listen hears video and audio
          *     takes (look_at sees images)`, or a take longer than 120 s (as any media input).
          */
         post: operations["studioListen"];
@@ -5005,6 +5006,11 @@ export interface components {
              */
             transcript?: boolean;
         };
+        /** @description from 1.109: the listen run (POST /v1/studio/takes/{take_id}/listen) with `note` */
+        ListenRun: {
+            /** @description from 1.109, only when the smaller model answers (`omni-listen-3b`): which model and why, in plain words, e.g. `Answered by the smaller listen model (Qwen2.5-Omni-3B): the T9 with Qwen3-Omni is not connected.`; absent otherwise */
+            note?: string;
+        } & components["schemas"]["Run"];
         /** @enum {string} */
         RunStatus: "queued" | "running" | "succeeded" | "failed" | "cancelled";
         /**
@@ -12143,7 +12149,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Run"];
+                    "application/json": components["schemas"]["ListenRun"];
                 };
             };
             401: components["responses"]["Unauthorized"];

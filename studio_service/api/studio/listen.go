@@ -33,15 +33,21 @@ func listenNode(workflow registry.Workflow) string {
 	return ""
 }
 
-// listenWorkflow is the listen workflow that can run now: Qwen3-Omni's (omni-listen) first, else any other (the fake);
-// none: why not, in plain words the Assistant and helm mcp pass on (listenWhy; API 1.108).
-func (s *Service) listenWorkflow() (registry.Workflow, string) {
+// listenWorkflow is the listen workflow that can run now: Qwen3-Omni's (omni-listen) first, then the smaller
+// Qwen2.5-Omni-3B's (omni-listen-3b, API 1.109), else any other (the fake); with the 3B, note says so and why (listenNote).
+// None: why not, in plain words the Assistant and helm mcp pass on (listenWhy; API 1.108).
+func (s *Service) listenWorkflow() (registry.Workflow, string, string) {
 	templates, now := s.registry.Workflows(), time.Now()
-	rank := func(w registry.Workflow) int { return map[bool]int{true: 0, false: 1}[w.ID == "omni-listen"] }
+	rank := func(w registry.Workflow) int { // omni-listen, omni-listen-3b, then the rest
+		if i := slices.Index([]string{"omni-listen", smallListen}, w.ID); i >= 0 {
+			return i
+		}
+		return 2
+	}
 	slices.SortFunc(templates, func(a, b registry.Workflow) int {
 		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a.ID, b.ID))
 	})
-	first, why := "", ""
+	first, reasons := "", map[string]string{}
 	for _, workflow := range templates {
 		if listenNode(workflow) == "" || !registry.IsText(workflow.Nodes) {
 			continue
@@ -54,30 +60,62 @@ func (s *Service) listenWorkflow() (registry.Workflow, string) {
 		nodes, _ := json.Marshal(graph)
 		_, _, reason := eligible(s.registry, s.registry.Hosts(), model.Run{WorkflowID: workflow.ID, Env: workflow.Env, Nodes: nodes}, now)
 		if reason == "" {
-			return workflow, ""
+			note := ""
+			if workflow.ID == smallListen {
+				note = s.listenNote(reasons["omni-listen"])
+			}
+			return workflow, note, ""
 		}
 		if first == "" {
-			first, why = workflow.ID, reason
+			first = workflow.ID
 		}
+		reasons[workflow.ID] = reason
 	}
-	return registry.Workflow{}, s.listenWhy(first, why)
+	return registry.Workflow{}, "", s.listenWhy(first, reasons)
 }
 
-// listenWhy says in plain words why the listen workflow `id` cannot run (its dispatch reason), with what to do: no
-// runner on, its model on a drive that is not connected, its model not downloaded.
-func (s *Service) listenWhy(id, reason string) string {
-	name := map[bool]string{true: "Qwen3-Omni", false: "the listen model"}[id == "omni-listen"]
-	switch {
-	case id == "" || (strings.HasPrefix(reason, "no live host for env") && !strings.Contains(reason, " has ")):
-		return "Can't listen: no runner that can listen is on; start the Mac's runner and ask again."
-	case strings.Contains(reason, " has model "):
-		for _, h := range s.registry.Hosts() {
-			found, _ := s.registry.Model(h.Host+"."+h.Env, "omni")
-			if slices.ContainsFunc(found.Variants, func(v registry.Variant) bool { return v.Presence == "unplugged" }) {
-				return "Can't listen: " + name + " is on the T9 drive, which is not connected; connect the T9 and ask again."
-			}
+// smallListen is the smaller listen model's workflow (API 1.109): Qwen2.5-Omni-3B, variant 3b of the omni family.
+const smallListen = "omni-listen-3b"
+
+// omniUnplugged: some host lists Qwen3-Omni (omni variant q8) as on a drive that is not connected.
+func (s *Service) omniUnplugged() bool {
+	for _, h := range s.registry.Hosts() {
+		found, _ := s.registry.Model(h.Host+"."+h.Env, "omni")
+		if slices.ContainsFunc(found.Variants, func(v registry.Variant) bool { return v.ID == "q8" && v.Presence == "unplugged" }) {
+			return true
 		}
-		return "Can't listen: " + name + " is not on this Mac (connect the T9 drive that holds it, or download it in Models) and ask again."
+	}
+	return false
+}
+
+// listenNote is the reply's note when the 3B answers (API 1.109): which model, and why Qwen3-Omni did not (its
+// dispatch reason), for the Assistant to tell the owner.
+func (s *Service) listenNote(reason string) string {
+	why := "Qwen3-Omni can't run now (" + reason + ")."
+	switch {
+	case s.omniUnplugged():
+		why = "the T9 with Qwen3-Omni is not connected."
+	case strings.Contains(reason, " has model "):
+		why = "Qwen3-Omni is not on this Mac."
+	}
+	return "Answered by the smaller listen model (Qwen2.5-Omni-3B): " + why
+}
+
+// listenWhy says in plain words why no listen workflow can run (`first` the first one's id, reasons each one's
+// dispatch reason), with what to do: no runner on, neither model present (Qwen3-Omni on a drive that is not
+// connected), else the reason.
+func (s *Service) listenWhy(first string, reasons map[string]string) string {
+	reason := reasons[first]
+	switch {
+	case first == "" || (strings.HasPrefix(reason, "no live host for env") && !strings.Contains(reason, " has ")):
+		return "Can't listen: no runner that can listen is on; start the Mac's runner and ask again."
+	case first == "omni-listen" && reasons[smallListen] != "" && !strings.Contains(reasons[smallListen], " has model "):
+		return "Can't listen now: " + reasons[smallListen] + "." // the 3B is there but cannot run either (no room, …)
+	case first == "omni-listen" && strings.Contains(reason, " has model "):
+		if s.omniUnplugged() {
+			return "Can't listen: Qwen3-Omni is on the T9 drive, which is not connected, and the smaller Qwen2.5-Omni-3B is not on this Mac; connect the T9 or download the 3B in Models, and ask again."
+		}
+		return "Can't listen: neither Qwen3-Omni nor the smaller Qwen2.5-Omni-3B is on this Mac; download one in Models (or connect the drive that holds it) and ask again."
 	}
 	return "Can't listen now: " + reason + "."
 }
@@ -85,14 +123,14 @@ func (s *Service) listenWhy(id, reason string) string {
 // Listen is POST /takes/{id}/listen (API 1.107) and the listen tool: one interactive run of the listen workflow on the
 // caller's video or audio take, in the take's session (else the caller's newest); 202 with the run. Its answer is the
 // run's `answer`, the transcript its resolved.texts `<node>.transcript`.
-func (s *Service) Listen(ctx context.Context, caller common.Caller, takeID string, body *dto.ListenRequest) (dto.Run, error) {
+func (s *Service) Listen(ctx context.Context, caller common.Caller, takeID string, body *dto.ListenRequest) (dto.ListenRun, error) {
 	if !utility.IsUUID(takeID) {
-		return dto.Run{}, errNotFound
+		return dto.ListenRun{}, errNotFound
 	}
 	if !s.registry.Ready() {
-		return dto.Run{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
+		return dto.ListenRun{}, network.NewServiceUnavailableError("studio is starting; try again", nil)
 	}
-	var out dto.Run
+	var out dto.ListenRun
 	err := s.tx(ctx, caller, func(tx pgx.Tx) error {
 		var kind string
 		var sessionID *string
@@ -105,7 +143,8 @@ func (s *Service) Listen(ctx context.Context, caller common.Caller, takeID strin
 		if kind != "video" && kind != "audio" {
 			return network.NewUnprocessableError("take "+takeID+" is "+kind+"; listen hears video and audio takes (look_at sees images)", nil)
 		}
-		workflow, why := s.listenWorkflow()
+		workflow, note, why := s.listenWorkflow()
+		out.Note = note
 		if why != "" {
 			return network.NewConflictError(why, nil)
 		}
@@ -122,11 +161,11 @@ func (s *Service) Listen(ctx context.Context, caller common.Caller, takeID strin
 		inputs := map[string]any{node + ".source": map[string]any{"take_id": takeID},
 			node + ".question": strings.TrimSpace(body.Question), node + ".transcript": transcript}
 		var err error
-		out, err = s.createRun(ctx, tx, caller, *sessionID, &dto.RunRequest{WorkflowID: workflow.ID, Inputs: inputs, Ask: true})
+		out.Run, err = s.createRun(ctx, tx, caller, *sessionID, &dto.RunRequest{WorkflowID: workflow.ID, Inputs: inputs, Ask: true})
 		return err
 	})
 	if err == nil {
-		err = s.placeQueued(ctx, &out)
+		err = s.placeQueued(ctx, &out.Run)
 	}
 	return out, err
 }
@@ -157,6 +196,10 @@ func (s *Service) listenTool(ctx context.Context, caller common.Caller, raw json
 		log.Printf("studio.tools listen: %v", err)
 		return toolErr("internal", "internal error")
 	}
-	return message.ToolsReply{Tool: "listen", Result: map[string]any{"run_id": run.ID, "session_id": run.SessionID,
-		"workflow_id": run.WorkflowID, "host": run.Host, "position": run.Position}}
+	result := map[string]any{"run_id": run.ID, "session_id": run.SessionID, "workflow_id": run.WorkflowID,
+		"host": run.Host, "position": run.Position}
+	if run.Note != "" {
+		result["note"] = run.Note // API 1.109: the smaller model answers
+	}
+	return message.ToolsReply{Tool: "listen", Result: result}
 }

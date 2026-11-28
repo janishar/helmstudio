@@ -7,14 +7,15 @@
   "nodes": [
     {
       "kind": "omni/model",
-      "title": "Qwen3-Omni 30B",
+      "title": "Qwen Omni",
       "family": "omni",
       "params": [
         {
           "name": "variant",
           "type": "enum",
           "enum": [
-            "q8"
+            "q8",
+            "3b"
           ],
           "default": "q8",
           "label": "Variant"
@@ -37,7 +38,7 @@
           "type": "Model"
         }
       ],
-      "help": "Qwen3-Omni 30B (A3B, GGUF Q8_0) hears and watches a take; Qwen3-ASR 1.7B writes down its speech."
+      "help": "Qwen3-Omni 30B (A3B, GGUF Q8_0), or the smaller Qwen2.5-Omni 3B, hears and watches a take; Qwen3-ASR 1.7B writes down its speech."
     },
     {
       "kind": "omni/listen",
