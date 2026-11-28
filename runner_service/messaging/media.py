@@ -17,7 +17,6 @@ weight holder.
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import os
 import shutil
@@ -33,7 +32,8 @@ from config import ENV, HOST
 from core import images, media
 from core.download import Cancelled
 from core.media import MediaError
-from messaging import cancels, schemas
+from messaging import cancels
+from messaging.delivery import dead_letter, decode, keep_alive
 from messaging.models import ModelEvents
 
 log = logging.getLogger("media")
@@ -68,25 +68,15 @@ class MediaJobs:
         self.job: str | None = None
 
     async def handle(self, msg) -> None:
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.media.job":
-            errs = [f"not a media job: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.media.job", "media job")
         if errs:
-            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-            with contextlib.suppress(Exception):
-                await self.js.publish(f"dlq.{msg.subject}", msg.data)
-            with contextlib.suppress(Exception):
-                await msg.term()
+            await dead_letter(self.js, msg, errs)
             return
         meta = getattr(msg, "metadata", None)
         events = MediaEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
         job_id, data = cmd["job_id"], cmd["data"]
         self.job, cancel = job_id, asyncio.Event()
-        beat = asyncio.create_task(self._wip(msg))
+        beat = asyncio.create_task(keep_alive(msg, WIP))
         tmp = Path(tempfile.mkdtemp(prefix="media-"))  # 0700
         stop = failure = result = None
         extra: dict = {}
@@ -141,12 +131,6 @@ class MediaJobs:
             await msg.ack_sync()
         except Exception:  # not acked: redelivered after ACK_WAIT, and the job runs again
             log.exception("media job %s: could not report %s", job_id, status)
-
-    async def _wip(self, msg) -> None:
-        while True:
-            await asyncio.sleep(WIP)
-            with contextlib.suppress(Exception):
-                await msg.in_progress()
 
     async def _fetch(
         self, inputs: list[dict], tmp: Path, cancel: asyncio.Event, done=None

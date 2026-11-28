@@ -29,8 +29,6 @@ import ssl
 import time
 
 import nats
-import nats.errors
-from nats.js.api import AckPolicy, ConsumerConfig, DeliverPolicy
 
 import config
 import health
@@ -39,9 +37,9 @@ from consumer import ACK_WAIT, Consumer
 from core import child, download, looks, lora, media, models, registry, voices
 from core.graph import GPU
 from core.residency import POLICIES, Residency, host_device, ram_gb
+from messaging import delivery, plugin_runs, schemas
 from messaging import media as media_jobs
 from messaging import models as model_jobs
-from messaging import plugin_runs, schemas
 from messaging.hosts import Host
 from messaging.settings import Settings
 from storage import Store
@@ -205,13 +203,14 @@ async def main() -> None:
                       "policy": settings.policy()} | ({"media": can_media} if can_media else {})  # fmt: skip
 
     host = Host(await js.key_value("hosts"), extra=extra)
+    node_schemas = registry.node_schemas(values)
     consumer = Consumer(
         js=js,
         store=store,
         cancels_kv=await js.key_value("cancels"),
         host=host,
         impls=impls,
-        node_schemas=registry.node_schemas(values),
+        node_schemas=node_schemas,
         residency=residency,
         device=device,
         after_run=config.AFTER_RUN,
@@ -219,7 +218,6 @@ async def main() -> None:
     )
     consumer.idle_unload_s = config.IDLE_UNLOAD_S
     settings = Settings(consumer, host)
-    node_schemas = registry.node_schemas(values)
     scan_lock = asyncio.Lock()
 
     async def rescan() -> None:
@@ -245,50 +243,23 @@ async def main() -> None:
                 except Exception:
                     log.exception("rescan failed")
 
-    # create or update: a changed config here replaces the old one on the server
-    await js.add_consumer(
-        "CMD",
-        ConsumerConfig(
-            name=DURABLE,
-            durable_name=DURABLE,
-            filter_subject=SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT,
-            ack_wait=ACK_WAIT,
-            max_deliver=1,  # a run is retried by studio's dispatcher, never by redelivery
-            max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL,
-        ),
-    )
-    sub = await js.pull_subscribe_bind(durable=DURABLE, stream="CMD")
-    await js.add_consumer(
-        "CMD",
-        ConsumerConfig(
-            name=model_jobs.DURABLE,
-            durable_name=model_jobs.DURABLE,
-            filter_subject=model_jobs.SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT,
-            ack_wait=model_jobs.ACK_WAIT,
-            max_deliver=10,  # a restart redelivers (the download resumes); a terminal status acks it
-            max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL,
-        ),
-    )
-    jobs_sub = await js.pull_subscribe_bind(durable=model_jobs.DURABLE, stream="CMD")
+    # a run is retried by studio's dispatcher, never by redelivery
+    sub = await delivery.durable(js, DURABLE, SUBJECT, ACK_WAIT, max_deliver=1)
+    # a restart redelivers (the download resumes); a terminal status acks it
+    jobs_sub = await delivery.durable(js, model_jobs.DURABLE, model_jobs.SUBJECT, model_jobs.ACK_WAIT, max_deliver=10)
     jobs = model_jobs.ModelJobs(
         js=js, cancels_kv=consumer.cancels_kv, packs_=packs, library=library, consumer=consumer,
         rescan=rescan, cache=config.CACHE, endpoint=config.HF_ENDPOINT, token_file=config.HF_TOKEN_FILE,
     )  # fmt: skip
 
     stop = asyncio.Event()
-    side_jobs = [model_jobs.pull(jobs_sub, jobs, stop)]
+    side_jobs = [delivery.pull(jobs_sub, jobs.handle, stop, "model jobs")]
     if can_media:  # exports and frames: ffmpeg, never the GPU loop
-        await js.add_consumer("CMD", ConsumerConfig(
-            name=media_jobs.DURABLE, durable_name=media_jobs.DURABLE, filter_subject=media_jobs.SUBJECT,
-            ack_policy=AckPolicy.EXPLICIT, ack_wait=media_jobs.ACK_WAIT, max_deliver=3, max_ack_pending=1,
-            deliver_policy=DeliverPolicy.ALL))  # fmt: skip
-        media_sub = await js.pull_subscribe_bind(durable=media_jobs.DURABLE, stream="CMD")
+        media_sub = await delivery.durable(
+            js, media_jobs.DURABLE, media_jobs.SUBJECT, media_jobs.ACK_WAIT, max_deliver=3
+        )
         mjobs = media_jobs.MediaJobs(js=js, cancels_kv=consumer.cancels_kv, store=store, encoders=can_media["encoders"])
-        side_jobs.append(model_jobs.pull(media_sub, mjobs, stop))
+        side_jobs.append(delivery.pull(media_sub, mjobs.handle, stop, "media jobs"))
         log.info("media jobs on %s (ffmpeg %s, %s)", media_jobs.SUBJECT, can_media["ffmpeg"],
                  ", ".join(can_media["encoders"]))  # fmt: skip
 
@@ -344,20 +315,13 @@ async def main() -> None:
         await nc.subscribe(f"runner.folders.check.{HOST}", cb=on_folders)
     server = await health.serve(nc)
     log.info("runner %s.%s ready on %s (device %s)", HOST, ENV, SUBJECT, device)
+
+    async def run(m) -> None:
+        await consumer.handle(m)
+        await settings.run_ended()
+
     try:
-        while not stop.is_set():
-            try:
-                msgs = await sub.fetch(1, timeout=2)
-            except nats.errors.TimeoutError:
-                continue
-            except Exception:
-                log.exception("fetch failed; retrying")
-                with contextlib.suppress(TimeoutError):
-                    await asyncio.wait_for(stop.wait(), 2)
-                continue
-            for m in msgs:
-                await consumer.handle(m)
-                await settings.run_ended()
+        await delivery.pull(sub, run, stop, "runs")
     finally:
         log.info("shutting down")
         server.close()

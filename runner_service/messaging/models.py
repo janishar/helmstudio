@@ -13,7 +13,6 @@ holder, so a download does not block generation.
 import asyncio
 import contextlib
 import hashlib
-import json
 import logging
 import shutil
 import time
@@ -22,7 +21,8 @@ from config import ENV, HOST
 from core import download, models
 from core import pack as packs
 from core.download import Cancelled, JobError
-from messaging import cancels, schemas
+from messaging import cancels
+from messaging.delivery import dead_letter, decode, keep_alive
 from messaging.publisher import envelope, send
 
 log = logging.getLogger("models")
@@ -71,25 +71,15 @@ class ModelJobs:
         self.job: str | None = None  # the job in progress
 
     async def handle(self, msg) -> None:
-        try:
-            cmd = json.loads(msg.data)
-        except ValueError:
-            cmd = None
-        errs = schemas.message_errors(cmd) if isinstance(cmd, dict) else ["not a JSON object"]
-        if not errs and cmd["type"] != "cmd.model.job":
-            errs = [f"not a model job: {cmd['type']}"]
+        cmd, errs = decode(msg, "cmd.model.job", "model job")
         if errs:
-            log.error("rejecting %s: %s", msg.subject, "; ".join(errs[:3]))
-            with contextlib.suppress(Exception):
-                await self.js.publish(f"dlq.{msg.subject}", msg.data)
-            with contextlib.suppress(Exception):
-                await msg.term()
+            await dead_letter(self.js, msg, errs)
             return
         meta = getattr(msg, "metadata", None)
         events = ModelEvents(self.js, cmd, getattr(meta, "num_delivered", None) or 1)
         job_id, data = cmd["job_id"], cmd["data"]
         self.job = job_id
-        beat = asyncio.create_task(self._wip(msg))
+        beat = asyncio.create_task(keep_alive(msg, WIP))
         failure = result = None
         try:
             if await cancels.requested(self.cancels_kv, job_id):
@@ -127,12 +117,6 @@ class ModelJobs:
             await msg.ack_sync()
         except Exception:  # not acked: redelivered after ACK_WAIT, and the job runs again (idempotent)
             log.exception("model job %s: could not report %s", job_id, status)
-
-    async def _wip(self, msg) -> None:
-        while True:
-            await asyncio.sleep(WIP)
-            with contextlib.suppress(Exception):
-                await msg.in_progress()
 
     def find(self, model: str):
         p = next((p for p in self.packs if p.spec["id"] == model), None)
@@ -319,21 +303,3 @@ class ModelJobs:
             await asyncio.to_thread(f.unlink, True)
         log.info("model job %s: deleted LoRA %s (%d files)", job_id, name, len(paths))
         return {"files": len(paths), "freed_bytes": freed}
-
-
-async def pull(sub, jobs: ModelJobs, stop: asyncio.Event) -> None:
-    """Fetch and handle model jobs one at a time until `stop`."""
-    import nats.errors
-
-    while not stop.is_set():
-        try:
-            msgs = await sub.fetch(1, timeout=2)
-        except nats.errors.TimeoutError:
-            continue
-        except Exception:
-            log.exception("model jobs fetch failed; retrying")
-            with contextlib.suppress(TimeoutError):
-                await asyncio.wait_for(stop.wait(), 2)
-            continue
-        for m in msgs:
-            await jobs.handle(m)
