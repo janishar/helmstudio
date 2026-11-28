@@ -43,6 +43,7 @@ import {
   type Field,
   type Raw,
 } from "@/lib/workflow";
+import { Range } from "@/components/range";
 
 type Timeline = S<"Timeline">;
 type Offer = S<"TakeOffer">;
@@ -418,9 +419,9 @@ function ActionForm({
               {` · ${before ? "before" : "after"}`}
             </span>
           </label>
-          <input
+          <Range
             id={`act-${ext.seconds.key}`}
-            type="range"
+
             min={ext.seconds.param.min}
             max={ext.seconds.param.max}
             step={ext.seconds.param.step ?? 0.1}

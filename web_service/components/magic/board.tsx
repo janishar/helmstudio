@@ -83,6 +83,7 @@ import {
   type Store,
 } from "@/components/magic/use-board";
 import "./magic.css";
+import { Range } from "@/components/range";
 
 const PANEL = "magic-side-panel";
 /** Why runs can't go (a board with no way to run). */
@@ -798,14 +799,12 @@ function Editor({ board, sample }: { board: Board; sample: boolean }) {
                     <path d="M5 12h14" />
                   </svg>
                 </button>
-                <input
-                  type="range"
+                <Range
                   className="zr"
                   aria-label="Zoom"
                   min={0}
                   max={100}
                   value={zPct}
-                  style={{ "--z": `${zPct}%` } as React.CSSProperties}
                   onChange={(e) => setPps(clampZ(lo * (MAX_PPS / lo) ** (+e.target.value / 100)))}
                 />
                 <button

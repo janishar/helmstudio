@@ -56,6 +56,7 @@ import {
   type Raw,
   type Update,
 } from "@/lib/workflow";
+import { Range } from "@/components/range";
 
 type Take = S<"Take">;
 type Change = (key: string, u: Update) => void;
@@ -784,9 +785,9 @@ export function ExtendControl({
           {grid && v ? ` · ${steps} steps · + ${steps * grid.step} frames` : ""}
         </span>
       </label>
-      <input
+      <Range
         id={id}
-        type="range"
+
         min={p.min}
         max={p.max}
         step={p.step ?? 0.1}
@@ -1462,8 +1463,7 @@ export function OfferPop({
                 {label}
                 <span className="mono text-[12px] text-t2">{chipText(f, raw)}</span>
               </span>
-              <input
-                type="range"
+              <Range
                 min={f.param.min}
                 max={f.param.max}
                 step={f.param.step ?? 0.05}

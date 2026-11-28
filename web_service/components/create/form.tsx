@@ -52,6 +52,7 @@ import {
   type Update,
 } from "@/lib/workflow";
 import { TextArea } from "@/components/expand-text";
+import { Range } from "@/components/range";
 
 /** Props shared by the form parts: the fields, what the controls hold, and the errors by field key. */
 export type FormProps = {
@@ -796,9 +797,9 @@ function CanvasPicker({
           <span>Size</span>
           <span className="mono text-[12px] text-t2">{mp} MP</span>
         </label>
-        <input
+        <Range
           id="canvas-size"
-          type="range"
+
           min={0}
           max={choices.length - 1}
           step={1}
@@ -865,9 +866,9 @@ function Duration({
         </span>
         <span className="mono text-[12px] text-t2">{text}</span>
       </label>
-      <input
+      <Range
         id={id}
-        type="range"
+
         min={g.min}
         max={g.max}
         step={g.step}
@@ -1250,8 +1251,7 @@ function Editor({
         <>
           {num}
           {p.min != null && p.max != null && (
-            <input
-              type="range"
+            <Range
               aria-label={label}
               min={p.min}
               max={p.max}
@@ -1418,9 +1418,9 @@ function Slider({
           {p.name === "speaking_rate" && "×"}
         </span>
       </label>
-      <input
+      <Range
         id={id}
-        type="range"
+
         min={p.min}
         max={p.max}
         step={p.step ?? (p.type === "float" ? 0.05 : 1)}

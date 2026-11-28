@@ -9,6 +9,7 @@ import { Chip } from "@/components/gallery/gallery";
 import { GalleryPicker } from "@/components/gallery/picker";
 import { api, ok, type S } from "@/lib/api";
 import { safeUrl } from "@/lib/format";
+import { Range } from "@/components/range";
 
 type Take = S<"Take">;
 type Input = Record<string, unknown>;
@@ -668,8 +669,7 @@ function AudioEdit({
       {tab === "Volume" && (
         <label className="flex items-center gap-2 text-[13px]">
           Volume
-          <input
-            type="range"
+          <Range
             min={-30}
             max={20}
             step={1}

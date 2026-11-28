@@ -39,6 +39,7 @@ import {
   type Estimate,
   type Kinds,
 } from "@/lib/magic-standard";
+import { Range } from "@/components/range";
 
 export function BlockDialog({
   act,
@@ -246,8 +247,7 @@ function Level({ a, b }: { a: Act; b: Block }) {
     <div className="flex flex-col gap-1.5">
       <h3 className="m-0 text-[13px]">Level</h3>
       <div className="flex items-center gap-2">
-        <input
-          type="range"
+        <Range
           aria-label="Level in decibels"
           className="grow"
           min={-60}
