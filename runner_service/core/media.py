@@ -302,8 +302,9 @@ def lines_problem(lines: list[dict]) -> str | None:
     return f": about {planned:.0f} s of speech; a take is at most {MAX_TAKE_S} s" if planned > MAX_TAKE_S else None
 
 
-def _ffmpeg(args: list[str], stdin: bytes | None = None, timeout: int = 300) -> bytes:
-    """Run ffmpeg on local temp files only (-protocol_whitelist file); its stdout. MediaError ffmpeg on failure."""
+def ffmpeg(args: list[str], stdin: bytes | None = None, timeout: float | None = 300) -> bytes:
+    """Run ffmpeg (-v error -nostdin -y first) on local temp files only (-protocol_whitelist file); its stdout.
+    MediaError ffmpeg on failure (packs wrap it in RunError)."""
     r = subprocess.run([FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", *args], input=stdin,
                        capture_output=True, check=False, timeout=timeout)  # fmt: skip
     if r.returncode:
@@ -320,7 +321,7 @@ def pcm(data: bytes, rate: int, channels: int) -> bytes:
     with tempfile.TemporaryDirectory(prefix="pcm-") as tmp:
         src = Path(tmp) / "source"
         src.write_bytes(data)
-        return _ffmpeg(["-protocol_whitelist", "file", "-i", str(src), "-map", "0:a:0", "-f", "s16le",
+        return ffmpeg(["-protocol_whitelist", "file", "-i", str(src), "-map", "0:a:0", "-f", "s16le",
                         "-acodec", "pcm_s16le", "-ar", str(rate), "-ac", str(channels), "pipe:1"])  # fmt: skip
 
 
@@ -334,7 +335,7 @@ def mux(mp4: bytes, wav: bytes) -> bytes:
         tmp = Path(tmp)
         (tmp / "video.mp4").write_bytes(mp4)
         (tmp / "sound").write_bytes(wav)
-        _ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "video.mp4"), "-protocol_whitelist", "file",
+        ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "video.mp4"), "-protocol_whitelist", "file",
                  "-i", str(tmp / "sound"), "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-af", "apad",
                  "-c:a", "aac", "-ar", "48000", "-ac", "2", "-shortest", "-movflags", "+faststart",
                  str(tmp / "out.mp4")])  # fmt: skip

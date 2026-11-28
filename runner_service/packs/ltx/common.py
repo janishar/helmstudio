@@ -5,7 +5,6 @@ retake, extend and audio to video (and retake's audio window), and the checks th
 
 import logging
 import math
-import shutil
 import subprocess
 from dataclasses import replace
 from decimal import ROUND_HALF_UP, Decimal
@@ -17,9 +16,10 @@ import yaml
 from PIL import Image, ImageCms
 
 import config
+from core import media
 from core.graph import RunError
+from core.media import FFMPEG
 
-FFMPEG = shutil.which("ffmpeg")
 if FFMPEG is None:  # checked when the runner loads the pack: it stops with this
     raise RuntimeError("the ltx pack needs ffmpeg on PATH to write MP4s (brew install ffmpeg)")
 
@@ -234,9 +234,10 @@ def check_sample(params: dict, wired: set, models: dict | None = None) -> str | 
 
 
 def _ffmpeg(*args: str) -> None:
-    r = subprocess.run([FFMPEG, "-v", "error", "-y", *args], capture_output=True, text=True, check=False)
-    if r.returncode:
-        raise RunError(f"ffmpeg failed: {r.stderr.strip()[-300:]}")
+    try:
+        media.ffmpeg(list(args), timeout=None)
+    except media.MediaError as e:
+        raise RunError(f"ffmpeg failed: {e}") from None
 
 
 # utils/constants.DEFAULT_NEGATIVE_PROMPT: fixed, not user editable (a change re-encodes: it is in the pack's code hash)

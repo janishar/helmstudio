@@ -17,7 +17,6 @@ the ltx pack's: {mp4, poster, last, frames, fps, has_audio, stream} (core.media 
 The base-fp8 variant (NVIDIA hosts) takes the same inputs to SGLang instead of h3: sgl.py."""
 
 import math
-import subprocess
 import tempfile
 from pathlib import Path
 
@@ -230,27 +229,33 @@ def cut(node: str, v: dict, dest: Path, *, picture: bool, audio: bool, soundtrac
         bare = cut(node, v, dest.with_name(dest.stem + "-picture" + dest.suffix), picture=True, audio=False)
         track = dest.with_name(dest.stem + "-soundtrack")
         track.write_bytes(soundtrack["data"])
-        a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(bare),
+        a = ["-protocol_whitelist", "file", "-i", str(bare),
              "-ss", f"{soundtrack.get('in', 0):.6f}", "-t", f"{part(soundtrack):.6f}", "-i", str(track),
              "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "pcm_s16le", "-shortest", str(dest)]  # fmt: skip
-        r = subprocess.run(a, capture_output=True, text=True, check=False, timeout=600)
-        bare.unlink()
-        track.unlink()
-        if r.returncode or not dest.is_file():
-            raise RunError(
-                f"{node}: adding soundtrack take {soundtrack['take_id']} failed: {media.last_line(r.stderr)}"
-            )
+        try:
+            media.ffmpeg(a, timeout=600)
+        except media.MediaError as e:
+            raise RunError(f"{node}: adding soundtrack take {soundtrack['take_id']} failed: {e}") from None
+        finally:
+            bare.unlink()
+            track.unlink()
+        if not dest.is_file():
+            raise RunError(f"{node}: adding soundtrack take {soundtrack['take_id']} failed: ffmpeg failed")
         return dest
     src = dest.with_name(dest.stem + "-take")
     src.write_bytes(v["data"])
-    a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(src),
+    a = ["-protocol_whitelist", "file", "-i", str(src),
          "-ss", f"{v.get('in', 0):.6f}", "-t", f"{part(v):.6f}"]  # fmt: skip
     a += ["-map", "0:v:0", "-c:v", "libx264", "-preset", "ultrafast", "-qp", "0"] if picture else ["-vn"]
     a += ["-map", "0:a:0", "-c:a", "pcm_s16le"] if audio else ["-an"]
-    r = subprocess.run([*a, str(dest)], capture_output=True, text=True, check=False, timeout=600)
-    src.unlink()
-    if r.returncode or not dest.is_file():
-        raise RunError(f"{node}: cutting reference take {v['take_id']} failed: {media.last_line(r.stderr)}")
+    try:
+        media.ffmpeg([*a, str(dest)], timeout=600)
+    except media.MediaError as e:
+        raise RunError(f"{node}: cutting reference take {v['take_id']} failed: {e}") from None
+    finally:
+        src.unlink()
+    if not dest.is_file():
+        raise RunError(f"{node}: cutting reference take {v['take_id']} failed: ffmpeg failed")
     return dest
 
 

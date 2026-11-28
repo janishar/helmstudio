@@ -295,7 +295,7 @@ def sound(ctx, params: dict, inputs: dict) -> dict:
 
 def _cut(mp4: Path, seconds: float, out: Path) -> None:
     """The picture's first `seconds`, H.264 copied (no sound kept)."""
-    media._ffmpeg(["-protocol_whitelist", "file", "-i", str(mp4), "-t", f"{seconds:.3f}", "-map", "0:v:0",
+    media.ffmpeg(["-protocol_whitelist", "file", "-i", str(mp4), "-t", f"{seconds:.3f}", "-map", "0:v:0",
                    "-c", "copy", "-movflags", "+faststart", str(out)])  # fmt: skip
 
 

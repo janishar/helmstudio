@@ -121,19 +121,19 @@ def cut_clip(node: str, clip: dict, dest: Path) -> Path:
     start, seconds = clip_part(node, clip)
     src = dest.with_name(dest.stem + "-take")
     src.write_bytes(clip["data"])
-    a = [media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file", "-i", str(src),
+    a = ["-protocol_whitelist", "file", "-i", str(src),
          "-ss", f"{start:.6f}", "-t", f"{seconds:.6f}", "-map", "0:a:0", "-ac", "1", "-c:a", "pcm_s16le",
          "-map_metadata", "-1", "-fflags", "+bitexact", "-flags", "+bitexact", str(dest)]  # fmt: skip
     try:
-        r = subprocess.run(a, capture_output=True, text=True, check=False, timeout=120)
+        media.ffmpeg(a, timeout=120)
+    except media.MediaError as e:
+        raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: {e}") from None
     except subprocess.TimeoutExpired:
         raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} took over 120 s") from None
     finally:
         src.unlink(missing_ok=True)
-    if r.returncode or not dest.is_file():
-        raise RunError(
-            f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: {media.last_line(r.stderr)}"
-        )
+    if not dest.is_file():
+        raise RunError(f"{node}.voice: cutting the clip of take {clip.get('take_id')} failed: ffmpeg failed")
     return dest
 
 

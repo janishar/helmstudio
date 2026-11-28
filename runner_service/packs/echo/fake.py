@@ -6,7 +6,6 @@ import io
 import json
 import math
 import re
-import subprocess
 import sys
 import tempfile
 import textwrap
@@ -211,14 +210,13 @@ def a2v(ctx, params: dict, inputs: dict) -> dict:
         tmp = Path(tmp)
         (tmp / "still.mp4").write_bytes(mp4.mp4(poster, frames, A2V_FPS))
         (tmp / "source").write_bytes(src["data"])
-        r = subprocess.run([media.FFMPEG or "ffmpeg", "-v", "error", "-nostdin", "-y", "-protocol_whitelist", "file",
-                            "-i", str(tmp / "still.mp4"), "-ss", f"{start}", "-t", f"{end - start}",
-                            "-protocol_whitelist", "file", "-i", str(tmp / "source"), "-map", "0:v:0", "-map",
-                            "1:a:0", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
-                            "-movflags", "+faststart", str(tmp / "out.mp4")],
-                           capture_output=True, text=True, check=False, timeout=120)  # fmt: skip
-        if r.returncode:
-            raise RunError(f"{ctx.node}.source: the sound could not be read ({media.last_line(r.stderr)})")
+        try:
+            media.ffmpeg(["-protocol_whitelist", "file", "-i", str(tmp / "still.mp4"), "-ss", f"{start}",
+                          "-t", f"{end - start}", "-protocol_whitelist", "file", "-i", str(tmp / "source"),
+                          "-map", "0:v:0", "-map", "1:a:0", "-c:v", "copy", "-c:a", "aac", "-ar", "48000", "-ac", "2",
+                          "-movflags", "+faststart", str(tmp / "out.mp4")], timeout=120)  # fmt: skip
+        except media.MediaError as e:
+            raise RunError(f"{ctx.node}.source: the sound could not be read ({e})") from None
         data = (tmp / "out.mp4").read_bytes()
     return _clip(poster, frames, A2V_FPS, data, take_id=src["take_id"], offset_s=-start, new_in_s=0,
                  new_out_s=end - start)  # fmt: skip
