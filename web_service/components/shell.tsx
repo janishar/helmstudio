@@ -95,7 +95,7 @@ function DockLink({ it: { href, label, Icon, tile }, path }: { it: Item; path: s
     <Link
       href={href}
       aria-current={isCurrent(href, path) ? "page" : undefined}
-      className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": tile } as React.CSSProperties}>
         <Icon size={18} strokeWidth={1.75} aria-hidden />
@@ -129,7 +129,7 @@ function SetupGear({ admin, path }: { admin: boolean; path: string }) {
           })),
         })
       }
-      className="dock-item flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
+      className="dock-item flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-[current]:text-t1"
     >
       <span className="tile" style={{ "--tile": SETTINGS.tile } as React.CSSProperties}>
         <Settings size={18} strokeWidth={1.75} aria-hidden />
@@ -245,7 +245,7 @@ export function AppShell({
               <nav
                 ref={nav}
                 aria-label="Sections"
-                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:w-[76px] md:flex-1 md:flex-col md:overflow-visible md:px-1 md:py-3.5"
+                className="panel z-10 m-3.5 mb-0 flex shrink-0 items-center gap-3.5 self-stretch overflow-x-auto rounded-[30px] px-3 py-1 md:m-0 md:gap-2.5 md:w-[76px] md:flex-1 md:flex-col md:overflow-visible md:px-1 md:py-3.5"
               >
                 {ITEMS.map((it) => (
                   <DockLink key={it.href} it={it} path={path} />
@@ -257,7 +257,7 @@ export function AppShell({
                     aria-expanded={a.open}
                     title={`Assistant (${shortcut()})`}
                     onClick={() => a.setOpen((o) => !o)}
-                    className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
+                    className="dock-item relative flex h-16 w-[58px] shrink-0 flex-col md:h-14 items-center justify-center gap-[5px] rounded-2xl text-[10px] font-medium text-t2 aria-expanded:text-t1"
                   >
                     <span
                       className="tile"
@@ -287,7 +287,7 @@ export function AppShell({
                 <div
                   role="group"
                   aria-label="Setup"
-                  className={`rail-setup flex-col items-center gap-3.5${admin ? " admin" : ""}`}
+                  className={`rail-setup flex-col items-center gap-2.5${admin ? " admin" : ""}`}
                 >
                   {admin && ADMIN_ITEMS.map((it) => <DockLink key={it.href} it={it} path={path} />)}
                   <DockLink it={SETTINGS} path={path} />
