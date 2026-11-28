@@ -55,7 +55,7 @@ import consumer
 import providers
 import remote
 from messaging import schemas
-from messaging.publisher import now
+from messaging.publisher import envelope, send
 
 log = logging.getLogger(__name__)
 
@@ -1631,19 +1631,10 @@ class Assistant:
 
     async def _send(self, kind: str, subject: str, msg_id: str, data: dict, v: dict) -> None:
         """One event of the thread, on contract, retried for up to 10 s (a duplicate is dropped by its id)."""
-        msg = {"type": kind, "version": 1, "id": str(uuid.uuid5(uuid.NAMESPACE_URL, f"helmstudio:assistant:{msg_id}")),
-               "job_id": v["thread_id"], "owner_id": v["owner_id"], "occurred_at": now(),
-               "trace": v.get("trace") or {}, "data": data}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            raise ValueError(f"{kind} is off-contract: {'; '.join(errs[:3])}")
-        body, headers = json.dumps(msg, ensure_ascii=False).encode(), {"Nats-Msg-Id": msg_id}
-        for i in range(20):
-            try:
-                return await self.js.publish(subject, body, headers=headers)
-            except Exception:
-                if i == 19:
-                    raise
-                await asyncio.sleep(0.5)
+        msg = envelope(
+            kind, v["thread_id"], v["owner_id"], v.get("trace") or {}, data, f"helmstudio:assistant:{msg_id}"
+        )
+        await send(self.js, subject, msg, msg_id)
 
 
 class Commands(consumer.Commands):

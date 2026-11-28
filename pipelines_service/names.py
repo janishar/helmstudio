@@ -14,11 +14,9 @@ import asyncio
 import json
 import logging
 import re
-import uuid
 
 import providers
-from messaging import schemas
-from messaging.publisher import now
+from messaging.publisher import envelope, send
 
 log = logging.getLogger(__name__)
 
@@ -134,13 +132,11 @@ class Names:
 
     async def publish(self, cmd: dict, title: str) -> None:
         d, sid = cmd["data"], cmd["data"]["session_id"]
-        trace = {k: v for k, v in cmd["trace"].items() if k in ("traceparent", "tracestate", "correlation_id")}
-        msg = {"type": "evt.pipeline.named", "version": 1, "id": str(uuid.uuid4()), "job_id": sid,
-               "owner_id": cmd["owner_id"], "occurred_at": now(), "trace": trace,
-               "data": {"session_id": sid, "run_id": d["run_id"], "title": title, "named_by": d["named_by"]}}  # fmt: skip
-        if errs := schemas.message_errors(msg):
-            log.error("name %s: evt.pipeline.named is off-contract: %s", sid, "; ".join(errs[:3]))
+        data = {"session_id": sid, "run_id": d["run_id"], "title": title, "named_by": d["named_by"]}
+        try:
+            msg = envelope("evt.pipeline.named", sid, cmd["owner_id"], cmd["trace"], data)
+        except ValueError as e:
+            log.error("name %s: %s", sid, e)
             return
-        await self.js.publish(f"evt.pipeline.{sid}.named", json.dumps(msg).encode(),
-                              headers={"Nats-Msg-Id": f"name:{sid}"})  # fmt: skip
+        await send(self.js, f"evt.pipeline.{sid}.named", msg, f"name:{sid}")
         log.info("named %s (%s)", sid, TEMPLATE)
