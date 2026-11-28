@@ -139,17 +139,11 @@ zonos3:           ## build the vendored zonos3-server (cmake, offline; under 2 m
 	$(MAKE) -C runner_service zonos3
 
 runner-torch runner-mlx runner-native: runner-%: $(if $(filter prod,$(STACK)),prod-secrets,secrets)  ## one native runner (env torch, mlx or native) in the background
-	@mkdir -p $(RUN_DIR); pid=$$(cat $(RUN_DIR)/runner-mac-$*.pid 2>/dev/null); \
-	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $* already runs ($$pid)"; exit 0; fi; \
-	cd runner_service && nohup sh -c 'echo $$$$ > .run/runner-mac-$*.pid; trap "kill \$$c; wait \$$c; exit 143" TERM INT; \
-	while :; do env \
-	  RUNNER_HOST=mac RUNNER_ENV=$* HEALTH_PORT=$(HEALTH_PORT_$*) NATS_URL_FILE=$(SECRETS)/nats_runner_mac_$*_url \
+	@env RUNNER_HOST=mac RUNNER_ENV=$* HEALTH_PORT=$(HEALTH_PORT_$*) NATS_URL_FILE=$(SECRETS)/nats_runner_mac_$*_url \
 	  S3_ENDPOINT=http://127.0.0.1:$(RUNNER_S3) S3_BUCKET=$${S3_BUCKET:-helmstudio} \
 	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_access_key_id S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_secret_access_key \
 	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts $(PLUGINS_$*) \
-	  $(UV) $(UV_RUN_$*) python main.py & c=$$!; wait $$c; s=$$?; [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; \
-	  echo "runner exited $$s: restarting"; sleep 2; done' > .run/runner-mac-$*.log 2>&1 & \
-	sleep 1; echo "runner $* started ($$(cat $(RUN_DIR)/runner-mac-$*.pid)); log runner_service/.run/runner-mac-$*.log"
+	  .tools/runner $* runner-mac-$* $(UV) $(UV_RUN_$*) python main.py
 
 runners-stop:     ## stops the native runners (each by its pid file; only a process make started)
 	@for env in torch mlx native; do f=$(RUN_DIR)/runner-mac-$$env.pid; pid=$$(cat $$f 2>/dev/null) || continue; \
@@ -192,23 +186,17 @@ runners-nvidia:   ## the NVIDIA host runners in the background (needs make up GP
 	z=runner_service/vendor/zonos3/build/zonos3-server; [ "$$(uname -s)" != Linux ] || [ -x $$z ] || \
 	  $(MAKE) --no-print-directory -C runner_service zonos3-get || true; \
 	envs=torch; if [ -n "$(SGLANG_FOUND)" ] || [ -x $$z ]; then envs="torch native"; fi; \
-	mkdir -p $(RUN_DIR); for e in $$envs; do \
-	pid=$$(cat $(RUN_DIR)/runner-$$h-$$e.pid 2>/dev/null); \
-	if [ -n "$$pid" ] && ps -p $$pid -o command= | grep -q 'uv run'; then echo "runner $$e already runs ($$pid)"; continue; fi; \
+	for e in $$envs; do \
 	(umask 077; printf 'nats://runner_%s_%s:%s@127.0.0.1:%s' $$h $$e "$$(cat $(SECRETS)/nats_runner_$${h}_$${e}_password)" \
 	  "$${NATS_HOST_PORT:-4322}" > $(SECRETS)/nats_runner_$${h}_$${e}_local_url); \
-	port=$$([ $$e = torch ] && echo 8091 || echo 8093); extra=$$([ $$e = torch ] && echo '--extra torch'); \
-	(cd runner_service && E=$$e H=$$h P=$$port X="$$extra" nohup sh -c 'echo $$$$ > .run/runner-$$H-$$E.pid; \
-	trap "kill \$$c; wait \$$c; exit 143" TERM INT; while :; do env \
-	  RUNNER_HOST=$$H RUNNER_ENV=$$E HEALTH_PORT=$$P NATS_URL_FILE=$(SECRETS)/nats_runner_$${H}_$${E}_local_url \
+	port=$$([ $$e = torch ] && echo $(HEALTH_PORT_torch) || echo $(HEALTH_PORT_native)); \
+	uvrun=$$([ $$e = torch ] && echo '$(UV_RUN_torch)' || echo '$(UV_RUN_native)'); \
+	env RUNNER_HOST=$$h RUNNER_ENV=$$e HEALTH_PORT=$$port NATS_URL_FILE=$(SECRETS)/nats_runner_$${h}_$${e}_local_url \
 	  S3_ENDPOINT=http://127.0.0.1:$${S3_HOST_PORT:-8433} S3_BUCKET=$${S3_BUCKET:-helmstudio} \
-	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_runner_$${H}_access_key_id \
-	  S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_runner_$${H}_secret_access_key HF_HUB_DISABLE_XET=1 \
+	  S3_ACCESS_KEY_ID_FILE=$(SECRETS)/s3_runner_$${h}_access_key_id \
+	  S3_SECRET_ACCESS_KEY_FILE=$(SECRETS)/s3_runner_$${h}_secret_access_key HF_HUB_DISABLE_XET=1 \
 	  HELMSTUDIO_MODELS=$${HELMSTUDIO_MODELS:-$$HOME/GenAI/models} CONTRACTS_DIR=$(CURDIR)/contracts \
-	  $(if $(SGLANG_BIN),SGLANG_BIN=$(SGLANG_BIN)) $(UV) run $$X python main.py & c=$$!; wait $$c; s=$$?; \
-	  [ $$s -eq 70 ] || [ $$s -eq 137 ] || exit $$s; echo "runner exited $$s: restarting"; sleep 2; done' \
-	  > .run/runner-$$h-$$e.log 2>&1 &); \
-	sleep 1; echo "runner $$e started ($$(cat $(RUN_DIR)/runner-$$h-$$e.pid)); log $(RUN_DIR)/runner-$$h-$$e.log"; done
+	  $(if $(SGLANG_BIN),SGLANG_BIN=$(SGLANG_BIN)) .tools/runner $$e runner-$$h-$$e $(UV) $$uvrun python main.py; done
 
 runners-nvidia-stop: ## stops the NVIDIA host runners (by their pid files)
 	@for f in $(RUN_DIR)/runner-$(GPU_HOST)-*.pid; do [ -f "$$f" ] || continue; pid=$$(cat $$f); \
