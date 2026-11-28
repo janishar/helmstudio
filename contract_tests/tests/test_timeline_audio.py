@@ -11,7 +11,7 @@ live env with ffmpeg: test_timeline's exports), Re-render of a line (rerender_st
 
 import pytest
 from conftest import headers, make_client
-from helpers import STUDIO, new_session, ok, start_run, take_of_run, wait_for, wait_run
+from helpers import STUDIO, check, new_session, ok, start_run, take_of_run, wait_for, wait_run
 from test_timeline import (
     TL,
     VIDEO,
@@ -28,7 +28,6 @@ from test_timeline import (
     video_inputs,
     wait_clip,
 )
-from test_user_workflows import check
 
 SPEAK, A2V = "echo-voice-over", "echo-a2v"
 ADA = "echo/ada"

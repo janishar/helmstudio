@@ -14,10 +14,12 @@ import struct
 
 import pytest
 from helpers import (
+    CONTRACTS,
     JOB_TIMEOUT,
     NO_SUCH_ID,
     STUDIO,
     all_takes,
+    check,
     new_session,
     ok,
     png_bytes,
@@ -29,7 +31,6 @@ from helpers import (
 )
 from test_batches import wait_batch
 from test_elements import element
-from test_user_workflows import CONTRACTS, check
 
 TL = f"{STUDIO}/timelines"
 FIXTURES = CONTRACTS / "fixtures" / "timelines"

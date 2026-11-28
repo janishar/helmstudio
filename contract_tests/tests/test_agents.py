@@ -12,7 +12,7 @@ import json
 
 import pytest
 from conftest import headers, make_client
-from helpers import NO_SUCH_ID, STUDIO, all_takes, ok, wait_for, wait_run
+from helpers import NO_SUCH_ID, STUDIO, all_takes, check, ok, wait_for, wait_run
 from test_batches import BATCHES, FINAL, finish, fresh, lines, rows_of, wait_batch, wait_rows
 from test_pipelines import (
     PIPELINE_FIXTURES,
@@ -28,7 +28,7 @@ from test_pipelines import (
     live_workflows,
     parked,
 )
-from test_user_workflows import WF, check, copy_echo, doc, keys, put
+from test_user_workflows import WF, copy_echo, doc, keys, put
 
 ASK = "echo-ask"
 FINAL_RUN = {"succeeded", "failed", "cancelled"}
@@ -52,12 +52,6 @@ def ask_live(api) -> dict:
     if r.status_code != 200:
         pytest.skip(f"the fake runner has no {ASK} workflow (before API 1.14)")
     return r.json()
-
-
-@pytest.fixture(scope="module")
-def palette(api) -> dict:
-    groups = ok(api.get(f"{STUDIO}/nodes"))["groups"]
-    return {n["kind"]: n for g in groups for n in g["nodes"]}
 
 
 # ---------------------------------------------------------------- scripts and documents

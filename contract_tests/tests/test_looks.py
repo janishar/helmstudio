@@ -15,9 +15,12 @@ import json
 import pytest
 from conftest import headers, make_client
 from helpers import (
+    CONTRACTS,
     NO_SUCH_ID,
     QUICK,
     STUDIO,
+    check,
+    detail,
     new_session,
     ok,
     png_bytes,
@@ -29,11 +32,10 @@ from helpers import (
     wait_run,
 )
 from test_batches import BATCHES, FAST, finish, lines, rows_of, submit, wait_batch
-from test_elements import LIB, PARAM, detail, element, made_with
+from test_elements import LIB, PARAM, element, made_with
 from test_loras import find_stack, fixture_file, row, stack_workflow, tag, uploaded
 from test_pipelines import batch_takes, create, echo_step, inputs_node
 from test_pipelines import submit as submit_pipeline
-from test_user_workflows import CONTRACTS, check
 
 STARTERS = json.loads((CONTRACTS / "fixtures" / "registry" / "looks.valid.json").read_text())[
     "looks"
