@@ -26,6 +26,8 @@ type Op struct {
 	Ripple  bool     `json:"ripple"` // 1.50: remove on an audio track ripples it
 	Name    *string  `json:"name"`   // 1.50: a marker's
 	Color   *string  `json:"color"`  // 1.50: a marker's
+	On      *bool    `json:"on"`     // 1.106: ducking's
+	DB      *float64 `json:"db"`     // 1.106: ducking's
 	Set     map[string]json.RawMessage
 }
 
@@ -490,6 +492,20 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 		}
 		d.Markers = slices.Delete(d.Markers, i, i+1)
 		return d, ""
+	case "ducking": // 1.106: the sequence's Duck music (absent fields kept; a sequence without it is off)
+		was := Ducking{DB: new(float64(DuckDB))}
+		if d.Ducking != nil {
+			was = *d.Ducking
+		}
+		now := Ducking{On: was.On, DB: new(was.Amount())}
+		if op.On != nil {
+			now.On = *op.On
+		}
+		if op.DB != nil {
+			now.DB = new(*op.DB)
+		}
+		d.Ducking = &now
+		return d, ""
 	}
 	var t *Track
 	i, at := -1, 0
@@ -688,6 +704,15 @@ func edit(doc Doc, op Op, takes map[string]Take) (Doc, string) {
 				c.Link = nil
 				if !null {
 					_ = json.Unmarshal(raw, &c.Link)
+				}
+			case "fade_in", "fade_out", "crossfade": // 1.106: 0 or null removes
+				p := map[string]**float64{"fade_in": &c.FadeIn, "fade_out": &c.FadeOut, "crossfade": &c.Crossfade}[key]
+				*p = nil
+				if !null {
+					_ = json.Unmarshal(raw, p)
+					if *p != nil && **p == 0 {
+						*p = nil
+					}
 				}
 			}
 		}

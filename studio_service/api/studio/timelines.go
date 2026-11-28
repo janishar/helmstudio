@@ -108,6 +108,8 @@ var problemText = map[string]string{
 	"too_many_markers": fmt.Sprintf("a sequence has at most %d markers", timeline.MaxMarkers),
 	"duplicate_marker": "its id is used twice",
 	"marker_past_end":  "it is after the sequence's end",
+	"fade_clip":        "an image, an empty slot or a line placeholder has no sound to fade", // 1.106
+	"crossfade_track":  "a crossfade goes on an audio track; V1 dissolves",
 }
 
 // problemsError maps the rules' problems to the 422.
@@ -216,6 +218,9 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 		if json.Unmarshal(row.Audio, &audio) == nil {
 			out.SampleRate = audio.SampleRate // API 1.32: the export plan's sounds
 		}
+		if row.Sound != nil { // 1.106: what ducking reads
+			out.Sound = *row.Sound
+		}
 	}
 	return out
 }
@@ -224,7 +229,7 @@ func ruleTake(row gallerymodel.Take) timeline.Take {
 func (s *Service) timelineTake(row gallerymodel.Take) dto.TimelineTake {
 	t := gallery.TakeDTO(s.signer, row)
 	out := dto.TimelineTake{ID: t.ID, Kind: t.Kind, Source: t.Source, Title: t.Title, URL: t.URL, ThumbURL: t.ThumbURL,
-		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio}
+		Width: t.Width, Height: t.Height, Video: t.Video, Audio: t.Audio, Sound: row.Sound}
 	if m := t.MadeWith; m != nil {
 		out.Seed, out.WorkflowID, out.WorkflowTitle, out.RenderS = m.Seed, &m.WorkflowID, &m.WorkflowTitle, m.RenderS
 	}
@@ -361,7 +366,7 @@ func (s *Service) timelineDTO(ctx context.Context, tx pgx.Tx, row timelineRow) (
 	}
 	out := dto.Timeline{ID: row.ID, Name: row.Name, SessionID: row.SessionID, Revision: row.Revision, Target: doc.Target,
 		TitleSource: row.TitleSource, NamedBy: row.NamedBy,
-		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Takes: map[string]dto.TimelineTake{},
+		Tracks: doc.Tracks, DurationS: doc.DurationS, Frames: doc.Frames, Markers: doc.Markers, Ducking: doc.Ducking, Takes: map[string]dto.TimelineTake{},
 		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt}
 	for id, take := range rows {
 		out.Takes[id] = s.timelineTake(take)
@@ -772,7 +777,7 @@ func (s *Service) UpdateTimeline(ctx context.Context, caller common.Caller, id s
 		if body.Revision != row.Revision {
 			return staleRevision(*row)
 		}
-		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks, Markers: body.Markers}, row.doc()
+		doc, previous := timeline.Doc{Target: *body.Target, Tracks: body.Tracks, Markers: body.Markers, Ducking: body.Ducking}, row.doc()
 		rules, _, err := loadTakes(ctx, tx, caller.ID, docTakeIDs(doc))
 		if err != nil {
 			return err

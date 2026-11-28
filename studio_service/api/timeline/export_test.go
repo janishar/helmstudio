@@ -55,6 +55,10 @@ func TestExportRuns(t *testing.T) {
 	}
 	export := func(doc Doc, wantMode string) {
 		t.Helper()
+		byKey := map[string]string{}
+		for take, key := range keys {
+			byKey[key] = take
+		}
 		job, err := BuildExport(doc, takes, keys, ExportPlan(doc, takes))
 		if err != nil || job.Mode != wantMode {
 			t.Fatalf("%v %s", err, job.Mode)
@@ -63,7 +67,7 @@ func TestExportRuns(t *testing.T) {
 		list := filepath.Join(dir, "list.txt")
 		var lines []string
 		for _, n := range job.Concat {
-			lines = append(lines, "file '"+files[map[string]string{"u/o/a.mp4": "A", "u/o/b.mp4": "B"}[job.Inputs[n].Key]]+"'")
+			lines = append(lines, "file '"+files[byKey[job.Inputs[n].Key]]+"'")
 		}
 		var args []string
 		for _, arg := range job.Args {
@@ -76,7 +80,7 @@ func TestExportRuns(t *testing.T) {
 				args = append(args, list)
 			case strings.HasPrefix(arg, "{in:"):
 				n, _ := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(arg, "{in:"), "}"))
-				args = append(args, files[map[string]string{"u/o/a.mp4": "A", "u/o/b.mp4": "B", "u/o/i.png": "I"}[job.Inputs[n].Key]])
+				args = append(args, files[byKey[job.Inputs[n].Key]])
 			default:
 				args = append(args, arg)
 			}
@@ -104,4 +108,38 @@ func TestExportRuns(t *testing.T) {
 		t.Fatal(probs)
 	}
 	export(*whole, "copy")
+	// 1.106: a V1 fade in and out, a crossfade that blends, one that dips, a fade out and ducking (music under a line)
+	wav := func(name string, freq int) string {
+		path := filepath.Join(dir, name)
+		run("-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "sine=f="+strconv.Itoa(freq)+":d=2:r=48000", path)
+		return path
+	}
+	files["M"], files["O"] = wav("m.wav", 220), wav("o.wav", 880)
+	takes["M"] = Take{Kind: "audio", DurationS: 2, HasAudio: true, Sound: "music"}
+	takes["O"] = Take{Kind: "audio", DurationS: 2, HasAudio: true, Sound: "voice"}
+	keys["M"], keys["O"] = "u/o/m.wav", "u/o/o.wav"
+	faded, probs := Normalize(Doc{Target: written.Target, Ducking: &Ducking{On: true, DB: new(-12.0)}, Tracks: []Track{
+		{Kind: "video", Clips: []Clip{{ID: "a", TakeID: id("A"), FadeIn: new(0.25), FadeOut: new(0.5)}}},
+		{Kind: "audio", Clips: []Clip{
+			{ID: "m1", TakeID: id("M"), In: new(0.0), Out: new(0.5), At: new(0.0), FadeIn: new(0.125), Crossfade: new(0.25)},
+			{ID: "m2", TakeID: id("M"), In: new(1.5), Out: new(2.0), At: new(0.5), Crossfade: new(0.25)}, // no sound past: a dip
+			{ID: "m3", TakeID: id("M"), In: new(0.0), Out: new(0.5), At: new(1.0), FadeOut: new(0.25)}}},
+		{Kind: "audio", Clips: []Clip{{ID: "vo", TakeID: id("O"), In: new(0.0), Out: new(0.5), At: new(0.75)}}}}}, takes, nil)
+	if probs != nil {
+		t.Fatal(probs)
+	}
+	if dips := Dips(*faded, takes); len(dips) != 1 || !strings.HasPrefix(dips[0], "crossfade_dip: m2 ") {
+		t.Fatal(dips)
+	}
+	job, _ := BuildExport(*faded, takes, keys, ExportPlan(*faded, takes))
+	graph := strings.Join(job.Args, " ")
+	for _, want := range []string{"afade=t=in:st=0:d=0.25:curve=tri", "afade=t=out:st=1.5:d=0.5:curve=tri",
+		"atrim=start=0:end=0.75", "afade=t=out:st=0.5:d=0.25:curve=tri", // m1 blends: 0.25 past its out, faded over it
+		"afade=t=out:st=0.375:d=0.125:curve=tri", // m2 dips: its last half
+		"volume=eval=frame:volume='pow(10,-12*clip(min((t-(0.45))/0.3,(1.55-t)/0.3),0,1)/20)'"} {
+		if !strings.Contains(graph, want) {
+			t.Errorf("the graph has no %s:\n%s", want, graph)
+		}
+	}
+	export(*faded, "copy")
 }

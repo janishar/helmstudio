@@ -141,6 +141,9 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 		input             int
 		start, end, at    float64
 		gain, fadeIn, out float64
+		// 1.106: its own fades in chain seconds ([inSt, inSt+inD), [outSt, outSt+outD)) and whether music ducks
+		inSt, inD, outSt, outD float64
+		music                  bool
 	}
 	var sounds []sound
 	for i, c := range v1.Clips {
@@ -164,6 +167,10 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 					s.fadeIn = g.S(c.TransitionIn.Frames)
 					s.at -= g.S(c.TransitionIn.Frames / 2)
 				}
+				// 1.106: its own fades from its own start and to its own end (a dissolve's handle lies outside them)
+				head, ln := *c.At-s.at, g.S(Len(c, kind, g, false))
+				s.inSt, s.inD = head, val(c.FadeIn)
+				s.outSt, s.outD = head+ln-val(c.FadeOut), val(c.FadeOut)
 				sounds = append(sounds, s)
 			}
 			next++
@@ -173,13 +180,38 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 		chains = append(chains, strings.Join(steps, ",")+"["+label+"]")
 		vlabels = append(vlabels, label)
 	}
-	for _, t := range doc.Tracks[1:] {
+	duck, voice := Duck(doc, takes)
+	for ti := 1; ti < len(doc.Tracks); ti++ {
+		t := doc.Tracks[ti]
 		for _, c := range t.Clips {
 			if c.Take() == "" || c.Offline || *c.Mute || *t.Mute { // a line placeholder reads nothing
 				continue
 			}
 			args = append(args, "-i", in(index[c.Take()]))
-			sounds = append(sounds, sound{input: next, start: *c.In, end: *c.Out, at: *c.At, gain: *t.GainDB + *c.GainDB})
+			s := sound{input: next, start: *c.In, end: *c.Out, at: *c.At, gain: *t.GainDB + *c.GainDB,
+				music: duck != nil && takes[c.Take()].Sound == "music"}
+			length := *c.Out - *c.In
+			// 1.106: a crossfade's sides in place of the clip's own fades (a blend plays d past out, faded out over it;
+			// a dip fades each side over d/2); the two overlap in the amix, each placed on its own
+			switch prev := into(doc, ti, c, takes); {
+			case prev != nil && prev.Blend:
+				s.inD = g.S(prev.Frames)
+			case prev != nil:
+				s.inD = g.S(prev.Frames) / 2
+			default:
+				s.inD = val(c.FadeIn)
+			}
+			switch x := Xfade(doc, c, takes); {
+			case x != nil && x.Blend:
+				d := g.S(x.Frames)
+				s.end += d
+				s.outSt, s.outD = length, d
+			case x != nil:
+				s.outSt, s.outD = length-g.S(x.Frames)/2, g.S(x.Frames)/2
+			default:
+				s.outSt, s.outD = length-val(c.FadeOut), val(c.FadeOut)
+			}
+			sounds = append(sounds, s)
 			next++
 		}
 	}
@@ -212,8 +244,12 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 		steps := []string{fmt.Sprintf("atrim=start=%s:end=%s", secs(s.start), secs(s.end)), "asetpts=N/SR/TB",
 			fmt.Sprintf("aresample=%d:async=1:first_pts=0", tg.SampleRate), "aformat=sample_fmts=fltp:channel_layouts=stereo",
 			"apad", "atrim=duration=" + secs(length)}
-		if s.gain != 0 {
-			steps = append(steps, "volume="+secs(s.gain)+"dB")
+		// order (1.106): its own fades, a dissolve's fades, gain, then (placed) ducking
+		if s.inD > 0 {
+			steps = append(steps, fmt.Sprintf("afade=t=in:st=%s:d=%s:curve=tri", secs(s.inSt), secs(s.inD)))
+		}
+		if s.outD > 0 {
+			steps = append(steps, fmt.Sprintf("afade=t=out:st=%s:d=%s:curve=tri", secs(s.outSt), secs(s.outD)))
 		}
 		if s.out > 0 {
 			steps = append(steps, fmt.Sprintf("afade=t=out:st=%s:d=%s:curve=tri", secs(length-s.out), secs(s.out)))
@@ -221,13 +257,23 @@ func buildArgs(doc Doc, takes map[string]Take, index map[string]int, g Grid, cop
 		if s.fadeIn > 0 {
 			steps = append(steps, fmt.Sprintf("afade=t=in:st=0:d=%s:curve=tri", secs(s.fadeIn)))
 		}
+		if s.gain != 0 {
+			steps = append(steps, "volume="+secs(s.gain)+"dB")
+		}
 		steps = append(steps, "asetpts=N/SR/TB")
 		chains = append(chains, fmt.Sprintf("[%d:a:0]%s[%sb]", s.input, strings.Join(steps, ","), label))
+		placed := label
+		if s.music && len(voice) > 0 {
+			placed = label + "u"
+		}
 		if s.at > 0 {
 			chains = append(chains, fmt.Sprintf("%s,atrim=duration=%s,asetpts=N/SR/TB[%sp]", silence, secs(s.at), label),
-				fmt.Sprintf("[%sp][%sb]concat=n=2:v=0:a=1[%s]", label, label, label))
+				fmt.Sprintf("[%sp][%sb]concat=n=2:v=0:a=1[%s]", label, label, placed))
 		} else {
-			chains = append(chains, fmt.Sprintf("[%sb]anull[%s]", label, label))
+			chains = append(chains, fmt.Sprintf("[%sb]anull[%s]", label, placed))
+		}
+		if placed != label { // 1.106: ducking, a volume automation in sequence seconds
+			chains = append(chains, fmt.Sprintf("[%s]volume=eval=frame:volume='%s'[%s]", placed, duckExpr(*duck, voice), label))
 		}
 		alabels = append(alabels, label)
 	}
@@ -274,6 +320,21 @@ func pictureSteps(tg Target, rate string, stream *Stream) []string {
 		"settb=AVTB",
 		// the frames carry their colour: videotoolbox writes its own VUI and drops primaries and transfer
 		"setparams=range=tv:color_primaries=bt709:color_trc=bt709:colorspace=bt709"}
+}
+
+// duckExpr is ducking's volume expression over the voice spans (1.106): pow(10, db × e(t) / 20), e the largest of
+// each span's eased ramp.
+func duckExpr(db float64, spans [][2]float64) string {
+	e := ""
+	for i, sp := range spans {
+		ramp := fmt.Sprintf("clip(min((t-(%s))/%s,(%s-t)/%s),0,1)", secs(sp[0]-DuckEase), secs(DuckEase), secs(sp[1]+DuckEase), secs(DuckEase))
+		if i == 0 {
+			e = ramp
+		} else {
+			e = "max(" + e + "," + ramp + ")"
+		}
+	}
+	return fmt.Sprintf("pow(10,%s*%s/20)", secs(db), e)
 }
 
 func in(n int) string { return "{in:" + strconv.Itoa(n) + "}" }

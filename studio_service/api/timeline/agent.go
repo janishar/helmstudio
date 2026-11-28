@@ -17,7 +17,8 @@ type Diff struct {
 	Changed  []Change   `json:"changed"`
 	Tracks   TrackDiff  `json:"tracks"`
 	Duration [2]float64 `json:"duration"`
-	Markers  TrackDiff  `json:"markers"` // 1.50: markers by id (changed: at, name, color)
+	Markers  TrackDiff  `json:"markers"`           // 1.50: markers by id (changed: at, name, color)
+	Ducking  []*Ducking `json:"ducking,omitempty"` // 1.106: [before, after], only when it changed
 }
 
 // Change is one clip's, track's or (1.50) marker's changed fields, each [before, after] (absent = null).
@@ -36,7 +37,7 @@ type TrackDiff struct {
 }
 
 var diffFields = []string{"take_id", "in", "out", "hold", "at", "gain_db", "mute", "transition_in", "alternatives",
-	"shot", "offline", "track", "link"} // link: 1.50
+	"shot", "offline", "track", "link", "fade_in", "fade_out", "crossfade"} // link: 1.50; the fades: 1.106
 
 // fieldsOf is v as JSON fields (numbers as float64, as the reference compares them).
 func fieldsOf(v any) map[string]any {
@@ -127,6 +128,9 @@ func DiffDocs(before, after Doc) Diff {
 			out.Markers.Removed = append(out.Markers.Removed, m.ID)
 		}
 	}
+	if !reflect.DeepEqual(fieldsOf(before)["ducking"], fieldsOf(after)["ducking"]) {
+		out.Ducking = []*Ducking{before.Ducking, after.Ducking}
+	}
 	return out
 }
 
@@ -154,6 +158,12 @@ type AgentClip struct {
 	Number       *int     `json:"number"`
 	Offline      bool     `json:"offline"`
 	Link         *string  `json:"link"` // 1.50
+	// 1.106: a clip's fades and Crossfade into next (with how it plays), an audio take's class
+	FadeIn        *float64 `json:"fade_in,omitempty"`
+	FadeOut       *float64 `json:"fade_out,omitempty"`
+	Crossfade     *float64 `json:"crossfade,omitempty"`
+	CrossfadeMode string   `json:"crossfade_mode,omitempty"`
+	Sound         string   `json:"sound,omitempty"`
 }
 
 // AgentMarker is one marker of the agent view (1.50).
@@ -181,15 +191,16 @@ type AgentView struct {
 	Frames    int                 `json:"frames"`
 	Tracks    []AgentTrack        `json:"tracks"`
 	Clips     []AgentClip         `json:"clips"`
-	Links     map[string][]string `json:"links"`   // 1.50: each V1 clip's linked sound clips, in track order
-	Markers   []AgentMarker       `json:"markers"` // 1.50
+	Links     map[string][]string `json:"links"`             // 1.50: each V1 clip's linked sound clips, in track order
+	Markers   []AgentMarker       `json:"markers"`           // 1.50
+	Ducking   *Ducking            `json:"ducking,omitempty"` // 1.106: when the sequence has it
 }
 
 // Agent is t_agent_view(doc, takes).
 func Agent(doc Doc, takes map[string]Take) AgentView {
 	g := NewGrid(doc.Target)
 	out := AgentView{Target: doc.Target, DurationS: doc.DurationS, Frames: doc.Frames, Tracks: []AgentTrack{}, Clips: []AgentClip{},
-		Links: map[string][]string{}, Markers: []AgentMarker{}}
+		Links: map[string][]string{}, Markers: []AgentMarker{}, Ducking: doc.Ducking}
 	for ti, t := range doc.Tracks {
 		out.Tracks = append(out.Tracks, AgentTrack{Name: t.Name, Kind: t.Kind, GainDB: val(t.GainDB), Mute: t.Mute != nil && *t.Mute,
 			Clips: len(t.Clips)})
@@ -216,6 +227,13 @@ func Agent(doc Doc, takes map[string]Take) AgentView {
 			}
 			if c.Number > 0 {
 				ac.Number = &c.Number
+			}
+			ac.FadeIn, ac.FadeOut, ac.Crossfade = c.FadeIn, c.FadeOut, c.Crossfade // 1.106
+			if x := Xfade(doc, c, takes); ti > 0 && x != nil {
+				ac.CrossfadeMode = x.Mode()
+			}
+			if ti > 0 && kind == "audio" {
+				ac.Sound = takes[c.Take()].Sound
 			}
 			out.Clips = append(out.Clips, ac)
 		}

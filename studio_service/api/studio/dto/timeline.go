@@ -142,6 +142,7 @@ type TimelineUpdate struct {
 	Target   *timeline.Target  `json:"target"`
 	Tracks   []timeline.Track  `json:"tracks"`
 	Markers  []timeline.Marker `json:"markers"` // 1.50: the whole list (absent = none)
+	Ducking  *timeline.Ducking `json:"ducking"` // 1.106: absent = off
 }
 
 // Validate checks the schema's shapes; the timeline rules are the service's.
@@ -174,6 +175,9 @@ func (b *TimelineUpdate) Validate() string {
 			}
 		}
 	}
+	if detail := CheckDucking(b.Ducking); detail != "" {
+		return "ducking" + detail
+	}
 	for mi, m := range b.Markers { // 1.50; at most 200 is the rules' (too_many_markers)
 		at := fmt.Sprintf("markers[%d]", mi)
 		switch {
@@ -186,6 +190,17 @@ func (b *TimelineUpdate) Validate() string {
 		case m.Color != nil && !slices.Contains(MarkerColors, *m.Color):
 			return at + ".color must be one of " + strings.Join(MarkerColors, ", ")
 		}
+	}
+	return ""
+}
+
+// fade is a fade's range (1.106): absent, or 0 to 10 seconds.
+func fade(p *float64) bool { return p == nil || (*p >= 0 && *p <= 10) }
+
+// CheckDucking checks a Ducking's range (1.106): db -24 to -3; the detail starts with the field.
+func CheckDucking(k *timeline.Ducking) string {
+	if k != nil && k.DB != nil && (*k.DB < -24 || *k.DB > -3) {
+		return ".db must be from -24 to -3"
 	}
 	return ""
 }
@@ -209,6 +224,10 @@ func checkClip(c timeline.Clip) string {
 		return ".transition_in must be a dissolve of an even 2 to 240 frames"
 	case len(c.Alternatives) > 32:
 		return ".alternatives: at most 32 items"
+	case !fade(c.FadeIn) || !fade(c.FadeOut): // 1.106
+		return ".fade_in and fade_out must be seconds from 0 to 10"
+	case c.Crossfade != nil && (*c.Crossfade <= 0 || *c.Crossfade > 10):
+		return ".crossfade must be more than 0 and at most 10 seconds"
 	}
 	seen := map[string]bool{}
 	for _, a := range c.Alternatives {
@@ -458,6 +477,7 @@ type TimelineTake struct {
 	WorkflowID    *string               `json:"workflow_id"`
 	WorkflowTitle *string               `json:"workflow_title"`
 	RenderS       *float64              `json:"render_s,omitempty"` // API 1.60: made_with.render_s
+	Sound         *string               `json:"sound,omitempty"`    // 1.106, an audio take: its class (ducking)
 }
 
 // TimelineProblem is one broken rule.
@@ -479,6 +499,7 @@ type Timeline struct {
 	DurationS float64                 `json:"duration_s"`
 	Frames    int                     `json:"frames"`
 	Markers   []timeline.Marker       `json:"markers,omitempty"` // 1.50
+	Ducking   *timeline.Ducking       `json:"ducking,omitempty"` // 1.106
 	Defaults  TimelineDefaults        `json:"defaults"`
 	CanUndo   bool                    `json:"can_undo"`
 	CanRedo   bool                    `json:"can_redo"`

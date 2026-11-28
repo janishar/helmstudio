@@ -23,6 +23,7 @@ T_MAGNET_PX = 6  # an edge lands on a cut within this many screen pixels
 T_IMAGE_HOLD_S = 3.0  # an image take added to V1 holds this long
 T_MAX_AUDIO_TRACKS, T_MAX_CLIPS, T_MAX_BYTES, T_MAX_ALTERNATIVES, T_MAX_RERENDER = 8, 1000, 262144, 32, 22
 T_MAX_MARKERS = 200  # 1.50: markers on a sequence
+T_DUCK_DB, T_DUCK_EASE = -12, 0.3  # 1.106: ducking's default amount and the ease each side of a voice span (s)
 # an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read (cmd.media.job, runner)
 T_MAX_EXPORT_S, T_MAX_EXPORT_BYTES, T_MAX_EXPORT_INPUTS = 7200, 16 << 30, 32 << 30
 
@@ -165,6 +166,15 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
                     n["transition_in"] = c["transition_in"]
                 else:
                     add("dissolve_track", name, cid)
+            for k in ("fade_in", "fade_out", "crossfade"):  # 1.106: on a clip with sound; a crossfade off V1
+                if not c.get(k):
+                    continue
+                if k == "crossfade" and video:
+                    add("crossfade_track", name, cid)
+                elif kind not in ("video", "audio"):
+                    add("fade_clip", name, cid)
+                else:
+                    n[k] = c[k]
             alts = list(dict.fromkeys(c.get("alternatives", []) + [tid] * bool(tid)))
             while len(alts) > T_MAX_ALTERNATIVES:  # the oldest that is not the current one goes
                 alts.remove(next(a for a in alts if a != tid))
@@ -181,6 +191,7 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
             for n, kind in clips:
                 n["at"] = g.s(pos)
                 pos += t_len(n, kind, g)
+                t_fades(n, t_len(n, kind, g), g)
             din = [n.get("transition_in", {}).get("frames", 0) for n, _ in clips] + [0]
             for k, (n, kind) in enumerate(clips):
                 d = din[k]
@@ -206,6 +217,16 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
                     add("overlap", name, n["id"])
                 prev_end = max(e, prev_end or 0)
                 ends.append((name, n["id"], e))
+            for n, _ in clips:  # 1.106: fades clamped; a crossfade into the clip on its end frame, else dropped
+                ln = t_len(n, "video", g, audio=True)
+                t_fades(n, ln, g)
+                if "crossfade" in n:
+                    nx = next((m for m, _ in clips if m is not n and g.f(m["at"]) == g.f(n["at"]) + ln), None)
+                    d = min(g.f(n["crossfade"]), ln, t_len(nx, "video", g, audio=True)) if nx else 0
+                    if d > 0:
+                        n["crossfade"] = g.s(d)
+                    else:
+                        del n["crossfade"]
         out.append({"name": name, "kind": t["kind"], "gain_db": t.get("gain_db", 0), "mute": t.get("mute", False),
                     "clips": [n for n, _ in clips]})
     v1 = out[0]["clips"]
@@ -229,9 +250,23 @@ def t_normalize(doc: dict, takes: dict, previous: dict | None = None) -> tuple[d
     if probs:
         return None, sorted(probs, key=lambda p: (p[0], p[1] or "", p[2] or ""))
     res = {"target": doc["target"], "tracks": out, "duration_s": g.s(frames), "frames": frames}
+    if "ducking" in doc:  # 1.106
+        res["ducking"] = doc["ducking"]
     if marks:
         res["markers"] = sorted(marks, key=lambda m: (m["at"], m["id"]))
     return res, []
+
+
+def t_fades(n: dict, ln: int, g: Grid) -> None:
+    """1.106: a clip's fades snapped to frames and clamped (fade_in ≤ its length ln, fade_out ≤ ln − fade_in); 0 is
+    absent (README, Audio fades, crossfades and ducking)."""
+    fi = min(g.f(n.get("fade_in", 0)), ln)
+    fo = min(g.f(n.get("fade_out", 0)), ln - fi)
+    for k, v in (("fade_in", fi), ("fade_out", fo)):
+        if v > 0:
+            n[k] = g.s(v)
+        else:
+            n.pop(k, None)
 
 
 T_ALL_TRACKS = ("split_all", "remove_range", "lift_range")  # 1.50: ops that cut every track themselves
@@ -490,6 +525,10 @@ def t_edit_op(doc: dict, op: dict, takes: dict) -> dict | str:
             return "unknown_marker"
         d["markers"] = [m for m in d["markers"] if m["id"] != op["id"]]
         return d
+    if o == "ducking":  # 1.106: the sequence's Duck music (absent fields kept; a sequence without it is off)
+        was = d.get("ducking") or {"on": False, "db": T_DUCK_DB}
+        d["ducking"] = {"on": op.get("on", was["on"]), "db": op.get("db", was.get("db", T_DUCK_DB))}
+        return d
     t, i = find(op["clip"])
     c, kind, on_v1 = t["clips"][i], t_kind(t["clips"][i], takes), t is d["tracks"][0]
     if o == "move":
@@ -595,9 +634,9 @@ def t_edit_op(doc: dict, op: dict, takes: dict) -> dict | str:
             c["in"], c["out"] = g.s(i_), g.s(min(i_ + ln, src))
         c["take_id"] = op["take_id"]
     elif o == "set":
-        for k in ("gain_db", "mute", "hold", "transition_in", "link"):  # link: 1.50
-            if k in op:
-                if op[k] is None:
+        for k in ("gain_db", "mute", "hold", "transition_in", "link", "fade_in", "fade_out", "crossfade"):
+            if k in op:  # link: 1.50; the fades and crossfade: 1.106 (0 removes them too)
+                if op[k] is None or (op[k] == 0 and "fade" in k):
                     c.pop(k, None)
                 else:
                     c[k] = op[k]
@@ -839,19 +878,94 @@ def frame_at(doc: dict, f: int, takes: dict) -> dict:
         pics.append(pic)
         if kind == "video" and takes[c["take_id"]]["has_audio"] and not c["mute"] and not v1t["mute"]:
             sounds.append({"clip": c["id"], "t": src, "gain_db": v1t["gain_db"] + c["gain_db"],
-                           "fade": mix_in if mix_in < 1 else 1 - mix_out})
+                           "fade": (mix_in if mix_in < 1 else 1 - mix_out) * t_ramp(f, a, a + ln, c, g)})
+    duck = t_duck(doc, takes)
     for t in doc["tracks"][1:]:
         for c in t["clips"]:
+            if not c.get("take_id") or c.get("offline") or c["mute"] or t["mute"]:
+                continue
             a = g.f(c["at"])
-            if c.get("take_id") and a <= f < a + t_len(c, "video", g, audio=True) and not c.get("offline") \
-                    and not c["mute"] and not t["mute"]:
-                sounds.append({"clip": c["id"], "t": c["in"] + g.s(f - a), "gain_db": t["gain_db"] + c["gain_db"],
-                               "fade": 1})
+            end = a + t_len(c, "video", g, audio=True)
+            x, prev = t_xfade(doc, c, takes), t_into(doc, t, c, takes)
+            if not a <= f < (end + x[0] if x and x[1] == "blend" else end):
+                continue
+            fade = 1
+            if prev:  # 1.106: the incoming side of a crossfade (its own fade in does not play)
+                h = prev[0] if prev[1] == "blend" else prev[0] / 2
+                if f < a + h:
+                    fade = (f - a) / h
+            else:
+                fade = t_ramp(f, a, end, {"fade_in": c.get("fade_in")}, g)
+            if x and x[1] == "blend":  # the outgoing side plays on past its end (its own fade out does not play)
+                if f >= end:
+                    fade *= (end + x[0] - f) / x[0]
+            elif x:
+                if f >= end - x[0] / 2:
+                    fade *= (end - f) / (x[0] / 2)
+            else:
+                fade *= t_ramp(f, a, end, {"fade_out": c.get("fade_out")}, g)
+            if duck and takes[c["take_id"]].get("sound") == "music":
+                fade *= 10 ** (duck[0] * t_envelope(g.s(f), duck[1]) / 20)
+            sounds.append({"clip": c["id"], "t": c["in"] + g.s(f - a) if f < end else c["out"] + g.s(f - end),
+                           "gain_db": t["gain_db"] + c["gain_db"], "fade": fade})
     return {"pictures": pics, "sounds": sounds}
 
 
+def t_ramp(f: int, a: int, end: int, c: dict, g: Grid) -> float:
+    """1.106: a clip's own fade in and out at frame f over [a, end), linear in amplitude, never below 0 (a dissolve's
+    handle before a or after end is silent under a fade)."""
+    fi, fo, k = g.f(c.get("fade_in") or 0), g.f(c.get("fade_out") or 0), 1
+    if fi and f < a + fi:
+        k *= max(0, (f - a) / fi)
+    if fo and f >= end - fo:
+        k *= max(0, (end - f) / fo)
+    return k
+
+
+def t_xfade(doc: dict, c: dict, takes: dict) -> tuple | None:
+    """1.106: an audio-track clip's Crossfade into next as (frames, blend | dip): a blend when its take has that much
+    sound past `out`, in samples (an offline take dips); None without one."""
+    if not c.get("crossfade") or not c.get("take_id") or "hold" in c:
+        return None
+    g, tk = Grid(doc["target"]), None if c.get("offline") else takes.get(c["take_id"])
+    blend = bool(tk and tk.get("duration_s")) and g.smp(c["out"]) + g.smp(c["crossfade"]) <= g.smp(tk["duration_s"])
+    return g.f(c["crossfade"]), "blend" if blend else "dip"
+
+
+def t_into(doc: dict, t: dict, c: dict, takes: dict) -> tuple | None:
+    """1.106: the crossfade of the clip on track t that ends on c's start frame, if it has one."""
+    g = Grid(doc["target"])
+    p = next((x for x in t["clips"] if x is not c and x.get("crossfade")
+              and g.f(x["at"]) + t_len(x, "video", g, audio=True) == g.f(c["at"])), None)
+    return t_xfade(doc, p, takes) if p else None
+
+
+def t_envelope(t: float, spans: list) -> float:
+    """1.106: the duck envelope at t (seconds) over the voice spans [a, b): 1 inside, 0 away, linear over the ease."""
+    e = 0
+    for a, b in spans:
+        e = max(e, min(1, max(0, min((t - (a - T_DUCK_EASE)) / T_DUCK_EASE, (b + T_DUCK_EASE - t) / T_DUCK_EASE))))
+    return e
+
+
+def t_duck(doc: dict, takes: dict) -> tuple | None:
+    """1.106: the sequence's ducking when on: (db, the voice clips' sounding spans in seconds, a blend's tail in), else
+    None. A voice clip is an audio-track clip whose take's class is voice, not muted (clip or track), not offline."""
+    if not doc.get("ducking", {}).get("on"):
+        return None
+    g, spans = Grid(doc["target"]), []
+    for t in doc["tracks"][1:]:
+        for c in t["clips"]:
+            if t["mute"] or c["mute"] or c.get("offline") or not c.get("take_id") \
+                    or takes.get(c["take_id"], {}).get("sound") != "voice":
+                continue
+            x, a = t_xfade(doc, c, takes), g.f(c["at"])
+            spans.append([g.s(a), g.s(a + t_len(c, "video", g, audio=True) + (x[0] if x and x[1] == "blend" else 0))])
+    return doc["ducking"].get("db", T_DUCK_DB), spans
+
+
 DIFF_FIELDS = ("take_id", "in", "out", "hold", "at", "gain_db", "mute", "transition_in", "alternatives", "shot",
-               "offline", "track", "link")  # link: 1.50
+               "offline", "track", "link", "fade_in", "fade_out", "crossfade")  # link: 1.50; fades: 1.106
 
 
 def t_diff(before: dict, after: dict) -> dict:
@@ -871,10 +985,13 @@ def t_diff(before: dict, after: dict) -> dict:
     for n, t in tb.items():
         if n in ta and (f := {k: [ta[n].get(k), t.get(k)] for k in ("gain_db", "mute") if ta[n].get(k) != t.get(k)}):
             tchanged.append({"track": n, "fields": f})
-    return {"added": [i for i in b if i not in a], "removed": [i for i in a if i not in b], "changed": changed,
-            "tracks": {"added": [n for n in tb if n not in ta], "removed": [n for n in ta if n not in tb],
-                       "changed": tchanged},
-            "duration": [before["duration_s"], after["duration_s"]], "markers": t_diff_markers(before, after)}
+    out = {"added": [i for i in b if i not in a], "removed": [i for i in a if i not in b], "changed": changed,
+           "tracks": {"added": [n for n in tb if n not in ta], "removed": [n for n in ta if n not in tb],
+                      "changed": tchanged},
+           "duration": [before["duration_s"], after["duration_s"]], "markers": t_diff_markers(before, after)}
+    if before.get("ducking") != after.get("ducking"):  # 1.106: only when it changed
+        out["ducking"] = [before.get("ducking"), after.get("ducking")]
+    return out
 
 
 def t_diff_markers(before: dict, after: dict) -> dict:
@@ -904,15 +1021,23 @@ def t_agent_view(doc: dict, takes: dict) -> dict:
                           "at_f": a, "end_f": a + ln, "length_f": ln, "gain_db": c["gain_db"], "mute": c["mute"],
                           "transition_in": c.get("transition_in", {}).get("frames"),
                           "alternatives": c.get("alternatives", []), "shot": c.get("shot"),
-                          "number": c.get("number"), "offline": c.get("offline", False), "link": c.get("link")})
+                          "number": c.get("number"), "offline": c.get("offline", False), "link": c.get("link")}
+                         | {k: c[k] for k in ("fade_in", "fade_out", "crossfade") if k in c})  # 1.106
+            if ti and (x := t_xfade(doc, c, takes)):
+                clips[-1]["crossfade_mode"] = x[1]
+            if ti and kind == "audio" and (snd := takes.get(c["take_id"], {}).get("sound")):
+                clips[-1]["sound"] = snd
     links = {}  # 1.50: each V1 clip's linked sound clips, in track order
     for c in clips:
         if c["link"]:
             links.setdefault(c["link"], []).append(c["id"])
     marks = [{"id": m["id"], "at": m["at"], "at_f": g.f(m["at"]), "name": m.get("name"), "color": m.get("color")}
              for m in doc.get("markers", [])]
-    return {"target": doc["target"], "duration_s": doc["duration_s"], "frames": doc["frames"], "tracks": tracks,
-            "clips": clips, "links": links, "markers": marks}
+    out = {"target": doc["target"], "duration_s": doc["duration_s"], "frames": doc["frames"], "tracks": tracks,
+           "clips": clips, "links": links, "markers": marks}
+    if "ducking" in doc:  # 1.106
+        out["ducking"] = doc["ducking"]
+    return out
 
 
 def frame_at_time(doc: dict, t: float, takes: dict) -> dict:

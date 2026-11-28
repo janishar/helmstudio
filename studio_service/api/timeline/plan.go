@@ -118,19 +118,161 @@ func FrameAt(doc Doc, f int, takes map[string]Take) Frame {
 			if mixIn < 1 {
 				fade = mixIn
 			}
+			fade *= ramp(f, a, a+ln, c.FadeIn, c.FadeOut, g)
 			out.Sounds = append(out.Sounds, Sound{Clip: c.ID, T: *src, GainDB: *v1t.GainDB + *c.GainDB, Fade: fade})
 		}
 	}
-	for _, t := range doc.Tracks[1:] {
+	duck, spans := Duck(doc, takes)
+	for ti := 1; ti < len(doc.Tracks); ti++ {
+		t := doc.Tracks[ti]
 		for _, c := range t.Clips {
+			if c.Take() == "" || c.Offline || *c.Mute || *t.Mute {
+				continue
+			}
 			a := g.F(val(c.At))
-			if c.Take() != "" && a <= f && f < a+Len(c, "video", g, true) && !c.Offline && !*c.Mute && !*t.Mute {
-				out.Sounds = append(out.Sounds, Sound{Clip: c.ID, T: val(c.In) + g.S(f-a), GainDB: *t.GainDB + *c.GainDB, Fade: 1})
+			end := a + Len(c, "video", g, true)
+			x, prev := Xfade(doc, c, takes), into(doc, ti, c, takes)
+			stop := end
+			if x != nil && x.Blend {
+				stop += x.Frames
+			}
+			if f < a || f >= stop {
+				continue
+			}
+			fade := 1.0
+			if prev != nil { // 1.106: the incoming side of a crossfade (its own fade in does not play)
+				h := float64(prev.Frames)
+				if !prev.Blend {
+					h /= 2
+				}
+				if float64(f) < float64(a)+h {
+					fade = float64(f-a) / h
+				}
+			} else {
+				fade = ramp(f, a, end, c.FadeIn, nil, g)
+			}
+			switch { // the outgoing side (its own fade out does not play)
+			case x != nil && x.Blend:
+				if f >= end {
+					fade *= float64(end+x.Frames-f) / float64(x.Frames)
+				}
+			case x != nil:
+				if h := float64(x.Frames) / 2; float64(f) >= float64(end)-h {
+					fade *= float64(end-f) / h
+				}
+			default:
+				fade *= ramp(f, a, end, nil, c.FadeOut, g)
+			}
+			if duck != nil && takes[c.Take()].Sound == "music" {
+				fade *= math.Pow(10, *duck*Envelope(g.S(f), spans)/20)
+			}
+			src := val(c.In) + g.S(f-a)
+			if f >= end {
+				src = val(c.Out) + g.S(f-end)
+			}
+			out.Sounds = append(out.Sounds, Sound{Clip: c.ID, T: src, GainDB: *t.GainDB + *c.GainDB, Fade: fade})
+		}
+	}
+	return out
+}
+
+// ramp is a clip's own fade in and out at frame f over [a, end) (1.106), linear in amplitude, never below 0.
+func ramp(f, a, end int, fadeIn, fadeOut *float64, g Grid) float64 {
+	fi, fo, k := g.F(val(fadeIn)), g.F(val(fadeOut)), 1.0
+	if fi > 0 && f < a+fi {
+		k *= max(0, float64(f-a)/float64(fi))
+	}
+	if fo > 0 && f >= end-fo {
+		k *= max(0, float64(end-f)/float64(fo))
+	}
+	return k
+}
+
+// Crossfade is an audio-track clip's Crossfade into next (1.106): its frames, and whether it blends (its take has that
+// much sound past out, in samples) or dips.
+type Crossfade struct {
+	Frames int
+	Blend  bool
+}
+
+// Mode is blend or dip.
+func (x Crossfade) Mode() string {
+	if x.Blend {
+		return "blend"
+	}
+	return "dip"
+}
+
+// Xfade is c's Crossfade into next, nil without one (an offline take dips).
+func Xfade(doc Doc, c Clip, takes map[string]Take) *Crossfade {
+	if c.Crossfade == nil || *c.Crossfade == 0 || c.Take() == "" || c.Hold != nil {
+		return nil
+	}
+	g := NewGrid(doc.Target)
+	tk, ok := takes[c.Take()]
+	blend := ok && !c.Offline && tk.DurationS > 0 && g.Smp(val(c.Out))+g.Smp(*c.Crossfade) <= g.Smp(tk.DurationS)
+	return &Crossfade{Frames: g.F(*c.Crossfade), Blend: blend}
+}
+
+// Dips are the edit warnings of doc's crossfades that dip (1.106): `crossfade_dip: <clip> has no sound past its cut:
+// it dips`, code first, track by track.
+func Dips(doc Doc, takes map[string]Take) []string {
+	out := []string{}
+	for _, t := range doc.Tracks[min(1, len(doc.Tracks)):] {
+		for _, c := range t.Clips {
+			if x := Xfade(doc, c, takes); x != nil && !x.Blend {
+				out = append(out, "crossfade_dip: "+c.ID+" has no sound past its cut: it dips")
 			}
 		}
 	}
 	return out
 }
+
+// into is the crossfade of the clip on track ti that ends on c's start frame, nil without one.
+func into(doc Doc, ti int, c Clip, takes map[string]Take) *Crossfade {
+	g := NewGrid(doc.Target)
+	for _, x := range doc.Tracks[ti].Clips {
+		if x.ID != c.ID && x.Crossfade != nil && *x.Crossfade != 0 && g.F(val(x.At))+Len(x, "video", g, true) == g.F(val(c.At)) {
+			return Xfade(doc, x, takes)
+		}
+	}
+	return nil
+}
+
+// Envelope is the duck envelope at t seconds over the voice spans [a, b) (1.106): 1 inside, 0 away, linear over
+// DuckEase each side.
+func Envelope(t float64, spans [][2]float64) float64 {
+	e := 0.0
+	for _, s := range spans {
+		e = max(e, min(1, max(0, min((t-(s[0]-DuckEase))/DuckEase, (s[1]+DuckEase-t)/DuckEase))))
+	}
+	return e
+}
+
+// Duck is the sequence's ducking when on (1.106): its dB and the voice clips' sounding spans in seconds (a blend's
+// tail in); nil when off. A voice clip is an audio-track clip whose take's class is voice, not muted, not offline.
+func Duck(doc Doc, takes map[string]Take) (*float64, [][2]float64) {
+	if doc.Ducking == nil || !doc.Ducking.On {
+		return nil, nil
+	}
+	g, spans := NewGrid(doc.Target), [][2]float64{}
+	for _, t := range doc.Tracks[1:] {
+		for _, c := range t.Clips {
+			if val2(t.Mute) || val2(c.Mute) || c.Offline || c.Take() == "" || takes[c.Take()].Sound != "voice" {
+				continue
+			}
+			a, e := g.F(val(c.At)), g.F(val(c.At))+Len(c, "video", g, true)
+			if x := Xfade(doc, c, takes); x != nil && x.Blend {
+				e += x.Frames
+			}
+			spans = append(spans, [2]float64{g.S(a), g.S(e)})
+		}
+	}
+	db := doc.Ducking.Amount()
+	return &db, spans
+}
+
+func val2(p *bool) bool { return p != nil && *p }
 
 // Reason is a code and the clip it is about ("" for none): why the picture is re-encoded, or why it cannot export.
 type Reason struct{ Code, Clip string }

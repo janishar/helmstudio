@@ -22,6 +22,8 @@ const (
 	MaxAlts        = 32
 	MaxRerender    = 22
 	MaxMarkers     = 200 // 1.50: markers on a sequence
+	DuckDB         = -12 // 1.106: ducking's default amount
+	DuckEase       = 0.3 // 1.106: seconds the duck eases each side of a voice span
 
 	// an export: at most 2 hours, an estimated 16 GiB written and 32 GiB of distinct takes read
 	MaxExportS      = 7200
@@ -121,6 +123,24 @@ type Clip struct {
 	Number       int       `json:"number,omitempty"` // V1: the shot number (API 1.29; Number gives it)
 	Offline      bool      `json:"offline,omitempty"`
 	Link         *string   `json:"link,omitempty"` // 1.50, an audio-track clip: the V1 clip it is linked to
+	// 1.106: a clip with sound's fades and an audio-track clip's Crossfade into next, seconds (absent = none)
+	FadeIn    *float64 `json:"fade_in,omitempty"`
+	FadeOut   *float64 `json:"fade_out,omitempty"`
+	Crossfade *float64 `json:"crossfade,omitempty"`
+}
+
+// Ducking is a sequence's Duck music (1.106): music dips by DB wherever a voice clip plays.
+type Ducking struct {
+	On bool     `json:"on"`
+	DB *float64 `json:"db,omitempty"`
+}
+
+// Amount is its dB (DuckDB without one).
+func (k Ducking) Amount() float64 {
+	if k.DB == nil {
+		return DuckDB
+	}
+	return *k.DB
 }
 
 // Marker is a named point on the sequence (API 1.50).
@@ -162,6 +182,7 @@ type Doc struct {
 	DurationS float64  `json:"duration_s"`
 	Frames    int      `json:"frames"`
 	Markers   []Marker `json:"markers,omitempty"` // 1.50: absent = none
+	Ducking   *Ducking `json:"ducking,omitempty"` // 1.106: absent = off
 }
 
 // Clone is a deep copy (through JSON: every float survives the round trip).
@@ -180,6 +201,7 @@ type Take struct {
 	HasAudio   bool       `json:"has_audio"`
 	Bytes      int64      `json:"bytes"`
 	SampleRate *int       `json:"sample_rate,omitempty"` // an audio take's own rate (API 1.32), nil unknown
+	Sound      string     `json:"sound,omitempty"`       // 1.106, an audio take's class: music, sound or voice (ducking)
 	Stream     *Stream    `json:"stream,omitempty"`
 	MadeWith   *MadeWith  `json:"made_with,omitempty"`
 	FrameOf    *FrameOf   `json:"frame_of,omitempty"`
@@ -293,7 +315,7 @@ func aLen(c Clip, g Grid) int {
 func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) {
 	var probs []Problem
 	add := func(code, track, clip string) { probs = append(probs, Problem{code, track, clip}) }
-	if raw, _ := json.Marshal(Doc{Target: doc.Target, Tracks: doc.Tracks, Markers: doc.Markers}); len(raw) > MaxBytes {
+	if raw, _ := json.Marshal(Doc{Target: doc.Target, Tracks: doc.Tracks, Markers: doc.Markers, Ducking: doc.Ducking}); len(raw) > MaxBytes {
 		return nil, []Problem{{Code: "too_large"}}
 	}
 	tracks := doc.Tracks
@@ -455,6 +477,21 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 					add("dissolve_track", name, cid)
 				}
 			}
+			for k, p := range map[string]*float64{"fade_in": c.FadeIn, "fade_out": c.FadeOut, "crossfade": c.Crossfade} {
+				switch { // 1.106: on a clip with sound; a crossfade off V1
+				case p == nil || *p == 0:
+				case k == "crossfade" && video:
+					add("crossfade_track", name, cid)
+				case kind != "video" && kind != "audio":
+					add("fade_clip", name, cid)
+				case k == "fade_in":
+					n.FadeIn = new(*p)
+				case k == "fade_out":
+					n.FadeOut = new(*p)
+				default:
+					n.Crossfade = new(*p)
+				}
+			}
 			alts, all := []string{}, slices.Clone(c.Alternatives)
 			if tid != "" {
 				all = append(all, tid)
@@ -486,6 +523,7 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 			for i := range clips {
 				clips[i].n.At = new(g.S(pos))
 				pos += Len(clips[i].n, clips[i].kind, g, false)
+				fades(&clips[i].n, Len(clips[i].n, clips[i].kind, g, false), g)
 			}
 			din := make([]int, len(clips)+1)
 			for k, c := range clips {
@@ -524,6 +562,25 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 				}
 				prevEnd, seen = max(e, prevEnd), true
 				ends = append(ends, end{name, c.n.ID, e})
+			}
+			for i := range clips { // 1.106: fades clamped; a crossfade into the clip on its end frame, else dropped
+				n := &clips[i].n
+				ln := Len(*n, "video", g, true)
+				fades(n, ln, g)
+				if n.Crossfade == nil {
+					continue
+				}
+				d := 0
+				for j, m := range clips {
+					if j != i && g.F(*m.n.At) == g.F(*n.At)+ln {
+						d = min(g.F(*n.Crossfade), ln, Len(m.n, "video", g, true))
+						break
+					}
+				}
+				n.Crossfade = nil
+				if d > 0 {
+					n.Crossfade = new(g.S(d))
+				}
 			}
 		}
 		nt := Track{Name: name, Kind: t.Kind, GainDB: new(val(t.GainDB)), Mute: new(t.Mute != nil && *t.Mute), Clips: []Clip{}}
@@ -568,7 +625,21 @@ func Normalize(doc Doc, takes map[string]Take, previous *Doc) (*Doc, []Problem) 
 		})
 		return nil, probs
 	}
-	return &Doc{Target: doc.Target, Tracks: out, DurationS: g.S(frames), Frames: frames, Markers: marks}, nil
+	return &Doc{Target: doc.Target, Tracks: out, DurationS: g.S(frames), Frames: frames, Markers: marks, Ducking: doc.Ducking}, nil
+}
+
+// fades snaps and clamps a clip's fades to its length ln frames (1.106): fade_in ≤ ln, fade_out ≤ ln − fade_in; 0 is
+// absent.
+func fades(n *Clip, ln int, g Grid) {
+	fi := min(g.F(val(n.FadeIn)), ln)
+	fo := min(g.F(val(n.FadeOut)), ln-fi)
+	n.FadeIn, n.FadeOut = nil, nil
+	if fi > 0 {
+		n.FadeIn = new(g.S(fi))
+	}
+	if fo > 0 {
+		n.FadeOut = new(g.S(fo))
+	}
 }
 
 // Number gives V1's shot numbers as studio stores doc over stored (nil: a new sequence; contracts/README.md,
