@@ -2,7 +2,7 @@
 // The error states' words and timing (docs/mock/ErrorStates.dc.html): the banner's checks and back-off (a1, a2), what
 // raises it (a2r), no runner (b), a run whose runner was lost or that failed (c1, c2), live updates paused (d), a run
 // that waits (e), a model on an unplugged drive (f) and the status tile (g).
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   arm,
   isDown,
@@ -11,6 +11,7 @@ import {
   reportAnswer,
   reportOutage,
   retryNow,
+  forgetSeen,
   statusOf,
   useHealth,
   whenUp,
@@ -409,7 +410,11 @@ describe("g · the status tile", () => {
     }),
   ];
 
-  it("Runner down for a runner that stopped in the last hour; one row each", () => {
+  beforeEach(forgetSeen);
+
+  it("Runner down for a runner seen up that stopped in the last hour; one row each", () => {
+    expect(statusOf(hosts, false, NOW).rows[1].text).toMatch(/^Offline since/); // never seen up: grey
+    statusOf([{ ...hosts[0], state: "idle" }, hosts[1], hosts[2]], false, NOW);
     const s = statusOf(hosts, false, NOW);
     expect(s.tile).toBe("Runner down");
     expect(s.rows.map((r) => [r.name, r.sub, r.text])).toEqual([
@@ -420,7 +425,12 @@ describe("g · the status tile", () => {
     ]);
   });
 
-  it("an old offline host raises nothing; none up is No runner; the studio down is Studio down", () => {
+  it("an off NVIDIA host is grey; an old offline host raises nothing; none up is No runner; studio down is Studio down", () => {
+    statusOf([hosts[1], { ...hosts[2], state: "idle" }], false, NOW);
+    expect(
+      statusOf([hosts[1], { ...hosts[2], updated_at: new Date(NOW).toISOString() }], false, NOW)
+        .tile,
+    ).toBeNull();
     expect(statusOf([hosts[1], hosts[2]], false, NOW).tile).toBeNull();
     expect(statusOf([hosts[0]], false, NOW).tile).toBe("No runner");
     expect(statusOf(hosts, true, NOW).tile).toBe("Studio down");

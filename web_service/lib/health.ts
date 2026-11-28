@@ -193,6 +193,11 @@ export type StatusRow = {
 };
 /** A host off longer than this no longer raises the tile (an NVIDIA VM you turned off is not an alarm). */
 export const STALE_MS = 60 * 60 * 1000;
+/** The runners this page has seen up ("host.env"): only one of them going down raises the logo's dot; a runner already
+ * off when the app opened (a remote machine you keep off, the fake runner) and an NVIDIA host show grey (owner, 2026-11-28: "Yes, change it"). */
+const seenUp = new Set<string>();
+/** For tests: forget what was seen up. */
+export const forgetSeen = () => seenUp.clear();
 /** The tile's words. */
 export type TileWord = "Studio down" | "No runner" | "Runner down";
 
@@ -229,12 +234,13 @@ export function statusOf(
     if (gpu) {
       const live = envs.some((e) => e.state !== "offline");
       const last = envs.map((e) => e.updated_at).reduce((a, b) => (a > b ? a : b));
-      if (!live && envs.some(fresh)) recent = true;
+      // an NVIDIA host is a machine you turn on and off: off is grey, never an alarm
+      const alarm = false;
       rows.push({
         key: host,
         name: "NVIDIA",
         sub: `${host} · ${gpu.device!.name.replace(/^NVIDIA /, "").replace(/ (Blackwell|Hopper|Ada|Ampere)\b.*$/, "")}`,
-        dot: live ? "ok" : envs.some(fresh) ? "bad" : "off",
+        dot: live ? "ok" : alarm ? "bad" : "off",
         text: live ? "Ready" : `Offline since ${hhmm(last)}`,
         host,
       });
@@ -242,17 +248,20 @@ export function statusOf(
     }
     for (const e of envs) {
       const off = e.state === "offline";
-      if (off && fresh(e)) recent = true;
+      const key = `${host}.${e.env}`;
+      if (!off) seenUp.add(key);
+      const alarm = off && fresh(e) && seenUp.has(key);
+      if (alarm) recent = true;
       rows.push({
         key: `${host}.${e.env}`,
         name: `${e.env} runner`,
         sub: host,
-        dot: !off ? "ok" : fresh(e) ? "bad" : "off",
+        dot: !off ? "ok" : alarm ? "bad" : "off",
         text: !off
           ? e.state === "busy"
             ? "Running"
             : "Ready"
-          : fresh(e)
+          : alarm
             ? "Stopped"
             : `Offline since ${hhmm(e.updated_at)}`,
         host,
