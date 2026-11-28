@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { Boxes, CircleCheck, LoaderCircle, RefreshCw, Server } from "lucide-react";
 import { openMenu, type Item } from "@/components/context-menu";
 import { useHosts } from "@/components/create/memory-chip";
+import { desktop } from "@/lib/desktop";
 import { arm, retryNow, statusOf, useHealth, type StatusRow, type TileWord } from "@/lib/health";
 
 /** The banner: "Studio isn't answering. Retrying… next try in 8 s" with Retry now, then "Back online" for 3 s. */
@@ -45,15 +46,6 @@ export function Banner() {
   );
 }
 
-/** The Mac app's bridge (desktop/src/ui/studio-preload.js) for this Mac's runners, when it offers them. */
-type Mac = {
-  localHost?: string;
-  restartRunners?: () => void;
-  restartRunner?: (env: string) => void;
-  showLog?: () => void;
-};
-const mac = () => (globalThis as { helmDesktop?: Mac }).helmDesktop;
-
 /** The rail logo's status: `children(word)` draws the logo (word is null when all is well, and the logo links home);
  * while something is down it gets a red dot on its corner, and a click (or Enter) opens the popover: Studio, each
  * runner per host, each NVIDIA host. Esc closes it (popover="auto"). */
@@ -77,7 +69,7 @@ export function StatusLogo({
   if (hosts && now && mark.h !== hosts) setMark({ h: hosts, at: now });
   const { tile, rows } = statusOf(hosts, down, now || Date.parse("2000-01-01"));
   if (!tile || !now) return <>{children(null)}</>;
-  const d = mac();
+  const d = desktop();
   const ago = mark.at ? Math.max(0, Math.round((now - mark.at) / 1000)) : null;
   const rowMenu = (e: React.MouseEvent, r: StatusRow) => {
     const here = !!r.env && r.host === d?.localHost;
