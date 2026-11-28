@@ -741,14 +741,14 @@ func SoundJoin(d Doc, t *Transition) (*Block, *Block) {
 	return a, b
 }
 
-// Tail is the frames music or sound block b runs past its end for the sound join after it ("Make cues longer"), 0
-// without one; a voice block never gets one.
+// Tail is the frames music or sound block b runs past its end for the crossfade-kind join after it ("Make cues
+// longer"; another kind of sound join plays as a crossfade but adds no tail), 0 without one; a voice block never gets one.
 func Tail(d Doc, b *Block) int {
 	if b == nil || (b.Kind != "music" && b.Kind != "sound") {
 		return 0
 	}
 	for _, t := range d.Transitions {
-		if a, _ := SoundJoin(d, t); a != nil && a.ID == b.ID {
+		if a, _ := SoundJoin(d, t); a != nil && a.ID == b.ID && t.Kind == "crossfade" {
 			return t.Length
 		}
 	}
@@ -776,13 +776,14 @@ func JoinModes(d Doc, dur func(take string) (float64, bool)) map[string]string {
 	return out
 }
 
-// DipWarnings are the board's warnings of music and sound joins that dip because the outgoing block's take is too
-// short: `<block> was made before the crossfade: it dips instead.` (a voice block dips without one).
+// DipWarnings are the board's warnings of crossfade-kind joins (music or sound) that dip because the outgoing block's
+// take is too short: `<block> was made before the crossfade: it dips instead.` (another kind of join, which gets no
+// tail, and a voice block dip without one; as the web's FixList).
 func DipWarnings(d Doc, dur func(take string) (float64, bool)) []string {
 	out := []string{}
 	modes := JoinModes(d, dur)
 	for _, t := range d.Transitions {
-		if a, _ := SoundJoin(d, t); a != nil && modes[t.ID] == "dip" && a.Kind != "voice" && shown(a.Takes, a.Pinned) != "" {
+		if a, _ := SoundJoin(d, t); a != nil && t.Kind == "crossfade" && modes[t.ID] == "dip" && shown(a.Takes, a.Pinned) != "" {
 			out = append(out, short(a)+" was made before the crossfade: it dips instead.")
 		}
 	}

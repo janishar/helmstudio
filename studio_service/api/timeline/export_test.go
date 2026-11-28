@@ -143,3 +143,24 @@ func TestExportRuns(t *testing.T) {
 	}
 	export(*faded, "copy")
 }
+
+// ducking under many lines stays a shallow expression (ffmpeg refuses one nested past about 100 deep)
+func TestDuckExprShallow(t *testing.T) {
+	spans := make([][2]float64, 1000)
+	for i := range spans {
+		spans[i] = [2]float64{float64(2 * i), float64(2*i + 1)}
+	}
+	depth, most := 0, 0
+	for _, r := range duckExpr(-12, spans) {
+		switch r {
+		case '(':
+			depth++
+			most = max(most, depth)
+		case ')':
+			depth--
+		}
+	}
+	if most > 40 {
+		t.Fatalf("nested %d deep", most)
+	}
+}

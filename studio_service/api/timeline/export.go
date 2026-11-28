@@ -323,18 +323,20 @@ func pictureSteps(tg Target, rate string, stream *Stream) []string {
 }
 
 // duckExpr is ducking's volume expression over the voice spans (1.106): pow(10, db × e(t) / 20), e the largest of
-// each span's eased ramp.
+// each span's eased ramp, as a balanced max() tree (ffmpeg refuses an expression nested past about 100 deep).
 func duckExpr(db float64, spans [][2]float64) string {
-	e := ""
+	ramps := make([]string, len(spans))
 	for i, sp := range spans {
-		ramp := fmt.Sprintf("clip(min((t-(%s))/%s,(%s-t)/%s),0,1)", secs(sp[0]-DuckEase), secs(DuckEase), secs(sp[1]+DuckEase), secs(DuckEase))
-		if i == 0 {
-			e = ramp
-		} else {
-			e = "max(" + e + "," + ramp + ")"
-		}
+		ramps[i] = fmt.Sprintf("clip(min((t-(%s))/%s,(%s-t)/%s),0,1)", secs(sp[0]-DuckEase), secs(DuckEase), secs(sp[1]+DuckEase), secs(DuckEase))
 	}
-	return fmt.Sprintf("pow(10,%s*%s/20)", secs(db), e)
+	var tree func([]string) string
+	tree = func(r []string) string {
+		if len(r) == 1 {
+			return r[0]
+		}
+		return "max(" + tree(r[:len(r)/2]) + "," + tree(r[len(r)/2:]) + ")"
+	}
+	return fmt.Sprintf("pow(10,%s*%s/20)", secs(db), tree(ramps))
 }
 
 func in(n int) string { return "{in:" + strconv.Itoa(n) + "}" }
