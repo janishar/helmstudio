@@ -770,14 +770,31 @@ func pickRefs(d magic.Doc, b *magic.Block) (first, last map[string]any, refs []m
 
 // inputsHash is what block b's take depends on, hashed: its request, its length, the takes its picks show (an asset:
 // its sheet and voice) and the frame it is made from. A take whose run's hash differs is out of date.
-func inputsHash(d magic.Doc, b *magic.Block) string {
+func inputsHash(d magic.Doc, b *magic.Block) string { return hashInputs(d, b, false) }
+
+// sameInputs is whether a run's kept hash still matches block b: today's (an asset counts by its first view, the one a
+// pick sends) or the one kept before 2026-11-28 (its whole sheet), so takes made then don't all turn out of date.
+func sameInputs(d magic.Doc, b *magic.Block, kept string) bool {
+	return kept == hashInputs(d, b, false) || kept == hashInputs(d, b, true)
+}
+
+// hashInputs: an asset counts by its first view and voice (a new view after the first changes nothing a pick sends;
+// owner, 2026-11-28: "Yes, change it"); wholeSheet is the hash kept before then.
+func hashInputs(d magic.Doc, b *magic.Block, wholeSheet bool) string {
 	pick := func(r map[string]any) any {
 		if r == nil {
 			return nil
 		}
 		if id, ok := r["asset"].(string); ok {
 			if a := findAsset(d, id); a != nil {
-				return []any{a.Sheet, a.VoiceID}
+				if wholeSheet {
+					return []any{a.Sheet, a.VoiceID}
+				}
+				first := []string{}
+				if len(a.Sheet) > 0 {
+					first = a.Sheet[:1]
+				}
+				return []any{first, a.VoiceID}
 			}
 			return nil
 		}
@@ -959,14 +976,14 @@ func blockStatuses(d magic.Doc, runs []magicRunRow) map[string]dto.MagicStatus {
 		if isDialogue(b) {
 			out[b.ID] = dialogueStatus(d, b, mine)
 		} else {
-			out[b.ID] = runStatus(mine, shownTake(b), inputsHash(d, b))
+			out[b.ID] = runStatus(mine, shownTake(b), func(h string) bool { return sameInputs(d, b, h) })
 		}
 	}
 	return out
 }
 
 // runStatus is the status of a block (or a dialogue's turn) with runs mine that shows take, its inputs hashed now.
-func runStatus(mine []magicRunRow, take, hash string) dto.MagicStatus {
+func runStatus(mine []magicRunRow, take string, same func(string) bool) dto.MagicStatus {
 	open := -1
 	for i, r := range mine {
 		if openRun[r.Status] {
@@ -983,7 +1000,7 @@ func runStatus(mine []magicRunRow, take, hash string) dto.MagicStatus {
 		return dto.MagicStatus{Status: "draft"}
 	}
 	for _, r := range mine {
-		if slices.Contains(r.Takes, take) && r.InputsHash != hash {
+		if slices.Contains(r.Takes, take) && !same(r.InputsHash) {
 			return dto.MagicStatus{Status: "out_of_date"}
 		}
 	}
@@ -1015,7 +1032,7 @@ func dialogueStatus(d magic.Doc, b *magic.Block, mine []magicRunRow) dto.MagicSt
 			}
 		}
 		take = cmp.Or(now, take)
-		st := runStatus(runs, take, hashes[i])
+		st := runStatus(runs, take, func(h string) bool { return h == hashes[i] || h == hashInputs(d, turnBlock(b, i), true) })
 		ts := dto.MagicTurnStatus{Status: st.Status, Progress: st.Progress, Error: st.Error}
 		if take != "" {
 			ts.Take = &take
@@ -1072,7 +1089,7 @@ func (s *Service) boardExtras(ctx context.Context, tx pgx.Tx, row boardRow, out 
 			current = turn < len(hashes[b.ID]) && r.InputsHash == hashes[b.ID][turn]
 			r.Turn = &turn
 		case b != nil && r.Turn == nil:
-			current = r.InputsHash == inputsHash(d, b)
+			current = sameInputs(d, b, r.InputsHash)
 		}
 		r.Takes = fitTakes(b, r) // API 1.85: a sound block's run lists its audio take
 		out.Runs = append(out.Runs, dto.MagicBlockRun{Block: r.Block, RunID: r.RunID, WorkflowID: r.WorkflowID,

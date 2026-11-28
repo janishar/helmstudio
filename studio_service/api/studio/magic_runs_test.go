@@ -495,3 +495,26 @@ func TestDialogueTurns(t *testing.T) {
 		t.Fatal("host and loop are inputs")
 	}
 }
+
+// An asset counts by its first view (the one a pick sends): a new view after it changes nothing; a new first view does;
+// a hash kept before (the whole sheet) still matches (owner, 2026-11-28: "Yes, change it").
+func TestAssetFirstViewIsTheInput(t *testing.T) {
+	d := magic.Doc{Target: board, Assets: []*magic.Asset{{ID: "a1", Kind: "character", Handle: "ink", Name: "Ink",
+		Sheet: []string{"11111111-1111-4111-8111-111111111111"}}}}
+	b := &magic.Block{ID: "f1", Kind: "frame", Length: 96,
+		Request: map[string]any{"kind": "frame", "prompt": "Ink pounces", "refs": []any{map[string]any{"asset": "a1"}}}}
+	d.Blocks = []*magic.Block{b}
+	kept := inputsHash(d, b)
+	d.Assets[0].Sheet = append(d.Assets[0].Sheet, "22222222-2222-4222-8222-222222222222")
+	if !sameInputs(d, b, kept) {
+		t.Fatal("a second view put the frame out of date")
+	}
+	// a take made before, over the whole two-view sheet, is still current while that sheet stands
+	if legacy := hashInputs(d, b, true); legacy == inputsHash(d, b) || !sameInputs(d, b, legacy) {
+		t.Fatal("a hash kept before no longer matches")
+	}
+	d.Assets[0].Sheet = []string{"33333333-3333-4333-8333-333333333333"}
+	if sameInputs(d, b, kept) {
+		t.Fatal("a new first view did not put the frame out of date")
+	}
+}
